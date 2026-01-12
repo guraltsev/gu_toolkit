@@ -2,40 +2,41 @@
 
 DESIGN OVERVIEW:
 ===============
-This module provides a small "reactive parameter" core intended for
+This module provides a small **reactive parameter** core intended for
 Jupyter/JupyterLab usage.
 
-It implements **Stages 1–5** of the project blueprint:
+The core abstraction is :class:`SmartParameter`, which stores:
 
-Stage 1:
-  - A `SmartParameter` holds metadata (type, bounds, default) and a value.
-  - Setting `value` coerces and clamps, then **always** notifies callbacks.
+- an immutable `id` (often a SymPy Symbol),
+- a numeric `value`,
+- optional numeric bounds `min_val` / `max_val`,
+- a `step` hint (useful for UI widgets),
+- a weakref-backed callback list.
 
-Stage 2:
-  - Callback registration returns an opaque `CallbackToken`.
-  - Registration is idempotent (re-registering the same callback returns the
-    original token).
-  - `set_protected(..., owner_token=...)` notifies all callbacks **except** the
-    owner identified by the token.
+The callback system is designed for notebook/widget scenarios:
 
-Stage 3:
-  - Callbacks are stored using **weak references** (including bound methods via
-    `weakref.WeakMethod`).
-  - Dead callbacks are automatically ignored and removed during registration and
-    notification scans.
+- Registration is **idempotent**: re-registering the same callable returns the
+  original :class:`CallbackToken`.
+- Callbacks are stored using **weak references**, including bound methods via
+  :class:`weakref.WeakMethod`.
+- Notifications continue even if some callbacks raise; exceptions are aggregated
+  into :attr:`SmartParameter.last_callback_errors`.
 
-Stage 4:
-  - Callback invocation supports a flexible signature:
-        cb(param, owner_token=..., **kwargs)
-    with fallback to:
-        cb(param)
-  - Callback exceptions are **aggregated** into `last_callback_errors`, and
-    notification continues.
-  - A single warning is emitted per notify batch when errors occurred.
+Stage alignment
+---------------
+This file intentionally supports later stages of the project blueprint as well,
+but **Stage 1** requirements are the key contract:
 
-Stage 5:
-  - `SmartParameterRegistry`: a dict-like, auto-vivifying container for
-    `SmartParameter` instances, keyed by immutable IDs (e.g. SymPy Symbols).
+Stage 1 contract:
+  - `value`, `min_val`, and `max_val` are dynamic; changing any notifies
+    callbacks.
+  - Every notification includes `what_changed` as a **tuple** containing all
+    fields that changed in that operation, e.g. `("value",)`,
+    `("max","value")`, `("min","max")`, `("min","max","value")`.
+  - Bounds updates clamp `value` if needed; clamping includes `"value"` in
+    `what_changed`.
+  - `step` is stored on the parameter and **does not auto-update** when bounds
+    change (it is a UI hint, not a derived property).
 
 GOTCHAS (WEAKREFS):
 ==================
@@ -60,9 +61,12 @@ SmartParameterRegistry
 MAINTENANCE GUIDE:
 =================
 Key invariants:
-  - Value assignment always notifies (no equality short-circuit).
+  - Assigning to `value` always notifies (no equality short-circuit).
   - Bounds validation: if both bounds are not None, require min_val <= max_val.
-  - Registration is idempotent (by normalized identity), implemented via scans.
+  - `what_changed` contains **only** fields that actually changed in that
+    operation (bounds setters do not notify if setting to the same value and no
+    clamping occurs).
+  - `step` is validated as float > 0 and does not auto-change.
 
 Performance notes:
   - `register_callback` is O(n) due to the idempotency scan (by design).
@@ -70,7 +74,9 @@ Performance notes:
 
 Testing strategy:
   - Use doctests in docstrings for basic coverage.
-  - For weakref behavior, include tests that delete callback owners and `gc.collect()`.
+  - For weakref behavior, include tests that delete callback owners and run
+    `gc.collect()`.
+
 """
 
 from __future__ import annotations
@@ -96,6 +102,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Hashable, Optional, TypeVar, cast
 
 T = TypeVar("T")
+
+_UNSET: object = object()
 
 
 @dataclass(frozen=True)
@@ -149,6 +157,30 @@ def _callable_label(cb: Callable[..., Any]) -> str:
     cls = cb.__class__
     cls_name = getattr(cls, "__qualname__", cls.__name__)
     return f"{cls_name}.__call__"
+
+
+def _coerce_optional_float(name: str, val: Any) -> Optional[float]:
+    """Coerce a bound value to Optional[float] with a helpful error."""
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except Exception as e:
+        raise TypeError(f"{name} must be a float or None, got {val!r}") from e
+
+
+def _default_step_for_bounds(min_val: Optional[float], max_val: Optional[float]) -> float:
+    """Compute a conservative default `step` from bounds.
+
+    The project blueprint uses `(max-min)/200` when both bounds are finite.
+    For unbounded or degenerate ranges, we fall back to `0.01`.
+    """
+    if min_val is None or max_val is None:
+        return 0.01
+    span = float(max_val) - float(min_val)
+    if span <= 0:
+        return 0.01
+    return span / 200.0
 
 
 class _CallbackEntry:
@@ -215,18 +247,66 @@ class _CallbackEntry:
 class SmartParameter:
     """A reactive parameter with coercion, clamping, and weakref callbacks.
 
-    The parameter holds a `value`. Assigning to `value`:
+    The parameter holds a `value`. Setting `value`:
+
       1) coerces via `type` (default: `float`),
       2) clamps to [min_val, max_val] where bounds are not None,
       3) stores the result,
-      4) notifies callbacks.
+      4) notifies callbacks with `what_changed=("value",)`.
+
+    Bounds `min_val` and `max_val` are also reactive. Changing either:
+
+      - validates bounds (`min_val <= max_val` if both not None),
+      - clamps `value` if needed,
+      - notifies with `what_changed` containing the bound that changed and
+        `"value"` if clamping occurred.
+
+    `set_bounds(min_val=..., max_val=...)` updates both bounds atomically and
+    sends **exactly one** notification.
 
     Callback behavior:
       - Callbacks are weakly referenced (including bound methods).
       - Registering the same callback is idempotent: it returns the same token.
-      - `set_protected` can exclude the owner callback identified by `owner_token`.
+      - `set_protected` and `set_bounds(..., owner_token=...)` can exclude the
+        owner callback identified by the token.
       - Callback errors are aggregated into `last_callback_errors`, and remaining
         callbacks are still invoked.
+
+    Examples
+    --------
+    Basic `what_changed` semantics:
+
+    >>> p = SmartParameter(id="a", min_val=0, max_val=1, value=0.5)
+    >>> events: list[tuple[str, ...]] = []
+    >>> def cb(param: SmartParameter, **kw: Any) -> None:
+    ...     events.append(kw["what_changed"])
+    >>> _ = p.register_callback(cb)
+    >>> p.value = 2
+    >>> p.value
+    1.0
+    >>> events[-1]
+    ('value',)
+
+    Changing bounds that clamps the current value includes `"value"`:
+
+    >>> events.clear()
+    >>> p.max_val = 0.2
+    >>> p.value
+    0.2
+    >>> events[-1]
+    ('max', 'value')
+
+    Atomic bounds update reports both bounds (and value if clamped):
+
+    >>> old_step = p.step
+    >>> events.clear()
+    >>> p.set_bounds(min_val=-1, max_val=0.1)
+    >>> p.value
+    0.1
+    >>> events[-1]
+    ('min', 'max', 'value')
+    >>> p.step == old_step
+    True
     """
 
     def __init__(
@@ -235,18 +315,50 @@ class SmartParameter:
         *,
         type: Callable[[Any], float] = float,
         value: Optional[Any] = None,
-        min_val: Optional[float] = -1.0,
-        max_val: Optional[float] = 1.0,
+        min_val: Optional[Any] = -1.0,
+        max_val: Optional[Any] = 1.0,
         default_val: float = 0.0,
+        step: Optional[Any] = None,
     ) -> None:
-        """Create a parameter."""
+        """
+        Create a parameter.
+
+        Args:
+            id:
+                Immutable identifier for the parameter (e.g. a SymPy Symbol).
+            type:
+                Coercion function applied to values before conversion to float.
+            value:
+                Initial value. If None, uses `default_val`.
+            min_val, max_val:
+                Optional bounds. If both are not None, must satisfy `min_val <= max_val`.
+            default_val:
+                Default numeric value used when `value` is None.
+            step:
+                UI hint for "increment size". If None, defaults to `(max-min)/200` when
+                both bounds are finite, else `0.01`.
+
+        Raises:
+            ValueError:
+                If the provided bounds are inconsistent.
+            TypeError:
+                If coercion to floats fails for bounds/value/step.
+        """
         self.id: Hashable = id
         self.type: Callable[[Any], float] = type
-        self.min_val: Optional[float] = min_val
-        self.max_val: Optional[float] = max_val
-        self.default_val: float = float(default_val)
 
-        self._validate_bounds()
+        self._min_val: Optional[float] = _coerce_optional_float("min_val", min_val)
+        self._max_val: Optional[float] = _coerce_optional_float("max_val", max_val)
+        self._validate_bounds(self._min_val, self._max_val)
+
+        if step is None:
+            self.step = _default_step_for_bounds(self._min_val, self._max_val)
+        else:
+            self.step = float(step)
+            if not (self.step > 0):
+                raise ValueError(f"step must be > 0, got {step!r}")
+
+        self.default_val: float = float(default_val)
 
         # Weakref-backed storage, idempotency implemented via scans (O(n)).
         self._callbacks_by_token: Dict[CallbackToken, _CallbackEntry] = {}
@@ -258,28 +370,27 @@ class SmartParameter:
         # Do not notify during initialization.
         self._value: float = self._coerce_and_clamp(initial)
 
-    def _validate_bounds(self) -> None:
-        """Validate min/max bounds."""
-        if self.min_val is not None and self.max_val is not None and self.min_val > self.max_val:
-            raise ValueError(
-                f"SmartParameter({self.id!r}) has invalid bounds: "
-                f"min_val={self.min_val} > max_val={self.max_val}"
-            )
+    # -------------------------------------------------------------------------
+    # Reactive properties (Stage 1 contract)
+    # -------------------------------------------------------------------------
 
-    def _coerce_and_clamp(self, new_val: Any) -> float:
-        """Coerce `new_val` via `self.type` and clamp to bounds."""
-        try:
-            v = float(self.type(new_val))
-        except Exception as e:  # pragma: no cover
-            raise TypeError(
-                f"SmartParameter({self.id!r}) expected value coercible by {self.type}, got {new_val!r}"
-            ) from e
+    @property
+    def min_val(self) -> Optional[float]:
+        """Lower bound for `value`, or None for unbounded."""
+        return self._min_val
 
-        if self.min_val is not None:
-            v = max(v, self.min_val)
-        if self.max_val is not None:
-            v = min(v, self.max_val)
-        return v
+    @min_val.setter
+    def min_val(self, new_min: Optional[Any]) -> None:
+        self.set_bounds(min_val=new_min)
+
+    @property
+    def max_val(self) -> Optional[float]:
+        """Upper bound for `value`, or None for unbounded."""
+        return self._max_val
+
+    @max_val.setter
+    def max_val(self, new_max: Optional[Any]) -> None:
+        self.set_bounds(max_val=new_max)
 
     @property
     def value(self) -> float:
@@ -289,15 +400,30 @@ class SmartParameter:
     @value.setter
     def value(self, new_val: Any) -> None:
         """Set the value (coerce+clamp) and notify all callbacks."""
-        self._set_value_internal(new_val, exclude_token=None, owner_token=None)
+        self._set_value_internal(new_val, exclude_token=None, owner_token=None, what_changed=("value",))
+
+    # -------------------------------------------------------------------------
+    # Public API
+    # -------------------------------------------------------------------------
 
     def set(self, new_val: Any, **kwargs: Any) -> None:
         """Set the value and forward keyword arguments to callbacks.
 
-        This method exists because the `value` property setter cannot accept
-        keyword arguments.
+        Notes:
+            The `value` property setter cannot accept keyword arguments, so this
+            method exists for cases where callbacks need extra metadata such as
+            `source="slider"`.
+
+        Args:
+            new_val: New value.
+            **kwargs: Arbitrary metadata forwarded to callbacks.
+
+        Raises:
+            TypeError: If the caller provides `what_changed` (reserved).
         """
-        self._set_value_internal(new_val, exclude_token=None, owner_token=None, **kwargs)
+        if "what_changed" in kwargs:
+            raise TypeError("`what_changed` is managed by SmartParameter; do not pass it to set().")
+        self._set_value_internal(new_val, exclude_token=None, owner_token=None, what_changed=("value",), **kwargs)
 
     def register_callback(self, callback: Callable[..., Any]) -> CallbackToken:
         """Register a callback (weakly referenced), idempotent by scan."""
@@ -328,8 +454,114 @@ class SmartParameter:
         self._callbacks_by_token.pop(token, None)
 
     def set_protected(self, new_val: Any, owner_token: CallbackToken, **kwargs: Any) -> None:
-        """Set the value, notifying all callbacks except the owner."""
-        self._set_value_internal(new_val, exclude_token=owner_token, owner_token=owner_token, **kwargs)
+        """Set the value, notifying all callbacks except the owner.
+
+        Raises:
+            TypeError: If the caller provides `what_changed` (reserved).
+        """
+        if "what_changed" in kwargs:
+            raise TypeError("`what_changed` is managed by SmartParameter; do not pass it to set_protected().")
+        self._set_value_internal(
+            new_val,
+            exclude_token=owner_token,
+            owner_token=owner_token,
+            what_changed=("value",),
+            **kwargs,
+        )
+
+    def set_bounds(
+        self,
+        *,
+        min_val: Any = _UNSET,
+        max_val: Any = _UNSET,
+        owner_token: Optional[CallbackToken] = None,
+        **kwargs: Any,
+    ) -> None:
+        """Update bounds (atomically) and notify once.
+
+        This is the recommended way to update both bounds together (e.g. from a
+        widget settings panel).
+
+        Args:
+            min_val:
+                New minimum bound, or None for unbounded. If omitted, the minimum
+                is unchanged.
+            max_val:
+                New maximum bound, or None for unbounded. If omitted, the maximum
+                is unchanged.
+            owner_token:
+                If provided, the callback registered with this token is excluded
+                from notification (useful for two-way widget bindings).
+            **kwargs:
+                Arbitrary metadata forwarded to callbacks.
+
+        Raises:
+            ValueError: If the resulting bounds are invalid.
+            TypeError: If coercion to floats fails.
+        """
+        if "what_changed" in kwargs:
+            raise TypeError("`what_changed` is managed by SmartParameter; do not pass it to set_bounds().")
+
+        new_min = self._min_val if min_val is _UNSET else _coerce_optional_float("min_val", min_val)
+        new_max = self._max_val if max_val is _UNSET else _coerce_optional_float("max_val", max_val)
+
+        changed: list[str] = []
+        if new_min != self._min_val:
+            changed.append("min")
+        if new_max != self._max_val:
+            changed.append("max")
+
+        if not changed:
+            return
+
+        self._validate_bounds(new_min, new_max)
+
+        self._min_val = new_min
+        self._max_val = new_max
+
+        # Clamp current value, and record if clamping changes it.
+        clamped = self._clamp_value(self._value, min_val=self._min_val, max_val=self._max_val)
+        if clamped != self._value:
+            self._value = clamped
+            changed.append("value")
+
+        self._notify(
+            exclude_token=owner_token,
+            owner_token=owner_token,
+            what_changed=tuple(changed),
+            **kwargs,
+        )
+
+    # -------------------------------------------------------------------------
+    # Internal helpers
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _validate_bounds(min_val: Optional[float], max_val: Optional[float]) -> None:
+        """Validate min/max bounds."""
+        if min_val is not None and max_val is not None and min_val > max_val:
+            raise ValueError(f"Invalid bounds: min_val={min_val} > max_val={max_val}")
+
+    @staticmethod
+    def _clamp_value(value: float, *, min_val: Optional[float], max_val: Optional[float]) -> float:
+        """Clamp a float to optional bounds."""
+        v = float(value)
+        if min_val is not None:
+            v = max(v, float(min_val))
+        if max_val is not None:
+            v = min(v, float(max_val))
+        return v
+
+    def _coerce_and_clamp(self, new_val: Any) -> float:
+        """Coerce `new_val` via `self.type` and clamp to bounds."""
+        try:
+            v = float(self.type(new_val))
+        except Exception as e:  # pragma: no cover
+            raise TypeError(
+                f"SmartParameter({self.id!r}) expected value coercible by {self.type}, got {new_val!r}"
+            ) from e
+
+        return self._clamp_value(v, min_val=self._min_val, max_val=self._max_val)
 
     def _set_value_internal(
         self,
@@ -337,17 +569,19 @@ class SmartParameter:
         *,
         exclude_token: Optional[CallbackToken],
         owner_token: Optional[CallbackToken],
+        what_changed: tuple[str, ...],
         **kwargs: Any,
     ) -> None:
         """Internal helper for value assignment and callback notification."""
         self._value = self._coerce_and_clamp(new_val)
-        self._notify(exclude_token=exclude_token, owner_token=owner_token, **kwargs)
+        self._notify(exclude_token=exclude_token, owner_token=owner_token, what_changed=what_changed, **kwargs)
 
     def _notify(
         self,
         *,
         exclude_token: Optional[CallbackToken],
         owner_token: Optional[CallbackToken],
+        what_changed: tuple[str, ...],
         **kwargs: Any,
     ) -> None:
         """Notify callbacks (weakref-aware, error-aggregating)."""
@@ -371,6 +605,7 @@ class SmartParameter:
                 label=entry.label,
                 cb=cb,
                 owner_token=owner_token,
+                what_changed=what_changed,
                 **kwargs,
             )
 
@@ -392,11 +627,12 @@ class SmartParameter:
         label: str,
         cb: Callable[..., Any],
         owner_token: Optional[CallbackToken],
+        what_changed: tuple[str, ...],
         **kwargs: Any,
     ) -> None:
         """Invoke callback with best-effort signature compatibility and aggregation."""
         try:
-            cb(self, owner_token=owner_token, **kwargs)
+            cb(self, owner_token=owner_token, what_changed=what_changed, **kwargs)
             return
         except TypeError as e:
             if self._is_signature_mismatch(e):
@@ -446,7 +682,7 @@ class SmartParameter:
         return (
             f"SmartParameter(id={self.id!r}, value={self.value!r}, "
             f"min_val={self.min_val!r}, max_val={self.max_val!r}, "
-            f"default_val={self.default_val!r})"
+            f"step={self.step!r}, default_val={self.default_val!r})"
         )
 
 
