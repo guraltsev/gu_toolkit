@@ -127,6 +127,7 @@ from typing import (
     TypeVar,
     runtime_checkable,
     OrderedDict as OrderedDictType,
+    Set,
 )
 
 import numpy
@@ -134,6 +135,7 @@ import sympy
 
 from gu_toolkit.plugins.numpify import numpify
 from gu_toolkit.plugins.SmartException import GuideError
+from gu_toolkit.plugins.SmartParameters import CallbackToken, SmartParameter, SmartParameterRegistry
 
 # ==============================================================================
 # Plotly text / legend label sanitation
@@ -651,26 +653,44 @@ class PlotlyBackend:
         return
 
 
+# ====================================================================
 # ==============================================================================
 # 3. Model (Plot)
 # ==============================================================================
 __all__+=["Plot"]
 class Plot:
-    """Represents one plotted SymPy expression."""
+    """Represents one plotted SymPy expression.
+
+    A plot has one independent variable (``symbol``) and zero or more parameter
+    symbols (``param_symbols``). The compiled numerical function always expects
+    arguments in the deterministic order:
+
+    ``(symbol, *param_symbols)``
+
+    Notes
+    -----
+    * Parameter symbols are always treated as scalars during evaluation; if a
+      compiled function returns a scalar (e.g. constants or parameterized
+      constants), :meth:`compute_data` broadcasts it to match the sampled x-grid.
+    """
 
     def __init__(
         self,
         name: str,
         expr: sympy.Expr,
         symbol: sympy.Symbol,
+        param_symbols: Tuple[sympy.Symbol, ...],
         domain: Union[Tuple[float, float], _ViewportToken],
         samples: Union[int, _ViewportToken],
         style: Style,
         on_change_callback: Callable[["Plot", bool, bool], None],
-    ):
-        self._name = name
+        param_value_getter: Optional[Callable[[Tuple[sympy.Symbol, ...]], Tuple[Any, ...]]] = None,
+    ) -> None:
+        self._name = str(name)
         self._expr = expr
         self._symbol = symbol
+        self._param_symbols = tuple(param_symbols)
+        self._param_value_getter = param_value_getter
         self._domain = domain
         self._samples = samples
         self._style = style
@@ -679,11 +699,13 @@ class Plot:
         self._reactive_style = ReactiveStyle(self._style, self._on_style_proxy_change)
 
         self.backend_handle: Any = None
-        self._func: Optional[Callable[[numpy.ndarray], numpy.ndarray]] = None
+        self._func: Optional[Callable[..., Any]] = None
         self._compile()
 
     def __repr__(self) -> str:
-        return f"<Plot '{self.name}': {self.expr} | visible={self.visible}>"
+        params = ", ".join(p.name for p in self._param_symbols)
+        params_s = f" params=[{params}]" if params else ""
+        return f"<Plot '{self.name}': {self.expr}{params_s} | visible={self.visible}>"
 
     @property
     def name(self) -> str:
@@ -696,6 +718,11 @@ class Plot:
     @property
     def symbol(self) -> sympy.Symbol:
         return self._symbol
+
+    @property
+    def param_symbols(self) -> Tuple[sympy.Symbol, ...]:
+        """Ordered parameter symbols used by this plot (deterministic)."""
+        return self._param_symbols
 
     @property
     def style(self) -> ReactiveStyle:
@@ -726,23 +753,35 @@ class Plot:
         self.update(domain=value)
 
     def _compile(self) -> None:
-        try:
-            self._func = numpify(self._expr, args=[self._symbol])
-        except Exception as e:
-            raise ValueError(f"Failed to compile expression '{self._expr}': {e}") from e
+        """Compile the sympy expression to a numpy function."""
+        args = (self._symbol, *self._param_symbols)
+        
+        # Just compile with numpify - it handles everything
+        func = numpify(self._expr, args=args, vectorize=True)
+        
+        # If expression doesn't use x, wrap it to broadcast
+        if self._symbol not in self._expr.free_symbols:
+            def wrapper(x, *params):
+                return numpy.full_like(x, func(x,*params) if self._param_symbols else float(self._expr))
+            self._func = wrapper
+        else:
+            self._func = func
 
     def _on_style_proxy_change(self) -> None:
         self._on_change_callback(self, needs_recompute=False, needs_redraw=True)
 
     def update(
         self,
+        *,
         expr: Optional[sympy.Expr] = None,
         symbol: Optional[sympy.Symbol] = None,
+        param_symbols: Optional[Tuple[sympy.Symbol, ...]] = None,
         domain: Optional[Union[Tuple[float, float], _ViewportToken]] = None,
         samples: Optional[Union[int, _ViewportToken]] = None,
         style: Optional[Style] = None,
         visible: Optional[bool] = None,
     ) -> None:
+        """Update plot configuration and trigger controller callbacks."""
         needs_recompute = False
         needs_redraw = False
 
@@ -752,6 +791,10 @@ class Plot:
         if symbol is not None and symbol != self._symbol:
             self._symbol = symbol
             needs_recompute = True
+        if param_symbols is not None and tuple(param_symbols) != self._param_symbols:
+            self._param_symbols = tuple(param_symbols)
+            needs_recompute = True
+
         if domain is not None and domain != self._domain:
             self._domain = domain
             needs_recompute = True
@@ -759,7 +802,7 @@ class Plot:
             self._samples = samples
             needs_recompute = True
 
-        if needs_recompute and (expr is not None or symbol is not None):
+        if needs_recompute and (expr is not None or symbol is not None or param_symbols is not None):
             self._compile()
 
         if style is not None:
@@ -773,10 +816,17 @@ class Plot:
 
         self._on_change_callback(self, needs_recompute, needs_redraw)
 
-    def compute_data(self, viewport_range: Tuple[float, float], global_samples: int) -> Tuple[numpy.ndarray, numpy.ndarray]:
+    def compute_data(
+        self,
+        viewport_range: Tuple[float, float],
+        global_samples: int,
+        param_values: Optional[Tuple[Any, ...]] = None
+    ) -> Tuple[numpy.ndarray, numpy.ndarray]:
+        """Sample this plot on the given viewport, using provided parameter values."""
         v_min, v_max = viewport_range
         bounds = self._domain
 
+        # Determine sampling bounds
         if bounds is VIEWPORT:
             start, stop = v_min, v_max
         else:
@@ -789,71 +839,55 @@ class Plot:
         if start >= stop:
             return numpy.array([]), numpy.array([])
 
+        # Determine number of samples
         n = global_samples if self._samples is VIEWPORT else int(self._samples)
-
-        try:
-            x_arr = numpy.linspace(start, stop, n)
-            if self._func is None:
-                return numpy.array([]), numpy.array([])
-            y_arr = self._func(x_arr)
-
-            # --- Plotly/FigureWidget compatibility & numerical hygiene ---
-            # Plotly accepts numpy arrays, but they must be numeric (not dtype=object
-            # with SymPy scalars). We coerce to real float arrays here.
-            x_arr = numpy.asarray(x_arr, dtype=float)
-            y_arr = numpy.asarray(y_arr)
-
-            # If SymPy/numpify produced an object array, attempt numeric coercion.
-            if y_arr.dtype == object:
-                try:
-                    y_arr = y_arr.astype(float)
-                except Exception as _e:
-                    raise ValueError(
-                        "Plot evaluation produced non-numeric values (dtype=object). "
-                        "This often happens if the expression was not fully numeric after numpify. "
-                        f"Expression: {self._expr}"
-                    ) from _e
-
-            # Complex values: allow near-real; otherwise error.
-            if numpy.iscomplexobj(y_arr):
-                imag_max = float(numpy.max(numpy.abs(numpy.imag(y_arr)))) if y_arr.size else 0.0
-                if imag_max > 1e-12:
-                    raise ValueError(
-                        "Plot evaluation produced complex values with non-negligible imaginary part. "
-                        f"Expression: {self._expr}"
-                    )
-                y_arr = numpy.real(y_arr)
-
-            # Final coercion to float for stable widget transport.
-            try:
-                y_arr = numpy.asarray(y_arr, dtype=float)
-            except Exception as _e:
+        
+        # Generate x values
+        x_arr = numpy.linspace(start, stop, n)
+        
+        # Get parameter values
+        if param_values is None and self._param_symbols:
+            if self._param_value_getter is None:
                 raise ValueError(
-                    "Plot evaluation produced values that could not be converted to floats. "
-                    f"Expression: {self._expr}"
-                ) from _e
-
-            # Ensure 1D and matching lengths.
-            x_arr = numpy.ravel(x_arr)
-            y_arr = numpy.ravel(y_arr)
-            if x_arr.shape != y_arr.shape:
-                raise ValueError(
-                    "Plot evaluation returned x and y arrays with different shapes. "
-                    f"x.shape={x_arr.shape}, y.shape={y_arr.shape}. "
-                    f"Expression: {self._expr}"
+                    "Missing parameter values for plot evaluation. "
+                    "Pass `param_values=...` explicitly, or call `compute_data` "
+                    "on a Plot created by a SmartFigure (which provides registry values)."
                 )
+            param_values = tuple(self._param_value_getter(self._param_symbols))
+        elif param_values is None:
+            param_values = ()
 
-            return x_arr, y_arr
-        except Exception as e:
-            raise ValueError(f"Error evaluating '{self._expr}' on range [{start:.2f}, {stop:.2f}]: {e}") from e
+        # Evaluate the function
+        y_arr = self._func(x_arr, *param_values)
+        
+        return x_arr, y_arr
 
+
+# ==============================================================================
 
 # ==============================================================================
 # 4. Controller (SmartFigure)
 # ==============================================================================
 __all__+=["SmartFigure"]
 class SmartFigure:
-    """Main plotting controller with a Plotly FigureWidget view (Phase 1)."""
+    """Main plotting controller with a Plotly FigureWidget view (Phase 1).
+
+    Stage 2/3 additions (blueprint alignment)
+    ---------------------------------------
+    * Expression analysis supports:
+      - constant expressions (0 free symbols),
+      - 1-symbol defaulting,
+      - 1-symbol + explicitly different `symbol` -> parameterized constant,
+      - multi-symbol expressions requiring an explicit `symbol`.
+
+    * Parameter integration:
+      - Each plot stores a deterministic parameter ordering.
+      - A figure reads parameter values from a :class:`SmartParameterRegistry`.
+      - Parameter changes recompute only the plots that depend on that parameter.
+    """
+
+    # Class-level default registry (shared by default).
+    _DEFAULT_PARAMETER_REGISTRY: SmartParameterRegistry = SmartParameterRegistry()
 
     def __init__(
         self,
@@ -862,42 +896,46 @@ class SmartFigure:
         y_range: Tuple[Any, Any] = (-3, 3),
         samples: int = 1000,
         show_now: bool = True,
-    ):
+        *,
+        parameter_registry: Optional[SmartParameterRegistry] = None,
+    ) -> None:
         self.default_symbol = var
         self._x_range = (float(x_range[0]), float(x_range[1]))
         self._y_range = (float(y_range[0]), float(y_range[1]))
-        self._global_samples = samples
+        self._global_samples = int(samples)
 
-        self._plots: OrderedDictType[str, Plot] = OrderedDict()
-        self._backend: Optional[PlotBackend] = None
-        self._widget: Optional[Any] = None
+        # Parameter registry: shared by default, but can be overridden per-figure.
+        self.parameter_registry: SmartParameterRegistry = (
+            parameter_registry if parameter_registry is not None else self._DEFAULT_PARAMETER_REGISTRY
+        )
+
+        # Plots and dependencies.
+        self._plots: "OrderedDict[str, Plot]" = OrderedDict()
+        self._plots_by_param: Dict[sympy.Symbol, Set[str]] = {}
+        self._param_callback_token: Dict[sympy.Symbol, CallbackToken] = {}
+        self._plot_params: Dict[str, Tuple[sympy.Symbol, ...]] = {}
+
+        self._backend: Optional[PlotlyBackend] = None
 
         if show_now:
             self.show()
 
+    # -------------------------------------------------------------------------
+    # View / widget lifecycle
+    # -------------------------------------------------------------------------
     @property
-    def widget(self) -> Any:
-        if self._widget is None:
-            _require_not_colab()
-            widgets = _lazy_import_ipywidgets()
-
+    def widget(self):
+        if self._backend is None:
             self._backend = PlotlyBackend()
             self._backend.set_viewport(self._x_range, self._y_range)
-
             for plot in self._plots.values():
                 self._create_backend_primitive(plot)
-
             self._update_all_data()
 
-            self._widget = widgets.VBox([self._backend.fig])
-        return self._widget
+        import ipywidgets as widgets  # type: ignore
+        return widgets.VBox([self._backend.fig])
 
-    @property
-    def backend(self) -> PlotBackend:
-        _ = self.widget
-        return self._backend  # type: ignore
-
-    def show(self) -> Any:
+    def show(self):
         w = self.widget
         try:
             from IPython.display import display  # type: ignore
@@ -906,72 +944,217 @@ class SmartFigure:
             pass
         return w
 
+    # -------------------------------------------------------------------------
+    # Ranges / viewport
+    # -------------------------------------------------------------------------
     @property
     def x_range(self) -> Tuple[float, float]:
         return self._x_range
 
     @x_range.setter
-    def x_range(self, val: Tuple[Any, Any]):
+    def x_range(self, val: Tuple[Any, Any]) -> None:
         self._x_range = (float(val[0]), float(val[1]))
         if self._backend:
             self._backend.set_viewport(self._x_range, self._y_range)
         self._update_all_data()
-
 
     @property
     def y_range(self) -> Tuple[float, float]:
         return self._y_range
 
     @y_range.setter
-    def y_range(self, val: Tuple[Any, Any]):
+    def y_range(self, val: Tuple[Any, Any]) -> None:
         self._y_range = (float(val[0]), float(val[1]))
         if self._backend:
             self._backend.set_viewport(self._x_range, self._y_range)
+        self._update_all_data()
 
+    # -------------------------------------------------------------------------
+    # Expression analysis (Stage 2)
+    # -------------------------------------------------------------------------
+    def _analyze_expr(
+        self, expr: sympy.Expr, requested: Optional[sympy.Symbol]
+    ) -> Tuple[sympy.Symbol, Tuple[sympy.Symbol, ...]]:
+        """Return (independent_symbol, param_symbols_sorted) for `expr`.
 
-    @property
-    def plots(self) -> MappingProxyType[str, Plot]:
-        return MappingProxyType(self._plots)
+        Rules (blueprint):
+        * |S|>1: must specify `requested` (even if it is not in S).
+        * |S|=1: if `requested` is None -> that symbol is independent;
+                 if requested differs -> parameterized constant.
+        * |S|=0: constant expression; independent is requested or default_symbol.
+        """
+        if requested is not None and not isinstance(requested, sympy.Symbol):
+            raise GuideError(f"symbol must be a SymPy Symbol, got {type(requested)!r}")
 
-    def get_plot_names(self) -> List[str]:
-        return list(self._plots.keys())
+        free_syms = tuple(sorted(expr.free_symbols, key=lambda s: s.name))
 
+        if len(free_syms) == 0:
+            sym = requested if requested is not None else self.default_symbol
+            return sym, ()
+
+        if len(free_syms) == 1:
+            only = free_syms[0]
+            if requested is None or requested == only:
+                return only, ()
+            # Parameterized constant in `requested`.
+            return requested, (only,)
+
+        # len(free_syms) > 1
+        if requested is None:
+            raise GuideError(
+                f"Expression `{expr}` has multiple symbols `{set(free_syms)}`.",
+                hint="Specify 'symbol=...' explicitly.",
+            )
+        params = tuple(s for s in free_syms if s != requested)
+        return requested, params
+
+    def _resolve_symbol(self, expr: sympy.Expr, requested: Optional[sympy.Symbol]) -> sympy.Symbol:
+        """Backwards-compatible helper returning only the independent symbol."""
+        sym, _params = self._analyze_expr(expr, requested)
+        return sym
+
+    # -------------------------------------------------------------------------
+    # Dependency tracking + callbacks (Stage 3)
+    # -------------------------------------------------------------------------
+    def _ensure_param_exists(self, sym: sympy.Symbol) -> None:
+        _ = self.parameter_registry.get_param(sym)
+
+    def _ensure_param_callback(self, sym: sympy.Symbol) -> None:
+        if sym in self._param_callback_token:
+            return
+        param = self.parameter_registry.get_param(sym)
+        token = param.register_callback(self._on_param_change)
+        self._param_callback_token[sym] = token
+
+    def _maybe_remove_param_callback(self, sym: sympy.Symbol) -> None:
+        if sym in self._plots_by_param and self._plots_by_param[sym]:
+            return
+        token = self._param_callback_token.pop(sym, None)
+        if token is None:
+            return
+        try:
+            self.parameter_registry.get_param(sym).remove_callback(token)
+        except Exception:
+            # Best effort: never let callback cleanup break figure usage.
+            pass
+
+    def _set_plot_params(self, plot_name: str, param_syms: Tuple[sympy.Symbol, ...]) -> None:
+        """Update dependency mappings for one plot name."""
+        old = self._plot_params.get(plot_name, ())
+        new = tuple(param_syms)
+
+        # Remove old dependencies.
+        for s in old:
+            names = self._plots_by_param.get(s)
+            if names is not None:
+                names.discard(plot_name)
+                if not names:
+                    self._plots_by_param.pop(s, None)
+                    self._maybe_remove_param_callback(s)
+
+        # Add new dependencies.
+        for s in new:
+            self._plots_by_param.setdefault(s, set()).add(plot_name)
+            self._ensure_param_exists(s)
+            self._ensure_param_callback(s)
+
+        self._plot_params[plot_name] = new
+
+    def _on_param_change(
+        self,
+        param: SmartParameter,
+        *,
+        owner_token: Optional[CallbackToken] = None,
+        what_changed: Tuple[str, ...] = (),
+        **_kwargs: Any,
+    ) -> None:
+        # Recompute only when the value changes (bounds-only changes do not affect evaluation).
+        # If bounds changes clamp the value, Stage 1 ensures `"value"` appears in what_changed.
+        if what_changed and "value" not in what_changed:
+            return
+
+        if not self._backend:
+            # If no live view exists yet, we defer recompute to the next draw.
+            return
+
+        param_id = param.id
+        if not isinstance(param_id, sympy.Symbol):
+            return
+
+        affected = tuple(self._plots_by_param.get(param_id, set()))
+        for name in affected:
+            plot = self._plots.get(name)
+            if plot is None:
+                continue
+            self._recompute_and_draw(plot)
+
+    # -------------------------------------------------------------------------
+    # Public plotting API
+    # -------------------------------------------------------------------------
     def plot(
         self,
-        expr: sympy.Expr,
+        expr: Any,
+        *,
         name: Optional[str] = None,
         symbol: Optional[sympy.Symbol] = None,
-        domain: Optional[Union[Tuple[float, float], _ViewportToken]] = None,
+        domain: Optional[Union[Tuple[Any, Any], _ViewportToken]] = None,
         samples: Optional[Union[int, _ViewportToken]] = None,
-        style: Optional[Union[Style, Dict[str, Any]]] = None,
-        visible: bool = True,
+        style: Optional[Dict[str, Any]] = None,
+        visible: Optional[bool] = None,
     ) -> Plot:
+        """Add or update a plot by name.
+
+        Parameters
+        ----------
+        expr:
+            SymPy expression (or something SymPy can sympify).
+        name:
+            Unique identifier for this plot within the figure. If omitted, an
+            auto-name ``f_k`` is chosen.
+        symbol:
+            Independent variable. If omitted on first creation, it is inferred by
+            :meth:`_analyze_expr` (see class docstring). When updating an existing
+            plot, omitting `symbol` keeps the previous independent symbol.
+        """
         if name is None:
             name = self._next_auto_name()
 
-        try:
-            if style is not None:
-                if isinstance(style, dict):
-                    style_obj = Style(**style)
-                elif isinstance(style, Style):
-                    style_obj = style
-                else:
-                    raise TypeError("Style must be a dictionary or Style object.")
-            else:
-                style_obj = Style()
+        expr_sp = sympy.sympify(expr)
+
+        style_obj = Style()
+        if style:
+            try:
+                for k, v in style.items():
+                    if not hasattr(style_obj, k):
+                        raise ValueError(f"Unknown style key '{k}'")
+                    setattr(style_obj, k, v)
+            except (ValueError, TypeError) as e:
+                raise GuideError(f"Style configuration error: {e}") from e
+        if visible is not None:
             style_obj.visible = visible
-        except (ValueError, TypeError) as e:
-            raise GuideError(f"Style configuration error: {e}") from e
+
+        new_domain_spec = None
+        if domain is not None:
+            new_domain_spec = self._normalize_bounds(domain)
 
         if name in self._plots:
             existing_plot = self._plots[name]
-            new_domain_spec = None
-            if domain is not None:
-                new_domain_spec = self._normalize_bounds(domain)
+            # Ensure direct Plot.compute_data(...) can read registry parameter values.
+            existing_plot._param_value_getter = self._param_values_for_symbols
+            requested_symbol = symbol if symbol is not None else existing_plot.symbol
+            resolved_sym, param_syms = self._analyze_expr(expr_sp, requested_symbol)
+
+            if new_domain_spec is None and domain is None:
+                new_domain_spec = None  # keep existing
+            # Ensure parameters exist and update dependencies.
+            for ps in param_syms:
+                self._ensure_param_exists(ps)
+            self._set_plot_params(name, param_syms)
 
             existing_plot.update(
-                expr=sympy.sympify(expr),
-                symbol=symbol,
+                expr=expr_sp,
+                symbol=resolved_sym,
+                param_symbols=param_syms,
                 domain=new_domain_spec,
                 samples=samples,
                 style=style_obj,
@@ -979,37 +1162,47 @@ class SmartFigure:
             )
             return existing_plot
 
-        expr = sympy.sympify(expr)
-        resolved_sym = self._resolve_symbol(expr, symbol)
+        resolved_sym, param_syms = self._analyze_expr(expr_sp, symbol)
+
+        # Ensure parameters exist and store dependency mapping.
+        for ps in param_syms:
+            self._ensure_param_exists(ps)
+        self._set_plot_params(name, param_syms)
 
         domain_spec = self._normalize_bounds(domain or VIEWPORT)
         samples_spec = samples if samples is not None else VIEWPORT
 
         new_plot = Plot(
             name=name,
-            expr=expr,
+            expr=expr_sp,
             symbol=resolved_sym,
+            param_symbols=param_syms,
             domain=domain_spec,
             samples=samples_spec,
             style=style_obj,
+            param_value_getter=self._param_values_for_symbols,
             on_change_callback=self._handle_plot_change,
         )
-
         self._plots[name] = new_plot
 
-        if self._backend is not None:
+        if self._backend:
             self._create_backend_primitive(new_plot)
             self._recompute_and_draw(new_plot)
 
         return new_plot
 
     def remove(self, name: str) -> None:
-        if name in self._plots:
-            plot = self._plots[name]
-            if self._backend and plot.backend_handle:
-                self._backend.remove_plot(plot.backend_handle)
-                self._backend.request_redraw()
-            del self._plots[name]
+        if name not in self._plots:
+            raise GuideError(f"No plot named '{name}'.")
+        plot = self._plots.pop(name)
+
+        # Dependency cleanup (does not remove parameters from registry).
+        self._set_plot_params(name, ())
+        self._plot_params.pop(name, None)
+
+        if self._backend and plot.backend_handle:
+            self._backend.remove_plot(plot.backend_handle)
+            self._backend.request_redraw()
 
     def clear(self) -> None:
         if self._backend:
@@ -1017,8 +1210,16 @@ class SmartFigure:
                 if plot.backend_handle:
                     self._backend.remove_plot(plot.backend_handle)
             self._backend.request_redraw()
-        self._plots.clear()
 
+        # Dependency cleanup (does not delete registry entries).
+        for nm in list(self._plots.keys()):
+            self._set_plot_params(nm, ())
+        self._plots.clear()
+        self._plot_params.clear()
+
+    # -------------------------------------------------------------------------
+    # Internals
+    # -------------------------------------------------------------------------
     def _next_auto_name(self) -> str:
         k = 1
         while True:
@@ -1027,39 +1228,11 @@ class SmartFigure:
                 return nm
             k += 1
 
-    def _resolve_symbol(self, expr: sympy.Expr, requested: Optional[sympy.Symbol]) -> sympy.Symbol:
-        free = expr.free_symbols
-        if requested:
-            if requested not in free and free:
-                raise GuideError(
-                    f"Requested symbol `{requested}` is not in expression `{expr}`.",
-                    hint=f"Make sure that your expression depends on `{requested}`.",
-                )
-            return requested
-        if not free:
-            return self.default_symbol
-        if len(free) == 1:
-            return list(free)[0]
-        raise GuideError(
-            f"Expression `{expr}` has multiple symbols `{free}`.",
-            hint="Specify 'symbol=...' explicitly.",
-        )
-
     def _normalize_bounds(self, domain: Any) -> Union[Tuple[float, float], _ViewportToken]:
         if domain is VIEWPORT:
             return VIEWPORT
-
-        if not isinstance(domain, (tuple, list)):
-            raise GuideError(f"Invalid domain format: {domain}. Expected tuple or VIEWPORT.")
-        if len(domain) != 2:
-            raise GuideError(f"Invalid domain tuple length: {domain}. Expected 2 elements.")
-        if isinstance(domain[0], sympy.Symbol):
-            raise GuideError(
-                f"Found symbol {domain[0]} in domain tuple. "
-                "This is no longer supported. Please use the 'symbol' argument explicitly.",
-                hint=f"Change your plot command to `plot(..., symbol={domain[0]}, domain={domain[1]})`",
-            )
-
+        if not isinstance(domain, (tuple, list)) or len(domain) != 2:
+            raise GuideError(f"Invalid domain format: {domain}. Expected (min, max).")
         try:
             d_min = float(domain[0]) if domain[0] is not None else None
             d_max = float(domain[1]) if domain[1] is not None else None
@@ -1084,10 +1257,27 @@ class SmartFigure:
                 self._backend.apply_style(plot.backend_handle, plot._style)
                 self._backend.request_redraw()
 
+    def _param_values_for_symbols(self, symbols: Tuple[sympy.Symbol, ...]) -> Tuple[float, ...]:
+        """Return parameter values (floats) in the same order as `symbols`."""
+        vals: list[float] = []
+        for s in symbols:
+            try:
+                vals.append(float(self.parameter_registry.get_param(s).value))
+            except Exception as e:
+                raise GuideError(
+                    f"Could not read value for parameter '{s}'.",
+                    hint=str(e),
+                ) from e
+        return tuple(vals)
+
+    def _param_values_for_plot(self, plot: Plot) -> Tuple[float, ...]:
+        return self._param_values_for_symbols(plot.param_symbols)
+
     def _recompute_and_draw(self, plot: Plot) -> None:
         if not self._backend:
             return
-        x, y = plot.compute_data(self._x_range, self._global_samples)
+        param_values = self._param_values_for_plot(plot)
+        x, y = plot.compute_data(self._x_range, self._global_samples, param_values=param_values)
         if plot.backend_handle:
             self._backend.update_plot(plot.backend_handle, x, y)
             self._backend.apply_style(plot.backend_handle, plot._style)
@@ -1096,8 +1286,6 @@ class SmartFigure:
     def _update_all_data(self) -> None:
         for plot in self._plots.values():
             self._recompute_and_draw(plot)
-
-
 
 
 __gu_exports__ = __all__

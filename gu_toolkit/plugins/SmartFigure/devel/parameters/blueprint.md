@@ -344,7 +344,7 @@ Below are 5 stages; the project remains usable after each stage.
 
 ---
 
-### Stage 2 — Expression analysis + parameter-aware Plot compilation + constant broadcasting
+### Stage 2 — Expression analysis + parameter-aware Plot compilation 
 
 **Description and instructions**
 
@@ -356,11 +356,89 @@ Below are 5 stages; the project remains usable after each stage.
   * > 1 symbols ⇒ must specify symbol
 * Extend `Plot`:
 
-  * store `param_symbols` and compile with `numpify(expr, args=(symbol, *param_symbols))`
+  * store `param_symbols` and compile with `numpify(expr, args=(symbol, *param_symbols), vectorize=True)`
 * Extend `Plot.compute_data`:
 
   * accept param values
-  * broadcast scalar y to match x before shape check
+For reference here is the numpify docstring:
+```python
+ """
+    Compile a SymPy expression into a high-performance NumPy function with broadcasting support.
+
+    This function generates a Python function that evaluates the given SymPy expression
+    using NumPy operations, enabling vectorized evaluation over arrays of inputs.
+    The generated function automatically handles NumPy broadcasting and dtype promotion.
+
+    Parameters
+    ----------
+    expr : sympy.Expr or convertible
+        SymPy expression to compile. Can be any object convertible via `sympy.sympify`,
+        including Python scalars (e.g., 5), strings, or existing SymPy expressions.
+    args : Optional[Iterable[sympy.Symbol]], optional
+        Symbols to treat as function arguments. If None (default), uses all free symbols
+        in `expr` sorted alphabetically by name. Can be a single Symbol or iterable.
+    f_numpy : Optional[Dict[sympy.Symbol, Callable[..., Any]]], optional
+        Custom mapping from SymPy Symbols to NumPy-compatible functions.
+        Useful when symbols represent functions rather than variables (e.g., mapping `f`
+        to `np.sin`). Keys must be Symbols not present in `args`.
+    vectorize : bool, default True
+        If True, generates a function that broadcasts over array inputs using NumPy
+        operations. If False, generates a scalar function that may be slower for
+        array inputs but avoids broadcasting overhead for scalar use cases.
+        When True and `expr` is constant, the function returns an array of the constant
+        value shaped by broadcasting the inputs.
+    expand_definition : bool, default True
+        If True, applies `sympy.expand(deep=True)` to the expression before compilation.
+        This can improve performance by expanding composite operations and should
+        generally be left enabled unless expression expansion is undesirable.
+
+    Returns
+    -------
+    Callable[..., Any]
+        Generated function that accepts numerical inputs corresponding to `args`.
+        The function:
+        - Converts inputs to NumPy arrays (when `vectorize=True`)
+        - Applies custom symbol mappings from `f_numpy`
+        - Evaluates the expression using NumPy operations
+        - Returns scalars or arrays with proper dtype promotion
+
+    Raises
+    ------
+    TypeError
+        - If `expr` cannot be sympified
+        - If `args` contains non-Symbol elements
+        - If `f_numpy` keys are not Symbols
+    ValueError
+        - If `expr` contains symbols not listed in `args`
+        - If `f_numpy` keys overlap with `args` symbols
+
+    Notes
+    -----
+    1. Broadcasting behavior:
+       - With `vectorize=True`: All inputs are converted to arrays via `numpy.asarray`
+         and broadcasting follows NumPy rules.
+       - With constant expressions: Returns `constant + numpy.zeros(broadcast_shape)`
+         to ensure proper dtype and shape handling.
+       - With `vectorize=False`: Inputs are not converted, and operations may fail
+         on array inputs.
+
+    2. Performance considerations:
+       - The generated function is created via `exec` and may have overhead on
+         very small inputs.
+       - For large arrays, the vectorized version provides near-native NumPy performance.
+       - Custom functions in `f_numpy` are injected by name and must be available in
+         the NumPy namespace or provided as callables.
+
+    3. Symbol resolution:
+       - All symbols in `expr` must be accounted for: either in `args` (as variables)
+         or in `f_numpy` (as functions).
+       - The generated function's parameter order matches the order of symbols in `args`.
+
+    4. Safety:
+       - Uses `exec` internally; exercise caution with untrusted expressions.
+       - The generated function includes its source code in its `__doc__` for inspection.
+
+```
 
 **Functional requirements**
 
