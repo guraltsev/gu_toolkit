@@ -199,94 +199,116 @@ VIEWPORT = _ViewportToken()
 # ==============================================================================
 # Helpers
 # ==============================================================================
-import ipywidgets as widgets
-from IPython.display import display
+__all__ += ["SmartSlider"]
 
-__all__+=["SmartSlider"]
-class SmartSlider(widgets.VBox):
-    def __init__(self, value=0.0, min_val=0.0, max_val=10.0, step=0.1, description='Value'):
-        super().__init__()
-        
-        # 1. Create the Core Components
-        self.slider = widgets.FloatSlider(
-            value=value,
-            min=min_val,
-            max=max_val,
-            step=step,
-            description=description,
-            continuous_update=False, # Wait until mouse release to trigger heavy updates
-            layout=widgets.Layout(width='300px')
-        )
-        
- 
-        
-        self.settings_btn = widgets.Button(
-            icon='cog',
-            layout=widgets.Layout(width='35px', height='auto'),
-            tooltip="Configure Slider Limits"
-        )
 
-        # 2. Create the Configuration Components (Hidden by default)
-        self.min_input = widgets.FloatText(value=min_val, description='Min:', layout=widgets.Layout(width='150px'))
-        self.max_input = widgets.FloatText(value=max_val, description='Max:', layout=widgets.Layout(width='150px'))
-        self.step_input = widgets.FloatText(value=step, description='Step:', layout=widgets.Layout(width='150px'))
-        
-        self.settings_panel = widgets.HBox(
-            [self.min_input, self.max_input, self.step_input],
-            layout=widgets.Layout(display='none', padding='5px 0 0 0') # Initially hidden
-        )
+class SmartSlider:
+    """A lazily-imported slider widget with an optional settings panel.
 
-        # 3. Layout the Main View
-        self.main_row = widgets.HBox([
-            self.slider, 
-            self.settings_btn
-        ])
-        
-        # Add children to the VBox (Main Row + Settings Panel)
-        self.children = [self.main_row, self.settings_panel]
+    This module aims to be importable in environments that do *not* have
+    ipywidgets available (e.g. plain Python scripts, some CI contexts). To keep
+    imports lightweight, the actual ipywidgets subclass is defined only on first
+    instantiation.
 
-        # 4. Linkage and Logic
-        
-    
-        
-        # Button Logic: Toggle Settings Panel
-        self.settings_btn.on_click(self._toggle_settings)
-        
-        # Settings Logic: Update Slider Properties
-        self.min_input.observe(self._update_min, names='value')
-        self.max_input.observe(self._update_max, names='value')
-        self.step_input.observe(self._update_step, names='value')
+    Notes
+    -----
+    This is a proxy. The first time you call ``SmartSlider(...)`` it will import
+    ``ipywidgets`` and replace ``SmartSlider`` in this module with the concrete
+    widget class for subsequent uses.
+    """
 
-    def _toggle_settings(self, b):
-        """Show or hide the settings panel."""
-        if self.settings_panel.layout.display == 'none':
-            self.settings_panel.layout.display = 'flex'
-        else:
-            self.settings_panel.layout.display = 'none'
+    def __new__(
+        cls,
+        value: float = 0.0,
+        min_val: float = 0.0,
+        max_val: float = 10.0,
+        step: float = 0.1,
+        description: str = "Value",
+    ):
+        widgets = _lazy_import_ipywidgets()
 
-    def _update_min(self, change):
-        """Update slider minimum. Ensure min < max."""
-        new_min = change['new']
-        if new_min < self.slider.max:
-            self.slider.min = new_min
-        else:
-            # If user tries to set min > max, push min down slightly or handle error
-            # Here we just reject the change implicitly by relying on traitlet validation usually,
-            # but explicit logic prevents UI locking.
-            pass
+        class _SmartSlider(widgets.VBox):
+            def __init__(
+                self,
+                value: float = 0.0,
+                min_val: float = 0.0,
+                max_val: float = 10.0,
+                step: float = 0.1,
+                description: str = "Value",
+            ) -> None:
+                super().__init__()
 
-    def _update_max(self, change):
-        """Update slider maximum."""
-        new_max = change['new']
-        if new_max > self.slider.min:
-            self.slider.max = new_max
+                # 1) Core components
+                self.slider = widgets.FloatSlider(
+                    value=value,
+                    min=min_val,
+                    max=max_val,
+                    step=step,
+                    description=description,
+                    continuous_update=False,  # heavy updates should not run per-mousemove
+                    layout=widgets.Layout(width="300px"),
+                )
 
-    def _update_step(self, change):
-        """Update slider step size."""
-        new_step = change['new']
-        if new_step > 0:
-            self.slider.step = new_step
-            
+                self.settings_btn = widgets.Button(
+                    icon="cog",
+                    layout=widgets.Layout(width="35px", height="auto"),
+                    tooltip="Configure slider limits",
+                )
+
+                # 2) Configuration panel (hidden by default)
+                self.min_input = widgets.FloatText(
+                    value=min_val, description="Min:", layout=widgets.Layout(width="150px")
+                )
+                self.max_input = widgets.FloatText(
+                    value=max_val, description="Max:", layout=widgets.Layout(width="150px")
+                )
+                self.step_input = widgets.FloatText(
+                    value=step, description="Step:", layout=widgets.Layout(width="150px")
+                )
+
+                self.settings_panel = widgets.HBox(
+                    [self.min_input, self.max_input, self.step_input],
+                    layout=widgets.Layout(display="none", padding="5px 0 0 0"),
+                )
+
+                # 3) Layout
+                self.main_row = widgets.HBox([self.slider, self.settings_btn])
+                self.children = [self.main_row, self.settings_panel]
+
+                # 4) Wiring
+                self.settings_btn.on_click(self._toggle_settings)
+                self.min_input.observe(self._update_min, names="value")
+                self.max_input.observe(self._update_max, names="value")
+                self.step_input.observe(self._update_step, names="value")
+
+            def _toggle_settings(self, _b: object) -> None:
+                """Show or hide the settings panel."""
+                self.settings_panel.layout.display = (
+                    "flex" if self.settings_panel.layout.display == "none" else "none"
+                )
+
+            def _update_min(self, change: Dict[str, Any]) -> None:
+                """Update slider minimum (best-effort)."""
+                new_min = float(change["new"])
+                if new_min < float(self.slider.max):
+                    self.slider.min = new_min
+
+            def _update_max(self, change: Dict[str, Any]) -> None:
+                """Update slider maximum (best-effort)."""
+                new_max = float(change["new"])
+                if new_max > float(self.slider.min):
+                    self.slider.max = new_max
+
+            def _update_step(self, change: Dict[str, Any]) -> None:
+                """Update slider step size (best-effort)."""
+                new_step = float(change["new"])
+                if new_step > 0:
+                    self.slider.step = new_step
+
+        # Cache the concrete class for future instantiations.
+        globals()["SmartSlider"] = _SmartSlider  # type: ignore[assignment]
+
+        return _SmartSlider(value=value, min_val=min_val, max_val=max_val, step=step, description=description)
 
 # ==============================================================================
 # Environment & dependency helpers (lazy imports)
@@ -872,7 +894,7 @@ __all__+=["SmartFigure"]
 class SmartFigure:
     """Main plotting controller with a Plotly FigureWidget view (Phase 1).
 
-    Stage 2/3 additions (blueprint alignment)
+    Stage 2–4 additions (blueprint alignment)
     ---------------------------------------
     * Expression analysis supports:
       - constant expressions (0 free symbols),
@@ -923,17 +945,33 @@ class SmartFigure:
     # -------------------------------------------------------------------------
     # View / widget lifecycle
     # -------------------------------------------------------------------------
-    @property
-    def widget(self):
+    def _ensure_backend(self) -> "PlotlyBackend":
+        """Create and initialize the plotting backend if needed.
+
+        This is a lazy initializer shared by :attr:`widget` and :attr:`backend`.
+        """
         if self._backend is None:
             self._backend = PlotlyBackend()
             self._backend.set_viewport(self._x_range, self._y_range)
             for plot in self._plots.values():
                 self._create_backend_primitive(plot)
             self._update_all_data()
+        return self._backend
 
-        import ipywidgets as widgets  # type: ignore
-        return widgets.VBox([self._backend.fig])
+    @property
+    def backend(self) -> "PlotlyBackend":
+        """Return the (lazily created) plotting backend.
+
+        This is primarily useful for testing and introspection. Accessing this
+        property does not display anything.
+        """
+        return self._ensure_backend()
+
+    @property
+    def widget(self):
+        backend = self._ensure_backend()
+        widgets = _lazy_import_ipywidgets()
+        return widgets.VBox([backend.fig])
 
     def show(self):
         w = self.widget
@@ -1014,7 +1052,7 @@ class SmartFigure:
         return sym
 
     # -------------------------------------------------------------------------
-    # Dependency tracking + callbacks (Stage 3)
+    # Dependency tracking + callbacks (Stage 4)
     # -------------------------------------------------------------------------
     def _ensure_param_exists(self, sym: sympy.Symbol) -> None:
         _ = self.parameter_registry.get_param(sym)
