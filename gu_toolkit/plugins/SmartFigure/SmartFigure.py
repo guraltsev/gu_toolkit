@@ -105,6 +105,11 @@ so Phase 2 can be implemented without rewriting the backend boundary.
 
 from __future__ import annotations
 
+
+__all__ = []
+
+
+
 import sys
 import uuid
 from types import MappingProxyType
@@ -127,8 +132,8 @@ from typing import (
 import numpy
 import sympy
 
-from gu_numpify import numpify
-from gu_SmartException import GuideError
+from gu_toolkit.plugins.numpify import numpify
+from gu_toolkit.plugins.SmartException import GuideError
 
 # ==============================================================================
 # Plotly text / legend label sanitation
@@ -184,8 +189,10 @@ class _ViewportToken:
     def __repr__(self) -> str:
         return "VIEWPORT"
 
-
+__all__+=["VIEWPORT"]
 VIEWPORT = _ViewportToken()
+
+
 
 # ==============================================================================
 # Helpers
@@ -193,6 +200,7 @@ VIEWPORT = _ViewportToken()
 import ipywidgets as widgets
 from IPython.display import display
 
+__all__+=["SmartSlider"]
 class SmartSlider(widgets.VBox):
     def __init__(self, value=0.0, min_val=0.0, max_val=10.0, step=0.1, description='Value'):
         super().__init__()
@@ -276,6 +284,8 @@ class SmartSlider(widgets.VBox):
         new_step = change['new']
         if new_step > 0:
             self.slider.step = new_step
+            
+
 # ==============================================================================
 # Environment & dependency helpers (lazy imports)
 # ==============================================================================
@@ -340,7 +350,7 @@ def _lazy_import_plotly_go():
 # ==============================================================================
 # 1. Configuration (Style & Reactive Proxy)
 # ==============================================================================
-
+__all__+=["Style"]
 @dataclass
 class Style:
     """Controls the visual appearance of a plot."""
@@ -469,6 +479,7 @@ class ReactiveStyle:
 HandleT = TypeVar("HandleT")
 
 
+__all__+=["PlotBackend"]
 @runtime_checkable
 class PlotBackend(Protocol[HandleT]):
     """Contract for rendering engines."""
@@ -480,7 +491,7 @@ class PlotBackend(Protocol[HandleT]):
     def set_viewport(self, x_range: Tuple[float, float], y_range: Optional[Tuple[float, float]]) -> None: ...
     def request_redraw(self) -> None: ...
 
-
+__all__+=["MplBackend"]
 class MplBackend:
     """Matplotlib backend (optional, lazy-imported)."""
 
@@ -540,13 +551,13 @@ class MplBackend:
     def request_redraw(self) -> None:
         self.fig.canvas.draw_idle()
 
-
+__all__+=["PlotlyTraceHandle"]
 @dataclass(frozen=True)
 class PlotlyTraceHandle:
     """Stable identifier for a Plotly trace in a FigureWidget (tracked by uid)."""
     uid: str
 
-
+__all__+=["PlotlyBackend"]
 class PlotlyBackend:
     """Plotly FigureWidget backend (Phase 1 default; 2D lines only)."""
 
@@ -643,7 +654,7 @@ class PlotlyBackend:
 # ==============================================================================
 # 3. Model (Plot)
 # ==============================================================================
-
+__all__+=["Plot"]
 class Plot:
     """Represents one plotted SymPy expression."""
 
@@ -716,7 +727,7 @@ class Plot:
 
     def _compile(self) -> None:
         try:
-            self._func = numpify(self._expr, args=[self._symbol], safe=True)
+            self._func = numpify(self._expr, args=[self._symbol])
         except Exception as e:
             raise ValueError(f"Failed to compile expression '{self._expr}': {e}") from e
 
@@ -840,7 +851,7 @@ class Plot:
 # ==============================================================================
 # 4. Controller (SmartFigure)
 # ==============================================================================
-
+__all__+=["SmartFigure"]
 class SmartFigure:
     """Main plotting controller with a Plotly FigureWidget view (Phase 1)."""
 
@@ -1087,3 +1098,8 @@ class SmartFigure:
             self._recompute_and_draw(plot)
 
 
+
+
+__gu_exports__ = __all__
+__gu_priority__ = 200
+__gu_enabled=True

@@ -12,14 +12,14 @@ vectorized NumPy functions. It offers specific support for:
 
 Usage:
     from gu_toolkit.compile.numpify import numpify
-    import sympy as sp
+    import sympy
 
-    x, y = sp.symbols('x y')
+    x, y = sympy.symbols('x y')
     # Auto-detect args (alphabetical: x, y)
-    func = numpify(sp.sin(x) * y)
+    func = numpify(sympy.sin(x) * y)
     
     # Manual args order (y, x)
-    func_explicit = numpify(sp.sin(x) * y, args=(y, x))
+    func_explicit = numpify(sympy.sin(x) * y, args=(y, x))
 """
 
 __gu_exports__ = ["numpify"]
@@ -31,18 +31,18 @@ __gu_enabled__ = True
 import textwrap
 from typing import Any, Callable, Dict, Iterable, Optional, Union
 
-import numpy as np
-import sympy as sp
+import numpy 
+import sympy
 from sympy.printing.numpy import NumPyPrinter
 
 __all__ = ["numpify"]
 
 
 def numpify(
-    expr: sp.Expr,
+    expr: sympy.Expr,
     *,
-    args: Optional[Iterable[sp.Symbol]] = None,
-    f_numpy: Optional[Dict[sp.Symbol, Callable[..., Any]]] = None,
+    args: Optional[Iterable[sympy.Symbol]] = None,
+    f_numpy: Optional[Dict[sympy.Symbol, Callable[..., Any]]] = None,
     vectorize: bool = True,
     expand_definition: bool = True,
 ) -> Callable[..., Any]:
@@ -70,7 +70,7 @@ def numpify(
     Callable[..., Any]
         A Python function accepting numerical arguments in the chosen order.
     """
-    if not isinstance(expr, sp.Basic):
+    if not isinstance(expr, sympy.Basic):
         raise TypeError(f"numpify expects a SymPy expression, got {type(expr)}")
 
     if args is None:
@@ -80,7 +80,7 @@ def numpify(
 
     # Expand custom definitions if requested
     if expand_definition:
-        expr = sp.expand(expr, deep=True)
+        expr = sympy.expand(expr, deep=True)
 
     # Custom symbol -> numpy function mapping
     f_numpy = dict(f_numpy) if f_numpy is not None else {}
@@ -99,10 +99,10 @@ def numpify(
     lines.append("def _generated(" + ", ".join(arg_names) + "):")
     if vectorize:
         for nm in arg_names:
-            lines.append(f"    {nm} = np.asarray({nm})")
+            lines.append(f"    {nm} = numpy.asarray({nm})")
     # Inject custom numeric mappings by name
     for sym, fn in f_numpy.items():
-        if not isinstance(sym, sp.Symbol):
+        if not isinstance(sym, sympy.Symbol):
             raise TypeError(f"f_numpy keys must be SymPy Symbols, got {type(sym)}")
         lines.append(f"    {sym.name} = _f_numpy['{sym.name}']")
 
@@ -111,7 +111,7 @@ def numpify(
     src = "\n".join(lines)
 
     # Compile
-    glb: Dict[str, Any] = {"np": np, "_f_numpy": {k.name: v for k, v in f_numpy.items()}}
+    glb: Dict[str, Any] = {"numpy": numpy, "_f_numpy": {k.name: v for k, v in f_numpy.items()}}
     loc: Dict[str, Any] = {}
     exec(src, glb, loc)
     fn = loc["_generated"]

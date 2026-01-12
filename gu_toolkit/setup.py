@@ -152,8 +152,15 @@ def setup(
         # Prelude exports (SymPy-heavy) + plugin exports
         from gu_toolkit import prelude as _prelude  # imported only when exporting
 
+        
         prelude_all = list(getattr(_prelude, "__all__", []))
+        #print("prelude_all: ", prelude_all)
+        
+        
         prelude_exports = {name: getattr(_prelude, name) for name in prelude_all if hasattr(_prelude, name)}
+
+        #print("prelude_exports: ", prelude_exports)
+        
 
         plugin_exports = get_exports(discover=False)
 
