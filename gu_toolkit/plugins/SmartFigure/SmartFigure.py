@@ -307,35 +307,71 @@ def _get_smart_slider_class() -> type:
                 description=description,
                 continuous_update=True,
                 readout=True,
-                layout=widgets.Layout(width="100%"),
+                layout=widgets.Layout(width="100%", min_width="300px", flex="1 1 auto"),
             )
 
-            self.settings_btn = widgets.ToggleButton(
-                value=False,
-                icon="sliders",
-                tooltip="Slider settings",
-                layout=widgets.Layout(width="38px"),
+            # A small cog button toggles advanced settings (min/max/step).
+            self.settings_btn = widgets.Button(
+                icon="cog",
+                tooltip="Configure slider limits",
+                layout=widgets.Layout(width="35px", height="auto", flex="0 0 auto"),
             )
-            self.settings_btn.observe(self._toggle_settings, names="value")
+            self.settings_btn.on_click(self._toggle_settings)
 
-            self.main_row = widgets.HBox([self.slider, self.settings_btn], layout=widgets.Layout(width="100%"))
+            self.main_row = widgets.HBox(
+                [self.slider, self.settings_btn],
+                layout=widgets.Layout(width="100%", align_items="center"),
+            )
 
-            self.min_input = widgets.FloatText(value=float(min_val), description="min", layout=widgets.Layout(width="200px"))
-            self.max_input = widgets.FloatText(value=float(max_val), description="max", layout=widgets.Layout(width="200px"))
-            self.step_input = widgets.FloatText(value=float(step), description="step", layout=widgets.Layout(width="200px"))
+            _input_layout = widgets.Layout(width="150px", min_width="130px")
+            _input_style = {"description_width": "45px"}
+
+            self.min_input = widgets.FloatText(
+                value=float(min_val),
+                description="Min:",
+                layout=_input_layout,
+                style=_input_style,
+            )
+            self.max_input = widgets.FloatText(
+                value=float(max_val),
+                description="Max:",
+                layout=_input_layout,
+                style=_input_style,
+            )
+            self.step_input = widgets.FloatText(
+                value=float(step),
+                description="Step:",
+                layout=_input_layout,
+                style=_input_style,
+            )
 
             self.min_input.observe(self._update_min, names="value")
             self.max_input.observe(self._update_max, names="value")
             self.step_input.observe(self._update_step, names="value")
 
-            self.settings_panel = widgets.HBox([self.min_input, self.max_input, self.step_input])
-            self.settings_panel.layout.display = "none"
+            # Use wrapping to avoid horizontal scrollbars in narrow containers.
+            self.settings_panel = widgets.HBox(
+                [self.min_input, self.max_input, self.step_input],
+                layout=widgets.Layout(
+                    display="none",
+                    width="100%",
+                    flex_flow="row wrap",
+                    padding="5px 0 0 0",
+                    overflow="hidden",
+                ),
+            )
 
-            super().__init__([self.main_row, self.settings_panel], layout=widgets.Layout(width="100%"))
+            super().__init__(
+                [self.main_row, self.settings_panel],
+                layout=widgets.Layout(width="100%", min_width="340px"),
+            )
 
-        def _toggle_settings(self, change: Mapping[str, object]) -> None:
-            show = bool(change.get("new", False))
-            self.settings_panel.layout.display = "flex" if show else "none"
+        def _toggle_settings(self, _b: object) -> None:
+            """Show or hide the settings panel."""
+            self.settings_panel.layout.display = (
+                "flex" if self.settings_panel.layout.display == "none" else "none"
+            )
+
 
         def _update_min(self, change: Mapping[str, object]) -> None:
             try:
@@ -1829,5 +1865,5 @@ class SmartFigure:
 # === SECTION: Plugin exports [id: exports] ===
 __gu_exports__ = __all__
 __gu_priority__ = 200
-__gu_enabled = True
+__gu_enabled__ = True
 # === END SECTION: Plugin exports ===
