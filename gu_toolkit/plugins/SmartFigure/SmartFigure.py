@@ -888,24 +888,284 @@ class Plot:
 # ==============================================================================
 
 # ==============================================================================
+
+# -----------------------------------------------------------------------------
+# Stage 5: Parameter slider bindings (UI layer)
+# -----------------------------------------------------------------------------
+class _ParamSliderBinding:
+    """Two-way binding between a :class:`SmartParameter` and a :class:`SmartSlider`.
+
+    The binding protocol follows the blueprint:
+
+    * Slider -> parameter: user interaction calls ``set_protected`` / ``set_bounds``.
+    * Parameter -> slider: external parameter changes update the widget without
+      feedback loops.
+
+    Notes
+    -----
+    This class lives in the UI layer. It is created only when a
+    :class:`SmartFigure` widget is constructed (i.e. when ipywidgets is available).
+    """
+
+    def __init__(
+        self,
+        *,
+        symbol: sympy.Symbol,
+        param: SmartParameter,
+        slider: Any,
+        slider_token: CallbackToken,
+    ) -> None:
+        self.symbol = symbol
+        self.param = param
+        self.slider = slider
+        self.slider_token = slider_token
+
+        # Guard used to prevent widget updates from triggering callbacks.
+        self._suspend_handlers = False
+
+        # We store handlers explicitly so we can unobserve them reliably.
+        self._is_attached = False
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+    def attach(self) -> None:
+        """Attach widget observers."""
+        if self._is_attached:
+            return
+
+        # Disable SmartSlider's internal min/max/step wiring. We want the
+        # SmartParameter to be the source of truth.
+        for widget_attr, handler_name in (
+            ("min_input", "_update_min"),
+            ("max_input", "_update_max"),
+            ("step_input", "_update_step"),
+        ):
+            try:
+                inp = getattr(self.slider, widget_attr)
+                handler = getattr(self.slider, handler_name)
+                inp.unobserve(handler, names="value")
+            except Exception:
+                pass
+
+        try:
+            self.slider.slider.observe(self._on_slider_value, names="value")
+            self.slider.min_input.observe(self._on_bounds_change, names="value")
+            self.slider.max_input.observe(self._on_bounds_change, names="value")
+            self.slider.step_input.observe(self._on_step_change, names="value")
+        finally:
+            self._is_attached = True
+
+    def detach(self) -> None:
+        """Detach widget observers (best-effort)."""
+        if not self._is_attached:
+            return
+        try:
+            self.slider.slider.unobserve(self._on_slider_value, names="value")
+            self.slider.min_input.unobserve(self._on_bounds_change, names="value")
+            self.slider.max_input.unobserve(self._on_bounds_change, names="value")
+            self.slider.step_input.unobserve(self._on_step_change, names="value")
+        except Exception:
+            pass
+        self._is_attached = False
+
+    # ------------------------------------------------------------------
+    # Parameter -> slider sync
+    # ------------------------------------------------------------------
+    def sync_from_param(
+        self,
+        *,
+        owner_token: Optional[CallbackToken] = None,
+        what_changed: Tuple[str, ...] = (),
+    ) -> None:
+        """Update the widget to reflect the parameter state.
+
+        If ``owner_token`` matches this binding's ``slider_token`` we skip updates
+        to avoid feedback loops.
+        """
+        if owner_token == self.slider_token:
+            return
+
+        self._suspend_handlers = True
+        try:
+            v = float(self.param.value)
+
+            # SmartSlider and FloatSlider require finite numeric bounds.
+            mn = self._coerce_bound(self.param.min_val, fallback=v - 1.0)
+            mx = self._coerce_bound(self.param.max_val, fallback=v + 1.0)
+            if not (mn < mx):
+                mn, mx = v - 1.0, v + 1.0
+
+            step = self._coerce_step(getattr(self.param, "step", None), mn, mx)
+
+            # Update slider first, then text inputs.
+            self.slider.slider.min = mn
+            self.slider.slider.max = mx
+            self.slider.slider.step = step
+            self.slider.slider.value = self._clamp(v, mn, mx)
+
+            self.slider.min_input.value = mn
+            self.slider.max_input.value = mx
+            self.slider.step_input.value = step
+        finally:
+            self._suspend_handlers = False
+
+    @staticmethod
+    def _coerce_bound(raw: Any, *, fallback: float) -> float:
+        try:
+            if raw is None:
+                return float(fallback)
+            return float(raw)
+        except Exception:
+            return float(fallback)
+
+    @staticmethod
+    def _clamp(val: float, mn: float, mx: float) -> float:
+        return max(mn, min(mx, val))
+
+    @staticmethod
+    def _coerce_step(raw: Any, mn: float, mx: float) -> float:
+        try:
+            if raw is None:
+                raise TypeError
+            step = float(raw)
+        except Exception:
+            # A reasonable default: 200 steps across the range.
+            step = (mx - mn) / 200.0 if mx > mn else 0.01
+        if step <= 0:
+            step = 0.01
+        return step
+
+    # ------------------------------------------------------------------
+    # Slider -> parameter handlers
+    # ------------------------------------------------------------------
+    def _on_slider_value(self, change: Dict[str, Any]) -> None:
+        if self._suspend_handlers:
+            return
+        try:
+            new_val = float(change["new"])
+        except Exception:
+            return
+
+        # Update parameter, then re-sync from parameter to reflect any coercion.
+        self._set_param_value(new_val)
+        self.sync_from_param(owner_token=None)
+
+    def _on_bounds_change(self, _change: Dict[str, Any]) -> None:
+        if self._suspend_handlers:
+            return
+        try:
+            mn = float(self.slider.min_input.value)
+            mx = float(self.slider.max_input.value)
+        except Exception:
+            return
+
+        self._set_param_bounds(mn, mx)
+        # Always re-sync: bounds changes may clamp value.
+        self.sync_from_param(owner_token=None)
+
+    def _on_step_change(self, change: Dict[str, Any]) -> None:
+        if self._suspend_handlers:
+            return
+        try:
+            new_step = float(change["new"])
+        except Exception:
+            return
+        if new_step <= 0:
+            return
+
+        # Best-effort: `step` is not reactive by contract.
+        try:
+            setattr(self.param, "step", new_step)
+        except Exception:
+            pass
+
+        self._suspend_handlers = True
+        try:
+            self.slider.slider.step = new_step
+        finally:
+            self._suspend_handlers = False
+
+    def _set_param_value(self, new_val: float) -> None:
+        try:
+            self.param.set_protected(
+                new_val,
+                owner_token=self.slider_token,
+                what_changed=("value",),
+                source="slider",
+            )
+            return
+        except TypeError:
+            # Older/alternate SmartParameter implementations.
+            pass
+        except Exception:
+            return
+
+        try:
+            self.param.value = new_val
+        except Exception:
+            pass
+
+    def _set_param_bounds(self, mn: float, mx: float) -> None:
+        try:
+            self.param.set_bounds(min_val=mn, max_val=mx, owner_token=self.slider_token, source="slider")
+            return
+        except TypeError:
+            pass
+        except Exception:
+            return
+
+        # Fallback: set attributes directly if available.
+        try:
+            self.param.min_val = mn
+            self.param.max_val = mx
+        except Exception:
+            pass
+
 # 4. Controller (SmartFigure)
 # ==============================================================================
 __all__+=["SmartFigure"]
 class SmartFigure:
-    """Main plotting controller with a Plotly FigureWidget view (Phase 1).
+    """Main plotting controller with a Plotly FigureWidget view.
 
-    Stage 2–4 additions (blueprint alignment)
-    ---------------------------------------
-    * Expression analysis supports:
-      - constant expressions (0 free symbols),
-      - 1-symbol defaulting,
-      - 1-symbol + explicitly different `symbol` -> parameterized constant,
-      - multi-symbol expressions requiring an explicit `symbol`.
+    DESIGN OVERVIEW
+    ---------------
+    ``SmartFigure`` is a small controller that orchestrates:
 
-    * Parameter integration:
-      - Each plot stores a deterministic parameter ordering.
-      - A figure reads parameter values from a :class:`SmartParameterRegistry`.
-      - Parameter changes recompute only the plots that depend on that parameter.
+    * **Expression analysis**: determine the independent variable and which free
+      symbols should be treated as **parameters**.
+    * **Registry integration**: parameters live in a :class:`SmartParameterRegistry`
+      (shared by default, overridable per-figure).
+    * **Dependency tracking**: changing a parameter recomputes **only** the plots
+      that depend on that parameter.
+    * **UI policy (Option A)**: a figure shows sliders only for parameters used by
+      its current plots; removing a plot removes its now-unused sliders, but the
+      registry entry is retained.
+
+    Expression analysis rules (blueprint)
+    ------------------------------------
+    Let ``S = expr.free_symbols``.
+
+    * ``|S| == 0``: constant expression; independent symbol is ``symbol`` if
+      provided, else the figure's default ``var``. No parameters.
+    * ``|S| == 1``:
+      - if ``symbol`` is omitted or equals the sole free symbol: that symbol is
+        the independent variable, no parameters.
+      - if ``symbol`` is provided and differs: treat as a *parameterized
+        constant* in ``symbol``; the sole free symbol becomes a parameter.
+    * ``|S| > 1``: the user must pass ``symbol=...`` (and it must be in ``S``);
+      all other free symbols become parameters.
+
+    Parameter ordering and evaluation contract
+    -----------------------------------------
+    Parameters are sorted deterministically by ``.name`` and compiled with
+    ``numpify(args=(symbol, *params_sorted))``. At evaluation time, each plot is
+    called as ``f(x_values, *param_values_sorted)``.
+
+    Registry retention policy
+    -------------------------
+    Parameters are **never** removed from the registry, even if unused by the
+    current figure. Only this figure's callbacks and UI sliders are cleaned up.
     """
 
     # Class-level default registry (shared by default).
@@ -937,6 +1197,11 @@ class SmartFigure:
         self._param_callback_token: Dict[sympy.Symbol, CallbackToken] = {}
         self._plot_params: Dict[str, Tuple[sympy.Symbol, ...]] = {}
 
+        # UI (Stage 5): per-figure parameter sliders (Option A).
+        self._widget: Optional[Any] = None
+        self._sliders_box: Optional[Any] = None
+        self._sliders_by_param: Dict[sympy.Symbol, _ParamSliderBinding] = {}
+
         self._backend: Optional[PlotlyBackend] = None
 
         if show_now:
@@ -967,11 +1232,47 @@ class SmartFigure:
         """
         return self._ensure_backend()
 
-    @property
-    def widget(self):
+    def _ensure_widget_container(self) -> Any:
+        """Build (and cache) the ipywidgets container for this figure.
+
+        The container always includes a slider column (hidden when empty) and the
+        Plotly ``FigureWidget``.
+
+        Raises
+        ------
+        GuideError
+            If running in Google Colab or if ipywidgets is unavailable.
+        """
+        _require_not_colab()
+
         backend = self._ensure_backend()
         widgets = _lazy_import_ipywidgets()
-        return widgets.VBox([backend.fig])
+
+        if self._widget is None:
+            self._sliders_box = widgets.VBox(
+                [],
+                layout=widgets.Layout(
+                    display="none",
+                    overflow="auto",
+                    max_width="360px",
+                    padding="0 10px 0 0",
+                ),
+            )
+
+            self._widget = widgets.HBox(
+                [self._sliders_box, backend.fig],
+                layout=widgets.Layout(align_items="stretch"),
+            )
+
+            # Populate sliders for any parameters already used by existing plots.
+            self._sync_ui_sliders_with_dependencies()
+
+        return self._widget
+
+    @property
+    def widget(self) -> Any:
+        """Return the interactive widget (slider column + plot view)."""
+        return self._ensure_widget_container()
 
     def show(self):
         w = self.widget
@@ -982,6 +1283,116 @@ class SmartFigure:
             pass
         return w
 
+
+
+    # -------------------------------------------------------------------------
+    # Stage 5: Slider UI policy (Option A)
+    # -------------------------------------------------------------------------
+    def _used_param_symbols(self) -> Tuple[sympy.Symbol, ...]:
+        """Return the parameter symbols currently used by this figure.
+
+        Symbols are returned sorted deterministically by ``.name``.
+        """
+        used = [s for s, names in self._plots_by_param.items() if names]
+        return tuple(sorted(used, key=lambda s: s.name))
+
+    def _refresh_sliders_box(self) -> None:
+        """Rebuild the slider column from current dependencies (best-effort)."""
+        if self._sliders_box is None:
+            return
+
+        ordered_syms = self._used_param_symbols()
+        children: list[Any] = []
+        for s in ordered_syms:
+            binding = self._sliders_by_param.get(s)
+            if binding is not None:
+                children.append(binding.slider)
+
+        self._sliders_box.children = tuple(children)
+        self._sliders_box.layout.display = "flex" if children else "none"
+
+    def _sync_ui_sliders_with_dependencies(self) -> None:
+        """Ensure the UI shows sliders only for parameters used by this figure."""
+        if self._sliders_box is None:
+            return
+
+        desired = set(self._used_param_symbols())
+        existing = set(self._sliders_by_param.keys())
+
+        # Create missing bindings.
+        for s in sorted(desired - existing, key=lambda sym: sym.name):
+            self._ensure_param_slider(s)
+
+        # Remove bindings that are no longer needed.
+        for s in sorted(existing - desired, key=lambda sym: sym.name):
+            self._remove_param_slider(s)
+
+        self._refresh_sliders_box()
+
+    def _ensure_param_slider(self, sym: sympy.Symbol) -> None:
+        """Create and attach a slider for the given parameter symbol."""
+        if self._sliders_box is None:
+            return
+        if sym in self._sliders_by_param:
+            return
+
+        param = self.parameter_registry.get_param(sym)
+
+        # SmartSlider requires finite bounds.
+        try:
+            v = float(param.value)
+        except Exception:
+            v = 0.0
+        try:
+            mn = float(param.min_val) if param.min_val is not None else v - 1.0
+        except Exception:
+            mn = v - 1.0
+        try:
+            mx = float(param.max_val) if param.max_val is not None else v + 1.0
+        except Exception:
+            mx = v + 1.0
+        if not (mn < mx):
+            mn, mx = v - 1.0, v + 1.0
+
+        step = getattr(param, "step", None)
+        try:
+            step_f = float(step) if step is not None else (mx - mn) / 200.0
+        except Exception:
+            step_f = (mx - mn) / 200.0
+        if step_f <= 0:
+            step_f = 0.01
+
+        slider = SmartSlider(value=v, min_val=mn, max_val=mx, step=step_f, description=str(sym))
+        # `CallbackToken` is an opaque value used to prevent callback feedback loops.
+        # Some implementations require an explicit string token.
+        raw_token = f"slider:{uuid.uuid4()}"
+        try:
+            token = CallbackToken(token=raw_token)  # type: ignore[call-arg]
+        except TypeError:
+            token = CallbackToken(raw_token)  # type: ignore[call-arg]
+        binding = _ParamSliderBinding(symbol=sym, param=param, slider=slider, slider_token=token)
+        binding.attach()
+
+        # Bring slider fully in sync with parameter (in case of coercion/clamping).
+        binding.sync_from_param(owner_token=None)
+
+        self._sliders_by_param[sym] = binding
+
+    def _remove_param_slider(self, sym: sympy.Symbol) -> None:
+        """Remove and dispose of a parameter slider from this figure's UI."""
+        binding = self._sliders_by_param.pop(sym, None)
+        if binding is None:
+            return
+
+        try:
+            binding.detach()
+        finally:
+            try:
+                binding.slider.close()
+            except Exception:
+                pass
+
+        self._refresh_sliders_box()
     # -------------------------------------------------------------------------
     # Ranges / viewport
     # -------------------------------------------------------------------------
@@ -1076,6 +1487,9 @@ class SmartFigure:
             # Best effort: never let callback cleanup break figure usage.
             pass
 
+        # Stage 5: remove slider from this figure's UI (registry entry is retained).
+        self._remove_param_slider(sym)
+
     def _set_plot_params(self, plot_name: str, param_syms: Tuple[sympy.Symbol, ...]) -> None:
         """Update dependency mappings for one plot name."""
         old = self._plot_params.get(plot_name, ())
@@ -1089,6 +1503,7 @@ class SmartFigure:
                 if not names:
                     self._plots_by_param.pop(s, None)
                     self._maybe_remove_param_callback(s)
+                    self._remove_param_slider(s)
 
         # Add new dependencies.
         for s in new:
@@ -1098,6 +1513,8 @@ class SmartFigure:
 
         self._plot_params[plot_name] = new
 
+        self._sync_ui_sliders_with_dependencies()
+
     def _on_param_change(
         self,
         param: SmartParameter,
@@ -1106,8 +1523,15 @@ class SmartFigure:
         what_changed: Tuple[str, ...] = (),
         **_kwargs: Any,
     ) -> None:
+        # Stage 5: keep any live slider in sync with the parameter.
+        param_id = param.id
+        if isinstance(param_id, sympy.Symbol):
+            binding = self._sliders_by_param.get(param_id)
+            if binding is not None:
+                binding.sync_from_param(owner_token=owner_token, what_changed=what_changed)
+
         # Recompute only when the value changes (bounds-only changes do not affect evaluation).
-        # If bounds changes clamp the value, Stage 1 ensures `"value"` appears in what_changed.
+        # If bounds changes clamp the value, Stage 1 ensures "value" appears in what_changed.
         if what_changed and "value" not in what_changed:
             return
 
