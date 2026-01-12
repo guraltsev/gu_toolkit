@@ -9,6 +9,9 @@ __all__+= list(getattr(sp, "__all__", []))
 import numpy as np
 __all__+=["np"]
 
+import pandas as pd
+__all__+=["pd"]
+
 # print("__all__ (from prelude):",__all__)
 
 # Standard symbols (override/define explicitly for consistency)
