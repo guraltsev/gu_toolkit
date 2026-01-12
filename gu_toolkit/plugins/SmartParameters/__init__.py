@@ -3,19 +3,16 @@
 This package implements a small reactive-parameter core intended for
 Jupyter/JupyterLab usage.
 
-Only **Stage 1 & Stage 2** of the project blueprint are implemented here:
-
-* `SmartParameter`: typed/clamped parameter with callback notification.
-* `CallbackToken`: opaque handle returned from callback registration.
-
-Stages not implemented yet (by design): weakref-backed callbacks, error
-aggregation, and the `SmartParameterRegistry` auto-vivifying mapping.
+Implemented blueprint stages:
+* Stage 1–4: `SmartParameter` with typed/clamped values and weakref-backed,
+  idempotent callback notification with error aggregation.
+* Stage 5: `SmartParameterRegistry` auto-vivifying mapping for parameters.
 
 Public re-exports:
     - CallbackToken
+    - CallbackError
     - SmartParameter
+    - SmartParameterRegistry
 """
 
-
-
-from .SmartParameters import *
+from .SmartParameters import *  # noqa: F401,F403
