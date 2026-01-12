@@ -1,4 +1,44 @@
 """
+Purpose
+-------
+Provide a small, student-facing API for plotting SymPy expressions in Jupyter notebooks, with
+a Plotly-first interactive widget that can run in JupyterLite/Pyodide when the required
+frontend extensions are bundled.
+
+Non-goals
+---------
+- Full-featured plotting (3D, scatter/markers, complex layout management).
+- Eager imports of heavy/optional UI dependencies at module import time.
+
+Design overview
+---------------
+This module follows a simple Model/Controller/View split:
+
+- Model: :class:`Plot` holds a SymPy expression, sampling configuration, and style.
+- Controller: :class:`SmartFigure` manages the viewport, plot registry, and recompute orchestration.
+- View: :class:`PlotBackend` is a thin rendering seam implemented by Plotly and (optionally) Matplotlib.
+
+Key invariants / assumptions
+----------------------------
+- A Plot is evaluated on a 1D grid (x-values) and returns y-values of matching shape.
+- Parameter symbols are treated as scalars; constant (or parameter-only) expressions are broadcast to the x-grid.
+- Optional UI dependencies (ipywidgets/plotly) are imported only when constructing widgets/backends.
+
+Public entrypoints
+------------------
+- :class:`SmartFigure` — main entrypoint; manages plots and (optionally) builds an interactive widget.
+- :class:`Plot` — one plotted expression; exposes sampling and style.
+- :class:`Style` — visual style configuration.
+- :data:`VIEWPORT` — sentinel meaning “inherit from figure viewport”.
+
+Testing
+-------
+This file is intended to be covered by a small deterministic test suite (e.g. ``tests/test_smartfigure_smoke.py``)
+that avoids importing optional UI dependencies.
+Supported Python versions: 3.9+.
+
+----
+
 gu_SmartFigure: Smart symbolic plotting (Plotly-first, JupyterLite-friendly)
 ============================================================================
 
@@ -105,29 +145,47 @@ so Phase 2 can be implemented without rewriting the backend boundary.
 
 from __future__ import annotations
 
+__all__ = [
+    # Fundamentals
+    "VIEWPORT",
 
-__all__ = []
+    # UI helpers (optional dependencies)
+    "SmartSlider",
 
+    # Configuration
+    "Style",
 
+    # Backends
+    "PlotBackend",
+    "MplBackend",
+    "PlotlyTraceHandle",
+    "PlotlyBackend",
+
+    # Core API
+    "Plot",
+    "SmartFigure",
+]
 
 import sys
 import uuid
-from types import MappingProxyType
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import (
     Any,
     Callable,
     Dict,
+    Iterable,
     List,
+    Mapping,
     Optional,
     Protocol,
+    TypeVar,
+    Sequence,
     Tuple,
     Union,
-    TypeVar,
+    SupportsFloat,
     runtime_checkable,
-    OrderedDict as OrderedDictType,
-    Set,
+    cast,
 )
 
 import numpy
@@ -135,12 +193,17 @@ import sympy
 
 from gu_toolkit.plugins.numpify import numpify
 from gu_toolkit.plugins.SmartException import GuideError
-from gu_toolkit.plugins.SmartParameters import CallbackToken, SmartParameter, SmartParameterRegistry
+from gu_toolkit.plugins.SmartParameters import (
+    CallbackToken,
+    SmartParameter,
+    SmartParameterRegistry,
+)
 
-# ==============================================================================
-# Plotly text / legend label sanitation
-# ==============================================================================
-def _plotly_sanitize_trace_name(label: Any) -> str:
+# === SECTION: Plotly label sanitation [id: plotly-labels] ===
+#
+# Defensive escaping for Plotly trace names/legends, with MathJax `$...$` support.
+
+def _plotly_sanitize_trace_name(label: object) -> str:
     """Return a Plotly trace name that is:
     - safe against Plotly's pseudo-HTML parsing (angle brackets, ampersands)
     - safe for LaTeX/MathJax when the user uses `$...$` math segments
@@ -182,137 +245,141 @@ def _plotly_sanitize_trace_name(label: Any) -> str:
 
     return "$".join(out_parts)
 
-# ==============================================================================
-# 0. Fundamentals & Tokens
-# ==============================================================================
+# === END SECTION: Plotly label sanitation ===
+
+# === SECTION: Fundamentals & tokens [id: fundamentals] ===
+#
+# VIEWPORT is a sentinel meaning “inherit viewport/sampling settings from the parent figure”.
 
 class _ViewportToken:
     """Sentinel token representing 'inherit settings from the parent figure'."""
     def __repr__(self) -> str:
         return "VIEWPORT"
 
-__all__+=["VIEWPORT"]
 VIEWPORT = _ViewportToken()
 
+# === END SECTION: Fundamentals & tokens ===
 
 
-# ==============================================================================
-# Helpers
-# ==============================================================================
-__all__ += ["SmartSlider"]
+
+# === SECTION: Helpers and optional dependency boundaries [id: helpers] ===
+
+
+# === SECTION: UI slider widget [id: ui-smartslider] ===
+#
+# This widget is only needed when building interactive Jupyter layouts. To keep this module importable
+# in environments without ipywidgets (CI, headless scripts, some kernels), we build the concrete
+# ipywidgets subclass lazily on first use.
+# === END SECTION: UI slider widget ===
+
+_SMART_SLIDER_CLASS: Optional[type] = None
+
+def _reset_smart_slider_cache_for_tests() -> None:
+    """Reset the cached ipywidgets slider class (test helper)."""
+    global _SMART_SLIDER_CLASS
+    _SMART_SLIDER_CLASS = None
+
+def _get_smart_slider_class() -> type:
+    """Return the cached concrete ipywidgets implementation of :class:`SmartSlider`."""
+    global _SMART_SLIDER_CLASS
+    if _SMART_SLIDER_CLASS is not None:
+        return _SMART_SLIDER_CLASS
+
+    widgets = _lazy_import_ipywidgets()
+
+    class _SmartSlider(widgets.VBox):
+        """Concrete ipywidgets slider with a collapsible settings panel."""
+
+        def __init__(
+            self,
+            *,
+            value: float = 0.0,
+            min_val: float = -1.0,
+            max_val: float = 1.0,
+            step: float = 0.01,
+            description: str = "",
+        ) -> None:
+            self.slider = widgets.FloatSlider(
+                value=value,
+                min=min_val,
+                max=max_val,
+                step=step,
+                description=description,
+                continuous_update=True,
+                readout=True,
+                layout=widgets.Layout(width="100%"),
+            )
+
+            self.settings_btn = widgets.ToggleButton(
+                value=False,
+                icon="sliders",
+                tooltip="Slider settings",
+                layout=widgets.Layout(width="38px"),
+            )
+            self.settings_btn.observe(self._toggle_settings, names="value")
+
+            self.main_row = widgets.HBox([self.slider, self.settings_btn], layout=widgets.Layout(width="100%"))
+
+            self.min_input = widgets.FloatText(value=float(min_val), description="min", layout=widgets.Layout(width="200px"))
+            self.max_input = widgets.FloatText(value=float(max_val), description="max", layout=widgets.Layout(width="200px"))
+            self.step_input = widgets.FloatText(value=float(step), description="step", layout=widgets.Layout(width="200px"))
+
+            self.min_input.observe(self._update_min, names="value")
+            self.max_input.observe(self._update_max, names="value")
+            self.step_input.observe(self._update_step, names="value")
+
+            self.settings_panel = widgets.HBox([self.min_input, self.max_input, self.step_input])
+            self.settings_panel.layout.display = "none"
+
+            super().__init__([self.main_row, self.settings_panel], layout=widgets.Layout(width="100%"))
+
+        def _toggle_settings(self, change: Mapping[str, object]) -> None:
+            show = bool(change.get("new", False))
+            self.settings_panel.layout.display = "flex" if show else "none"
+
+        def _update_min(self, change: Mapping[str, object]) -> None:
+            try:
+                self.slider.min = float(change.get("new", self.slider.min))
+            except Exception:
+                # Keep previous value on invalid input.
+                self.min_input.value = float(self.slider.min)
+
+        def _update_max(self, change: Mapping[str, object]) -> None:
+            try:
+                self.slider.max = float(change.get("new", self.slider.max))
+            except Exception:
+                self.max_input.value = float(self.slider.max)
+
+        def _update_step(self, change: Mapping[str, object]) -> None:
+            try:
+                self.slider.step = float(change.get("new", self.slider.step))
+            except Exception:
+                self.step_input.value = float(self.slider.step)
+
+    _SMART_SLIDER_CLASS = _SmartSlider
+    return _SmartSlider
 
 
 class SmartSlider:
-    """A lazily-imported slider widget with an optional settings panel.
+    """Proxy/factory returning a concrete ipywidgets slider implementation.
 
-    This module aims to be importable in environments that do *not* have
-    ipywidgets available (e.g. plain Python scripts, some CI contexts). To keep
-    imports lightweight, the actual ipywidgets subclass is defined only on first
-    instantiation.
-
-    Notes
-    -----
-    This is a proxy. The first time you call ``SmartSlider(...)`` it will import
-    ``ipywidgets`` and replace ``SmartSlider`` in this module with the concrete
-    widget class for subsequent uses.
+    The returned object is an ipywidgets Widget (a VBox). This indirection keeps the module importable
+    without ipywidgets.
     """
 
     def __new__(
         cls,
+        *,
         value: float = 0.0,
-        min_val: float = 0.0,
-        max_val: float = 10.0,
-        step: float = 0.1,
-        description: str = "Value",
-    ):
-        widgets = _lazy_import_ipywidgets()
+        min_val: float = -1.0,
+        max_val: float = 1.0,
+        step: float = 0.01,
+        description: str = "",
+    ) -> object:
+        slider_cls = _get_smart_slider_class()
+        return slider_cls(value=value, min_val=min_val, max_val=max_val, step=step, description=description)  # type: ignore[misc]
 
-        class _SmartSlider(widgets.VBox):
-            def __init__(
-                self,
-                value: float = 0.0,
-                min_val: float = 0.0,
-                max_val: float = 10.0,
-                step: float = 0.1,
-                description: str = "Value",
-            ) -> None:
-                super().__init__()
-
-                # 1) Core components
-                self.slider = widgets.FloatSlider(
-                    value=value,
-                    min=min_val,
-                    max=max_val,
-                    step=step,
-                    description=description,
-                    continuous_update=False,  # heavy updates should not run per-mousemove
-                    layout=widgets.Layout(width="300px"),
-                )
-
-                self.settings_btn = widgets.Button(
-                    icon="cog",
-                    layout=widgets.Layout(width="35px", height="auto"),
-                    tooltip="Configure slider limits",
-                )
-
-                # 2) Configuration panel (hidden by default)
-                self.min_input = widgets.FloatText(
-                    value=min_val, description="Min:", layout=widgets.Layout(width="150px")
-                )
-                self.max_input = widgets.FloatText(
-                    value=max_val, description="Max:", layout=widgets.Layout(width="150px")
-                )
-                self.step_input = widgets.FloatText(
-                    value=step, description="Step:", layout=widgets.Layout(width="150px")
-                )
-
-                self.settings_panel = widgets.HBox(
-                    [self.min_input, self.max_input, self.step_input],
-                    layout=widgets.Layout(display="none", padding="5px 0 0 0"),
-                )
-
-                # 3) Layout
-                self.main_row = widgets.HBox([self.slider, self.settings_btn])
-                self.children = [self.main_row, self.settings_panel]
-
-                # 4) Wiring
-                self.settings_btn.on_click(self._toggle_settings)
-                self.min_input.observe(self._update_min, names="value")
-                self.max_input.observe(self._update_max, names="value")
-                self.step_input.observe(self._update_step, names="value")
-
-            def _toggle_settings(self, _b: object) -> None:
-                """Show or hide the settings panel."""
-                self.settings_panel.layout.display = (
-                    "flex" if self.settings_panel.layout.display == "none" else "none"
-                )
-
-            def _update_min(self, change: Dict[str, Any]) -> None:
-                """Update slider minimum (best-effort)."""
-                new_min = float(change["new"])
-                if new_min < float(self.slider.max):
-                    self.slider.min = new_min
-
-            def _update_max(self, change: Dict[str, Any]) -> None:
-                """Update slider maximum (best-effort)."""
-                new_max = float(change["new"])
-                if new_max > float(self.slider.min):
-                    self.slider.max = new_max
-
-            def _update_step(self, change: Dict[str, Any]) -> None:
-                """Update slider step size (best-effort)."""
-                new_step = float(change["new"])
-                if new_step > 0:
-                    self.slider.step = new_step
-
-        # Cache the concrete class for future instantiations.
-        globals()["SmartSlider"] = _SmartSlider  # type: ignore[assignment]
-
-        return _SmartSlider(value=value, min_val=min_val, max_val=max_val, step=step, description=description)
-
-# ==============================================================================
-# Environment & dependency helpers (lazy imports)
-# ==============================================================================
+# --- Subsection: Environment & dependency helpers (lazy imports) ---
 
 def _in_colab() -> bool:
     """Return True if running in Google Colab."""
@@ -371,10 +438,9 @@ def _lazy_import_plotly_go():
 
 
 
-# ==============================================================================
-# 1. Configuration (Style & Reactive Proxy)
-# ==============================================================================
-__all__+=["Style"]
+# === END SECTION: Helpers and optional dependency boundaries ===
+
+# === SECTION: Configuration (Style and reactive style) [id: config-style] ===
 @dataclass
 class Style:
     """Controls the visual appearance of a plot."""
@@ -392,12 +458,7 @@ class Style:
         "vis": "visible"
     }
 
-    def __init__(self, *args, **kwargs):
-        if args:
-            raise TypeError(
-                "Style does not accept positional arguments. "
-                "Use keyword arguments (color='red') or unpack a dict (**style)."
-            )
+    def __init__(self, **kwargs: object) -> None:
         for k, v in kwargs.items():
             prop = self._ALIASES.get(k, k)
             if hasattr(self, prop) and prop in self.__annotations__:
@@ -432,7 +493,7 @@ class Style:
         content = ", ".join(set_params) if set_params else "default"
         return f"<Style: {content}>"
 
-    def __setattr__(self, name: str, value: Any) -> None:
+    def __setattr__(self, name: str, value: object) -> None:
         if value is None:
             if name == "visible":
                 raise TypeError("`style.visible` must be a boolean, got `None`.")
@@ -478,14 +539,14 @@ class Style:
 
 class ReactiveStyle:
     """A live link to the style of a plot that triggers backend updates on mutation."""
-    def __init__(self, style: Style, callback: Callable[[], None]):
+    def __init__(self, style: Style, callback: Callable[[], None]) -> None:
         self._style = style
         self._callback = callback
 
-    def __getattr__(self, name: str) -> Any:
+    def __getattr__(self, name: str) -> object:
         return getattr(self._style, name)
 
-    def __setattr__(self, name: str, value: Any) -> None:
+    def __setattr__(self, name: str, value: object) -> None:
         if name in ("_style", "_callback"):
             super().__setattr__(name, value)
             return
@@ -496,14 +557,13 @@ class ReactiveStyle:
         return repr(self._style)
 
 
-# ==============================================================================
-# 2. Renderer (Backend)
-# ==============================================================================
+# === END SECTION: Configuration (Style and reactive style) ===
+
+# === SECTION: Renderer backends [id: backends] ===
 
 HandleT = TypeVar("HandleT")
 
 
-__all__+=["PlotBackend"]
 @runtime_checkable
 class PlotBackend(Protocol[HandleT]):
     """Contract for rendering engines."""
@@ -515,11 +575,10 @@ class PlotBackend(Protocol[HandleT]):
     def set_viewport(self, x_range: Tuple[float, float], y_range: Optional[Tuple[float, float]]) -> None: ...
     def request_redraw(self) -> None: ...
 
-__all__+=["MplBackend"]
 class MplBackend:
     """Matplotlib backend (optional, lazy-imported)."""
 
-    def __init__(self, figsize=(7, 4), dpi=100):
+    def __init__(self, figsize: Tuple[int, int] = (7, 4), dpi: int = 100) -> None:
         try:
             import matplotlib.pyplot as plt  # type: ignore
         except Exception as e:
@@ -544,15 +603,15 @@ class MplBackend:
             kw["linestyle"] = style.linestyle
         return kw
 
-    def add_plot(self, name: str, x: numpy.ndarray, y: numpy.ndarray, style: Style) -> Any:
+    def add_plot(self, name: str, x: numpy.ndarray, y: numpy.ndarray, style: Style) -> object:
         kw = self._translate_style(style)
         (line,) = self.ax.plot(x, y, label=name, **kw)
         return line
 
-    def update_plot(self, handle: Any, x: numpy.ndarray, y: numpy.ndarray) -> None:
+    def update_plot(self, handle: object, x: numpy.ndarray, y: numpy.ndarray) -> None:
         handle.set_data(x, y)
 
-    def apply_style(self, handle: Any, style: Style) -> None:
+    def apply_style(self, handle: object, style: Style) -> None:
         kw = self._translate_style(style)
         if "color" in kw:
             handle.set_color(kw["color"])
@@ -564,7 +623,7 @@ class MplBackend:
             handle.set_linestyle(kw["linestyle"])
         handle.set_visible(kw["visible"])
 
-    def remove_plot(self, handle: Any) -> None:
+    def remove_plot(self, handle: object) -> None:
         handle.remove()
 
     def set_viewport(self, x_range: Tuple[float, float], y_range: Optional[Tuple[float, float]]) -> None:
@@ -575,13 +634,11 @@ class MplBackend:
     def request_redraw(self) -> None:
         self.fig.canvas.draw_idle()
 
-__all__+=["PlotlyTraceHandle"]
 @dataclass(frozen=True)
 class PlotlyTraceHandle:
     """Stable identifier for a Plotly trace in a FigureWidget (tracked by uid)."""
     uid: str
 
-__all__+=["PlotlyBackend"]
 class PlotlyBackend:
     """Plotly FigureWidget backend (Phase 1 default; 2D lines only)."""
 
@@ -675,11 +732,9 @@ class PlotlyBackend:
         return
 
 
-# ====================================================================
-# ==============================================================================
-# 3. Model (Plot)
-# ==============================================================================
-__all__+=["Plot"]
+# === END SECTION: Renderer backends ===
+
+# === SECTION: Plot model [id: model-plot] ===
 class Plot:
     """Represents one plotted SymPy expression.
 
@@ -776,19 +831,33 @@ class Plot:
 
     def _compile(self) -> None:
         """Compile the sympy expression to a numpy function."""
-        args = (self._symbol, *self._param_symbols)
-        
-        # Just compile with numpify - it handles everything
-        func = numpify(self._expr, args=args, vectorize=True)
-        
-        # If expression doesn't use x, wrap it to broadcast
-        if self._symbol not in self._expr.free_symbols:
-            def wrapper(x, *params):
-                return numpy.full_like(x, func(x,*params) if self._param_symbols else float(self._expr))
-            self._func = wrapper
-        else:
-            self._func = func
+        declared_args = (self._symbol, *self._param_symbols)
+        free_syms = tuple(a for a in declared_args if a in self._expr.free_symbols)
 
+        try:
+            base = numpify(self._expr, args=free_syms, vectorize=True)
+        except Exception as exc:
+            raise GuideError(
+                f"Failed to compile expression for plot {self._name!r}. "
+                "If this expression is constant or does not depend on some declared symbols, "
+                "this typically indicates a compiler mismatch.",
+            ) from exc
+
+        used_positions = [i for i, a in enumerate(declared_args) if a in set(free_syms)]
+        uses_x = self._symbol in self._expr.free_symbols
+
+        def compiled(x: numpy.ndarray, *params: float) -> numpy.ndarray:
+            x_arr = numpy.asarray(x, dtype=float)
+            full = (x_arr, *params)
+            used_vals = [full[i] for i in used_positions]
+            y = base(*used_vals)
+            y_arr = numpy.asarray(y, dtype=float)
+            if not uses_x:
+                # Broadcast constants / parameter-only expressions to the x-grid.
+                y_arr = numpy.broadcast_to(y_arr, x_arr.shape)
+            return y_arr
+
+        self._func = compiled
     def _on_style_proxy_change(self) -> None:
         self._on_change_callback(self, needs_recompute=False, needs_redraw=True)
 
@@ -842,7 +911,7 @@ class Plot:
         self,
         viewport_range: Tuple[float, float],
         global_samples: int,
-        param_values: Optional[Tuple[Any, ...]] = None
+        param_values: Optional[Sequence[float]] = None,
     ) -> Tuple[numpy.ndarray, numpy.ndarray]:
         """Sample this plot on the given viewport, using provided parameter values."""
         v_min, v_max = viewport_range
@@ -880,14 +949,14 @@ class Plot:
             param_values = ()
 
         # Evaluate the function
-        y_arr = self._func(x_arr, *param_values)
-        
-        return x_arr, y_arr
+        param_tuple = tuple(float(v) for v in param_values)
+        y_arr = self._func(x_arr, *param_tuple)
+        return x_arr, numpy.asarray(y_arr, dtype=float)
 
 
-# ==============================================================================
+# === END SECTION: Plot model ===
 
-# ==============================================================================
+# === SECTION: Parameter slider bindings [id: ui-bindings] ===
 
 # -----------------------------------------------------------------------------
 # Stage 5: Parameter slider bindings (UI layer)
@@ -1122,9 +1191,9 @@ class _ParamSliderBinding:
         except Exception:
             pass
 
-# 4. Controller (SmartFigure)
-# ==============================================================================
-__all__+=["SmartFigure"]
+# === END SECTION: Parameter slider bindings ===
+
+# === SECTION: SmartFigure controller [id: controller] ===
 class SmartFigure:
     """Main plotting controller with a Plotly FigureWidget view.
 
@@ -1171,11 +1240,16 @@ class SmartFigure:
     # Class-level default registry (shared by default).
     _DEFAULT_PARAMETER_REGISTRY: SmartParameterRegistry = SmartParameterRegistry()
 
+    @classmethod
+    def _reset_shared_parameter_registry_for_tests(cls) -> None:
+        """Reset the shared default parameter registry (test helper)."""
+        cls._DEFAULT_PARAMETER_REGISTRY = SmartParameterRegistry()
+
     def __init__(
         self,
         var: sympy.Symbol = sympy.Symbol("x"),
-        x_range: Tuple[Any, Any] = (-4, 4),
-        y_range: Tuple[Any, Any] = (-3, 3),
+        x_range: Tuple[SupportsFloat, SupportsFloat] = (-4, 4),
+        y_range: Tuple[SupportsFloat, SupportsFloat] = (-3, 3),
         samples: int = 1000,
         show_now: bool = True,
         *,
@@ -1193,13 +1267,13 @@ class SmartFigure:
 
         # Plots and dependencies.
         self._plots: "OrderedDict[str, Plot]" = OrderedDict()
-        self._plots_by_param: Dict[sympy.Symbol, Set[str]] = {}
+        self._plots_by_param: Dict[sympy.Symbol, set[str]] = {}
         self._param_callback_token: Dict[sympy.Symbol, CallbackToken] = {}
         self._plot_params: Dict[str, Tuple[sympy.Symbol, ...]] = {}
 
         # UI (Stage 5): per-figure parameter sliders (Option A).
-        self._widget: Optional[Any] = None
-        self._sliders_box: Optional[Any] = None
+        self._widget: Optional[object] = None
+        self._sliders_box: Optional[object] = None
         self._sliders_by_param: Dict[sympy.Symbol, _ParamSliderBinding] = {}
 
         self._backend: Optional[PlotlyBackend] = None
@@ -1232,7 +1306,7 @@ class SmartFigure:
         """
         return self._ensure_backend()
 
-    def _ensure_widget_container(self) -> Any:
+    def _ensure_widget_container(self) -> object:
         """Build (and cache) the ipywidgets container for this figure.
 
         The container always includes a slider column (hidden when empty) and the
@@ -1270,7 +1344,7 @@ class SmartFigure:
         return self._widget
 
     @property
-    def widget(self) -> Any:
+    def widget(self) -> object:
         """Return the interactive widget (slider column + plot view)."""
         return self._ensure_widget_container()
 
@@ -1401,7 +1475,7 @@ class SmartFigure:
         return self._x_range
 
     @x_range.setter
-    def x_range(self, val: Tuple[Any, Any]) -> None:
+    def x_range(self, val: Tuple[SupportsFloat, SupportsFloat]) -> None:
         self._x_range = (float(val[0]), float(val[1]))
         if self._backend:
             self._backend.set_viewport(self._x_range, self._y_range)
@@ -1412,7 +1486,7 @@ class SmartFigure:
         return self._y_range
 
     @y_range.setter
-    def y_range(self, val: Tuple[Any, Any]) -> None:
+    def y_range(self, val: Tuple[SupportsFloat, SupportsFloat]) -> None:
         self._y_range = (float(val[0]), float(val[1]))
         if self._backend:
             self._backend.set_viewport(self._x_range, self._y_range)
@@ -1555,13 +1629,13 @@ class SmartFigure:
     # -------------------------------------------------------------------------
     def plot(
         self,
-        expr: Any,
+        expr: object,
         *,
         name: Optional[str] = None,
         symbol: Optional[sympy.Symbol] = None,
-        domain: Optional[Union[Tuple[Any, Any], _ViewportToken]] = None,
+        domain: Optional[Union[Tuple[SupportsFloat, SupportsFloat], _ViewportToken]] = None,
         samples: Optional[Union[int, _ViewportToken]] = None,
-        style: Optional[Dict[str, Any]] = None,
+        style: Optional[Mapping[str, object]] = None,
         visible: Optional[bool] = None,
     ) -> Plot:
         """Add or update a plot by name.
@@ -1750,6 +1824,10 @@ class SmartFigure:
             self._recompute_and_draw(plot)
 
 
+# === END SECTION: SmartFigure controller ===
+
+# === SECTION: Plugin exports [id: exports] ===
 __gu_exports__ = __all__
 __gu_priority__ = 200
-__gu_enabled=True
+__gu_enabled = True
+# === END SECTION: Plugin exports ===
