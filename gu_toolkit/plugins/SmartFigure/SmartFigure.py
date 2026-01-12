@@ -245,7 +245,8 @@ class SmartSlider:
                     max=max_val,
                     step=step,
                     description=description,
-                    continuous_update=False,  # heavy updates should not run per-mousemove
+                    continuous_update=True,
+                    
                     layout=widgets.Layout(width="300px"),
                 )
 
