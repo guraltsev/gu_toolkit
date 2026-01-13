@@ -1460,7 +1460,7 @@ class SmartFigure:
         if sym in self._sliders_by_param:
             return
 
-        param = self.parameter_registry.get_param(sym)
+        param = self.parameter_registry[sym]
 
         # SmartSlider requires finite bounds.
         try:
@@ -1590,12 +1590,12 @@ class SmartFigure:
     # Dependency tracking + callbacks (Stage 4)
     # -------------------------------------------------------------------------
     def _ensure_param_exists(self, sym: sympy.Symbol) -> None:
-        _ = self.parameter_registry.get_param(sym)
+        _ = self.parameter_registry[sym]
 
     def _ensure_param_callback(self, sym: sympy.Symbol) -> None:
         if sym in self._param_callback_token:
             return
-        param = self.parameter_registry.get_param(sym)
+        param = self.parameter_registry[sym]
         token = param.register_callback(self._on_param_change)
         self._param_callback_token[sym] = token
 
@@ -1606,7 +1606,7 @@ class SmartFigure:
         if token is None:
             return
         try:
-            self.parameter_registry.get_param(sym).remove_callback(token)
+            self.parameter_registry[sym].remove_callback(token)
         except Exception:
             # Best effort: never let callback cleanup break figure usage.
             pass
@@ -1848,7 +1848,7 @@ class SmartFigure:
         vals: list[float] = []
         for s in symbols:
             try:
-                vals.append(float(self.parameter_registry.get_param(s).value))
+                vals.append(float(self.parameter_registry[s].value))
             except Exception as e:
                 raise GuideError(
                     f"Could not read value for parameter '{s}'.",
