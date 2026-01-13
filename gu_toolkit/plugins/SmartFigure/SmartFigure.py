@@ -39,10 +39,10 @@ Supported Python versions: 3.9+.
 
 ----
 
-gu_SmartFigure: Smart symbolic plotting (Plotly-first, JupyterLite-friendly)
+SmartFigure: Smart symbolic plotting (Plotly-first, JupyterLite-friendly)
 ============================================================================
 
-`gu_SmartFigure` provides a small, student-facing API for plotting SymPy
+`SmartFigure` provides a small, student-facing API for plotting SymPy
 expressions in Jupyter notebooks. The core design separates:
 
 - **Model**: :class:`Plot` (symbolic expression, sampling configuration, style)
@@ -68,7 +68,7 @@ Student Quickstart (one page)
 -----------------------------
 ```python
 import sympy as sp
-from gu_SmartFigure import SmartFigure
+from SmartFigure import SmartFigure
 
 x = sp.Symbol("x")
 
@@ -170,6 +170,7 @@ import sys
 import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import (
     Any,
     Callable,
@@ -432,7 +433,7 @@ def _require_not_colab() -> None:
     """Raise GuideError if the current runtime is Google Colab."""
     if _in_colab():
         raise GuideError(
-            "Google Colab is not supported by gu_SmartFigure's interactive widget.\n\n"
+            "Google Colab is not supported by SmartFigure's interactive widget.\n\n"
             "Why: Colab's widget/Plotly integration is not compatible with the portable "
             "JupyterLite-first design of this project.\n\n"
             "Use one of these instead:\n"
@@ -1341,6 +1342,19 @@ class SmartFigure:
         property does not display anything.
         """
         return self._ensure_backend()
+
+    @property
+    def plots(self) -> Mapping[str, Plot]:
+        """Return a read-only mapping of the registered plots.
+
+        Returns
+        -------
+        Mapping[str, Plot]
+            A dictionary-like view mapping plot names to Plot objects.
+            modifications must be done via :meth:`plot` or :meth:`remove`.
+        """
+        return MappingProxyType(self._plots)
+
 
     def _ensure_widget_container(self) -> object:
         """Build (and cache) the ipywidgets container for this figure.
