@@ -377,6 +377,94 @@ class InputFuzzyTypo(InputNameError):
             f"Did you mean `{self.suggestion}`?"
         )
 
+
+@register_diagnosis
+class DictKeyError(Diagnosis):
+    """
+    Diagnoses KeyErrors, offering "Did you mean?" suggestions 
+    by inspecting the dictionary keys for typos or case mismatches.
+    """
+    def _reset_state(self):
+        self.missing_key = None
+        self.suggestion = None
+        self.dict_name = None
+        self.issue_type = "missing" # 'missing', 'case', 'typo'
+
+    def _check_condition(self, etype, evalue, tb, code, user_ns) -> float:
+        if not isinstance(evalue, KeyError):
+            return 0.0
+        
+        # Extract the raw key from the exception args
+        # KeyError('foo') -> args[0] is 'foo'
+        if not evalue.args: return 0.5
+        raw_key = evalue.args[0]
+        self.missing_key = raw_key
+
+        # Attempt to find the dictionary variable name in the code line
+        # Regex looks for: variable_name[
+        match = re.search(r"([a-zA-Z_]\w*)\s*\[", code)
+        
+        if match:
+            name = match.group(1)
+            # Ensure the variable exists in user namespace and is dict-like
+            if name in user_ns and hasattr(user_ns[name], "keys"):
+                self.dict_name = name
+                # Get actual keys safely
+                try:
+                    keys = list(user_ns[name].keys())
+                except Exception:
+                    keys = []
+                
+                # 1. Check for Case Sensitivity (Strings only)
+                if isinstance(raw_key, str):
+                    for k in keys:
+                        if isinstance(k, str) and k.lower() == raw_key.lower():
+                            self.suggestion = k
+                            self.issue_type = "case"
+                            return 0.95 # High confidence
+
+                # 2. Check for Fuzzy Typos (String conversion)
+                # We map string representations back to original keys for the suggestion
+                str_keys_map = {str(k): k for k in keys}
+                str_raw = str(raw_key)
+                
+                matches = difflib.get_close_matches(str_raw, str_keys_map.keys(), n=1, cutoff=0.6)
+                
+                if matches:
+                    self.suggestion = str_keys_map[matches[0]]
+                    self.issue_type = "typo"
+                    return 0.85 # Good confidence
+        
+        # 3. Generic KeyError (Code line didn't reveal a dict variable or no matches found)
+        return 0.5
+
+    def _generate_info(self, evalue, code, user_ns):
+        # Format keys with quotes if strings, otherwise standard repr
+        key_disp = repr(self.missing_key)
+        
+        if self.issue_type == "case":
+            sug_disp = repr(self.suggestion)
+            return (
+                "Key Capitalization Error",
+                f"The key `{key_disp}` was not found in `{self.dict_name}`.",
+                f"Did you mean `{sug_disp}`? Dictionary keys are case-sensitive."
+            )
+        elif self.issue_type == "typo":
+            sug_disp = repr(self.suggestion)
+            return (
+                "Key Typo",
+                f"The key `{key_disp}` was not found in `{self.dict_name}`.",
+                f"Did you mean `{sug_disp}`?"
+            )
+        else:
+            # Generic
+            context = f" in `{self.dict_name}`" if self.dict_name else ""
+            return (
+                "Missing Key",
+                f"The key `{key_disp}` does not exist{context}.",
+                "Check the available keys or use `.get()` to handle missing values."
+            )
+
 # --- 5. Math Specific Heuristics ---
 
 @register_diagnosis
