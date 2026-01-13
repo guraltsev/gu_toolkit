@@ -192,9 +192,9 @@ from typing import (
 import numpy
 import sympy
 
-from gu_toolkit.plugins.numpify import numpify
-from gu_toolkit.plugins.SmartException import GuideError
-from gu_toolkit.plugins.SmartParameters import (
+from gu_toolkit.numpify import numpify
+from gu_toolkit.SmartException import GuideError
+from gu_toolkit.SmartParameters import (
     CallbackToken,
     SmartParameter,
     SmartParameterRegistry,

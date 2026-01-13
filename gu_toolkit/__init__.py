@@ -1,3 +1,6 @@
-from .setup import setup
+from .prelude import *
+from .NamedFunction import *
+from .numpify import *
+from .SmartException import *
+from .SmartFigure import *
 
-__all__ = ["setup"]
