@@ -62,9 +62,6 @@ import types
 from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from typing import Generic, Optional, TypeVar
 
-__gu_exports__ = ["GuideError"]
-__gu_priority__ = 200
-__gu_enabled__ = True
 
 __all__ = ["GuideError"]
 
@@ -380,7 +377,6 @@ def _diagnose(ctx: ExceptionContext, location: SourceLocation) -> list[Diagnosis
 #
 # Built-in heuristics are ordered from general to specific. Each heuristic should
 # return a confidence that reflects how often it is "actually right".
-# === END SECTION: Built-in diagnosers ===
 
 
 @register_diagnosis
@@ -599,11 +595,11 @@ class MissingImport(Diagnosis):
             f"Try `sp.{name}` or `np.{name}`.",
         )
 
+# === END SECTION: Built-in diagnosers ===
 
 # === SECTION: UI renderer (ipywidgets) [id: ui]===
 #
 # This section is the only place that imports ipywidgets / IPython.display.
-# === END SECTION: UI renderer (ipywidgets) ===
 
 
 _LOG = logging.getLogger(__name__)
@@ -830,11 +826,13 @@ def smart_exception_handler(
         _LOG.exception("SmartException handler failed; falling back to raw traceback.")
         traceback.print_exception(etype, evalue, tb)
 
+# === END SECTION: UI renderer (ipywidgets) ===
+
 
 # === SECTION: Activation helpers (IPython integration) [id: activation]===
 #
 # Convenience installation/uninstallation for interactive sessions.
-# === END SECTION: Activation helpers (IPython integration) ===
+
 
 
 def activate(*, verbose: bool = False) -> None:
@@ -875,9 +873,4 @@ def deactivate(*, verbose: bool = False) -> None:
     ip.set_custom_exc((Exception,), None)
     if verbose:
         _LOG.info("SmartException handler deactivated.")
-
-
-def _setup(ctx: Mapping[str, object]) -> None:
-    """Plugin hook used by the surrounding framework."""
-    verbose = bool(ctx.get("verbose", False))
-    activate(verbose=verbose)
+# === END SECTION: Activation helpers (IPython integration) ===
