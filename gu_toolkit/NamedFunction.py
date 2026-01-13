@@ -5,10 +5,6 @@ NamedFunction: Dynamic SymPy Function Generation
 This module provides the `NamedFunction` decorator to convert standard Python 
 functions or classes into full-fledged SymPy Function classes with enhanced documentation.
 """
-__gu_exports__ = ['NamedFunction']
-__gu_priority__ = 200
-__gu_enabled__ = True
-
 
 import inspect
 import textwrap

@@ -6,27 +6,10 @@ This module provides tools to compile symbolic SymPy expressions into high-perfo
 vectorized NumPy functions. It offers specific support for:
 1. "Deep" rewriting of custom SymPy functions via the 'expand_definition' hint.
 2. Injecting custom numerical implementations (f_numpy) for specific symbols.
-3. Automatic vectorization (converting inputs to NumPy arrays).
-4. Manual control over argument order.
+3. Auto-detection of @NamedFunction classes with 'f_numpy' implementations.
+4. Automatic vectorization (converting inputs to NumPy arrays).
 5. Inspectable source code via the generated function's docstring.
-
-Usage:
-    from gu_toolkit.compile.numpify import numpify
-    import sympy
-
-    x, y = sympy.symbols('x y')
-    # Auto-detect args (alphabetical: x, y)
-    func = numpify(sympy.sin(x) * y)
-    
-    # Manual args order (y, x)
-    func_explicit = numpify(sympy.sin(x) * y, args=(y, x))
 """
-
-__gu_exports__ = ["numpify"]
-__gu_priority__ = 200
-__gu_enabled__ = True
-
-
 
 import textwrap
 from typing import Any, Callable, Dict, Iterable, Optional, Union
@@ -49,121 +32,28 @@ def numpify(
     """
     Compile a SymPy expression into a high-performance NumPy function with broadcasting support.
 
-    This function generates a Python function that evaluates the given SymPy expression
-    using NumPy operations, enabling vectorized evaluation over arrays of inputs.
-    The generated function automatically handles NumPy broadcasting and dtype promotion.
-
     Parameters
     ----------
     expr : sympy.Expr or convertible
-        SymPy expression to compile. Can be any object convertible via `sympy.sympify`,
-        including Python scalars (e.g., 5), strings, or existing SymPy expressions.
+        SymPy expression to compile.
     args : Optional[Iterable[sympy.Symbol]], optional
-        Symbols to treat as function arguments. If None (default), uses all free symbols
-        in `expr` sorted alphabetically by name. Can be a single Symbol or iterable.
+        Symbols to treat as function arguments. If None, uses all free symbols sorted alphabetically.
     f_numpy : Optional[Dict[sympy.Symbol, Callable[..., Any]]], optional
         Custom mapping from SymPy Symbols to NumPy-compatible functions.
-        Useful when symbols represent functions rather than variables (e.g., mapping `f`
-        to `np.sin`). Keys must be Symbols not present in `args`.
     vectorize : bool, default True
-        If True, generates a function that broadcasts over array inputs using NumPy
-        operations. If False, generates a scalar function that may be slower for
-        array inputs but avoids broadcasting overhead for scalar use cases.
-        When True and `expr` is constant, the function returns an array of the constant
-        value shaped by broadcasting the inputs.
+        If True, broadcasts inputs using NumPy operations.
     expand_definition : bool, default True
-        If True, applies `sympy.expand(deep=True)` to the expression before compilation.
-        This can improve performance by expanding composite operations and should
-        generally be left enabled unless expression expansion is undesirable.
+        If True, applies `sympy.expand(deep=True)` to the expression.
 
     Returns
     -------
     Callable[..., Any]
-        Generated function that accepts numerical inputs corresponding to `args`.
-        The function:
-        - Converts inputs to NumPy arrays (when `vectorize=True`)
-        - Applies custom symbol mappings from `f_numpy`
-        - Evaluates the expression using NumPy operations
-        - Returns scalars or arrays with proper dtype promotion
-
-    Raises
-    ------
-    TypeError
-        - If `expr` cannot be sympified
-        - If `args` contains non-Symbol elements
-        - If `f_numpy` keys are not Symbols
-    ValueError
-        - If `expr` contains symbols not listed in `args`
-        - If `f_numpy` keys overlap with `args` symbols
-
-    Notes
-    -----
-    1. Broadcasting behavior:
-       - With `vectorize=True`: All inputs are converted to arrays via `numpy.asarray`
-         and broadcasting follows NumPy rules.
-       - With constant expressions: Returns `constant + numpy.zeros(broadcast_shape)`
-         to ensure proper dtype and shape handling.
-       - With `vectorize=False`: Inputs are not converted, and operations may fail
-         on array inputs.
-
-    2. Performance considerations:
-       - The generated function is created via `exec` and may have overhead on
-         very small inputs.
-       - For large arrays, the vectorized version provides near-native NumPy performance.
-       - Custom functions in `f_numpy` are injected by name and must be available in
-         the NumPy namespace or provided as callables.
-
-    3. Symbol resolution:
-       - All symbols in `expr` must be accounted for: either in `args` (as variables)
-         or in `f_numpy` (as functions).
-       - The generated function's parameter order matches the order of symbols in `args`.
-
-    4. Safety:
-       - Uses `exec` internally; exercise caution with untrusted expressions.
-       - The generated function includes its source code in its `__doc__` for inspection.
-
-    Examples
-    --------
-    >>> import sympy
-    >>> import numpy as np
-    >>> x, y = sympy.symbols('x y')
-
-    Basic scalar and vector evaluation:
-    >>> f = numpify(5, args=x)
-    >>> f(0)
-    5.0
-    >>> f(np.array([1, 2, 3]))
-    array([5., 5., 5.])
-
-    Trigonometric function:
-    >>> g = numpify(sympy.sin(x), args=x)
-    >>> g(np.array([0, np.pi/2]))
-    array([0., 1.])
-
-    Multiple arguments with broadcasting:
-    >>> h = numpify(x**2 + y, args=(x, y))
-    >>> h([1, 2, 3], 10)  # Broadcast y=10 across x
-    array([11., 14., 19.])
-
-    Custom function mapping:
-    >>> from numpy import exp
-    >>> f_map = {sympy.Function('f')(x): exp}
-    >>> expr = sympy.Function('f')(x) * 2
-    >>> j = numpify(expr, args=x, f_numpy=f_map)
-    >>> j(0)
-    2.0
-    >>> j(1)  # 2 * exp(1)
-    5.43656365691809
-
-    Disable vectorization for scalar-only use:
-    >>> k = numpify(x**2, args=x, vectorize=False)
-    >>> k(3)
-    9.0
+        Generated NumPy-compatible function.
     """
     # 1) Accept Python scalars/etc.
     try:
         expr = sympy.sympify(expr)
-    except Exception as e:  # pragma: no cover
+    except Exception as e:
         raise TypeError(f"numpify expects a SymPy-compatible expression, got {type(expr)}") from e
 
     if not isinstance(expr, sympy.Basic):
@@ -188,61 +78,93 @@ def numpify(
     if expand_definition:
         expr = sympy.expand(expr, deep=True)
 
-    # Custom symbol -> numpy function mapping
-    f_numpy = dict(f_numpy) if f_numpy is not None else {}
-    for sym, fn in f_numpy.items():
-        if not isinstance(sym, sympy.Symbol):
-            raise TypeError(f"f_numpy keys must be SymPy Symbols, got {type(sym)}")
+    # 3) Identify Custom Functions (@NamedFunction support)
+    # Scan for Function atoms whose class provides a static 'f_numpy' implementation.
+    # We must register these so the printer knows them and the exec scope has them.
+    auto_detected_funcs = set()
+    for atom in expr.atoms(sympy.Function):
+        cls = atom.func
+        if hasattr(cls, 'f_numpy'):
+            auto_detected_funcs.add(cls)
 
-    # Guard against expressions that reference symbols not provided by args
-    missing = set(expr.free_symbols) - set(args_tuple)
-    if missing:
-        missing_str = ", ".join(sorted((s.name for s in missing)))
-        args_str = ", ".join(a.name for a in args_tuple)
+    # Ensure no name collisions between functions and arguments
+    detected_names = {cls.__name__ for cls in auto_detected_funcs}
+    arg_names_set = {a.name for a in args_tuple}
+    collisions = detected_names & arg_names_set
+    if collisions:
         raise ValueError(
-            f"Expression contains symbols not listed in args: {missing_str}. "
-            f"Provided args: ({args_str})."
+            f"The following functions conflict with argument names: {collisions}. "
+            "Please rename the arguments or the functions."
         )
 
-    # Optional sanity: prevent accidental overwrites
-    if set(f_numpy.keys()) & set(args_tuple):
-        overlap = ", ".join(sorted(s.name for s in (set(f_numpy.keys()) & set(args_tuple))))
+    # 4) Prepare Printer settings
+    # Explicit user mappings
+    f_numpy_map = dict(f_numpy) if f_numpy is not None else {}
+    for sym, fn in f_numpy_map.items():
+        if not isinstance(sym, sympy.Symbol):
+            raise TypeError(f"f_numpy keys must be SymPy Symbols, got {type(sym)}")
+            
+    # Allow NamedFunction classes to be printed by their name (e.g., 'G(x)' -> 'G(x)')
+    printer_user_funcs = {name: name for name in detected_names}
+    
+    # We must verify explicit f_numpy keys don't overlap with args
+    if set(f_numpy_map.keys()) & set(args_tuple):
+        overlap = ", ".join(sorted(s.name for s in (set(f_numpy_map.keys()) & set(args_tuple))))
         raise ValueError(
             f"f_numpy keys overlap with args ({overlap}). This would overwrite argument values."
         )
 
-    printer = NumPyPrinter(settings={"user_functions": {}})
+    # Initialize Printer with knowledge of our custom functions
+    printer = NumPyPrinter(settings={"user_functions": printer_user_funcs})
 
     arg_names = [a.name for a in args_tuple]
-    expr_code = printer.doprint(expr)
+    
+    # Generate the code string
+    try:
+        expr_code = printer.doprint(expr)
+    except Exception as e:
+        # Fallback error handling if something remains unsupported
+        raise ValueError(f"Failed to convert expression to NumPy code: {e}") from e
 
     is_constant = (len(expr.free_symbols) == 0)
 
     lines: list[str] = []
     lines.append("def _generated(" + ", ".join(arg_names) + "):")
+    
     if vectorize:
         for nm in arg_names:
             lines.append(f"    {nm} = numpy.asarray({nm})")
 
-    # Inject custom numeric mappings by name
-    for sym in f_numpy.keys():
-        lines.append(f"    {sym.name} = _f_numpy['{sym.name}']")
+    # Inject explicit custom numeric mappings (Symbol -> Function)
+    for sym in f_numpy_map.keys():
+        lines.append(f"    {sym.name} = _f_numpy_explicit['{sym.name}']")
 
-    # 3) Broadcast constants to input shape when vectorizing
+    # 5) Broadcast constants or return expression
     if vectorize and is_constant and len(arg_names) > 0:
         lines.append(f"    _shape = numpy.broadcast({', '.join(arg_names)}).shape")
-        # Use + zeros(...) so dtype promotion follows numpy rules naturally.
         lines.append(f"    return ({expr_code}) + numpy.zeros(_shape)")
     else:
         lines.append(f"    return {expr_code}")
 
     src = "\n".join(lines)
 
+    # 6) Construct Execution Scope
+    # We inject:
+    #   - numpy
+    #   - Explicit f_numpy mappings (as _f_numpy_explicit)
+    #   - Auto-detected NamedFunction implementations (by class name)
     glb: Dict[str, Any] = {
         "numpy": numpy,
-        "_f_numpy": {k.name: v for k, v in f_numpy.items()},
+        "_f_numpy_explicit": {k.name: v for k, v in f_numpy_map.items()},
     }
+    
+    # Inject auto-detected function implementations
+    for cls in auto_detected_funcs:
+        glb[cls.__name__] = cls.f_numpy
+
     loc: Dict[str, Any] = {}
+    
+    # compile
     exec(src, glb, loc)
     fn = loc["_generated"]
 
