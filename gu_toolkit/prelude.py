@@ -21,3 +21,6 @@ k, l, m, n = sp.symbols("k l m n", integer=True)
 __all__+=["k","l","m","n"]
 f, g, h = sp.symbols("f g h", cls=sp.Function)
 __all__+=["f","g","h"]
+
+from IPython.display import Latex as LaTeX
+__all__+=["LaTeX"]
