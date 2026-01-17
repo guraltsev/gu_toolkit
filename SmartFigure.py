@@ -19,7 +19,8 @@ The intended workflow is:
 - define symbols with SymPy (e.g. ``x, a = sp.symbols("x a")``),
 - create a ``SmartFigure``,
 - add one or more plots with ``SmartFigure.plot(...)``,
-- optionally add parameters (sliders) by passing ``parameters=[a, ...]``.
+- optionally add parameters (sliders) explicitly by passing ``parameters=[a, ...]``.
+- otherwise, parameters are autodetected from the expression (all free symbols that are not the plot variable) and added automatically.
 
 ---------------------------------------------------------------------------
 Quick start (in a Jupyter notebook)
@@ -30,10 +31,13 @@ Quick start (in a Jupyter notebook)
 >>>
 >>> x, a = sp.symbols("x a")
 >>> fig = SmartFigure(x_range=(-6, 6), y_range=(-3, 3))
->>> fig.plot(x, sp.sin(x), parameters=[], id="sin")
->>> fig.plot(x, a*sp.cos(x), parameters=[a], id="a_cos")  # adds a slider for a
+>>> fig.plot(x, sp.sin(x), id="sin")
+>>> fig.plot(x, a*sp.cos(x), id="a_cos")  # adds a slider for a
 >>> fig.title = "Sine and a·Cosine"
 >>> fig  # display in the output cell (or use display(fig))
+
+Tip: if you omit ``parameters`` when calling ``plot``, SmartFigure will infer them
+from the expression and create sliders automatically. Pass ``[]`` to disable that.
 
 Notes for students
 ------------------
@@ -174,6 +178,13 @@ class OneShotOutput(widgets.Output):
 # === SECTION: SmartFigure [id: SmartFigure]===
 from .InputConvert import InputConvert
 
+# Architecture note:
+# - SmartFigure is the coordinator: it owns the Plotly FigureWidget, UI panels, and
+#   the parameter widgets. It renders all plots in response to UI changes.
+# - SmartPlot is the leaf unit: one curve + one Plotly trace. It compiles SymPy
+#   to NumPy via numpify and asks SmartFigure for current parameter values.
+# This separation keeps UI concerns in SmartFigure and math/rendering in SmartPlot.
+
 
 class SmartPlot:
     """
@@ -266,6 +277,37 @@ class SmartPlot:
         label="",
         visible=True,
     ):
+        """
+        Create a new SmartPlot instance.
+
+        Parameters
+        ----------
+        var : sympy.Symbol
+            Independent variable.
+        func : sympy.Expr
+            SymPy expression to plot.
+        smart_figure : SmartFigure
+            Parent SmartFigure that owns this plot.
+        parameters : list[sympy.Symbol] or None, optional
+            Parameter symbols used in ``func``.
+        x_domain : tuple (x_min, x_max), optional
+            Optional domain override for evaluation.
+        sampling_points : int or None, optional
+            Per-plot sampling point override.
+        label : str, optional
+            Legend label for the plot.
+        visible : bool or "legendonly", optional
+            Visibility of the plot.
+
+        Examples
+        --------
+        Most users create plots via SmartFigure:
+
+        >>> import sympy as sp
+        >>> x = sp.Symbol("x")
+        >>> fig = SmartFigure()
+        >>> fig.plot(x, sp.sin(x), id="sin")
+        """
         self._smart_figure = smart_figure
         self._smart_figure.add_plot_trace(x=[], y=[], mode="lines")
         self._plot_handle = self._smart_figure._figure.data[-1]
@@ -303,20 +345,22 @@ class SmartPlot:
         -----
         Triggers recompilation via ``numpify`` and a re-render.
 
+        No autodetection of parameters is done. This function REQUIRES the parameters to be passed explicitly.
+
         Examples
         --------
         >>> import sympy as sp
         >>> x = sp.Symbol("x")
         >>> fig = SmartFigure()
-        >>> p = fig.plot(x, sp.sin(x), parameters=[], id="f")
-        >>> p.set_var_func(x, sp.cos(x), parameters=[])
+        >>> p = fig.plot(x, sp.sin(x), id="f")
+        >>> p.set_func(x, sp.cos(x))
 
         However, since SmartFigure supports updating via calling plot again with the same `id`, this is not necessary. It is easier to do:
-          >>> import sympy as sp
+        >>> import sympy as sp
         >>> x = sp.Symbol("x")
         >>> fig = SmartFigure()
-        >>> fig.plot(x, sp.sin(x), parameters=[], id="f")
-        >>> fig.plot(t, sp.cos(t), parameters=[], id="f")
+        >>> fig.plot(x, sp.sin(x), id="f")
+        >>> fig.plot(t, sp.cos(t), id="f")
         """
 
         self._var = var
@@ -591,6 +635,28 @@ class SmartFigure:
         y_range: tuple = (-3, 3),
         debug: bool = False,
     ):
+        """
+        Create a SmartFigure with a Plotly FigureWidget and UI controls.
+
+        Parameters
+        ----------
+        sampling_points : int, optional
+            Default number of samples per plot.
+        x_range : tuple (x_min, x_max), optional
+            Default x-axis viewport range.
+        y_range : tuple (y_min, y_max), optional
+            Default y-axis viewport range.
+        debug : bool, optional
+            If True, print debug information to the output widget.
+
+        Examples
+        --------
+        >>> import sympy as sp
+        >>> x = sp.Symbol("x")
+        >>> fig = SmartFigure(sampling_points=800, x_range=(-6, 6), y_range=(-4, 4))
+        >>> fig.plot(x, sp.sin(x), id="sin")
+        >>> fig
+        """
         self._debug = debug
 
         # --- Figure layout setup ---
@@ -1030,10 +1096,23 @@ class SmartFigure:
 
         Parameters
         ----------
-        name : str
-            The name of the parameter.
-        slider : SmartFloatSlider
-            The slider widget to add.
+        parameter_id : sympy.Symbol
+            The parameter symbol (e.g. ``a``).
+        value : float, optional
+            Initial slider value.
+        min : float, optional
+            Minimum slider value.
+        max : float, optional
+            Maximum slider value.
+        step : float, optional
+            Slider step size.
+
+        Examples
+        --------
+        >>> import sympy as sp
+        >>> a = sp.Symbol("a")
+        >>> fig = SmartFigure()
+        >>> fig.add_param(a, value=2.0, min=-5, max=5, step=0.5)
         """
 
         description = f"${sp.latex(parameter_id)}$"  # Can be enriched later
@@ -1147,6 +1226,11 @@ class SmartFigure:
         'hook:10'
         >>> fig.add_param_change_hook(lambda ch: None)
         'hook:11'
+
+        Use with a simple logger:
+        >>> def log_change(change):
+        ...     print(change["name"], change["old"], "->", change["new"])
+        >>> fig.add_param_change_hook(log_change, hook_id="logger")
         """
         if not callable(callback):
             raise TypeError(f"callback must be callable, got {type(callback)}")
@@ -1205,6 +1289,13 @@ class SmartFigure:
             out = fig.new_info_output()
             with out:
                 print("hello")
+
+        Examples
+        --------
+        >>> fig = SmartFigure()
+        >>> out = fig.new_info_output()
+        >>> with out:
+        ...     print("f(x) = sin(x)")
         """
         out = widgets.Output(layout=widgets.Layout(**layout_kwargs))
         self.panels["info"].children += (out,)
@@ -1275,6 +1366,11 @@ class SmartFigure:
         ----------
         scatter_kwargs : dict
             Keyword arguments for the scatter trace.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()
+        >>> fig.add_scatter(x=[0, 1], y=[0, 1], mode="markers")
         """
         warnings.warn("add_scatter is deprecated, use add_plot_trace instead.", DeprecationWarning)
         self.add_plot_trace(**scatter_kwargs)
@@ -1287,6 +1383,11 @@ class SmartFigure:
         ----------
         plot_kwargs : dict
             Keyword arguments for the plot trace.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()
+        >>> fig.add_plot_trace(x=[0, 1], y=[1, 0], mode="lines", name="diag")
         """
         self._figure.add_scatter(**plot_kwargs)
 
@@ -1305,6 +1406,11 @@ class SmartFigure:
         ----------
         layout_kwargs : dict
             Keyword arguments for updating the figure layout.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()
+        >>> fig.update_layout(title="My Plot", height=400, width=600)
         """
         self._figure.update_layout(**layout_kwargs)
 
@@ -1322,7 +1428,9 @@ class SmartFigure:
             SymPy expression (e.g. ``sin(x)``, ``a*x**2 + b``).
         parameters : list[sympy.Symbol] or None, optional
             Parameter symbols whose numeric values come from sliders.
-            **Important:** In this version, pass ``[]`` when there are no parameters.
+            If ``None``, parameters are autodetected from ``func.free_symbols`` (excluding ``var``).
+            **Important:** In this version, pass ``[]`` when there are no parameters and you want to
+            explicitly disable autodetection.
         id : str, optional
             Unique identifier for the plot.
             - If ``id`` is new: creates a new plot.
@@ -1345,6 +1453,8 @@ class SmartFigure:
         Think of this as:
         - “add a curve to the figure”
         - and “keep it updated when sliders or viewport changes”.
+        If you omit ``parameters``, SmartFigure will infer them from the expression.
+        This is a convenience for quick exploration, but pass ``[]`` if you want no sliders.
 
         Examples
         --------
@@ -1371,6 +1481,13 @@ class SmartFigure:
         >>> fig = SmartFigure()
         >>> fig.plot(x, x**2, parameters=[], id="f")
         >>> fig.plot(x, x**3, parameters=[], id="f")  # same id => update curve
+
+        Autodetect parameters from the expression:
+
+        >>> import sympy as sp
+        >>> x, a, b = sp.symbols("x a b")
+        >>> fig = SmartFigure()
+        >>> fig.plot(x, a*x**2 + b, id="poly")  # parameters inferred as [a, b]
 
         Choose a wider computation domain than the visible window:
 
@@ -1431,6 +1548,11 @@ class SmartFigure:
     def render(self):
         """
         Render all plots on the figure.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()
+        >>> fig.render()  # force a redraw after external changes
         """
         with self._figure.batch_update():
             for plot in self.plots.values():
