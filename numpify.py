@@ -94,7 +94,7 @@ def numpify(
     args: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]] = None,
     f_numpy: Optional[Mapping[_BindingKey, Any]] = None,
     vectorize: bool = True,
-    expand_definition: bool = False,
+    expand_definition: bool = True,
 ) -> Callable[..., Any]:
     """Compile a SymPy expression into a NumPy-evaluable Python function.
 
@@ -259,8 +259,9 @@ def _normalize_args(expr: sp.Basic, args: Optional[Union[sp.Symbol, Iterable[sp.
         raise TypeError("args must be a SymPy Symbol or an iterable of SymPy Symbols") from e
 
     for a in args_tuple:
-        if not isinstance(a, sp.Symbol):
-            raise TypeError(f"args must contain only SymPy Symbols, got {type(a)}")
+        arg_expr = sp.sympify(a)
+        if not isinstance(arg_expr, sp.Symbol):
+            raise TypeError(f"args must contain only SymPy Symbols, got {type(arg_expr)}")
     return cast(Tuple[sp.Symbol, ...], args_tuple)
 
 
