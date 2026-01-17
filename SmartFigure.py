@@ -618,7 +618,6 @@ class SmartFigure:
                 showline=True,
                 ticks="outside",
             ),
-            title=dict(x=0.5, y=0.95, xanchor="center"),
         )
 
         # --- End of figure layout setup ---
@@ -642,36 +641,92 @@ class SmartFigure:
 
     def _layout_init(self):
         """
-        Responsive layout:
-        - LaTeX title (HTMLMath)
-        - Wide: controls can sit right of plot
-        - Narrow: controls wrap directly below plot (no vertical "row stretching")
-        - Full-width checkbox forces controls below even on wide screens
+        Responsive layout with vertically-resizable plot that preserves aspect ratio on reflow.
+
+        Strategy:
+        - Plot container uses CSS aspect-ratio: var(--sf-ar) where --sf-ar = width/height
+        - A JS drag handle updates --sf-ar during vertical resizing
+        - No native resize: vertical (it writes pixel height and breaks aspect-ratio on reflow)
         """
         import ipywidgets as widgets
-        from IPython.display import display
+        from IPython.display import display, Javascript
 
         self.panels = {}
-        # --- JS bootstrap of resize observer for plotly ---
+
+        # --- Invisible output that runs CSS/JS bootstrap ---
         self.panels["js_bootstrap"] = widgets.Output(
             layout=widgets.Layout(
-                layout=widgets.Layout(
-                    width="1px",
-                    height="1px",
-                    overflow="hidden",
-                    opacity="0.0",
-                    margin="0px",
-                    padding="0px",
-                )
-            )  # invisible, but executes JS
+                width="1px",
+                height="1px",
+                overflow="hidden",
+                opacity="0.0",
+                margin="0px",
+                padding="0px",
+            )
         )
+
+        # --- CSS (aspect ratio + drag handle) ---
+        self.panels["css"] = widgets.HTML(
+            value=r"""
+    <style>
+    /* Host plot panel: height governed by aspect-ratio. */
+    .sf-plot-aspect {
+    position: relative;
+    width: 100%;
+    /* width/height ratio */
+    aspect-ratio: var(--sf-ar, 1.3333333333);
+    min-height: 260px;
+    box-sizing: border-box;
+    }
+
+    /* Make widget + plotly fill the host height */
+    .sf-plot-aspect > .jupyter-widgets,
+    .sf-plot-aspect .jupyter-widgets,
+    .sf-plot-aspect .widget-subarea,
+    .sf-plot-aspect .js-plotly-plot,
+    .sf-plot-aspect .plotly-graph-div {
+    width: 100% !important;
+    height: 100% !important;
+    }
+
+    /* Drag handle (bottom grip) */
+    .sf-aspect-handle {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 14px;
+    cursor: ns-resize;
+    user-select: none;
+    touch-action: none;
+    /* Let plot interactions through except right on the grip */
+    background: transparent;
+    z-index: 10;
+    }
+    .sf-aspect-handle::after {
+    content: "";
+    display: block;
+    width: 56px;
+    height: 4px;
+    margin: 5px auto 0 auto;
+    border-radius: 999px;
+    background: rgba(0,0,0,0.25);
+    }
+
+    /* Slightly emphasize grip on hover */
+    .sf-aspect-handle:hover::after {
+    background: rgba(0,0,0,0.40);
+    }
+    </style>
+    """
+        )
+
         # --- Title (LaTeX) ---
         self.panels["title"] = widgets.HTMLMath(
             value=r"",
             layout=widgets.Layout(margin="0px"),
         )
 
-        # Small + unobtrusive
         self.panels["full_width"] = widgets.Checkbox(
             value=False,
             description="Full width plot",
@@ -690,26 +745,26 @@ class SmartFigure:
             ),
         )
 
-        # --- Plot panel ---
-        # IMPORTANT: do NOT give this vertical grow when stacked; we toggle its flex below.
-        self.panels["plot"] = widgets.VBox(
+        # --- Plot panel (aspect ratio host) ---
+        self.panels["plot"] = widgets.Box(
+            children=(),
             layout=widgets.Layout(
                 width="100%",
                 min_width="320px",
                 margin="0px",
                 padding="0px",
                 flex="1 1 560px",
-                min_height="420px",  # <-- ADD THIS (or set height="420px")
-            )
+                # IMPORTANT: do NOT set a fixed height/min_height here; CSS aspect-ratio controls it.
+            ),
         )
+        self.panels["plot"].add_class("sf-plot-aspect")
+        # Optional: set initial ratio to 4/3
+        # (you can change this to 16/9 etc)
+        self.panels["plot"].layout._css = ""  # harmless no-op for some widget managers
 
         # --- Controls panel ---
         self.panels["controls"] = widgets.VBox(
-            [
-                widgets.HTML(
-                    value="<div style='margin:0; padding:0;'><b>Parameters</b></div>"
-                ),
-            ],
+            [widgets.HTML(value="<div style='margin:0; padding:0;'><b>Parameters</b></div>")],
             layout=widgets.Layout(
                 margin="0px",
                 padding="0px 0px 0px 10px",
@@ -721,9 +776,6 @@ class SmartFigure:
         )
 
         # --- Content area (flex + wrap) ---
-        # KEY FIXES:
-        #   * align_content="flex-start" prevents multi-row flex from distributing extra vertical space
-        #   * gap kept small
         self.panels["content"] = widgets.Box(
             [self.panels["plot"], self.panels["controls"]],
             layout=widgets.Layout(
@@ -742,69 +794,137 @@ class SmartFigure:
 
         self.panels["main_layout"] = widgets.VBox(
             [
+                self.panels["css"],
                 self.panels["js_bootstrap"],
                 self.panels["titlebar"],
                 self.panels["content"],
             ],
             layout=widgets.Layout(width="100%", margin="0px", padding="0px"),
         )
-        
-        from IPython.display import display, Javascript
+
+        # --- JS: plotly resize observer + aspect-ratio resizer handle ---
         with self.panels["js_bootstrap"]:
-            display(Javascript(r"""
-            (function () {
-            if (window.__smartfigure_plotly_resizer_installed) return;
-            window.__smartfigure_plotly_resizer_installed = true;
+            display(
+                Javascript(
+                    r"""
+    (function () {
+    if (window.__smartfigure_plotly_aspect_resizer_installed) return;
+    window.__smartfigure_plotly_aspect_resizer_installed = true;
 
-            function tryInstall() {
-                // Plotly may not be on window yet when this runs in JupyterLab
-                if (!(window.Plotly && Plotly.Plots && window.ResizeObserver)) return false;
+    function safeResizePlotly(gd) {
+        try {
+        if (window.Plotly && Plotly.Plots) Plotly.Plots.resize(gd);
+        } catch (e) {}
+    }
 
-                function resizeOne(gd) {
-                try { Plotly.Plots.resize(gd); } catch (e) {}
-                }
+    function ensureHandle(host) {
+        if (host.__sf_handle_installed) return;
+        host.__sf_handle_installed = true;
 
-                function attachObservers() {
-                const graphs = document.querySelectorAll('.js-plotly-plot');
-                graphs.forEach(gd => {
-                    if (gd.__smartfigure_ro) return;
+        // Default aspect ratio if none set
+        const cur = host.style.getPropertyValue('--sf-ar');
+        if (!cur) host.style.setProperty('--sf-ar', '1.3333333333'); // 4/3 default
 
-                    // Observe the graph div itself (more robust than parentElement)
-                    const ro = new ResizeObserver(() => resizeOne(gd));
-                    ro.observe(gd);
-                    gd.__smartfigure_ro = ro;
+        const handle = document.createElement('div');
+        handle.className = 'sf-aspect-handle';
+        host.appendChild(handle);
 
-                    // Fix "wrong size on creation"
-                    requestAnimationFrame(() => resizeOne(gd));
-                    setTimeout(() => resizeOne(gd), 50);
-                    setTimeout(() => resizeOne(gd), 250);
-                });
-                }
+        let dragging = false;
+        let startY = 0;
+        let startH = 0;
 
-                attachObservers();
+        const MIN_H = 180;
+        const MAX_H = 2200;
 
-                // Catch later-created FigureWidgets
-                const mo = new MutationObserver(() => attachObservers());
-                mo.observe(document.body, { childList: true, subtree: true });
+        function onMove(ev) {
+        if (!dragging) return;
 
-                // Fallback on window resize
-                window.addEventListener('resize', () => setTimeout(attachObservers, 100));
+        const dy = ev.clientY - startY;
+        let newH = startH + dy;
+        newH = Math.max(MIN_H, Math.min(MAX_H, newH));
 
-                return true;
-            }
+        const rect = host.getBoundingClientRect();
+        const w = rect.width || 1;
+        const newAR = w / newH; // width/height
 
-            // Retry until Plotly is available
-            let n = 0;
-            const t = setInterval(() => {
-                n += 1;
-                if (tryInstall() || n > 50) clearInterval(t);  // ~5s max
-            }, 100);
-            })();
-            """))
+        host.style.setProperty('--sf-ar', String(newAR));
+
+        // Resize the plotly graph inside this host immediately
+        const gd = host.querySelector('.js-plotly-plot');
+        if (gd) safeResizePlotly(gd);
+        }
+
+        function onUp(ev) {
+        if (!dragging) return;
+        dragging = false;
+        try { handle.releasePointerCapture(ev.pointerId); } catch (e) {}
+        window.removeEventListener('pointermove', onMove, true);
+        window.removeEventListener('pointerup', onUp, true);
+        window.removeEventListener('pointercancel', onUp, true);
+        }
+
+        handle.addEventListener('pointerdown', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        dragging = true;
+        startY = ev.clientY;
+        startH = host.getBoundingClientRect().height || 1;
+        try { handle.setPointerCapture(ev.pointerId); } catch (e) {}
+
+        window.addEventListener('pointermove', onMove, true);
+        window.addEventListener('pointerup', onUp, true);
+        window.addEventListener('pointercancel', onUp, true);
+        }, { passive: false });
+    }
+
+    function attachPlotlyResizeObservers() {
+        if (!(window.Plotly && Plotly.Plots && window.ResizeObserver)) return false;
+
+        function attachToGraph(gd) {
+        if (gd.__smartfigure_ro) return;
+
+        const ro = new ResizeObserver(() => safeResizePlotly(gd));
+        ro.observe(gd);
+        gd.__smartfigure_ro = ro;
+
+        requestAnimationFrame(() => safeResizePlotly(gd));
+        setTimeout(() => safeResizePlotly(gd), 50);
+        setTimeout(() => safeResizePlotly(gd), 250);
+        }
+
+        document.querySelectorAll('.js-plotly-plot').forEach(attachToGraph);
+        return true;
+    }
+
+    function attachAspectHandles() {
+        document.querySelectorAll('.sf-plot-aspect').forEach(ensureHandle);
+    }
+
+    function attachAll() {
+        attachAspectHandles();
+        attachPlotlyResizeObservers();
+    }
+
+    // Initial + mutation observer
+    attachAll();
+
+    const mo = new MutationObserver(() => attachAll());
+    mo.observe(document.body, { childList: true, subtree: true });
+
+    // Retry until Plotly exists (JupyterLab timing)
+    let n = 0;
+    const t = setInterval(() => {
+        n += 1;
+        attachAll();
+        if ((window.Plotly && Plotly.Plots) || n > 50) clearInterval(t);
+    }, 100);
+    })();
+    """
+                )
+            )
 
         def _apply_full_width(on: bool):
             if on:
-                # Force below: true column stack + NO plot flex-grow
                 self.panels["content"].layout.flex_flow = "column"
                 self.panels["content"].layout.gap = "8px"
 
@@ -815,7 +935,6 @@ class SmartFigure:
                 self.panels["controls"].layout.padding = "0px"
                 self.panels["controls"].layout.width = "100%"
             else:
-                # Restore wrap behavior + side panel sizing
                 self.panels["content"].layout.flex_flow = "row wrap"
                 self.panels["content"].layout.gap = "8px"
 
@@ -831,7 +950,7 @@ class SmartFigure:
                 _apply_full_width(change["new"])
 
         self.panels["full_width"].observe(_on_full_width, names="value")
-        _apply_full_width(self.panels["full_width"].value)  # apply initial state
+        _apply_full_width(self.panels["full_width"].value)
 
         with self._output:
             display(self.panels["main_layout"])
