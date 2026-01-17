@@ -777,16 +777,13 @@ class SmartFigure:
             value="<div style='margin:10px 0 0 0; padding:0;'><b>Info</b></div>"
         )
 
-        # Public “info area” (you'll add convenience methods later)
-        self.panels["info"] = widgets.Output(
-            layout=widgets.Layout(
-                width="100%",
-                margin="0px",
-                padding="0px",
-                overflow="auto",
-            )
+        # IMPORTANT: this is a *container* for Output widgets (so you can't "print into it" directly)
+        self.panels["info"] = widgets.VBox(
+            children=(),
+            layout=widgets.Layout(width="100%", margin="0px", padding="0px"),
         )
-         # Entire sidebar is hidden until at least one parameter is added
+
+        # Entire sidebar hidden unless params or info outputs exist
         self.panels["controls"] = widgets.VBox(
             [
                 self.panels["params_header"],
@@ -801,7 +798,7 @@ class SmartFigure:
                 min_width="300px",
                 max_width="400px",
                 height="auto",
-                display="none",  # <-- key: hide when no parameters
+                display="none",  # <-- key: start hidden
             ),
         )
 
@@ -997,10 +994,24 @@ class SmartFigure:
                 pass
         self.render()
 
-    def _ensure_controls_visible(self) -> None:
-        # Show the sidebar the first time we actually have something to show
-        if self.panels["controls"].layout.display == "none":
-            self.panels["controls"].layout.display = "flex"
+    def _set_controls_visible(self) -> None:
+        """
+        Sync sidebar + section visibility based on whether we have:
+        - any parameter widgets in self.panels["params"]
+        - any info output widgets in self.panels["info"]
+        """
+        has_params = len(self.panels["params"].children) > 0
+        has_info = len(self.panels["info"].children) > 0
+
+        # Hide empty sections
+        self.panels["params_header"].layout.display = "block" if has_params else "none"
+        self.panels["params"].layout.display = "flex" if has_params else "none"
+
+        self.panels["info_header"].layout.display = "block" if has_info else "none"
+        self.panels["info"].layout.display = "flex" if has_info else "none"
+
+        # Hide the whole sidebar if there's nothing to show
+        self.panels["controls"].layout.display = "flex" if (has_params or has_info) else "none"
     def add_param(self, parameter_id, value=0.0, min=-1, max=1, step=0.01):
         """
         Add a SmartFloatSlider parameter to the controls panel.
@@ -1023,8 +1034,9 @@ class SmartFigure:
         slider = SmartFloatSlider(
             description=description, value=value, min=min, max=max, step=step
         )
-        self._ensure_controls_visible()
+        
         self.panels["params"].children += (slider,)
+        self._set_controls_visible()
         self._params[parameter_id] = slider
 
         def rerender_on_param_change(change):
@@ -1032,7 +1044,18 @@ class SmartFigure:
 
         slider.observe(rerender_on_param_change, names="value")
         return
-
+    def new_info_output(self, **layout_kwargs) -> widgets.Output:
+        """
+        Create an Output widget inside the Info area and return it.
+        Usage:
+            out = fig.new_info_output()
+            with out:
+                print("hello")
+        """
+        out = widgets.Output(layout=widgets.Layout(**layout_kwargs))
+        self.panels["info"].children += (out,)
+        self._ensure_controls_visible()
+        return out
     @property
     def title(self):
         return self._figure.layout.title.text
