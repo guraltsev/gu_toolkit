@@ -1,5 +1,6 @@
-"""
-Widgets and interactive plotting helpers for math exploration in Jupyter.
+from __future__ import annotations
+
+"""Widgets and interactive plotting helpers for math exploration in Jupyter.
 
 This file defines two main ideas:
 
@@ -12,6 +13,7 @@ This file defines two main ideas:
    A thin, student-friendly wrapper around ``plotly.graph_objects.FigureWidget`` that:
    - plots SymPy expressions by compiling them to NumPy via ``numpify``,
    - supports interactive parameter sliders (via ``SmartFloatSlider``),
+   - optionally provides an *Info* area (a stack of ``ipywidgets.Output`` widgets),
    - re-renders automatically when you pan/zoom (throttled) or move a slider.
 
 The intended workflow is:
@@ -39,6 +41,16 @@ Quick start (in a Jupyter notebook)
 Tip: if you omit ``parameters`` when calling ``plot``, SmartFigure will infer them
 from the expression and create sliders automatically. Pass ``[]`` to disable that.
 
+Info panel
+----------
+The sidebar has two sections:
+
+- **Parameters**: auto-created sliders for SymPy symbols.
+- **Info**: a container that holds *Output widgets* created by
+  :meth:`SmartFigure.new_info_output`. This design is deliberate: printing directly
+  into a container widget is ambiguous in Jupyter, but printing into an
+  ``Output`` widget is well-defined.
+
 Notes for students
 ------------------
 - SymPy expressions are symbolic. They are like *formulas*.
@@ -48,19 +60,31 @@ Notes for students
 """
 
 # === SECTION: OneShotOutput [id: OneShotOutput]===
-import sympy as sp
-from typing import Any, Type, TypeVar
-import time
-from .numpify import numpify
-from .NamedFunction import NamedFunction
-import plotly.graph_objects as go
-from typing import Any, Callable, Optional, Hashable
-from sympy import Symbol
-import numpy as np
-import ipywidgets as widgets
-from IPython.display import display
-import warnings
+
 import re
+import time
+import warnings
+from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union
+
+import ipywidgets as widgets
+import numpy as np
+import plotly.graph_objects as go
+import sympy as sp
+from IPython.display import Javascript, display
+from sympy.core.expr import Expr
+from sympy.core.symbol import Symbol
+
+from .InputConvert import InputConvert
+from .numpify import numpify
+
+
+# -----------------------------
+# Small type aliases
+# -----------------------------
+NumberLike = Union[int, float]
+NumberLikeOrStr = Union[int, float, str]
+RangeLike = Tuple[NumberLikeOrStr, NumberLikeOrStr]
+VisibleSpec = Union[bool, str]  # Plotly uses True/False or the string "legendonly".
 
 class OneShotOutput(widgets.Output):
     """
@@ -127,12 +151,17 @@ class OneShotOutput(widgets.Output):
 
     __slots__ = ("_displayed",)
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize a new OneShotOutput widget."""
         super().__init__()
         self._displayed = False
 
-    def _repr_mimebundle_(self, include=None, exclude=None, **kwargs):
+    def _repr_mimebundle_(
+        self,
+        include: Any = None,
+        exclude: Any = None,
+        **kwargs: Any,
+    ) -> Any:
         """
         IPython rich display hook used by ipywidgets.
 
@@ -176,7 +205,6 @@ class OneShotOutput(widgets.Output):
 
 
 # === SECTION: SmartFigure [id: SmartFigure]===
-from .InputConvert import InputConvert
 
 # Architecture note:
 # - SmartFigure is the coordinator: it owns the Plotly FigureWidget, UI panels, and
@@ -217,7 +245,7 @@ class SmartPlot:
     ----------
     The following are “public” (no leading underscore):
     - constructor ``__init__``
-    - ``set_var_func``
+    - ``set_func``
     - properties ``var``, ``parameters``, ``func`` are read-only
         To change them, use ``set_func``
     - properties ``label``
@@ -268,15 +296,15 @@ class SmartPlot:
 
     def __init__(
         self,
-        var,
-        func,
-        smart_figure,
-        parameters=None,
-        x_domain=None,
-        sampling_points=None,
-        label="",
-        visible=True,
-    ):
+        var: Symbol,
+        func: Expr,
+        smart_figure: SmartFigure,
+        parameters: Optional[Sequence[Symbol]] = None,
+        x_domain: Optional[RangeLike] = None,
+        sampling_points: Optional[int] = None,
+        label: str = "",
+        visible: VisibleSpec = True,
+    ) -> None:
         """
         Create a new SmartPlot instance.
 
@@ -308,13 +336,19 @@ class SmartPlot:
         >>> fig = SmartFigure()
         >>> fig.plot(x, sp.sin(x), id="sin")
         """
-        self._smart_figure = smart_figure
+        # Parent/owner. SmartPlot asks it for viewport ranges and parameter values.
+        self._smart_figure: SmartFigure = smart_figure
+
+        # We always attach exactly one Plotly trace per SmartPlot.
         self._smart_figure.add_plot_trace(x=[], y=[], mode="lines")
         self._plot_handle = self._smart_figure._figure.data[-1]
 
-        self._suspend_render = True
+        # During initialization we may set several properties that would each trigger
+        # a render; suspend until we're fully configured.
+        self._suspend_render: bool = True
 
-        self.set_func(var, func, parameters)  # Private method
+        # Compile SymPy -> NumPy callable and store parameter list.
+        self.set_func(var, func, parameters)
 
         self.x_domain = x_domain
 
@@ -328,7 +362,12 @@ class SmartPlot:
 
         # raise NotImplementedError("SmartPlot is not implemented yet.")
 
-    def set_func(self, var, func, parameters=None):
+    def set_func(
+        self,
+        var: Symbol,
+        func: Expr,
+        parameters: Optional[Sequence[Symbol]] = None,
+    ) -> None:
         """
         Set the independent variable and symbolic function for this plot.
 
@@ -345,7 +384,8 @@ class SmartPlot:
         -----
         Triggers recompilation via ``numpify`` and a re-render.
 
-        No autodetection of parameters is done. This function REQUIRES the parameters to be passed explicitly.
+        No autodetection of parameters is done here.
+        If you want autodetection, use :meth:`SmartFigure.plot` with ``parameters=None``.
 
         Examples
         --------
@@ -360,107 +400,131 @@ class SmartPlot:
         >>> x = sp.Symbol("x")
         >>> fig = SmartFigure()
         >>> fig.plot(x, sp.sin(x), id="f")
-        >>> fig.plot(t, sp.cos(t), id="f")
+        >>> fig.plot(x, sp.cos(x), id="f")
         """
 
-        self._var = var
-        self._parameters = parameters
-        self._func = func
-        self._f_numpy = numpify(
+        self._var: Symbol = var
+        self._parameters: Optional[Tuple[Symbol, ...]] = (
+            tuple(parameters) if parameters is not None else None
+        )
+        self._func: Expr = func
+        # numpify expects an ordered list of arguments: (var, *parameters)
+        self._f_numpy: Callable[..., Any] = numpify(
             func,
             args=[
                 self._var,
             ]
-            + (self._parameters or []),
+            + (list(self._parameters) or []),
         )
 
     @property
-    def var(self):
+    def var(self) -> Symbol:
         return self._var
 
     @property
-    def parameters(self):
+    def parameters(self) -> Optional[Tuple[Symbol, ...]]:
         return self._parameters
 
     @property
-    def func(self):
+    def func(self) -> Expr:
         return self._func
 
     @property
-    def label(self):
+    def label(self) -> str:
         return self._plot_handle.name
 
     @label.setter
-    def label(self, value):
+    def label(self, value: str) -> None:
         self._plot_handle.name = value
 
     @property
-    def x_domain(self):
+    def x_domain(self) -> Optional[Tuple[float, float]]:
         return self._x_domain
 
     @x_domain.setter
-    def x_domain(self, value):
-        if value is not None:  # Value normalization
-            x_min, x_max = value
-            value = (
-                InputConvert(x_min, dest_type=float),
-                InputConvert(x_max, dest_type=float),
-            )
-            if x_min > x_max:
-                raise ValueError(f"x_min ({x_min}) must be less than x_max ({x_max})")
+    def x_domain(self, value: Optional[RangeLike]) -> None:
+        """Optional evaluation-domain override.
 
-        self._x_domain = value
+        If set to ``None``, the plot is evaluated on the current viewport range.
+        If set to a range, the plot is evaluated on the *union* of the viewport
+        and this domain, so the curve remains stable as you pan.
+        """
+        if value is not None:
+            x_min_raw, x_max_raw = value
+            x_min = float(InputConvert(x_min_raw, dest_type=float))
+            x_max = float(InputConvert(x_max_raw, dest_type=float))
+            if x_min > x_max:
+                raise ValueError(f"x_min ({x_min}) must be <= x_max ({x_max})")
+            self._x_domain = (x_min, x_max)
+        else:
+            self._x_domain = None
         self.render()
 
     @property
-    def sampling_points(self):
+    def sampling_points(self) -> Optional[int]:
         return self._sampling_points
 
     @sampling_points.setter
-    def sampling_points(self, value):
-        if value is not None:
-            value = InputConvert(value, dest_type=int)
-        self._sampling_points = value
+    def sampling_points(self, value: Optional[int]) -> None:
+        """Per-plot sampling override.
+
+        If ``None``, the plot uses the parent figure's ``sampling_points``.
+        """
+        self._sampling_points = int(InputConvert(value, dest_type=int)) if value is not None else None
         self.render()
 
     @property
-    def visible(self):
+    def visible(self) -> VisibleSpec:
         return self._plot_handle.visible
 
     @visible.setter
-    def visible(self, value):
+    def visible(self, value: VisibleSpec) -> None:
         self._plot_handle.visible = value
-        if value == True:
+        if value is True:
             self.render()
 
-    def compute_data(self):
+    def compute_data(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Compute (x, y) samples for the current viewport / domain.
+
+        Role
+        ----
+        This is the *numerical* heart of SmartPlot:
+        - choose an x-interval,
+        - build the argument list (x plus current parameter values),
+        - evaluate the compiled NumPy function.
+        """
         viewport_x_range = self._smart_figure.current_x_range
+        if viewport_x_range is None:
+            # Plotly can report None before ranges are initialized. Fall back to defaults.
+            viewport_x_range = self._smart_figure.x_range
+
+        # If an evaluation domain override exists, evaluate on the union of domains.
         if self.x_domain is None:
-            x_min = viewport_x_range[0]
-            x_max = viewport_x_range[1]
+            x_min, x_max = float(viewport_x_range[0]), float(viewport_x_range[1])
         else:
-            x_min = min(viewport_x_range[0], self.x_domain[0])
-            x_max = max(viewport_x_range[1], self.x_domain[1])
+            x_min = min(float(viewport_x_range[0]), float(self.x_domain[0]))
+            x_max = max(float(viewport_x_range[1]), float(self.x_domain[1]))
 
-        if self.sampling_points is None:
-            num = self._smart_figure.sampling_points
-        else:
-            num = self.sampling_points
+        # Sampling density: per-plot override wins; otherwise use figure default.
+        num = self._smart_figure.sampling_points if self.sampling_points is None else self.sampling_points
+        if num is None:
+            num = 500
 
-        x_values = np.linspace(x_min, x_max, num=num)
+        x_values = np.linspace(x_min, x_max, num=int(num))
 
-        args = [x_values]
+        args: list[Any] = [x_values]
         if self._parameters is not None:
             for param in self._parameters:
                 args.append(self._smart_figure._params[param].value)
 
-        y_values = self._f_numpy(*args)
+        y_values = np.asarray(self._f_numpy(*args))
         return x_values, y_values
 
-    def render(self):
+    def render(self) -> None:
         if self._suspend_render:
             return
-        if not self.visible == True:
+        # Skip expensive computations if the trace is not visible.
+        if self.visible is not True:
             return
         x_values, y_values = self.compute_data()
         self._plot_handle.x = x_values
@@ -468,19 +532,27 @@ class SmartPlot:
 
     def update(
         self,
-        var,
-        func,
-        parameters=None,
-        label=None,
-        x_domain=None,
-        sampling_points=None,
-    ):
+        var: Optional[Symbol],
+        func: Optional[Expr],
+        parameters: Optional[Sequence[Symbol]] = None,
+        label: Optional[str] = None,
+        x_domain: Optional[Union[RangeLike, str]] = None,
+        sampling_points: Optional[Union[int, str]] = None,
+    ) -> None:
+        """Update one or more aspects of this plot.
+
+        This method is called by :meth:`SmartFigure.plot` when reusing an existing
+        plot id.
+        """
         if label is not None:
             self.label = label
+
         if x_domain is not None:
             if x_domain == "figure_default":
                 self.x_domain = None
-            self.x_domain = x_domain
+            else:
+                self.x_domain = x_domain
+
         if func is not None or var is not None or parameters is not None:
             if var is None:
                 var = self.var
@@ -489,10 +561,12 @@ class SmartPlot:
             if func is None:
                 func = self.func
             self.set_func(var, func, parameters=parameters)
+
         if sampling_points is not None:
             if sampling_points == "figure_default":
                 self.sampling_points = None
-            self.sampling_points = sampling_points
+            else:
+                self.sampling_points = int(InputConvert(sampling_points, dest_type=int))
 
 
 from .SmartSlider import SmartFloatSlider
@@ -618,23 +692,23 @@ class SmartFigure:
     # ------------
     _figure: go.FigureWidget  # the plotly figure widget
     _output: OneShotOutput  # the output widget to display the figure
-    plots: dict  # dictionary to store plots by name
+    plots: dict[str, SmartPlot]  # curves indexed by a user-supplied id
 
-    _sampling_points: int  # default number of sampling points
-    _x_range: tuple  # default x-axis range
-    _y_range: tuple  # default y-axis range
-    _panels: dict  # dictionary to store panels by name
+    _sampling_points: Optional[int]  # default number of sampling points
+    _x_range: Tuple[float, float]  # default x-axis range
+    _y_range: Tuple[float, float]  # default y-axis range
+    panels: dict[str, widgets.Widget]  # named widget containers/panels
 
      
-    _HOOK_ID_RE = re.compile(r"^hook:(\d+)$") # regex to match automatic string hook IDs
+    _HOOK_ID_RE = re.compile(r"^hook:(\d+)$")  # regex to match automatic string hook IDs
 
     def __init__(
         self,
         sampling_points: int = 500,
-        x_range: tuple = (-4, 4),
-        y_range: tuple = (-3, 3),
+        x_range: RangeLike = (-4, 4),
+        y_range: RangeLike = (-3, 3),
         debug: bool = False,
-    ):
+    ) -> None:
         """
         Create a SmartFigure with a Plotly FigureWidget and UI controls.
 
@@ -657,16 +731,17 @@ class SmartFigure:
         >>> fig.plot(x, sp.sin(x), id="sin")
         >>> fig
         """
-        self._debug = debug
+        self._debug: bool = debug
 
         # --- Figure layout setup ---
-        self._output = OneShotOutput()
+        self._output: OneShotOutput = OneShotOutput()
         self._layout_init()
 
         # Create the FigureWidget
         # Put the figure in the left panel
         with self._output:
-            self._figure = go.FigureWidget()
+            # Plotly figure widget lives inside the aspect-ratio host box.
+            self._figure: go.FigureWidget = go.FigureWidget()
             self.panels["plot"].children = (self._figure,)
 
         # Removed fixed width, added autosize=True so it fills the left panel
@@ -694,30 +769,28 @@ class SmartFigure:
 
         # --- End of figure layout setup ---
 
-        if sampling_points == "figure_default":
-            self.sampling_points = None
-        else:
-            self.sampling_points = sampling_points
+        self.sampling_points = sampling_points
 
         self.x_range = x_range
         self.y_range = y_range
 
         self.plots = {}
 
-        self._params = {}  # dictionary to store parameters
+        # Slider registry: SymPy Symbol -> slider widget.
+        self._params: dict[Symbol, SmartFloatSlider] = {}
         # --- NEW: parameter-change hooks ---
         # Maps hook_id -> callable(change_dict) to be run after a parameter slider changes.
-        self._param_change_hooks = {}
+        self._param_change_hooks: dict[Hashable, Callable[[dict[str, Any]], Any]] = {}
         # Monotone counter for autogenerated ids "hook:1", "hook:2", ...
-        self._hook_counter = 0
+        self._hook_counter: int = 0
 
 
-        self._last_relayout = time.monotonic()
+        self._last_relayout: float = time.monotonic()
         self._figure.layout.on_change(
             self._throttled_axis_range_callback, "xaxis.range", "yaxis.range"
         )
 
-    def _layout_init(self):
+    def _layout_init(self) -> None:
         """
         Responsive layout with vertically-resizable plot that preserves aspect ratio on reflow.
 
@@ -726,9 +799,8 @@ class SmartFigure:
         - A JS drag handle updates --sf-ar during vertical resizing
         - No native resize: vertical (it writes pixel height and breaks aspect-ratio on reflow)
         """
-        import ipywidgets as widgets
-        from IPython.display import display, Javascript
-
+        # Panels is the UI registry used throughout SmartFigure.
+        # Everything that needs to be manipulated later lives here.
         self.panels = {}
 
         # --- Invisible output that runs CSS/JS bootstrap ---
@@ -908,7 +980,7 @@ class SmartFigure:
             layout=widgets.Layout(width="100%", margin="0px", padding="0px"),
         )
 
-        # --- JS: plotly resize observer + aspect-ratio resizer handle ---
+        # --- JS: Plotly ResizeObserver + aspect-ratio drag handle ---
         with self.panels["js_bootstrap"]:
             display(
                 Javascript(
@@ -1029,7 +1101,7 @@ class SmartFigure:
                 )
             )
 
-        def _apply_full_width(on: bool):
+        def _apply_full_width(on: bool) -> None:
             if on:
                 self.panels["content"].layout.flex_flow = "column"
                 self.panels["content"].layout.gap = "8px"
@@ -1051,7 +1123,7 @@ class SmartFigure:
                 self.panels["controls"].layout.padding = "0px 0px 0px 10px"
                 self.panels["controls"].layout.width = "auto"
 
-        def _on_full_width(change):
+        def _on_full_width(change: dict[str, Any]) -> None:
             if change["name"] == "value":
                 _apply_full_width(change["new"])
 
@@ -1061,7 +1133,7 @@ class SmartFigure:
         with self._output:
             display(self.panels["main_layout"])
 
-    def _throttled_axis_range_callback(self, attr, old, new):
+    def _throttled_axis_range_callback(self, attr: str, old: Any, new: Any) -> None:
         if time.monotonic() - self._last_relayout < 0.5:
             return
         self._last_relayout = time.monotonic()
@@ -1072,9 +1144,14 @@ class SmartFigure:
                 pass
         self.render()
 
-    def _set_controls_visible(self) -> None:
+    def _ensure_controls_visible(self) -> None:
         """
-        Sync sidebar + section visibility based on whether we have:
+        Sync sidebar + section visibility.
+
+        Role
+        ----
+        The sidebar is entirely hidden unless there's something meaningful to show.
+        Concretely, we show/hide based on whether we have:
         - any parameter widgets in self.panels["params"]
         - any info output widgets in self.panels["info"]
         """
@@ -1089,8 +1166,22 @@ class SmartFigure:
         self.panels["info"].layout.display = "flex" if has_info else "none"
 
         # Hide the whole sidebar if there's nothing to show
-        self.panels["controls"].layout.display = "flex" if (has_params or has_info) else "none"
-    def add_param(self, parameter_id, value=0.0, min=-1, max=1, step=0.01):
+        self.panels["controls"].layout.display = (
+            "flex" if (has_params or has_info) else "none"
+        )
+
+    # Backwards-compatible alias (older drafts used this name).
+    def _set_controls_visible(self) -> None:
+        self._ensure_controls_visible()
+
+    def add_param(
+        self,
+        parameter_id: Symbol,
+        value: NumberLike = 0.0,
+        min: NumberLike = -1,
+        max: NumberLike = 1,
+        step: NumberLike = 0.01,
+    ) -> SmartFloatSlider:
         """
         Add a SmartFloatSlider parameter to the controls panel.
 
@@ -1117,25 +1208,29 @@ class SmartFigure:
 
         description = f"${sp.latex(parameter_id)}$"  # Can be enriched later
         if parameter_id in self._params:
-            if self._debug:
-                with self._output:
-                    print(f"Parameter {parameter_id} already exists. Skipping.")
-            return
+            # Reuse existing slider. This keeps callbacks stable and avoids UI duplication.
+            return self._params[parameter_id]
 
         slider = SmartFloatSlider(
-            description=description, value=value, min=min, max=max, step=step
+            description=description,
+            value=float(value),
+            min=float(min),
+            max=float(max),
+            step=float(step),
         )
         
+        # Add slider to the Parameters section.
         self.panels["params"].children += (slider,)
-        self._set_controls_visible()
+        self._ensure_controls_visible()
         self._params[parameter_id] = slider
 
         
-        slider.observe(self._on_param_change, names="value") # NEW (simple + reusable)
-        
-        return
+        # Centralized callback: rerender once, then run user hooks.
+        slider.observe(self._on_param_change, names="value")
+
+        return slider
     
-    def _on_param_change(self, change: dict) -> None:
+    def _on_param_change(self, change: dict[str, Any]) -> None:
         """
         Internal ipywidgets observer for *any* parameter slider change.
 
@@ -1158,7 +1253,7 @@ class SmartFigure:
         # Then notify any user hooks (kept separate so hook failures don't kill interactivity).
         self._run_param_change_hooks(change)
 
-    def _run_param_change_hooks(self, change: dict) -> None:
+    def _run_param_change_hooks(self, change: dict[str, Any]) -> None:
         """
         Run all registered parameter-change hooks.
 
@@ -1178,7 +1273,7 @@ class SmartFigure:
                 )
     def add_param_change_hook(
         self,
-        callback: Callable[[dict], Any],
+        callback: Callable[[dict[str, Any]], Any],
         hook_id: Optional[Hashable] = None,
     ) -> Hashable:
         """
@@ -1282,7 +1377,7 @@ class SmartFigure:
             # Example: user inserts "hook:7" early, then auto ids begin at "hook:8".
             self._hook_counter = max(self._hook_counter, n)
 
-    def new_info_output(self, **layout_kwargs) -> widgets.Output:
+    def new_info_output(self, **layout_kwargs: Any) -> widgets.Output:
         """
         Create an Output widget inside the Info area and return it.
         Usage:
@@ -1297,67 +1392,77 @@ class SmartFigure:
         >>> with out:
         ...     print("f(x) = sin(x)")
         """
+        # Info panel intentionally holds Output widgets so the user can "print into" them.
         out = widgets.Output(layout=widgets.Layout(**layout_kwargs))
         self.panels["info"].children += (out,)
         self._ensure_controls_visible()
         return out
     @property
-    def title(self):
-        return self._figure.layout.title.text
+    def title(self) -> str:
+        """Title text shown above the figure.
+
+        Notes
+        -----
+        We use an ``HTMLMath`` title panel rather than Plotly's native title so
+        LaTeX rendering is reliable in Jupyter.
+        """
+        return str(self.panels["title"].value or "")
 
     @title.setter
-    def title(self, value):
+    def title(self, value: str) -> None:
         self.panels["title"].value = value
 
     @property
-    def x_range(self):
+    def x_range(self) -> Tuple[float, float]:
         return self._x_range
 
     @x_range.setter
-    def x_range(self, value):
-        x_min, x_max = value
-        value = (
-            InputConvert(x_min, dest_type=float),
-            InputConvert(x_max, dest_type=float),
-        )
+    def x_range(self, value: RangeLike) -> None:
+        x_min_raw, x_max_raw = value
+        x_min = float(InputConvert(x_min_raw, dest_type=float))
+        x_max = float(InputConvert(x_max_raw, dest_type=float))
         if x_min > x_max:
-            raise ValueError(f"x_min ({x_min}) must be less than x_max ({x_max})")
-        self._figure.update_xaxes(range=value)
-        self._x_range = value
+            raise ValueError(f"x_min ({x_min}) must be <= x_max ({x_max})")
+        self._figure.update_xaxes(range=(x_min, x_max))
+        self._x_range = (x_min, x_max)
 
     @property
-    def y_range(self):
+    def y_range(self) -> Tuple[float, float]:
         return self._y_range
 
     @y_range.setter
-    def y_range(self, value):
-        y_min, y_max = value
-        value = (
-            InputConvert(y_min, dest_type=float),
-            InputConvert(y_max, dest_type=float),
-        )
+    def y_range(self, value: RangeLike) -> None:
+        y_min_raw, y_max_raw = value
+        y_min = float(InputConvert(y_min_raw, dest_type=float))
+        y_max = float(InputConvert(y_max_raw, dest_type=float))
         if y_min > y_max:
-            raise ValueError(f"y_min ({y_min}) must be less than y_max ({y_max})")
-        self._figure.update_yaxes(range=value)
-        self._y_range = value
+            raise ValueError(f"y_min ({y_min}) must be <= y_max ({y_max})")
+        self._figure.update_yaxes(range=(y_min, y_max))
+        self._y_range = (y_min, y_max)
 
     @property
-    def current_x_range(self):
+    def current_x_range(self) -> Optional[Tuple[float, float]]:
         return self._figure.layout.xaxis.range
 
     @property
-    def current_y_range(self):
+    def current_y_range(self) -> Optional[Tuple[float, float]]:
         return self._figure.layout.yaxis.range
 
     @property
-    def sampling_points(self):
+    def sampling_points(self) -> Optional[int]:
         return self._sampling_points
 
     @sampling_points.setter
-    def sampling_points(self, value):
-        self._sampling_points = value
+    def sampling_points(self, value: Union[int, str, None]) -> None:
+        # Accept the historical sentinel "figure_default".
+        if value == "figure_default":
+            self._sampling_points = None
+        elif value is None:
+            self._sampling_points = None
+        else:
+            self._sampling_points = int(InputConvert(value, dest_type=int))
 
-    def add_scatter(self, **scatter_kwargs):
+    def add_scatter(self, **scatter_kwargs: Any) -> None:
         """
         DEPRECATED: use add_plot_trace instead.
         Add a scatter trace to the figure.
@@ -1375,7 +1480,7 @@ class SmartFigure:
         warnings.warn("add_scatter is deprecated, use add_plot_trace instead.", DeprecationWarning)
         self.add_plot_trace(**scatter_kwargs)
 
-    def add_plot_trace(self, **plot_kwargs):
+    def add_plot_trace(self, **plot_kwargs: Any) -> None:
         """
         Add a plot trace to the figure.
 
@@ -1391,14 +1496,14 @@ class SmartFigure:
         """
         self._figure.add_scatter(**plot_kwargs)
 
-    def _ipython_display_(self, **kwargs):
+    def _ipython_display_(self, **kwargs: Any) -> OneShotOutput:
         """
         IPython display hook to show the figure in Jupyter notebooks.
         """
         display(self._output)
         return self._output
 
-    def update_layout(self, **layout_kwargs):
+    def update_layout(self, **layout_kwargs: Any) -> None:
         """
         Update the layout of the figure.
 
@@ -1415,8 +1520,14 @@ class SmartFigure:
         self._figure.update_layout(**layout_kwargs)
 
     def plot(
-        self, var, func, parameters=None, id=None, x_domain=None, sampling_points=None
-    ):
+        self,
+        var: Symbol,
+        func: Expr,
+        parameters: Optional[Sequence[Symbol]] = None,
+        id: Optional[str] = None,
+        x_domain: Optional[RangeLike] = None,
+        sampling_points: Optional[Union[int, str]] = None,
+    ) -> SmartPlot:
         """
         Plot a SymPy expression on the figure (and keep it “live”).
 
@@ -1498,9 +1609,11 @@ class SmartFigure:
         >>> fig.plot(x, sp.sin(x), parameters=[], id="sin", sampling_points=5000)
         """
         if id is None:
+            # Choose the first free id among f_0, f_1, ...
             for n in range(101):  # 0 to 100 inclusive
-                if id not in self.plots:
-                    id = f"f_{n}"
+                candidate = f"f_{n}"
+                if candidate not in self.plots:
+                    id = candidate
                     break
             if id is None:
                 raise ValueError("No available f_n identifiers (max 100 reached)")
@@ -1509,14 +1622,16 @@ class SmartFigure:
             with self._output:
                 print(f"Plotting {sp.latex(func)}, var={sp.latex(var)}")
             if parameters is not None:
-                print(f"Parameters: {parameters}")
+                with self._output:
+                    print(f"Parameters: {parameters}")
 
         if parameters is None:
             # Autodetect parameters
             syms = func.free_symbols
             parameters = [s for s in syms if s != var]
             if self._debug:
-                print(f"Detected parameters: {parameters}")
+                with self._output:
+                    print(f"Detected parameters: {parameters}")
 
         for p in parameters:
             self.add_param(p)
@@ -1545,7 +1660,7 @@ class SmartFigure:
 
         return plot
 
-    def render(self):
+    def render(self) -> None:
         """
         Render all plots on the figure.
 
