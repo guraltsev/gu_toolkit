@@ -654,9 +654,8 @@ class SmartFigure:
         self.panels = {}
 
         # --- Title (LaTeX) ---
-        title_tex = getattr(self, "title_tex", r"")
         self.panels["title"] = widgets.HTMLMath(
-            value=rf"$$ {title_tex} $$",
+            value=r"",
             layout=widgets.Layout(margin="0px"),
         )
 
@@ -813,11 +812,7 @@ class SmartFigure:
 
     @title.setter
     def title(self, value):
-        self.update_layout(
-            title=dict(
-                text=value,  # Your title text here
-            )
-        )
+        self.panels["title"].value = value
 
     @property
     def x_range(self):
