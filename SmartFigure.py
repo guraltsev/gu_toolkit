@@ -652,7 +652,19 @@ class SmartFigure:
         from IPython.display import display
 
         self.panels = {}
-
+        # --- JS bootstrap of resize observer for plotly ---
+        self.panels["js_bootstrap"] = widgets.Output(
+            layout=widgets.Layout(
+                layout=widgets.Layout(
+                    width="1px",
+                    height="1px",
+                    overflow="hidden",
+                    opacity="0.0",
+                    margin="0px",
+                    padding="0px",
+                )
+            )  # invisible, but executes JS
+        )
         # --- Title (LaTeX) ---
         self.panels["title"] = widgets.HTMLMath(
             value=r"",
@@ -729,9 +741,66 @@ class SmartFigure:
         )
 
         self.panels["main_layout"] = widgets.VBox(
-            [self.panels["titlebar"], self.panels["content"]],
+            [
+                self.panels["js_bootstrap"],
+                self.panels["titlebar"],
+                self.panels["content"],
+            ],
             layout=widgets.Layout(width="100%", margin="0px", padding="0px"),
         )
+        
+        from IPython.display import display, Javascript
+        with self.panels["js_bootstrap"]:
+            display(Javascript(r"""
+            (function () {
+            if (window.__smartfigure_plotly_resizer_installed) return;
+            window.__smartfigure_plotly_resizer_installed = true;
+
+            function tryInstall() {
+                // Plotly may not be on window yet when this runs in JupyterLab
+                if (!(window.Plotly && Plotly.Plots && window.ResizeObserver)) return false;
+
+                function resizeOne(gd) {
+                try { Plotly.Plots.resize(gd); } catch (e) {}
+                }
+
+                function attachObservers() {
+                const graphs = document.querySelectorAll('.js-plotly-plot');
+                graphs.forEach(gd => {
+                    if (gd.__smartfigure_ro) return;
+
+                    // Observe the graph div itself (more robust than parentElement)
+                    const ro = new ResizeObserver(() => resizeOne(gd));
+                    ro.observe(gd);
+                    gd.__smartfigure_ro = ro;
+
+                    // Fix "wrong size on creation"
+                    requestAnimationFrame(() => resizeOne(gd));
+                    setTimeout(() => resizeOne(gd), 50);
+                    setTimeout(() => resizeOne(gd), 250);
+                });
+                }
+
+                attachObservers();
+
+                // Catch later-created FigureWidgets
+                const mo = new MutationObserver(() => attachObservers());
+                mo.observe(document.body, { childList: true, subtree: true });
+
+                // Fallback on window resize
+                window.addEventListener('resize', () => setTimeout(attachObservers, 100));
+
+                return true;
+            }
+
+            // Retry until Plotly is available
+            let n = 0;
+            const t = setInterval(() => {
+                n += 1;
+                if (tryInstall() || n > 50) clearInterval(t);  // ~5s max
+            }, 100);
+            })();
+            """))
 
         def _apply_full_width(on: bool):
             if on:
