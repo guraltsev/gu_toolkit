@@ -55,7 +55,7 @@ from sympy import Symbol
 import numpy as np
 import ipywidgets as widgets
 from IPython.display import display
-
+import warnings
 
 class OneShotOutput(widgets.Output):
     """
@@ -266,7 +266,7 @@ class SmartPlot:
         visible=True,
     ):
         self._smart_figure = smart_figure
-        self._smart_figure.add_scatter(x=[], y=[], mode="lines")
+        self._smart_figure.add_plot_trace(x=[], y=[], mode="lines")
         self._plot_handle = self._smart_figure._figure.data[-1]
 
         self._suspend_render = True
@@ -482,7 +482,7 @@ class SmartFigure:
     - ``plot``  Creates a new plot
     - ``render`` Re-renders all plots
     - ``add_param`` (advanced) Creates a slider for a parameter (automatically done when ``plot`` is called)
-    - ``add_scatter`` (advanced)
+    - ``add_plot_trace`` (advanced) Creates a plot trace - a graphical line connecting data points
     - ``update_layout`` (advanced)
     Properties:
     - ``title`` Title of the figure
@@ -1055,6 +1055,7 @@ class SmartFigure:
 
     def add_scatter(self, **scatter_kwargs):
         """
+        DEPRECATED: use add_plot_trace instead.
         Add a scatter trace to the figure.
 
         Parameters
@@ -1062,7 +1063,19 @@ class SmartFigure:
         scatter_kwargs : dict
             Keyword arguments for the scatter trace.
         """
-        self._figure.add_scatter(**scatter_kwargs)
+        warnings.warn("add_scatter is deprecated, use add_plot_trace instead.", DeprecationWarning)
+        self.add_plot_trace(**scatter_kwargs)
+
+    def add_plot_trace(self, **plot_kwargs):
+        """
+        Add a plot trace to the figure.
+
+        Parameters
+        ----------
+        plot_kwargs : dict
+            Keyword arguments for the plot trace.
+        """
+        self._figure.add_scatter(**plot_kwargs)
 
     def _ipython_display_(self, **kwargs):
         """
@@ -1169,7 +1182,10 @@ class SmartFigure:
                 print(f"Parameters: {parameters}")
 
         if parameters is None:
-            parameters = []
+            # Autodetect parameters
+            syms = func.free_symbols
+            parameters = [s for s in syms if s != var]
+            print(f"Detected parameters: {parameters}")
 
         for p in parameters:
             self.add_param(p)
