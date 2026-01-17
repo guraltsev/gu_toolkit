@@ -599,12 +599,11 @@ class SmartFigure:
 
         # Removed fixed width, added autosize=True so it fills the left panel
         self._figure.update_layout(
-            height=600,
             autosize=True,
             template="plotly_white",
             showlegend=True,
             xaxis=dict(
-                #title="x",
+                # title="x",
                 zeroline=True,
                 zerolinewidth=2,
                 zerolinecolor="black",
@@ -612,7 +611,7 @@ class SmartFigure:
                 ticks="outside",
             ),
             yaxis=dict(
-                #title="y",
+                # title="y",
                 zeroline=True,
                 zerolinewidth=2,
                 zerolinecolor="black",
@@ -643,25 +642,126 @@ class SmartFigure:
 
     def _layout_init(self):
         """
-        Initialize the layout of the figure.
+        Responsive layout:
+        - LaTeX title (HTMLMath)
+        - Wide: controls can sit right of plot
+        - Narrow: controls wrap directly below plot (no vertical "row stretching")
+        - Full-width checkbox forces controls below even on wide screens
         """
+        import ipywidgets as widgets
+        from IPython.display import display
+
         self.panels = {}
-        # Right Panel: Sidebar with a title
+
+        # --- Title (LaTeX) ---
+        title_tex = getattr(self, "title_tex", r"")
+        self.panels["title"] = widgets.HTMLMath(
+            value=rf"$$ {title_tex} $$",
+            layout=widgets.Layout(margin="0px"),
+        )
+
+        # Small + unobtrusive
+        self.panels["full_width"] = widgets.Checkbox(
+            value=False,
+            description="Full width plot",
+            indent=False,
+            layout=widgets.Layout(width="160px", margin="0px"),
+        )
+
+        self.panels["titlebar"] = widgets.HBox(
+            [self.panels["title"], self.panels["full_width"]],
+            layout=widgets.Layout(
+                width="100%",
+                align_items="center",
+                justify_content="space-between",
+                margin="0px 0px 6px 0px",
+                padding="0px",
+            ),
+        )
+
+        # --- Plot panel ---
+        # IMPORTANT: do NOT give this vertical grow when stacked; we toggle its flex below.
+        self.panels["plot"] = widgets.VBox(
+            layout=widgets.Layout(
+                width="100%",
+                min_width="320px",
+                margin="0px",
+                padding="0px",
+                flex="1 1 560px",   # basis controls when side-by-side
+            )
+        )
+
+        # --- Controls panel ---
         self.panels["controls"] = widgets.VBox(
-            [widgets.HTML(value="<b>Parameters</b>")],
-            layout=widgets.Layout(width="400px", padding="0px 0px 0px 10px"),
+            [
+                widgets.HTML(value="<div style='margin:0; padding:0;'><b>Parameters</b></div>"),
+            ],
+            layout=widgets.Layout(
+                margin="0px",
+                padding="0px 0px 0px 10px",
+                flex="0 1 380px",
+                min_width="300px",
+                max_width="400px",
+                height="auto",
+            ),
         )
 
-        # Left Panel: Plot area
-        self.panels["plot"] = widgets.VBox(layout=widgets.Layout(flex="1"))
-
-        # Main Container: Combines Left and Right
-        self.panels["main_layout"] = widgets.HBox(
-            [self.panels["plot"], self.panels["controls"]],  
-            layout=widgets.Layout(width="100%", align_items="flex-start"),
+        # --- Content area (flex + wrap) ---
+        # KEY FIXES:
+        #   * align_content="flex-start" prevents multi-row flex from distributing extra vertical space
+        #   * gap kept small
+        self.panels["content"] = widgets.Box(
+            [self.panels["plot"], self.panels["controls"]],
+            layout=widgets.Layout(
+                display="flex",
+                flex_flow="row wrap",
+                align_items="flex-start",
+                align_content="flex-start",
+                justify_content="flex-start",
+                width="100%",
+                margin="0px",
+                padding="0px",
+                gap="8px",
+                height="auto",
+            ),
         )
 
-        # Display the layout once
+        self.panels["main_layout"] = widgets.VBox(
+            [self.panels["titlebar"], self.panels["content"]],
+            layout=widgets.Layout(width="100%", margin="0px", padding="0px"),
+        )
+
+        def _apply_full_width(on: bool):
+            if on:
+                # Force below: true column stack + NO plot flex-grow
+                self.panels["content"].layout.flex_flow = "column"
+                self.panels["content"].layout.gap = "8px"
+
+                self.panels["plot"].layout.flex = "0 0 auto"
+                self.panels["controls"].layout.flex = "0 0 auto"
+
+                self.panels["controls"].layout.max_width = ""
+                self.panels["controls"].layout.padding = "0px"
+                self.panels["controls"].layout.width = "100%"
+            else:
+                # Restore wrap behavior + side panel sizing
+                self.panels["content"].layout.flex_flow = "row wrap"
+                self.panels["content"].layout.gap = "8px"
+
+                self.panels["plot"].layout.flex = "1 1 560px"
+                self.panels["controls"].layout.flex = "0 1 380px"
+
+                self.panels["controls"].layout.max_width = "400px"
+                self.panels["controls"].layout.padding = "0px 0px 0px 10px"
+                self.panels["controls"].layout.width = "auto"
+
+        def _on_full_width(change):
+            if change["name"] == "value":
+                _apply_full_width(change["new"])
+
+        self.panels["full_width"].observe(_on_full_width, names="value")
+        _apply_full_width(self.panels["full_width"].value)  # apply initial state
+
         with self._output:
             display(self.panels["main_layout"])
 
