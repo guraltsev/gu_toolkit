@@ -762,9 +762,38 @@ class SmartFigure:
         # (you can change this to 16/9 etc)
         self.panels["plot"].layout._css = ""  # harmless no-op for some widget managers
 
-        # --- Controls panel ---
+         # --- Controls / sidebar panel (parameters + info) ---
+        self.panels["params_header"] = widgets.HTML(
+            value="<div style='margin:0; padding:0;'><b>Parameters</b></div>"
+        )
+
+        # Container that will hold the sliders
+        self.panels["params"] = widgets.VBox(
+            children=(),
+            layout=widgets.Layout(width="100%", margin="0px", padding="0px"),
+        )
+
+        self.panels["info_header"] = widgets.HTML(
+            value="<div style='margin:10px 0 0 0; padding:0;'><b>Info</b></div>"
+        )
+
+        # Public “info area” (you'll add convenience methods later)
+        self.panels["info"] = widgets.Output(
+            layout=widgets.Layout(
+                width="100%",
+                margin="0px",
+                padding="0px",
+                overflow="auto",
+            )
+        )
+         # Entire sidebar is hidden until at least one parameter is added
         self.panels["controls"] = widgets.VBox(
-            [widgets.HTML(value="<div style='margin:0; padding:0;'><b>Parameters</b></div>")],
+            [
+                self.panels["params_header"],
+                self.panels["params"],
+                self.panels["info_header"],
+                self.panels["info"],
+            ],
             layout=widgets.Layout(
                 margin="0px",
                 padding="0px 0px 0px 10px",
@@ -772,8 +801,10 @@ class SmartFigure:
                 min_width="300px",
                 max_width="400px",
                 height="auto",
+                display="none",  # <-- key: hide when no parameters
             ),
         )
+
 
         # --- Content area (flex + wrap) ---
         self.panels["content"] = widgets.Box(
@@ -966,6 +997,10 @@ class SmartFigure:
                 pass
         self.render()
 
+    def _ensure_controls_visible(self) -> None:
+        # Show the sidebar the first time we actually have something to show
+        if self.panels["controls"].layout.display == "none":
+            self.panels["controls"].layout.display = "flex"
     def add_param(self, parameter_id, value=0.0, min=-1, max=1, step=0.01):
         """
         Add a SmartFloatSlider parameter to the controls panel.
@@ -988,7 +1023,8 @@ class SmartFigure:
         slider = SmartFloatSlider(
             description=description, value=value, min=min, max=max, step=step
         )
-        self.panels["controls"].children += (slider,)
+        self._ensure_controls_visible()
+        self.panels["params"].children += (slider,)
         self._params[parameter_id] = slider
 
         def rerender_on_param_change(change):
@@ -1185,7 +1221,8 @@ class SmartFigure:
             # Autodetect parameters
             syms = func.free_symbols
             parameters = [s for s in syms if s != var]
-            print(f"Detected parameters: {parameters}")
+            if self._debug:
+                print(f"Detected parameters: {parameters}")
 
         for p in parameters:
             self.add_param(p)
