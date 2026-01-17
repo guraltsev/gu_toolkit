@@ -686,14 +686,17 @@ class SmartFigure:
                 min_width="320px",
                 margin="0px",
                 padding="0px",
-                flex="1 1 560px",   # basis controls when side-by-side
+                flex="1 1 560px",
+                min_height="420px",  # <-- ADD THIS (or set height="420px")
             )
         )
 
         # --- Controls panel ---
         self.panels["controls"] = widgets.VBox(
             [
-                widgets.HTML(value="<div style='margin:0; padding:0;'><b>Parameters</b></div>"),
+                widgets.HTML(
+                    value="<div style='margin:0; padding:0;'><b>Parameters</b></div>"
+                ),
             ],
             layout=widgets.Layout(
                 margin="0px",
