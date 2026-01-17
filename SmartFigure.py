@@ -50,6 +50,8 @@ The sidebar has two sections:
   :meth:`SmartFigure.new_info_output`. This design is deliberate: printing directly
   into a container widget is ambiguous in Jupyter, but printing into an
   ``Output`` widget is well-defined.
+  Info outputs are keyed by id, so you can retrieve them via
+  ``fig.info_output[id]`` or create/reuse them via ``fig.new_info_output(id)``.
 
 Notes for students
 ------------------
@@ -603,12 +605,14 @@ class SmartFigure:
     - ``add_param`` (advanced) Creates a slider for a parameter (automatically done when ``plot`` is called)
     - ``add_plot_trace`` (advanced) Creates a plot trace - a graphical line connecting data points
     - ``update_layout`` (advanced)
+    - ``new_info_output`` Creates or reuses an info Output widget
     Properties:
     - ``title`` Title of the figure
     - ``x_range``, ``y_range``, "home" ranges of the viewport
     - ``sampling_points`` number of sampling points for plots
     - ``current_x_range``, ``current_y_range``, read-only ranges of the current viewport position
     - ``plots`` a dictionary of ``SmartPlot`` objects indexed by ``id`` specified at creation with ``plot(...)``
+    - ``info_output`` a dictionary of info Output widgets indexed by id
 
     Advanced Usage
     -------------
@@ -1398,6 +1402,21 @@ class SmartFigure:
         Or reuse/create by id:
             out = fig.new_info_output("info:1")
             out = fig.info_output["info:1"]
+
+        Parameters
+        ----------
+        id : hashable, optional
+            If provided, this id is used as the key in ``fig.info_output``.
+            If not provided, a new id is auto-assigned as "info:1", "info:2", ...
+            Reusing an existing id returns the existing Output widget.
+        **layout_kwargs : dict
+            Optional layout parameters for the Output widget.
+
+        Returns
+        -------
+        widgets.Output
+            The created or reused Output widget. The widget has a readable ``id``
+            attribute matching the key used in ``fig.info_output``.
 
         Examples
         --------
