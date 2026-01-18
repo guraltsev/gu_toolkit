@@ -1388,7 +1388,7 @@ class SmartFigure:
             # Example: user inserts "hook:7" early, then auto ids begin at "hook:8".
             self._hook_counter = max(self._hook_counter, n)
 
-    def new_info_output(
+    def get_info_output(
         self,
         id: Optional[Hashable] = None,
         **layout_kwargs: Any,
