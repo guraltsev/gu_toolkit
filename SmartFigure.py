@@ -11,7 +11,7 @@ This file defines two main ideas:
 
 2) SmartFigure (+ SmartPlot)
    A thin, student-friendly wrapper around ``plotly.graph_objects.FigureWidget`` that:
-   - plots SymPy expressions by compiling them to NumPy via ``numpify``,
+   - plots SymPy expressions by compiling them to NumPy via ``numpify_cached``,
    - supports interactive parameter sliders (via ``SmartFloatSlider``),
    - optionally provides an *Info* area (a stack of ``ipywidgets.Output`` widgets),
    - re-renders automatically when you pan/zoom (throttled) or move a slider.
@@ -57,8 +57,28 @@ Notes for students
 ------------------
 - SymPy expressions are symbolic. They are like *formulas*.
 - Plotly needs numerical values (arrays of numbers).
-- ``numpify`` bridges the two: it turns a SymPy expression into a NumPy-callable function.
+- ``numpify_cached`` bridges the two: it turns a SymPy expression into a NumPy-callable function.
 - Sliders provide the numeric values of parameters like ``a`` in real time.
+
+Logging / debugging
+-------------------
+
+This module uses the standard Python ``logging`` framework (no prints). By default it installs a
+``NullHandler``, so you will see nothing unless you configure logging.
+
+In a Jupyter/JupyterLab notebook, enable logs like this:
+
+    import logging
+    logging.basicConfig(level=logging.INFO)   # or logging.DEBUG
+
+To limit output to just this module, set its logger level instead:
+
+    import logging
+    logging.getLogger(__name__).setLevel(logging.DEBUG)
+
+Notes:
+- INFO render messages are rate-limited to ~1.0s.
+- DEBUG range messages (x_range/y_range) are rate-limited to ~0.5s.
 """
 
 # === SECTION: OneShotOutput [id: OneShotOutput]===
@@ -66,6 +86,7 @@ Notes for students
 import re
 import time
 import warnings
+import logging
 from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union
 
 import ipywidgets as widgets
@@ -77,7 +98,15 @@ from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
 from .InputConvert import InputConvert
-from .numpify import numpify
+from .numpify import numpify_cached
+
+
+# Module logger
+# - Uses a NullHandler so importing this module never configures global logging.
+# - Callers can enable logs via standard logging configuration.
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    logger.addHandler(logging.NullHandler())
 
 
 # -----------------------------
@@ -212,7 +241,7 @@ class OneShotOutput(widgets.Output):
 # - SmartFigure is the coordinator: it owns the Plotly FigureWidget, UI panels, and
 #   the parameter widgets. It renders all plots in response to UI changes.
 # - SmartPlot is the leaf unit: one curve + one Plotly trace. It compiles SymPy
-#   to NumPy via numpify and asks SmartFigure for current parameter values.
+#   to NumPy via numpify_cached and asks SmartFigure for current parameter values.
 # This separation keeps UI concerns in SmartFigure and math/rendering in SmartPlot.
 
 
@@ -223,7 +252,7 @@ class SmartPlot:
     Conceptually, a ``SmartPlot`` is “one function on one set of axes”.
     It owns a single Plotly trace (a line plot) and knows how to:
 
-    - compile the SymPy expression to a fast NumPy function (via ``numpify``),
+    - compile the SymPy expression to a fast NumPy function (via ``numpify_cached``),
     - sample x-values on an appropriate domain,
     - evaluate y-values (including current slider parameter values),
     - push the sampled data into the Plotly trace.
@@ -384,7 +413,7 @@ class SmartPlot:
 
         Notes
         -----
-        Triggers recompilation via ``numpify`` and a re-render.
+        Triggers recompilation via ``numpify_cached`` and a re-render.
 
         No autodetection of parameters is done here.
         If you want autodetection, use :meth:`SmartFigure.plot` with ``parameters=None``.
@@ -410,8 +439,8 @@ class SmartPlot:
             tuple(parameters) if parameters is not None else None
         )
         self._func: Expr = func
-        # numpify expects an ordered list of arguments: (var, *parameters)
-        self._f_numpy: Callable[..., Any] = numpify(
+        # numpify_cached expects an ordered list of arguments: (var, *parameters)
+        self._f_numpy: Callable[..., Any] = numpify_cached(
             func,
             args=[
                 self._var,
@@ -691,6 +720,9 @@ class SmartFigure:
         "_param_change_hooks", # dictionary of user-supplied hooks to call when a parameter changes
         "_hook_counter", # counter for auto-incrementing hook IDs if user doesn't supply one.
         "_info_output_counter",
+        # Rate-limited logging timestamps (monotonic seconds).
+        "_render_info_last_log_t",  # INFO: at most once / 1s
+        "_render_debug_last_log_t",  # DEBUG: at most once / 0.5s
     ]
 
     # ------------
@@ -797,6 +829,11 @@ class SmartFigure:
 
 
         self._last_relayout: float = time.monotonic()
+
+        # Rate-limited logging timestamps. Keep on the instance because SmartFigure uses __slots__.
+        # Initialize to 0 so the first render can log immediately.
+        self._render_info_last_log_t: float = 0.0
+        self._render_debug_last_log_t: float = 0.0
         self._figure.layout.on_change(
             self._throttled_axis_range_callback, "xaxis.range", "yaxis.range"
         )
@@ -1153,7 +1190,7 @@ class SmartFigure:
             with self._output:
                 # print(f"Relayout event detected: from {old} to {new}")
                 pass
-        self.render()
+        self.render(reason="relayout")
 
     def _ensure_controls_visible(self) -> None:
         """
@@ -1259,7 +1296,8 @@ class SmartFigure:
             - "new":   new value
         """
         # First update the figure so the user sees the new curve immediately.
-        self.render()
+        # Rendering is a hot path during slider drags; render() has rate-limited logging.
+        self.render(reason="param_change", trigger=change)
 
         # Then notify any user hooks (kept separate so hook failures don't kill interactivity).
         self._run_param_change_hooks(change)
@@ -1674,6 +1712,7 @@ class SmartFigure:
 
         >>> fig.plot(x, sp.sin(x), parameters=[], id="sin", sampling_points=5000)
         """
+        id_was_none = id is None #Used mainly for debugging
         if id is None:
             # Choose the first free id among f_0, f_1, ...
             for n in range(101):  # 0 to 100 inclusive
@@ -1684,6 +1723,8 @@ class SmartFigure:
             if id is None:
                 raise ValueError("No available f_n identifiers (max 100 reached)")
 
+        is_update = id in self.plots 
+
         if self._debug:
             with self._output:
                 print(f"Plotting {sp.latex(func)}, var={sp.latex(var)}")
@@ -1691,18 +1732,49 @@ class SmartFigure:
                 with self._output:
                     print(f"Parameters: {parameters}")
 
+        autodetected = parameters is None #Used mainly for debugging
         if parameters is None:
-            # Autodetect parameters
+            # Autodetect parameters (all free symbols except the plot variable).
+            # Use a stable order so logs and slider ordering are deterministic.
             syms = func.free_symbols
-            parameters = [s for s in syms if s != var]
+            parameters = sorted([s for s in syms if s != var], key=lambda s: s.sort_key())
             if self._debug:
                 with self._output:
                     print(f"Detected parameters: {parameters}")
+        else:
+            # Normalize to a plain list (callers may pass tuples/generators).
+            parameters = list(parameters)
 
+        # Track which sliders were newly created during this call.
+        _before_syms = set(self._params.keys()) # Used mainly for debugging
         for p in parameters:
             self.add_param(p)
+        _after_syms = set(self._params.keys()) # Used mainly for debugging 
+        _new_syms = sorted(list(_after_syms - _before_syms), key=lambda s: s.sort_key()) # Used mainly for debugging
 
-        if id in self.plots:
+        # INFO: summary of plot creation/update and parameter inference.
+        # This is not a hot path (plot() is called by the user), so a single log is fine.
+        if logger.isEnabledFor(logging.INFO):
+            expr_s = str(func)
+            if len(expr_s) > 140:
+                expr_s = expr_s[:137] + "..."
+            params_s = [str(s) for s in parameters]
+            new_s = [str(s) for s in _new_syms]
+            logger.info(
+                "plot(%s id=%s auto_id=%s var=%s expr=%s params_mode=%s params=%s new_sliders=%s x_domain=%s sampling_points=%s)",
+                "update" if is_update else "create",
+                id,
+                id_was_none,
+                str(var),
+                expr_s,
+                "autodetect" if autodetected else "explicit",
+                params_s,
+                new_s,
+                x_domain,
+                sampling_points,
+            )
+
+        if is_update:
             plot = self.plots[id]
             plot.update(
                 var,
@@ -1726,15 +1798,84 @@ class SmartFigure:
 
         return plot
 
-    def render(self) -> None:
-        """
-        Render all plots on the figure.
+    def render(self, *, reason: str = "manual", trigger: Any = None) -> None:
+        """Render all plots on the figure.
+
+        This is a *hot* method: it is called during slider drags and (throttled)
+        pan/zoom relayout events.
+
+        Logging policy
+        --------------
+        - INFO logs are rate-limited to at most once every 1 second.
+        - DEBUG logs for ranges are rate-limited to at most once every 0.5 seconds.
+        - Messages are emitted **before** the expensive render loop.
+
+        Parameters
+        ----------
+        reason:
+            Short string explaining why a render is being requested.
+            Examples: "param_change", "relayout", "manual".
+        trigger:
+            Optional event payload used only for logging.
+            For slider changes this is typically an ipywidgets change dict.
 
         Examples
         --------
         >>> fig = SmartFigure()
         >>> fig.render()  # force a redraw after external changes
         """
+        now = time.monotonic()
+
+        # --- INFO (once / 1s) ---
+        if logger.isEnabledFor(logging.INFO) and (now - self._render_info_last_log_t) >= 1.0:
+            self._render_info_last_log_t = now
+
+            sym_name: Optional[str] = None
+            old_val: Any = None
+            new_val: Any = None
+
+            # Extract a small, informative summary for slider-triggered renders.
+            if isinstance(trigger, dict) and trigger.get("name") == "value":
+                old_val = trigger.get("old")
+                new_val = trigger.get("new")
+                owner = trigger.get("owner", None)
+                if owner is not None:
+                    # Do NOT attach attributes to the slider (it may use __slots__).
+                    # This scan is done only once per second (rate-limited).
+                    for s, sl in self._params.items():
+                        if sl is owner:
+                            sym_name = str(s)
+                            break
+
+                logger.info(
+                    "render(reason=%s sym=%s old=%s new=%s) plots=%d",
+                    reason,
+                    sym_name,
+                    old_val,
+                    new_val,
+                    len(self.plots),
+                )
+            else:
+                logger.info("render(reason=%s) plots=%d", reason, len(self.plots))
+
+        # --- DEBUG (once / 0.5s): ranges ---
+        if logger.isEnabledFor(logging.DEBUG) and (now - self._render_debug_last_log_t) >= 0.5:
+            self._render_debug_last_log_t = now
+
+            cx = self.current_x_range
+            cy = self.current_y_range
+            cx_t = tuple(cx) if cx is not None else None
+            cy_t = tuple(cy) if cy is not None else None
+
+            logger.debug(
+                "ranges(reason=%s) x_range=%s y_range=%s current_x_range=%s current_y_range=%s",
+                reason,
+                tuple(self.x_range),
+                tuple(self.y_range),
+                cx_t,
+                cy_t,
+            )
+
         with self._figure.batch_update():
             for plot in self.plots.values():
                 plot.render()
