@@ -26,6 +26,7 @@ Dependencies
 Public API
 ----------
 - :func:`numpify`
+- :func:`numpify_cached`
 
 How custom functions are handled
 --------------------------------
@@ -69,6 +70,8 @@ array([2., 4., 6.])
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import textwrap
 from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple, Union, cast
 
@@ -78,7 +81,7 @@ from sympy.core.function import FunctionClass
 from sympy.printing.numpy import NumPyPrinter
 
 
-__all__ = ["numpify"]
+__all__ = ["numpify", "numpify_cached"]
 
 
 _SymBindingKey = sp.Symbol
@@ -336,3 +339,161 @@ def _require_bound_unknown_functions(expr: sp.Basic, printer: NumPyPrinter, func
             f"{missing_str}. Define `<F>.f_numpy` on the function class (e.g. via @NamedFunction), "
             "or pass `f_numpy={F: callable}` to numpify."
         )
+
+
+# ---------------------------------------------------------------------------
+# Cached compilation
+# ---------------------------------------------------------------------------
+
+_NUMPIFY_CACHE_MAXSIZE = 256
+
+
+def _freeze_value_marker(value: Any) -> tuple[str, Any]:
+    """Return a hashable marker for *value*.
+
+    We prefer using the value itself when it is hashable (stable semantics).
+    If it is unhashable (e.g. NumPy arrays, dicts), fall back to object identity.
+
+    Notes
+    -----
+    - Using ``id(value)`` means cache hits are session-local and depend on the
+      specific object instance. This is usually what you want for injected
+      constants like arrays.
+    """
+    try:
+        hash(value)
+    except Exception:
+        return ("ID", id(value))
+    else:
+        return ("H", value)
+
+
+def _freeze_f_numpy_key(f_numpy: Optional[Mapping[_BindingKey, Any]]) -> tuple[tuple[Any, ...], ...]:
+    """Normalize ``f_numpy`` to a hashable key for caching.
+
+    The key is a sorted tuple of entries. Each entry includes:
+
+    - a *normalized binding key* (symbol/function name identity)
+    - a *value marker* (hashable value when possible, otherwise ``id(value)``)
+
+    This function is intentionally conservative: it aims to prevent incorrect
+    cache hits when bindings differ.
+    """
+    if not f_numpy:
+        return tuple()
+
+    frozen: list[tuple[Any, ...]] = []
+    for k, v in f_numpy.items():
+        if isinstance(k, sp.Symbol):
+            k_norm = ("S", k.name)
+        elif isinstance(k, sp.Function):
+            # Bindings for applications behave like bindings for their function class.
+            fc = k.func
+            k_norm = ("F", getattr(fc, "__module__", ""), getattr(fc, "__qualname__", fc.__name__))
+        elif isinstance(k, FunctionClass):
+            k_norm = ("F", getattr(k, "__module__", ""), getattr(k, "__qualname__", k.__name__))
+        else:
+            # Should not happen: numpify() validates keys.
+            k_norm = ("K", repr(k))
+
+        v_mark = _freeze_value_marker(v)
+        frozen.append((k_norm, v_mark))
+
+    frozen.sort(key=lambda item: item[0])
+    return tuple(tuple(x) for x in frozen)
+
+
+class _FrozenFNumPy:
+    """Small hashable wrapper around an ``f_numpy`` mapping.
+
+    This exists solely so that :func:`functools.lru_cache` can cache compiled
+    callables even when the mapping contains unhashable values (like NumPy arrays).
+
+    The cache key is derived from a normalized, hashable view of the mapping.
+    """
+
+    __slots__ = ("mapping", "_key")
+
+    def __init__(self, mapping: Optional[Mapping[_BindingKey, Any]]):
+        self.mapping: dict[_BindingKey, Any] = {} if mapping is None else dict(mapping)
+        self._key = _freeze_f_numpy_key(self.mapping)
+
+    def __hash__(self) -> int:  # pragma: no cover
+        return hash(self._key)
+
+    def __eq__(self, other: object) -> bool:  # pragma: no cover
+        return isinstance(other, _FrozenFNumPy) and self._key == other._key
+
+
+@lru_cache(maxsize=_NUMPIFY_CACHE_MAXSIZE)
+def _numpify_cached_impl(
+    expr: sp.Basic,
+    args_tuple: Tuple[sp.Symbol, ...],
+    frozen: _FrozenFNumPy,
+    vectorize: bool,
+    expand_definition: bool,
+) -> Callable[..., Any]:
+    # Delegate to numpify() for actual compilation.
+    return numpify(
+        expr,
+        args=args_tuple,
+        f_numpy=frozen.mapping,
+        vectorize=vectorize,
+        expand_definition=expand_definition,
+    )
+
+
+def numpify_cached(
+    expr: Any,
+    *,
+    args: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]] = None,
+    f_numpy: Optional[Mapping[_BindingKey, Any]] = None,
+    vectorize: bool = True,
+    expand_definition: bool = True,
+) -> Callable[..., Any]:
+    """Cached version of :func:`numpify`.
+
+    This is a convenience wrapper for interactive sessions where the same SymPy
+    expression is compiled repeatedly.
+
+    Cache key
+    ---------
+    The cache key includes:
+
+    - the SymPy expression (after :func:`sympy.sympify`),
+    - the normalized argument tuple ``args``,
+    - a normalized, hashable view of ``f_numpy``,
+    - and the options ``vectorize`` / ``expand_definition``.
+
+    Parameters
+    ----------
+    expr, args, f_numpy, vectorize, expand_definition:
+        Same meaning as in :func:`numpify`.
+
+    Returns
+    -------
+    Callable[..., Any]
+        The compiled callable, reused across cache hits.
+
+    Notes
+    -----
+    - If you mutate objects referenced by ``f_numpy`` (e.g. change entries of a
+      NumPy array), cached callables will see the mutated object because the
+      compiled function captures the object by reference.
+    - If you need a fresh compile, call :func:`numpify` directly or clear the
+      cache via ``numpify_cached.cache_clear()``.
+    """
+    # Normalize to SymPy and args tuple exactly as numpify() does.
+    expr_sym = cast(sp.Basic, sp.sympify(expr))
+    if not isinstance(expr_sym, sp.Basic):
+        raise TypeError(f"numpify_cached expects a SymPy expression, got {type(expr_sym)}")
+
+    args_tuple = _normalize_args(expr_sym, args)
+    frozen = _FrozenFNumPy(f_numpy)
+
+    return _numpify_cached_impl(expr_sym, args_tuple, frozen, vectorize, expand_definition)
+
+
+# Expose cache controls on the public wrapper.
+numpify_cached.cache_info = _numpify_cached_impl.cache_info  # type: ignore[attr-defined]
+numpify_cached.cache_clear = _numpify_cached_impl.cache_clear  # type: ignore[attr-defined]
