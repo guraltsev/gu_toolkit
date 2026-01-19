@@ -50,11 +50,11 @@ The sidebar has two sections:
 
 - **Parameters**: auto-created sliders for SymPy symbols.
 - **Info**: a container that holds *Output widgets* created by
-  :meth:`SmartFigure.new_info_output`. This design is deliberate: printing directly
+  :meth:`SmartFigure.get_info_output`. This design is deliberate: printing directly
   into a container widget is ambiguous in Jupyter, but printing into an
   ``Output`` widget is well-defined.
   Info outputs are keyed by id, so you can retrieve them via
-  ``fig.info_output[id]`` or create/reuse them via ``fig.new_info_output(id)``.
+  ``fig.info_output[id]`` or create/reuse them via ``fig.get_info_output(id)``.
 
 Notes for students
 ------------------
@@ -63,9 +63,18 @@ Notes for students
 - ``numpify_cached`` bridges the two: it turns a SymPy expression into a NumPy-callable function.
 - Sliders provide the numeric values of parameters like ``a`` in real time.
 
+Architecture Note (For Developers)
+----------------------------------
+To avoid a "God Object," responsibilities are split via composition:
+- SmartFigure: The main coordinator/facade.
+- SmartFigureLayout: Handles all UI/Widget construction, CSS/JS injection, and layout logic.
+- ParameterManager: Handles slider creation, storage, and change hooks. Acts as a dict proxy.
+- InfoPanelManager: Handles the info sidebar and component registry.
+- SmartPlot: Handles the specific math-to-trace rendering logic.
+
+
 Logging / debugging
 -------------------
-
 This module uses the standard Python ``logging`` framework (no prints). By default it installs a
 ``NullHandler``, so you will see nothing unless you configure logging.
 
@@ -84,13 +93,11 @@ Notes:
 - DEBUG range messages (x_range/y_range) are rate-limited to ~0.5s.
 """
 
-# === SECTION: OneShotOutput [id: OneShotOutput]===
-
 import re
 import time
 import warnings
 import logging
-from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator
 
 import ipywidgets as widgets
 import numpy as np
@@ -100,8 +107,10 @@ from IPython.display import Javascript, display
 from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
+# Internal imports (assumed to exist in the same package)
 from .InputConvert import InputConvert
 from .numpify import numpify_cached
+from .SmartSlider import SmartFloatSlider
 
 
 # Module logger
@@ -119,6 +128,11 @@ NumberLike = Union[int, float]
 NumberLikeOrStr = Union[int, float, str]
 RangeLike = Tuple[NumberLikeOrStr, NumberLikeOrStr]
 VisibleSpec = Union[bool, str]  # Plotly uses True/False or the string "legendonly".
+
+
+# =============================================================================
+# SECTION: OneShotOutput [id: OneShotOutput]
+# =============================================================================
 
 class OneShotOutput(widgets.Output):
     """
@@ -140,19 +154,13 @@ class OneShotOutput(widgets.Output):
     - having it be the last expression in a cell,
     - calling ``display(output)``,
     - placing it inside another widget/layout that is displayed.
-
-    Attributes
+   
+     Attributes
     ----------
     _displayed : bool
         Internal flag tracking whether the widget has been displayed.
-
-    Notes
-    -----
-    - Inherits from ``ipywidgets.Output``.
-    - Uses ``__slots__`` for a tiny memory optimization.
-    - Designed for Jupyter Notebook / JupyterLab.
-
-    Examples
+    
+      Examples
     --------
     Basic output usage:
 
@@ -190,12 +198,7 @@ class OneShotOutput(widgets.Output):
         super().__init__()
         self._displayed = False
 
-    def _repr_mimebundle_(
-        self,
-        include: Any = None,
-        exclude: Any = None,
-        **kwargs: Any,
-    ) -> Any:
+    def _repr_mimebundle_(self, include: Any = None, exclude: Any = None, **kwargs: Any) -> Any:
         """
         IPython rich display hook used by ipywidgets.
 
@@ -208,8 +211,7 @@ class OneShotOutput(widgets.Output):
                 "This widget supports only one-time display."
             )
         self._displayed = True
-        bundle = super()._repr_mimebundle_(include=include, exclude=exclude, **kwargs)
-        return bundle
+        return super()._repr_mimebundle_(include=include, exclude=exclude, **kwargs)
 
     @property
     def has_been_displayed(self) -> bool:
@@ -235,18 +237,427 @@ class OneShotOutput(widgets.Output):
         self._displayed = False
 
 
-# === END SECTION: OneShotOutput [id: OneShotOutput]===
+# =============================================================================
+# SECTION: SmartFigureLayout (The View) [id: SmartFigureLayout]
+# =============================================================================
+
+class SmartFigureLayout:
+    """
+    Manages the visual structure, CSS/JS injection, and widget hierarchy of a SmartFigure.
+    
+    This class isolates all the "messy" UI code (CSS strings, JavaScript injection,
+    VBox/HBox nesting) from the mathematical logic.
+
+    Responsibilities:
+    - Building the HBox/VBox structure.
+    - Injecting the specific CSS/JS for aspect ratio handling.
+    - Exposing containers for Plots, Parameters, and Info.
+    - Handling layout toggles (e.g. full width, sidebar visibility).
+    """
+
+    def __init__(self, title: str = "") -> None:
+        # 1. CSS and JS Injection
+        #    Invisible widgets that carry the bootstrap code for the browser.
+        self._css_widget = widgets.HTML(value=self._get_css())
+        self._js_widget = widgets.Output(layout=widgets.Layout(width="0px", height="0px", display="none"))
+        
+        # 2. Title Bar
+        #    We use HTMLMath for proper LaTeX title rendering.
+        self.title_html = widgets.HTMLMath(value=title, layout=widgets.Layout(margin="0px"))
+        self.full_width_checkbox = widgets.Checkbox(
+            value=False,
+            description="Full width plot",
+            indent=False,
+            layout=widgets.Layout(width="160px", margin="0px"),
+        )
+        self._titlebar = widgets.HBox(
+            [self.title_html, self.full_width_checkbox],
+            layout=widgets.Layout(
+                width="100%", align_items="center", justify_content="space-between", margin="0 0 6px 0"
+            ),
+        )
+
+        # 3. Plot Area (The "Left" Panel)
+        #    Note: CSS aspect-ratio controls height. We do NOT set a fixed height here.
+        self.plot_container = widgets.Box(
+            children=(),
+            layout=widgets.Layout(
+                width="100%", min_width="320px", margin="0px", padding="0px", flex="1 1 560px"
+            ),
+        )
+        self.plot_container.add_class("sf-plot-aspect")
+
+        # 4. Controls Sidebar (The "Right" Panel)
+        #    Initially hidden (display="none") until parameters or info widgets are added.
+        self.params_header = widgets.HTML("<b>Parameters</b>", layout=widgets.Layout(display="none", margin="0"))
+        self.params_box = widgets.VBox(layout=widgets.Layout(width="100%", display="none"))
+        
+        self.info_header = widgets.HTML("<b>Info</b>", layout=widgets.Layout(display="none", margin="10px 0 0 0"))
+        self.info_box = widgets.VBox(layout=widgets.Layout(width="100%", display="none"))
+
+        self.sidebar_container = widgets.VBox(
+            [self.params_header, self.params_box, self.info_header, self.info_box],
+            layout=widgets.Layout(
+                margin="0px", padding="0px 0px 0px 10px", flex="0 1 380px",
+                min_width="300px", max_width="400px", display="none"
+            ),
+        )
+
+        # 5. Main Content Wrapper (Flex)
+        #    Uses flex-wrap so the sidebar drops below the plot on narrow screens.
+        self.content_wrapper = widgets.Box(
+            [self.plot_container, self.sidebar_container],
+            layout=widgets.Layout(
+                display="flex", flex_flow="row wrap", align_items="flex-start",
+                width="100%", gap="8px"
+            ),
+        )
+
+        # 6. Root Widget
+        self.root_widget = widgets.VBox(
+            [self._css_widget, self._js_widget, self._titlebar, self.content_wrapper],
+            layout=widgets.Layout(width="100%")
+        )
+
+        # Wire up internal logic
+        self.full_width_checkbox.observe(self._on_full_width_change, names="value")
+        self._inject_js()
+
+    @property
+    def output_widget(self) -> OneShotOutput:
+        """Returns a OneShotOutput wrapping the layout, ready for display."""
+        out = OneShotOutput()
+        with out:
+            display(self.root_widget)
+        return out
+
+    def set_title(self, text: str) -> None:
+        self.title_html.value = text
+
+    def get_title(self) -> str:
+        return self.title_html.value
+
+    def update_sidebar_visibility(self, has_params: bool, has_info: bool) -> None:
+        """
+        Updates visibility of headers and the sidebar itself based on content.
+        
+        This prevents empty "Parameters" or "Info" headers from cluttering the UI.
+        """
+        self.params_header.layout.display = "block" if has_params else "none"
+        self.params_box.layout.display = "flex" if has_params else "none"
+        
+        self.info_header.layout.display = "block" if has_info else "none"
+        self.info_box.layout.display = "flex" if has_info else "none"
+
+        show_sidebar = has_params or has_info
+        self.sidebar_container.layout.display = "flex" if show_sidebar else "none"
+
+    def _on_full_width_change(self, change: Dict[str, Any]) -> None:
+        """Toggles CSS flex properties for full-width mode."""
+        is_full = change["new"]
+        layout = self.content_wrapper.layout
+        plot_layout = self.plot_container.layout
+        sidebar_layout = self.sidebar_container.layout
+
+        if is_full:
+            # Stack vertically, full width
+            layout.flex_flow = "column"
+            plot_layout.flex = "0 0 auto"
+            sidebar_layout.flex = "0 0 auto"
+            sidebar_layout.max_width = ""
+            sidebar_layout.width = "100%"
+            sidebar_layout.padding = "0px"
+        else:
+            # Side-by-side (wrapping), restricted width for sidebar
+            layout.flex_flow = "row wrap"
+            plot_layout.flex = "1 1 560px"
+            sidebar_layout.flex = "0 1 380px"
+            sidebar_layout.max_width = "400px"
+            sidebar_layout.width = "auto"
+            sidebar_layout.padding = "0px 0px 0px 10px"
+
+    def _get_css(self) -> str:
+        """
+        Returns the CSS needed for the aspect-ratio hack and drag handle.
+        """
+        return """
+        <style>
+        /* Host plot panel: height governed by aspect-ratio. */
+        .sf-plot-aspect {
+            position: relative; width: 100%;
+            aspect-ratio: var(--sf-ar, 1.3333333333);
+            min-height: 260px; box-sizing: border-box;
+        }
+        /* Force Plotly to fill the host container */
+        .sf-plot-aspect .js-plotly-plot, .sf-plot-aspect .plotly-graph-div {
+            width: 100% !important; height: 100% !important;
+        }
+        /* Drag handle (bottom grip) */
+        .sf-aspect-handle {
+            position: absolute; left: 0; right: 0; bottom: 0; height: 14px;
+            cursor: ns-resize; z-index: 10;
+        }
+        .sf-aspect-handle::after {
+            content: ""; display: block; width: 56px; height: 4px;
+            margin: 5px auto; border-radius: 999px; background: rgba(0,0,0,0.25);
+        }
+        .sf-aspect-handle:hover::after { background: rgba(0,0,0,0.40); }
+        </style>
+        """
+
+    def _inject_js(self) -> None:
+        """
+        Injects the JavaScript Logic for the resize handle and Plotly resizing.
+        """
+        # Kept inline to ensure the file is self-contained.
+        js_code = r"""
+        (function () {
+            if (window.__smartfigure_plotly_aspect_resizer_installed) return;
+            window.__smartfigure_plotly_aspect_resizer_installed = true;
+
+            function safeResizePlotly(gd) {
+                try { if (window.Plotly && Plotly.Plots) Plotly.Plots.resize(gd); } catch (e) {}
+            }
+            
+            function ensureHandle(host) {
+                if (host.__sf_handle_installed) return;
+                host.__sf_handle_installed = true;
+                const handle = document.createElement('div');
+                handle.className = 'sf-aspect-handle';
+                host.appendChild(handle);
+                
+                let dragging = false, startY = 0, startH = 0;
+                
+                function onMove(ev) {
+                    if (!dragging) return;
+                    const newH = Math.max(180, Math.min(2200, startH + (ev.clientY - startY)));
+                    const rect = host.getBoundingClientRect();
+                    host.style.setProperty('--sf-ar', String((rect.width || 1) / newH));
+                    const gd = host.querySelector('.js-plotly-plot');
+                    if (gd) safeResizePlotly(gd);
+                }
+                function onUp(ev) {
+                    dragging = false; 
+                    window.removeEventListener('pointermove', onMove, true);
+                    window.removeEventListener('pointerup', onUp, true);
+                }
+                handle.addEventListener('pointerdown', (ev) => {
+                    ev.preventDefault(); dragging = true; startY = ev.clientY;
+                    startH = host.getBoundingClientRect().height || 1;
+                    window.addEventListener('pointermove', onMove, true);
+                    window.addEventListener('pointerup', onUp, true);
+                });
+            }
+
+            function attachAll() {
+                document.querySelectorAll('.sf-plot-aspect').forEach(ensureHandle);
+                document.querySelectorAll('.js-plotly-plot').forEach(gd => {
+                    if (!gd.__smartfigure_ro) {
+                        const ro = new ResizeObserver(() => safeResizePlotly(gd));
+                        ro.observe(gd);
+                        gd.__smartfigure_ro = ro;
+                    }
+                });
+            }
+
+            const mo = new MutationObserver(() => attachAll());
+            mo.observe(document.body, { childList: true, subtree: true });
+            setTimeout(attachAll, 1000); 
+        })();
+        """
+        with self._js_widget:
+            display(Javascript(js_code))
 
 
-# === SECTION: SmartFigure [id: SmartFigure]===
+# =============================================================================
+# SECTION: ParameterManager (The Model for Parameters) [id: ParameterManager]
+# =============================================================================
 
-# Architecture note:
-# - SmartFigure is the coordinator: it owns the Plotly FigureWidget, UI panels, and
-#   the parameter widgets. It renders all plots in response to UI changes.
-# - SmartPlot is the leaf unit: one curve + one Plotly trace. It compiles SymPy
-#   to NumPy via numpify_cached and asks SmartFigure for current parameter values.
-# This separation keeps UI concerns in SmartFigure and math/rendering in SmartPlot.
+class ParameterManager:
+    """
+    Manages the collection of parameter sliders and change hooks.
 
+    Responsibilities:
+    - Creating and reusing SmartFloatSlider widgets.
+    - Storing current parameter values.
+    - Executing hooks when parameters change.
+    - **Backward Compatibility:** Acts like a dictionary so `fig.params[sym]` works.
+
+    Design Note:
+    ------------
+    By centralizing parameter logic here, we decouple the "state" of the math
+    from the "rendering" of the figure.
+    """
+
+    def __init__(self, render_callback: Callable[[str, Any], None], layout_box: widgets.Box) -> None:
+        self._sliders: Dict[Symbol, SmartFloatSlider] = {}
+        self._hooks: Dict[Hashable, Callable[[Dict, Any], Any]] = {}
+        self._hook_counter: int = 0
+        self._render_callback = render_callback
+        self._layout_box = layout_box # The VBox where sliders live
+
+    def add_param(self, symbol: Symbol, **kwargs: Any) -> SmartFloatSlider:
+        """
+        Create or reuse a slider for the given symbol.
+
+        Parameters
+        ----------
+        symbol : sympy.Symbol
+            The parameter symbol.
+        **kwargs :
+            Options for the slider (min, max, value, step).
+        """
+        if symbol in self._sliders:
+            return self._sliders[symbol]
+
+        defaults = {'value': 0.0, 'min': -1.0, 'max': 1.0, 'step': 0.01}
+        config = {**defaults, **kwargs}
+        
+        slider = SmartFloatSlider(
+            description=f"${sp.latex(symbol)}$",
+            value=float(config['value']),
+            min=float(config['min']),
+            max=float(config['max']),
+            step=float(config['step'])
+        )
+        
+        # Observe changes
+        slider.observe(self._on_slider_change, names="value")
+        
+        self._sliders[symbol] = slider
+        self._layout_box.children += (slider,)
+        return slider
+
+    def get_value(self, symbol: Symbol) -> float:
+        """Returns the current float value of a parameter."""
+        return self._sliders[symbol].value if symbol in self._sliders else 0.0
+
+    @property
+    def has_params(self) -> bool:
+        """True if any parameters (sliders) have been created."""
+        return len(self._sliders) > 0
+
+    def add_hook(self, callback: Callable, hook_id: Optional[Hashable] = None, fig: Any = None) -> Hashable:
+        """
+        Register a parameter change hook.
+        
+        Parameters
+        ----------
+        callback: Callable
+            The function to call (signature: (change, fig)).
+        hook_id: Hashable, optional
+            Optional unique identifier.
+        fig: SmartFigure
+            The SmartFigure instance. Crucial for passing to the callback immediately
+            so the hook can initialize.
+
+        Returns
+        -------
+        Hashable
+            The hook ID.
+        """
+        if hook_id is None:
+            self._hook_counter += 1
+            hook_id = f"hook:{self._hook_counter}"
+        self._hooks[hook_id] = callback
+        
+        # Run immediately on registration
+        try:
+            callback({}, fig) 
+        except Exception as e:
+            warnings.warn(f"Hook failed on init: {e}")
+        return hook_id
+
+    def _on_slider_change(self, change: Dict[str, Any]) -> None:
+        # 1. Trigger main render via the callback passed in __init__
+        self._render_callback("param_change", change)
+    
+    def get_hooks(self) -> Dict[Hashable, Callable]:
+        return self._hooks
+
+    # --- Dict-like Interface for Backward Compatibility ---
+    # This allows `fig.params[symbol]` to work in user hooks.
+    
+    def __getitem__(self, key: Symbol) -> SmartFloatSlider:
+        return self._sliders[key]
+    
+    def __contains__(self, key: Symbol) -> bool:
+        return key in self._sliders
+    
+    def items(self) -> Iterator[Tuple[Symbol, SmartFloatSlider]]:
+        return self._sliders.items()
+    
+    def keys(self) -> Iterator[Symbol]:
+        return self._sliders.keys()
+    
+    def values(self) -> Iterator[SmartFloatSlider]:
+        return self._sliders.values()
+    
+    def get(self, key: Symbol, default: Any = None) -> Any:
+        return self._sliders.get(key, default)
+
+
+# =============================================================================
+# SECTION: InfoPanelManager (The Model for Info) [id: InfoPanelManager]
+# =============================================================================
+
+class InfoPanelManager:
+    """
+    Manages the 'Info' section output widgets and interactive components.
+
+    It allows adding "Output" widgets (where you can print text or display charts)
+    and registering "Stateful Components" (classes that update when sliders move).
+    """
+    
+    _ID_REGEX = re.compile(r"^info:(\d+)$")
+
+    def __init__(self, layout_box: widgets.Box) -> None:
+        self._outputs: Dict[Hashable, widgets.Output] = {}
+        self._components: Dict[Hashable, Any] = {}
+        self._layout_box = layout_box
+        self._counter = 0
+
+    def get_output(self, id: Optional[Hashable] = None, **layout_kwargs: Any) -> widgets.Output:
+        """
+        Get or create an Info Output widget.
+        """
+        if id is None:
+            self._counter += 1
+            id = f"info:{self._counter}"
+        
+        if id in self._outputs:
+            out = self._outputs[id]
+            if layout_kwargs:
+                out.layout = widgets.Layout(**layout_kwargs)
+            return out
+        
+        # Validate ID if string (avoids collision with auto-generated IDs)
+        if isinstance(id, str):
+            m = self._ID_REGEX.match(id)
+            if m:
+                self._counter = max(self._counter, int(m.group(1)))
+
+        out = widgets.Output(layout=widgets.Layout(**layout_kwargs))
+        setattr(out, 'id', id)
+        
+        self._outputs[id] = out
+        self._layout_box.children += (out,)
+        return out
+
+    def add_component(self, id: Hashable, component_inst: Any) -> None:
+        self._components[id] = component_inst
+
+    def get_component(self, id: Hashable) -> Any:
+        return self._components[id]
+
+    @property
+    def has_info(self) -> bool:
+        return len(self._outputs) > 0
+
+
+# =============================================================================
+# SECTION: SmartPlot (The specific logic for one curve) [id: SmartPlot]
+# =============================================================================
 
 class SmartPlot:
     """
@@ -259,80 +670,13 @@ class SmartPlot:
     - sample x-values on an appropriate domain,
     - evaluate y-values (including current slider parameter values),
     - push the sampled data into the Plotly trace.
-
-    Notes for students
-    ------------------
-    - ``var`` is the independent variable (a SymPy symbol like ``x``).
-    - ``func`` is a SymPy expression like ``sin(x)`` or ``a*x**2``.
-    - Parameters (like ``a``) are SymPy symbols whose values come from sliders.
-
-    Important behavior
-    ------------------
-    ``render()`` will **not** compute anything if the plot is not visibly drawn.
-    In this code, that means:
-    - if ``self.visible`` is exactly ``True``, it renders;
-    - if ``self.visible`` is ``False`` or ``"legendonly"``, it skips computation.
-
-    This is useful for performance in interactive notebooks.
-
-    Public API
-    ----------
-    The following are “public” (no leading underscore):
-    - constructor ``__init__``
-    - ``set_func``
-    - properties ``var``, ``parameters``, ``func`` are read-only
-        To change them, use ``set_func``
-    - properties ``label``
-        Read/write, changes the label in the legend
-    - ``x_domain``
-        Sets the domain of the x-axis, no data will be rendered outside of this range, whatever the viewport is.
-        To make it unlimited, use ``None``.
-    ``sampling_points`` are read/write
-        Number of sampling points for the plot.
-        Set to ``None`` to use the default number of samples of the figure.
-        Useful mainly if the function is expensive to evaluate or (set it smaller than the default), or
-        if the function changes significantly (set it larger than the default).
-        Changing the parameter triggers a re-render
-    - ``visible``
-        Read/write, changes the visibility of the plot. Possible values are:
-            - True (visible),
-            - False (hidden in plot and legend),
-            - "legendonly" (not drawn, but shown in legend).
-        Clicking on the legend entry will toggle the visibility between "visible" and "legendonly".
-    - ``compute_data``
-        Recomputes the data (x-values and y-values)
-    - ``render``
-        Pushes the data into the Plotly trace
-    - ``update``
-        Updates all aspects of the plot
-
-    Examples
-    --------
-    Typically you do not create ``SmartPlot`` directly; you call ``SmartFigure.plot``.
-
-    >>> import sympy as sp
-    >>> x = sp.Symbol("x")
-    >>> fig = SmartFigure()
-    >>> display(fig)  # display Figure in the output cell
-    >>> p = fig.plot(x, sp.sin(x), parameters=[], id="sin")
-    >>> p.label
-    'sin'
-
-
-    Limit the evaluation domain:
-
-    >>> p.x_domain = (-10, 10)  # compute on a wider domain than the current viewport
-
-    Change sampling density for this plot only:
-
-    >>> p.sampling_points = 2000
     """
 
     def __init__(
         self,
         var: Symbol,
         func: Expr,
-        smart_figure: SmartFigure,
+        smart_figure: "SmartFigure",
         parameters: Optional[Sequence[Symbol]] = None,
         x_domain: Optional[RangeLike] = None,
         sampling_points: Optional[int] = None,
@@ -340,128 +684,33 @@ class SmartPlot:
         visible: VisibleSpec = True,
     ) -> None:
         """
-        Create a new SmartPlot instance.
-
-        Parameters
-        ----------
-        var : sympy.Symbol
-            Independent variable.
-        func : sympy.Expr
-            SymPy expression to plot.
-        smart_figure : SmartFigure
-            Parent SmartFigure that owns this plot.
-        parameters : list[sympy.Symbol] or None, optional
-            Parameter symbols used in ``func``.
-        x_domain : tuple (x_min, x_max), optional
-            Optional domain override for evaluation.
-        sampling_points : int or None, optional
-            Per-plot sampling point override.
-        label : str, optional
-            Legend label for the plot.
-        visible : bool or "legendonly", optional
-            Visibility of the plot.
-
-        Examples
-        --------
-        Most users create plots via SmartFigure:
-
-        >>> import sympy as sp
-        >>> x = sp.Symbol("x")
-        >>> fig = SmartFigure()
-        >>> fig.plot(x, sp.sin(x), id="sin")
+        Create a new SmartPlot instance. (Usually called by SmartFigure.plot)
         """
-        # Parent/owner. SmartPlot asks it for viewport ranges and parameter values.
-        self._smart_figure: SmartFigure = smart_figure
+        self._smart_figure = smart_figure
+        
+        # Add trace to figure
+        self._smart_figure.figure_widget.add_scatter(x=[], y=[], mode="lines", name=label, visible=visible)
+        self._plot_handle = self._smart_figure.figure_widget.data[-1]
 
-        # We always attach exactly one Plotly trace per SmartPlot.
-        self._smart_figure.add_plot_trace(x=[], y=[], mode="lines")
-        self._plot_handle = self._smart_figure._figure.data[-1]
-
-        # During initialization we may set several properties that would each trigger
-        # a render; suspend until we're fully configured.
-        self._suspend_render: bool = True
-
-        # Compile SymPy -> NumPy callable and store parameter list.
+        self._suspend_render = True
         self.set_func(var, func, parameters)
-
         self.x_domain = x_domain
-
         self.sampling_points = sampling_points
-        self.label = label
-        self.visible = visible
-
         self._suspend_render = False
-
+        
         self.render()
 
-        # raise NotImplementedError("SmartPlot is not implemented yet.")
-
-    def set_func(
-        self,
-        var: Symbol,
-        func: Expr,
-        parameters: Optional[Sequence[Symbol]] = None,
-    ) -> None:
+    def set_func(self, var: Symbol, func: Expr, parameters: Optional[Sequence[Symbol]] = None) -> None:
         """
         Set the independent variable and symbolic function for this plot.
-
-        Parameters
-        ----------
-        var : sympy.Symbol
-            The independent variable.
-        func : sympy.Expr
-            The SymPy expression to plot.
-        parameters : list[sympy.Symbol] or None, optional
-            Parameter symbols used by ``func`` whose numeric values come from sliders.
-
-        Notes
-        -----
-        Triggers recompilation via ``numpify_cached`` and a re-render.
-
-        No autodetection of parameters is done here.
-        If you want autodetection, use :meth:`SmartFigure.plot` with ``parameters=None``.
-
-        Examples
-        --------
-        >>> import sympy as sp
-        >>> x = sp.Symbol("x")
-        >>> fig = SmartFigure()
-        >>> p = fig.plot(x, sp.sin(x), id="f")
-        >>> p.set_func(x, sp.cos(x))
-
-        However, since SmartFigure supports updating via calling plot again with the same `id`, this is not necessary. It is easier to do:
-        >>> import sympy as sp
-        >>> x = sp.Symbol("x")
-        >>> fig = SmartFigure()
-        >>> fig.plot(x, sp.sin(x), id="f")
-        >>> fig.plot(x, sp.cos(x), id="f")
+        Triggers recompilation via ``numpify_cached``.
         """
-
-        self._var: Symbol = var
-        self._parameters: Optional[Tuple[Symbol, ...]] = (
-            tuple(parameters) if parameters is not None else None
-        )
-        self._func: Expr = func
-        # numpify_cached expects an ordered list of arguments: (var, *parameters)
-        self._f_numpy: Callable[..., Any] = numpify_cached(
-            func,
-            args=[
-                self._var,
-            ]
-            + (list(self._parameters) or []),
-        )
-
-    @property
-    def var(self) -> Symbol:
-        return self._var
-
-    @property
-    def parameters(self) -> Optional[Tuple[Symbol, ...]]:
-        return self._parameters
-
-    @property
-    def func(self) -> Expr:
-        return self._func
+        self._var = var
+        self._parameters = tuple(parameters) if parameters is not None else None
+        self._func = func
+        # Compile
+        args = [self._var] + (list(self._parameters) or [])
+        self._f_numpy = numpify_cached(func, args=args)
 
     @property
     def label(self) -> str:
@@ -477,19 +726,11 @@ class SmartPlot:
 
     @x_domain.setter
     def x_domain(self, value: Optional[RangeLike]) -> None:
-        """Optional evaluation-domain override.
-
-        If set to ``None``, the plot is evaluated on the current viewport range.
-        If set to a range, the plot is evaluated on the *union* of the viewport
-        and this domain, so the curve remains stable as you pan.
-        """
         if value is not None:
-            x_min_raw, x_max_raw = value
-            x_min = float(InputConvert(x_min_raw, dest_type=float))
-            x_max = float(InputConvert(x_max_raw, dest_type=float))
-            if x_min > x_max:
-                raise ValueError(f"x_min ({x_min}) must be <= x_max ({x_max})")
-            self._x_domain = (x_min, x_max)
+            raw_min, raw_max = value
+            self._x_domain = (float(InputConvert(raw_min, float)), float(InputConvert(raw_max, float)))
+            if self._x_domain[0] > self._x_domain[1]:
+                raise ValueError("x_min must be <= x_max")
         else:
             self._x_domain = None
         self.render()
@@ -500,11 +741,7 @@ class SmartPlot:
 
     @sampling_points.setter
     def sampling_points(self, value: Optional[int]) -> None:
-        """Per-plot sampling override.
-
-        If ``None``, the plot uses the parent figure's ``sampling_points``.
-        """
-        self._sampling_points = int(InputConvert(value, dest_type=int)) if value is not None else None
+        self._sampling_points = int(InputConvert(value, int)) if value is not None else None
         self.render()
 
     @property
@@ -517,94 +754,64 @@ class SmartPlot:
         if value is True:
             self.render()
 
-    def compute_data(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Compute (x, y) samples for the current viewport / domain.
-
-        Role
-        ----
-        This is the *numerical* heart of SmartPlot:
-        - choose an x-interval,
-        - build the argument list (x plus current parameter values),
-        - evaluate the compiled NumPy function.
-        """
-        viewport_x_range = self._smart_figure.current_x_range
-        if viewport_x_range is None:
-            # Plotly can report None before ranges are initialized. Fall back to defaults.
-            viewport_x_range = self._smart_figure.x_range
-
-        # If an evaluation domain override exists, evaluate on the union of domains.
-        if self.x_domain is None:
-            x_min, x_max = float(viewport_x_range[0]), float(viewport_x_range[1])
-        else:
-            x_min = min(float(viewport_x_range[0]), float(self.x_domain[0]))
-            x_max = max(float(viewport_x_range[1]), float(self.x_domain[1]))
-
-        # Sampling density: per-plot override wins; otherwise use figure default.
-        num = self._smart_figure.sampling_points if self.sampling_points is None else self.sampling_points
-        if num is None:
-            num = 500
-
-        x_values = np.linspace(x_min, x_max, num=int(num))
-
-        args: list[Any] = [x_values]
-        if self._parameters is not None:
-            for param in self._parameters:
-                args.append(self._smart_figure._params[param].value)
-
-        y_values = np.asarray(self._f_numpy(*args))
-        return x_values, y_values
-
     def render(self) -> None:
-        if self._suspend_render:
-            return
-        # Skip expensive computations if the trace is not visible.
-        if self.visible is not True:
-            return
-        x_values, y_values = self.compute_data()
-        self._plot_handle.x = x_values
-        self._plot_handle.y = y_values
-
-    def update(
-        self,
-        var: Optional[Symbol],
-        func: Optional[Expr],
-        parameters: Optional[Sequence[Symbol]] = None,
-        label: Optional[str] = None,
-        x_domain: Optional[Union[RangeLike, str]] = None,
-        sampling_points: Optional[Union[int, str]] = None,
-    ) -> None:
-        """Update one or more aspects of this plot.
-
-        This method is called by :meth:`SmartFigure.plot` when reusing an existing
-        plot id.
         """
-        if label is not None:
-            self.label = label
+        Compute (x, y) samples and update the Plotly trace.
+        Skips computation if the plot is hidden.
+        """
+        if self._suspend_render or self.visible is not True:
+            return
 
-        if x_domain is not None:
-            if x_domain == "figure_default":
-                self.x_domain = None
-            else:
-                self.x_domain = x_domain
+        # 1. Determine Range
+        fig = self._smart_figure
+        viewport = fig.current_x_range or fig.x_range
+        
+        if self.x_domain is None:
+            x_min, x_max = float(viewport[0]), float(viewport[1])
+        else:
+            x_min = min(float(viewport[0]), float(self.x_domain[0]))
+            x_max = max(float(viewport[1]), float(self.x_domain[1]))
 
-        if func is not None or var is not None or parameters is not None:
-            if var is None:
-                var = self.var
-            if parameters is None:
-                parameters = self.parameters
-            if func is None:
-                func = self.func
-            self.set_func(var, func, parameters=parameters)
+        # 2. Determine Sampling
+        num = self.sampling_points or fig.sampling_points or 500
+        
+        # 3. Compute
+        x_values = np.linspace(x_min, x_max, num=int(num))
+        args = [x_values]
+        if self._parameters:
+            # Retrieve values from the manager
+            for p in self._parameters:
+                args.append(fig.params.get_value(p))
+        
+        y_values = np.asarray(self._f_numpy(*args))
+        
+        # 4. Update Trace
+        with fig.figure_widget.batch_update():
+            self._plot_handle.x = x_values
+            self._plot_handle.y = y_values
+    
+    def update(self, **kwargs: Any) -> None:
+        """Convenience to update multiple attributes (function, label, domain) at once."""
+        if 'label' in kwargs: self.label = kwargs['label']
+        if 'x_domain' in kwargs: 
+            val = kwargs['x_domain']
+            self.x_domain = None if val == "figure_default" else val
+        if 'sampling_points' in kwargs:
+            val = kwargs['sampling_points']
+            self.sampling_points = None if val == "figure_default" else int(InputConvert(val, int))
+        
+        # Function update
+        if any(k in kwargs for k in ('var', 'func', 'parameters')):
+            v = kwargs.get('var', self._var)
+            f = kwargs.get('func', self._func)
+            p = kwargs.get('parameters', self._parameters)
+            self.set_func(v, f, p)
+            self.render()
 
-        if sampling_points is not None:
-            if sampling_points == "figure_default":
-                self.sampling_points = None
-            else:
-                self.sampling_points = int(InputConvert(sampling_points, dest_type=int))
 
-
-from .SmartSlider import SmartFloatSlider
-
+# =============================================================================
+# SECTION: SmartFigure (The Coordinator) [id: SmartFigure]
+# =============================================================================
 
 class SmartFigure:
     """
@@ -622,131 +829,26 @@ class SmartFigure:
     Key features
     ------------
     - Uses Plotly ``FigureWidget`` so it is interactive inside notebooks.
-    - Uses a right-side controls panel (a ``VBox``) for parameter sliders.
+    - Uses a right-side controls panel for parameter sliders.
     - Supports plotting multiple curves identified by an ``id``.
     - Re-renders curves on:
       - slider changes,
       - pan/zoom changes (throttled to at most once every 0.5 seconds).
 
-    Public API
-    ----------
-    Methods:
-    - ``__init__``
-    - ``plot``  Creates a new plot
-    - ``render`` Re-renders all plots
-    - ``add_param`` (advanced) Creates a slider for a parameter (automatically done when ``plot`` is called)
-    - ``add_plot_trace`` (advanced) Creates a plot trace - a graphical line connecting data points
-    - ``update_layout`` (advanced)
-    - ``new_info_output`` Creates or reuses an info Output widget
-    Properties:
-    - ``title`` Title of the figure
-    - ``x_range``, ``y_range``, "home" ranges of the viewport
-    - ``sampling_points`` number of sampling points for plots
-    - ``current_x_range``, ``current_y_range``, read-only ranges of the current viewport position
-    - ``plots`` a dictionary of ``SmartPlot`` objects indexed by ``id`` specified at creation with ``plot(...)``
-    - ``info_output`` a dictionary of info Output widgets indexed by id
-
-    Advanced Usage
-    -------------
-    The underlying Plotly's ``FigureWidget`` can be accessed via ``_figure``.
-    The right-side controls panel can be accessed via ``_controls_panel``.
-
-
-    A note about parameters
-    -----------------------
-    Parameters are SymPy symbols like ``a`` and ``b`` that get a slider each.
-    You pass them to ``plot(..., parameters=[a, b])`` and the sliders appear
-    automatically (via ``add_param``).
-
-
     Examples
     --------
-    1) Plot a simple function:
-
-    >>> import sympy as sp
-    >>> x = sp.Symbol("x")
-    >>> fig = SmartFigure()
-    >>> fig.plot(x, sp.sin(x), parameters=[], id="sin")
-    >>> fig.title = "y = sin(x)"
-    >>> fig  # display in notebook
-
-    2) Add a parameter slider:
-
-    >>> import sympy as sp
-    >>> x, a = sp.symbols("x a")
-    >>> fig = SmartFigure(x_range=(-6, 6), y_range=(-3, 3))
-    >>> fig.plot(x, a*sp.sin(x), parameters=[a], id="a_sin")
-    >>> fig.title = "Explore: y = a·sin(x)"
-    >>> fig
-
-    3) Multiple curves:
-
     >>> import sympy as sp
     >>> x, a = sp.symbols("x a")
     >>> fig = SmartFigure()
-    >>> fig.plot(x, sp.sin(x), parameters=[], id="sin")
-    >>> fig.plot(x, sp.cos(x), parameters=[], id="cos")
     >>> fig.plot(x, a*sp.sin(x), parameters=[a], id="a_sin")
-    >>> fig.title = "Sine, Cosine, and a·Sine"
     >>> fig
-
-    4) Update an existing plot by reusing its id:
-
-    >>> import sympy as sp
-    >>> x = sp.Symbol("x")
-    >>> fig = SmartFigure()
-    >>> fig.plot(x, x**2, parameters=[], id="f")
-    >>> fig.plot(x, x**3, parameters=[], id="f")  # updates curve "f" in-place
-
-    5) Control the sampling density:
-
-    >>> fig = SmartFigure(sampling_points=2000)  # global default for the figure
-
-    or per plot:
-    >>> fig.plot(x, sp.sin(x), parameters=[], id="sin", sampling_points=5000)
     """
-
+    
     __slots__ = [
-        "_figure",
-        "_output",
-        "plots",
-        "info_output",
-        "info_components",  # registry of stateful Info panel components
-        "_sampling_points",
-        "_x_range",
-        "_y_range",
-        "_current_x_range",
-        "_current_y_range",
-        "_debug",
-        "_last_relayout",
-        "panels",
-        "_params",
-        "_param_change_hooks", # dictionary of user-supplied hooks to call when a parameter changes
-        "_hook_counter", # counter for auto-incrementing hook IDs if user doesn't supply one.
-        "_info_output_counter",
-        # Rate-limited logging timestamps (monotonic seconds).
-        "_render_info_last_log_t",  # INFO: at most once / 1s
-        "_render_debug_last_log_t",  # DEBUG: at most once / 0.5s
+        "_layout", "_params", "_info", "_figure", "plots",
+        "_x_range", "_y_range", "_sampling_points", "_debug",
+        "_last_relayout", "_render_info_last_log_t", "_render_debug_last_log_t"
     ]
-
-    # ------------
-    # API
-    # ------------
-    _figure: go.FigureWidget  # the plotly figure widget
-    _output: OneShotOutput  # the output widget to display the figure
-    plots: dict[str, SmartPlot]  # curves indexed by a user-supplied id
-    info_output: dict[Hashable, widgets.Output]  # info Output widgets indexed by id
-
-
-    info_components: dict[Hashable, Any]  # stateful info components indexed by id
-    _sampling_points: Optional[int]  # default number of sampling points
-    _x_range: Tuple[float, float]  # default x-axis range
-    _y_range: Tuple[float, float]  # default y-axis range
-    panels: dict[str, widgets.Widget]  # named widget containers/panels
-
-     
-    _HOOK_ID_RE = re.compile(r"^hook:(\d+)$")  # regex to match automatic string hook IDs
-    _INFO_OUTPUT_ID_RE = re.compile(r"^info:(\d+)$")  # regex to match automatic info output IDs
 
     def __init__(
         self,
@@ -755,1038 +857,106 @@ class SmartFigure:
         y_range: RangeLike = (-3, 3),
         debug: bool = False,
     ) -> None:
-        """
-        Create a SmartFigure with a Plotly FigureWidget and UI controls.
+        self._debug = debug
+        self._sampling_points = sampling_points
+        self.plots: Dict[str, SmartPlot] = {}
 
-        Parameters
-        ----------
-        sampling_points : int, optional
-            Default number of samples per plot.
-        x_range : tuple (x_min, x_max), optional
-            Default x-axis viewport range.
-        y_range : tuple (y_min, y_max), optional
-            Default y-axis viewport range.
-        debug : bool, optional
-            If True, print debug information to the output widget.
+        # 1. Initialize Layout (View)
+        self._layout = SmartFigureLayout()
+        
+        # 2. Initialize Managers
+        # Note: we pass a callback for rendering so params can trigger updates
+        self._params = ParameterManager(self.render, self._layout.params_box)
+        self._info = InfoPanelManager(self._layout.info_box)
 
-        Examples
-        --------
-        >>> import sympy as sp
-        >>> x = sp.Symbol("x")
-        >>> fig = SmartFigure(sampling_points=800, x_range=(-6, 6), y_range=(-4, 4))
-        >>> fig.plot(x, sp.sin(x), id="sin")
-        >>> fig
-        """
-        self._debug: bool = debug
-
-        # --- Figure layout setup ---
-        self._output: OneShotOutput = OneShotOutput()
-        self._layout_init()
-
-        # Create the FigureWidget
-        # Put the figure in the left panel
-        with self._output:
-            # Plotly figure widget lives inside the aspect-ratio host box.
-            self._figure: go.FigureWidget = go.FigureWidget()
-            self.panels["plot"].children = (self._figure,)
-
-        # Removed fixed width, added autosize=True so it fills the left panel
+        # 3. Initialize Plotly Figure
+        self._figure = go.FigureWidget()
         self._figure.update_layout(
-            autosize=True,
-            template="plotly_white",
-            showlegend=True,
-            xaxis=dict(
-                # title="x",
-                zeroline=True,
-                zerolinewidth=2,
-                zerolinecolor="black",
-                showline=True,
-                ticks="outside",
-            ),
-            yaxis=dict(
-                # title="y",
-                zeroline=True,
-                zerolinewidth=2,
-                zerolinecolor="black",
-                showline=True,
-                ticks="outside",
-            ),
+            autosize=True, template="plotly_white", showlegend=True, margin=dict(l=20, r=20, t=20, b=20),
+            xaxis=dict(zeroline=True, zerolinewidth=2, zerolinecolor="black", showline=True, ticks="outside"),
+            yaxis=dict(zeroline=True, zerolinewidth=2, zerolinecolor="black", showline=True, ticks="outside"),
         )
+        self._layout.plot_container.children = (self._figure,)
 
-        # --- End of figure layout setup ---
-
-        self.sampling_points = sampling_points
-
+        # 4. Set Initial State
         self.x_range = x_range
         self.y_range = y_range
-
-        self.plots = {}
-        self.info_output = {}
-
-
-        # Registry of stateful Info panel components (see add_info_component).
-        self.info_components: dict[Hashable, Any] = {}
-        # Slider registry: SymPy Symbol -> slider widget.
-        self._params: dict[Symbol, SmartFloatSlider] = {}
-        # --- NEW: parameter-change hooks ---
-        # Maps hook_id -> callable(change, fig) run after a parameter slider changes.
-        self._param_change_hooks: dict[Hashable, Callable[[dict[str, Any], SmartFigure], Any]] = {}
-        # Monotone counter for autogenerated ids "hook:1", "hook:2", ...
-        self._hook_counter: int = 0
-        # Monotone counter for autogenerated info output ids "info:1", "info:2", ...
-        self._info_output_counter: int = 0
-
-
-        self._last_relayout: float = time.monotonic()
-
-        # Rate-limited logging timestamps. Keep on the instance because SmartFigure uses __slots__.
-        # Initialize to 0 so the first render can log immediately.
-        self._render_info_last_log_t: float = 0.0
-        self._render_debug_last_log_t: float = 0.0
-        self._figure.layout.on_change(
-            self._throttled_axis_range_callback, "xaxis.range", "yaxis.range"
-        )
-
-    def _layout_init(self) -> None:
-        """
-        Responsive layout with vertically-resizable plot that preserves aspect ratio on reflow.
-
-        Strategy:
-        - Plot container uses CSS aspect-ratio: var(--sf-ar) where --sf-ar = width/height
-        - A JS drag handle updates --sf-ar during vertical resizing
-        - No native resize: vertical (it writes pixel height and breaks aspect-ratio on reflow)
-        """
-        # Panels is the UI registry used throughout SmartFigure.
-        # Everything that needs to be manipulated later lives here.
-        self.panels = {}
-
-        # --- Invisible output that runs CSS/JS bootstrap ---
-        self.panels["js_bootstrap"] = widgets.Output(
-            layout=widgets.Layout(
-                width="1px",
-                height="1px",
-                overflow="hidden",
-                opacity="0.0",
-                margin="0px",
-                padding="0px",
-            )
-        )
-
-        # --- CSS (aspect ratio + drag handle) ---
-        self.panels["css"] = widgets.HTML(
-            value=r"""
-    <style>
-    /* Host plot panel: height governed by aspect-ratio. */
-    .sf-plot-aspect {
-    position: relative;
-    width: 100%;
-    /* width/height ratio */
-    aspect-ratio: var(--sf-ar, 1.3333333333);
-    min-height: 260px;
-    box-sizing: border-box;
-    }
-
-    /* Make widget + plotly fill the host height */
-    .sf-plot-aspect > .jupyter-widgets,
-    .sf-plot-aspect .jupyter-widgets,
-    .sf-plot-aspect .widget-subarea,
-    .sf-plot-aspect .js-plotly-plot,
-    .sf-plot-aspect .plotly-graph-div {
-    width: 100% !important;
-    height: 100% !important;
-    }
-
-    /* Drag handle (bottom grip) */
-    .sf-aspect-handle {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 14px;
-    cursor: ns-resize;
-    user-select: none;
-    touch-action: none;
-    /* Let plot interactions through except right on the grip */
-    background: transparent;
-    z-index: 10;
-    }
-    .sf-aspect-handle::after {
-    content: "";
-    display: block;
-    width: 56px;
-    height: 4px;
-    margin: 5px auto 0 auto;
-    border-radius: 999px;
-    background: rgba(0,0,0,0.25);
-    }
-
-    /* Slightly emphasize grip on hover */
-    .sf-aspect-handle:hover::after {
-    background: rgba(0,0,0,0.40);
-    }
-    </style>
-    """
-        )
-
-        # --- Title (LaTeX) ---
-        self.panels["title"] = widgets.HTMLMath(
-            value=r"",
-            layout=widgets.Layout(margin="0px"),
-        )
-
-        self.panels["full_width"] = widgets.Checkbox(
-            value=False,
-            description="Full width plot",
-            indent=False,
-            layout=widgets.Layout(width="160px", margin="0px"),
-        )
-
-        self.panels["titlebar"] = widgets.HBox(
-            [self.panels["title"], self.panels["full_width"]],
-            layout=widgets.Layout(
-                width="100%",
-                align_items="center",
-                justify_content="space-between",
-                margin="0px 0px 6px 0px",
-                padding="0px",
-            ),
-        )
-
-        # --- Plot panel (aspect ratio host) ---
-        self.panels["plot"] = widgets.Box(
-            children=(),
-            layout=widgets.Layout(
-                width="100%",
-                min_width="320px",
-                margin="0px",
-                padding="0px",
-                flex="1 1 560px",
-                # IMPORTANT: do NOT set a fixed height/min_height here; CSS aspect-ratio controls it.
-            ),
-        )
-        self.panels["plot"].add_class("sf-plot-aspect")
-        # Optional: set initial ratio to 4/3
-        # (you can change this to 16/9 etc)
-        self.panels["plot"].layout._css = ""  # harmless no-op for some widget managers
-
-         # --- Controls / sidebar panel (parameters + info) ---
-        self.panels["params_header"] = widgets.HTML(
-            value="<div style='margin:0; padding:0;'><b>Parameters</b></div>"
-        )
-
-        # Container that will hold the sliders
-        self.panels["params"] = widgets.VBox(
-            children=(),
-            layout=widgets.Layout(width="100%", margin="0px", padding="0px"),
-        )
-
-        self.panels["info_header"] = widgets.HTML(
-            value="<div style='margin:10px 0 0 0; padding:0;'><b>Info</b></div>"
-        )
-
-        # IMPORTANT: this is a *container* for Output widgets (so you can't "print into it" directly)
-        self.panels["info"] = widgets.VBox(
-            children=(),
-            layout=widgets.Layout(width="100%", margin="0px", padding="0px"),
-        )
-
-        # Entire sidebar hidden unless params or info outputs exist
-        self.panels["controls"] = widgets.VBox(
-            [
-                self.panels["params_header"],
-                self.panels["params"],
-                self.panels["info_header"],
-                self.panels["info"],
-            ],
-            layout=widgets.Layout(
-                margin="0px",
-                padding="0px 0px 0px 10px",
-                flex="0 1 380px",
-                min_width="300px",
-                max_width="400px",
-                height="auto",
-                display="none",  # <-- key: start hidden
-            ),
-        )
-
-
-        # --- Content area (flex + wrap) ---
-        self.panels["content"] = widgets.Box(
-            [self.panels["plot"], self.panels["controls"]],
-            layout=widgets.Layout(
-                display="flex",
-                flex_flow="row wrap",
-                align_items="flex-start",
-                align_content="flex-start",
-                justify_content="flex-start",
-                width="100%",
-                margin="0px",
-                padding="0px",
-                gap="8px",
-                height="auto",
-            ),
-        )
-
-        self.panels["main_layout"] = widgets.VBox(
-            [
-                self.panels["css"],
-                self.panels["js_bootstrap"],
-                self.panels["titlebar"],
-                self.panels["content"],
-            ],
-            layout=widgets.Layout(width="100%", margin="0px", padding="0px"),
-        )
-
-        # --- JS: Plotly ResizeObserver + aspect-ratio drag handle ---
-        with self.panels["js_bootstrap"]:
-            display(
-                Javascript(
-                    r"""
-    (function () {
-    if (window.__smartfigure_plotly_aspect_resizer_installed) return;
-    window.__smartfigure_plotly_aspect_resizer_installed = true;
-
-    function safeResizePlotly(gd) {
-        try {
-        if (window.Plotly && Plotly.Plots) Plotly.Plots.resize(gd);
-        } catch (e) {}
-    }
-
-    function ensureHandle(host) {
-        if (host.__sf_handle_installed) return;
-        host.__sf_handle_installed = true;
-
-        // Default aspect ratio if none set
-        const cur = host.style.getPropertyValue('--sf-ar');
-        if (!cur) host.style.setProperty('--sf-ar', '1.3333333333'); // 4/3 default
-
-        const handle = document.createElement('div');
-        handle.className = 'sf-aspect-handle';
-        host.appendChild(handle);
-
-        let dragging = false;
-        let startY = 0;
-        let startH = 0;
-
-        const MIN_H = 180;
-        const MAX_H = 2200;
-
-        function onMove(ev) {
-        if (!dragging) return;
-
-        const dy = ev.clientY - startY;
-        let newH = startH + dy;
-        newH = Math.max(MIN_H, Math.min(MAX_H, newH));
-
-        const rect = host.getBoundingClientRect();
-        const w = rect.width || 1;
-        const newAR = w / newH; // width/height
-
-        host.style.setProperty('--sf-ar', String(newAR));
-
-        // Resize the plotly graph inside this host immediately
-        const gd = host.querySelector('.js-plotly-plot');
-        if (gd) safeResizePlotly(gd);
-        }
-
-        function onUp(ev) {
-        if (!dragging) return;
-        dragging = false;
-        try { handle.releasePointerCapture(ev.pointerId); } catch (e) {}
-        window.removeEventListener('pointermove', onMove, true);
-        window.removeEventListener('pointerup', onUp, true);
-        window.removeEventListener('pointercancel', onUp, true);
-        }
-
-        handle.addEventListener('pointerdown', (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        dragging = true;
-        startY = ev.clientY;
-        startH = host.getBoundingClientRect().height || 1;
-        try { handle.setPointerCapture(ev.pointerId); } catch (e) {}
-
-        window.addEventListener('pointermove', onMove, true);
-        window.addEventListener('pointerup', onUp, true);
-        window.addEventListener('pointercancel', onUp, true);
-        }, { passive: false });
-    }
-
-    function attachPlotlyResizeObservers() {
-        if (!(window.Plotly && Plotly.Plots && window.ResizeObserver)) return false;
-
-        function attachToGraph(gd) {
-        if (gd.__smartfigure_ro) return;
-
-        const ro = new ResizeObserver(() => safeResizePlotly(gd));
-        ro.observe(gd);
-        gd.__smartfigure_ro = ro;
-
-        requestAnimationFrame(() => safeResizePlotly(gd));
-        setTimeout(() => safeResizePlotly(gd), 50);
-        setTimeout(() => safeResizePlotly(gd), 250);
-        }
-
-        document.querySelectorAll('.js-plotly-plot').forEach(attachToGraph);
-        return true;
-    }
-
-    function attachAspectHandles() {
-        document.querySelectorAll('.sf-plot-aspect').forEach(ensureHandle);
-    }
-
-    function attachAll() {
-        attachAspectHandles();
-        attachPlotlyResizeObservers();
-    }
-
-    // Initial + mutation observer
-    attachAll();
-
-    const mo = new MutationObserver(() => attachAll());
-    mo.observe(document.body, { childList: true, subtree: true });
-
-    // Retry until Plotly exists (JupyterLab timing)
-    let n = 0;
-    const t = setInterval(() => {
-        n += 1;
-        attachAll();
-        if ((window.Plotly && Plotly.Plots) || n > 50) clearInterval(t);
-    }, 100);
-    })();
-    """
-                )
-            )
-
-        def _apply_full_width(on: bool) -> None:
-            if on:
-                self.panels["content"].layout.flex_flow = "column"
-                self.panels["content"].layout.gap = "8px"
-
-                self.panels["plot"].layout.flex = "0 0 auto"
-                self.panels["controls"].layout.flex = "0 0 auto"
-
-                self.panels["controls"].layout.max_width = ""
-                self.panels["controls"].layout.padding = "0px"
-                self.panels["controls"].layout.width = "100%"
-            else:
-                self.panels["content"].layout.flex_flow = "row wrap"
-                self.panels["content"].layout.gap = "8px"
-
-                self.panels["plot"].layout.flex = "1 1 560px"
-                self.panels["controls"].layout.flex = "0 1 380px"
-
-                self.panels["controls"].layout.max_width = "400px"
-                self.panels["controls"].layout.padding = "0px 0px 0px 10px"
-                self.panels["controls"].layout.width = "auto"
-
-        def _on_full_width(change: dict[str, Any]) -> None:
-            if change["name"] == "value":
-                _apply_full_width(change["new"])
-
-        self.panels["full_width"].observe(_on_full_width, names="value")
-        _apply_full_width(self.panels["full_width"].value)
-
-        with self._output:
-            display(self.panels["main_layout"])
-
-    def _throttled_axis_range_callback(self, attr: str, old: Any, new: Any) -> None:
-        if time.monotonic() - self._last_relayout < 0.5:
-            return
+        
+        # 5. Bind Events
         self._last_relayout = time.monotonic()
-
-        if self._debug:
-            with self._output:
-                # print(f"Relayout event detected: from {old} to {new}")
-                pass
-        self.render(reason="relayout")
-
-    def _ensure_controls_visible(self) -> None:
-        """
-        Sync sidebar + section visibility.
-
-        Role
-        ----
-        The sidebar is entirely hidden unless there's something meaningful to show.
-        Concretely, we show/hide based on whether we have:
-        - any parameter widgets in self.panels["params"]
-        - any info output widgets in self.panels["info"]
-        """
-        has_params = len(self.panels["params"].children) > 0
-        has_info = len(self.panels["info"].children) > 0
-
-        # Hide empty sections
-        self.panels["params_header"].layout.display = "block" if has_params else "none"
-        self.panels["params"].layout.display = "flex" if has_params else "none"
-
-        self.panels["info_header"].layout.display = "block" if has_info else "none"
-        self.panels["info"].layout.display = "flex" if has_info else "none"
-
-        # Hide the whole sidebar if there's nothing to show
-        self.panels["controls"].layout.display = (
-            "flex" if (has_params or has_info) else "none"
-        )
-
-    # Backwards-compatible alias (older drafts used this name).
-    def _set_controls_visible(self) -> None:
-        self._ensure_controls_visible()
-
-    def add_param(
-        self,
-        parameter_id: Symbol,
-        value: NumberLike = 0.0,
-        min: NumberLike = -1,
-        max: NumberLike = 1,
-        step: NumberLike = 0.01,
-    ) -> SmartFloatSlider:
-        """
-        Add a SmartFloatSlider parameter to the controls panel.
-
-        Parameters
-        ----------
-        parameter_id : sympy.Symbol
-            The parameter symbol (e.g. ``a``).
-        value : float, optional
-            Initial slider value.
-        min : float, optional
-            Minimum slider value.
-        max : float, optional
-            Maximum slider value.
-        step : float, optional
-            Slider step size.
-
-        Examples
-        --------
-        >>> import sympy as sp
-        >>> a = sp.Symbol("a")
-        >>> fig = SmartFigure()
-        >>> fig.add_param(a, value=2.0, min=-5, max=5, step=0.5)
-        """
-
-        description = f"${sp.latex(parameter_id)}$"  # Can be enriched later
-        if parameter_id in self._params:
-            # Reuse existing slider. This keeps callbacks stable and avoids UI duplication.
-            return self._params[parameter_id]
-
-        slider = SmartFloatSlider(
-            description=description,
-            value=float(value),
-            min=float(min),
-            max=float(max),
-            step=float(step),
-        )
-        
-        # Add slider to the Parameters section.
-        self.panels["params"].children += (slider,)
-        self._ensure_controls_visible()
-        self._params[parameter_id] = slider
-
-        
-        # Centralized callback: rerender once, then run user hooks.
-        slider.observe(self._on_param_change, names="value")
-
-        return slider
-    
-    def _on_param_change(self, change: dict[str, Any]) -> None:
-        """
-        Internal ipywidgets observer for *any* parameter slider change.
-
-        This centralizes the behavior so:
-        - we render once per change event, and
-        - we can reliably run user hooks after rendering.
-
-        Parameters
-        ----------
-        change : dict
-            The standard traitlets/ipywidgets change dictionary. Common keys include:
-            - "owner": the widget whose trait changed (here: a SmartFloatSlider)
-            - "name":  the trait name (here: "value")
-            - "old":   previous value
-            - "new":   new value
-        """
-        # First update the figure so the user sees the new curve immediately.
-        # Rendering is a hot path during slider drags; render() has rate-limited logging.
-        self.render(reason="param_change", trigger=change)
-
-        # Then notify any user hooks (kept separate so hook failures don't kill interactivity).
-        self._run_param_change_hooks(change)
-
-    def _run_param_change_hooks(self, change: dict[str, Any]) -> None:
-        """
-        Run all registered parameter-change hooks.
-
-        Notes
-        -----
-        - Hooks are called in insertion/replacement order as stored in the dict.
-        - Hook exceptions are caught and reported as warnings so the notebook
-          remains interactive.
-        """
-        # Iterate over a snapshot in case hooks modify the hook registry.
-        for hook_id, callback in list(self._param_change_hooks.items()):
-            try:
-                callback(change,self)
-            except Exception as exc:
-                warnings.warn(
-                    f"SmartFigure param-change hook {hook_id!r} raised {type(exc).__name__}: {exc}"
-                )
-    def add_param_change_hook(
-        self,
-        callback: Callable[[dict[str, Any], SmartFigure], Any],
-        hook_id: Optional[Hashable] = None,
-    ) -> Hashable:
-        """
-        Register (or replace) a callback to run when *any* parameter value changes.
-
-        Behavior    
-        --------
-        - If `hook_id` is provided and already exists, it is **replaced**.
-        - If `hook_id` is provided and does not exist, it is **created**.
-        - If `hook_id` is None, an id is auto-assigned as "hook:1", "hook:2", ...
-
-        Additional rule (collision safety)
-        ---------------------------------
-        If the user provides a string hook id of the form "hook:N", then the internal
-        counter is bumped so that later autogenerated ids won't collide. Concretely,
-        we ensure `self._hook_counter >= N`.
-
-        Parameters
-        ----------
-        callback:
-            Callable invoked as `callback(change, fig)` after the figure re-renders.
-            The `change` dict is the standard traitlets/ipywidgets change payload.
-        hook_id:
-            Any **hashable** key usable in a dict (e.g. str, int, tuple, Enum, etc.).
-            If None, a fresh id is autogenerated.
-
-        Returns
-        -------
-        Hashable
-            The hook id used to store the callback (provided or autogenerated).
-
-        Examples
-        --------
-        Autogenerated ids:
-        >>> hid1 = fig.add_param_change_hook(lambda ch, fig: print("changed"))
-        >>> hid1
-        'hook:1'
-
-        User-specified ids (any hashable key):
-        >>> fig.add_param_change_hook(lambda ch, fig: None, hook_id=("analysis", 1))
-        ('analysis', 1)
-
-        Collision-safe bump:
-        >>> fig.add_param_change_hook(lambda ch, fig: None, hook_id="hook:10")
-        'hook:10'
-        >>> fig.add_param_change_hook(lambda ch, fig: None)
-        'hook:11'
-
-        Use with a simple logger:
-        >>> def log_change(change, fig):
-        ...     print(change["name"], change["old"], "->", change["new"])
-        >>> fig.add_param_change_hook(log_change, hook_id="logger")
-        """
-        if not callable(callback):
-            raise TypeError(f"callback must be callable, got {type(callback)}")
-
-        if hook_id is None:
-            # Generate monotonically increasing ids: "hook:1", "hook:2", ...
-            self._hook_counter += 1
-            hook_id = f"hook:{self._hook_counter}"
-        else:
-            # Dict keys must be hashable; check early for a clearer error.
-            try:
-                hash(hook_id)
-            except Exception as exc:
-                raise TypeError(
-                    f"hook_id must be hashable (usable as a dict key), got {type(hook_id)}"
-                ) from exc
-
-            # If the user picked an id in our "hook:N" namespace, bump the counter
-            # so future auto-ids don't accidentally collide.
-            self._maybe_bump_hook_counter_from_id(hook_id)
-
-        # Insert or replace (dict assignment naturally replaces if key exists).
-        self._param_change_hooks[hook_id] = callback
-        
-        callback({}, self)
-        
-        return hook_id
-       
-    def _maybe_bump_hook_counter_from_id(self, hook_id: Hashable) -> None:
-        """
-        If `hook_id` matches the autogenerated scheme "hook:N", bump the internal
-        counter so future autogenerated ids don't collide.
-
-        Notes
-        -----
-        We bump using `max(current, N)` rather than setting it unconditionally.
-        This prevents moving the counter backwards (which could reintroduce
-        collisions if we already generated higher ids earlier).
-        """
-        if isinstance(hook_id, str):
-            m = self._HOOK_ID_RE.match(hook_id)
-            if m is None:
-                return
-
-            n = int(m.group(1))
-            if n < 1:
-                raise ValueError(
-                    f"Invalid hook id {hook_id!r}: N must be >= 1 for ids of the form 'hook:N'."
-                )
-
-            # Ensure future auto ids start at least after this N.
-            # Example: user inserts "hook:7" early, then auto ids begin at "hook:8".
-            self._hook_counter = max(self._hook_counter, n)
-
-    def get_info_output(
-        self,
-        id: Optional[Hashable] = None,
-        **layout_kwargs: Any,
-    ) -> widgets.Output:
-        """
-        Create an Output widget inside the Info area and return it.
-        Usage:
-            out = fig.get_info_output()
-            with out:
-                print("hello")
-        Or reuse/create by id:
-            out = fig.get_info_output("info:1")
-            out = fig.info_output["info:1"]
-
-        Parameters
-        ----------
-        id : hashable, optional
-            If provided, this id is used as the key in ``fig.info_output``.
-            If not provided, a new id is auto-assigned as "info:1", "info:2", ...
-            Reusing an existing id returns the existing Output widget.
-        **layout_kwargs : dict
-            Optional layout parameters for the Output widget.
-
-        Returns
-        -------
-        widgets.Output
-            The created or reused Output widget. The widget has a readable ``id``
-            attribute matching the key used in ``fig.info_output``.
-
-        Examples
-        --------
-        >>> fig = SmartFigure()
-        >>> out = fig.get_info_output()
-        >>> with out:
-        ...     print("f(x) = sin(x)")
-        """
-        if id is None:
-            # Generate monotonically increasing ids: "info:1", "info:2", ...
-            self._info_output_counter += 1
-            id = f"info:{self._info_output_counter}"
-        else:
-            # Dict keys must be hashable; check early for a clearer error.
-            try:
-                hash(id)
-            except Exception as exc:
-                raise TypeError(
-                    f"info output id must be hashable (usable as a dict key), got {type(id)}"
-                ) from exc
-
-            # If the user picked an id in our "info:N" namespace, bump the counter
-            # so future auto-ids don't accidentally collide.
-            if isinstance(id, str):
-                m = self._INFO_OUTPUT_ID_RE.match(id)
-                if m is not None:
-                    n = int(m.group(1))
-                    if n < 1:
-                        raise ValueError(
-                            f"Invalid info output id {id!r}: N must be >= 1 for ids of the form 'info:N'."
-                        )
-                    self._info_output_counter = max(self._info_output_counter, n)
-
-        if id in self.info_output:
-            out = self.info_output[id]
-            if layout_kwargs:
-                out.layout = widgets.Layout(**layout_kwargs)
-            return out
-
-        # Info panel intentionally holds Output widgets so the user can "print into" them.
-        out = widgets.Output(layout=widgets.Layout(**layout_kwargs))
-        setattr(out, "id", id)
-        self.info_output[id] = out
-        self.panels["info"].children += (out,)
-        self._ensure_controls_visible()
-        return out
-
-    # Backwards-compatible alias (older docs used this name).
-    def new_info_output(
-        self,
-        id: Optional[Hashable] = None,
-        **layout_kwargs: Any,
-    ) -> widgets.Output:
-        """Alias for :meth:`get_info_output`.
-
-        The public API uses :meth:`get_info_output`. This alias exists only so that
-        older notebooks (and older docs) keep working.
-        """
-        return self.get_info_output(id=id, **layout_kwargs)
-
-    # ---------------------------------------------------------------------
-    # Info components
-    # ---------------------------------------------------------------------
-
-    def add_info_component(
-        self,
-        id: Hashable,
-        component: Callable[[widgets.Output, "SmartFigure"], Any],
-        *,
-        hook_id: Optional[Hashable] = None,
-        **out_layout: Any,
-    ) -> Any:
-        """Register (or replace) a stateful *info component*.
-
-        An *info component* is a small object that owns both:
-
-        1) its UI living inside an Info :class:`ipywidgets.Output` widget, and
-        2) its update logic, run automatically after any parameter slider changes.
-
-        This method is deliberately explicit (no decorators) and rerun-safe:
-        calling it again with the same ``id`` will reuse the same Output widget and
-        replace the stored component instance and its hook.
-
-        Parameters
-        ----------
-        id:
-            Stable identifier for the component and its Info Output widget.
-            Reusing ``id`` across notebook reruns is the intended workflow.
-        component:
-            Either a class or a factory callable invoked as ``component(out, fig)``.
-            The returned object **must** provide an ``update(change, fig, out)`` method.
-        hook_id:
-            Optional explicit hook identifier. If omitted, a deterministic default
-            is used: ``("info_component", id)``.
-        **out_layout:
-            Optional layout kwargs forwarded to :meth:`get_info_output`.
-
-        Returns
-        -------
-        object
-            The created component instance.
-
-        Notes
-        -----
-        - Registration does **not** call ``update``. This keeps behavior explicit and
-          avoids surprising side effects at registration time.
-        - The registered hook uses the existing parameter-change hook pipeline:
-          it is called with the standard hook signature ``(change, fig)`` and
-          forwards to the component's richer signature ``update(change, fig, out)``.
-
-        Examples
-        --------
-        >>> class CounterCard:
-        ...     def __init__(self, out, fig):
-        ...         import ipywidgets as widgets
-        ...         from IPython.display import clear_output, display
-        ...         self.n = 0
-        ...         self._label = widgets.HTML(value="<code>0</code>")
-        ...         with out:
-        ...             clear_output()
-        ...             display(self._label)
-        ...     def update(self, change, fig, out):
-        ...         self.n += 1
-        ...         self._label.value = f"<code>{self.n}</code>"
-        ...
-        >>> fig = SmartFigure()
-        >>> card = fig.add_info_component("info:counter", CounterCard)
-        """
-        # Ensure we have (and reuse) the Info Output widget.
-        out = self.get_info_output(id, **out_layout)
-
-        # Create the component instance (classes are callables, so one path suffices).
-        inst = component(out, self)
-
-        update = getattr(inst, "update", None)
-        if update is None or not callable(update):
-            raise TypeError(
-                "Info component must define an 'update(change, fig, out)' method. "
-                f"Got {type(inst).__name__} without a callable .update."
-            )
-
-        # Store/replace instance by id (rerun-safe).
-        self.info_components[id] = inst
-
-        # Deterministic default hook id so reruns replace instead of duplicating.
-        if hook_id is None:
-            hook_id = ("info_component", id)
-
-        # Hook signature stays general: (change, fig). Forward to richer update signature.
-        def _cb(change: dict[str, Any], fig: "SmartFigure") -> Any:
-            return inst.update(change, fig, out)
-
-        self.add_param_change_hook(_cb, hook_id=hook_id)
-
-        return inst
-
-    def get_info_component(self, id: Hashable) -> Any:
-        """Return a previously registered info component instance.
-
-        Parameters
-        ----------
-        id:
-            The id used in :meth:`add_info_component`.
-
-        Returns
-        -------
-        object
-            The registered component instance.
-
-        Raises
-        ------
-        KeyError
-            If no component is registered under ``id``.
-        """
-        return self.info_components[id]
-
-    def remove_info_component(self, id: Hashable, *, hook_id: Optional[Hashable] = None) -> None:
-        """Remove an info component instance and its associated param-change hook.
-
-        This is a minimal cleanup helper.
-
-        Notes
-        -----
-        - The Info Output widget is **not** removed from the UI.
-          You can clear it manually via ``with out: clear_output()``.
-        - If you registered with a custom ``hook_id``, pass the same ``hook_id`` here.
-
-        Parameters
-        ----------
-        id:
-            Component id used in :meth:`add_info_component`.
-        hook_id:
-            Hook id to remove. If omitted, uses the default ``("info_component", id)``.
-        """
-        self.info_components.pop(id, None)
-        if hook_id is None:
-            hook_id = ("info_component", id)
-        self._param_change_hooks.pop(hook_id, None)
+        self._render_info_last_log_t = 0.0
+        self._render_debug_last_log_t = 0.0
+        self._figure.layout.on_change(self._throttled_relayout, "xaxis.range", "yaxis.range")
+
+    # --- Properties ---
 
     @property
     def title(self) -> str:
-        """Title text shown above the figure.
-
-        Notes
-        -----
-        We use an ``HTMLMath`` title panel rather than Plotly's native title so
-        LaTeX rendering is reliable in Jupyter.
-        """
-        return str(self.panels["title"].value or "")
+        """Title text shown above the figure (renders LaTeX)."""
+        return self._layout.get_title()
 
     @title.setter
     def title(self, value: str) -> None:
-        self.panels["title"].value = value
+        self._layout.set_title(value)
+    
+    @property
+    def figure_widget(self) -> go.FigureWidget:
+        """Access the underlying Plotly FigureWidget."""
+        return self._figure
+    
+    @property
+    def params(self) -> ParameterManager:
+        """
+        The ParameterManager instance.
+        Acts like a dictionary of `{Symbol: Slider}` for backward compatibility.
+        """
+        return self._params
+    
+    @property
+    def info_output(self) -> Dict[Hashable, widgets.Output]:
+        """Dictionary of Info Output widgets indexed by id."""
+        return self._info._outputs # Direct access for backward compat or advanced use
 
     @property
     def x_range(self) -> Tuple[float, float]:
+        """Default x-axis range (restored on double-click)."""
         return self._x_range
-
+    
     @x_range.setter
     def x_range(self, value: RangeLike) -> None:
-        x_min_raw, x_max_raw = value
-        x_min = float(InputConvert(x_min_raw, dest_type=float))
-        x_max = float(InputConvert(x_max_raw, dest_type=float))
-        if x_min > x_max:
-            raise ValueError(f"x_min ({x_min}) must be <= x_max ({x_max})")
-        self._figure.update_xaxes(range=(x_min, x_max))
-        self._x_range = (x_min, x_max)
+        self._x_range = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        self._figure.update_xaxes(range=self._x_range)
 
     @property
     def y_range(self) -> Tuple[float, float]:
+        """Default y-axis range."""
         return self._y_range
-
+    
     @y_range.setter
     def y_range(self, value: RangeLike) -> None:
-        y_min_raw, y_max_raw = value
-        y_min = float(InputConvert(y_min_raw, dest_type=float))
-        y_max = float(InputConvert(y_max_raw, dest_type=float))
-        if y_min > y_max:
-            raise ValueError(f"y_min ({y_min}) must be <= y_max ({y_max})")
-        self._figure.update_yaxes(range=(y_min, y_max))
-        self._y_range = (y_min, y_max)
+        self._y_range = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        self._figure.update_yaxes(range=self._y_range)
 
     @property
     def current_x_range(self) -> Optional[Tuple[float, float]]:
+        """Current viewport x-range (read-only)."""
         return self._figure.layout.xaxis.range
 
     @property
     def current_y_range(self) -> Optional[Tuple[float, float]]:
+        """Current viewport y-range (read-only)."""
         return self._figure.layout.yaxis.range
-
+    
     @property
     def sampling_points(self) -> Optional[int]:
+        """Default number of sampling points per plot."""
         return self._sampling_points
 
     @sampling_points.setter
-    def sampling_points(self, value: Union[int, str, None]) -> None:
-        # Accept the historical sentinel "figure_default".
-        if value == "figure_default":
-            self._sampling_points = None
-        elif value is None:
-            self._sampling_points = None
-        else:
-            self._sampling_points = int(InputConvert(value, dest_type=int))
+    def sampling_points(self, val: Union[int, str, None]) -> None:
+        self._sampling_points = int(InputConvert(val, int)) if isinstance(val, (int, float, str)) and val != "figure_default" else None
 
-    def add_scatter(self, **scatter_kwargs: Any) -> None:
-        """
-        DEPRECATED: use add_plot_trace instead.
-        Add a scatter trace to the figure.
-
-        Parameters
-        ----------
-        scatter_kwargs : dict
-            Keyword arguments for the scatter trace.
-
-        Examples
-        --------
-        >>> fig = SmartFigure()
-        >>> fig.add_scatter(x=[0, 1], y=[0, 1], mode="markers")
-        """
-        warnings.warn("add_scatter is deprecated, use add_plot_trace instead.", DeprecationWarning)
-        self.add_plot_trace(**scatter_kwargs)
-
-    def add_plot_trace(self, **plot_kwargs: Any) -> None:
-        """
-        Add a plot trace to the figure.
-
-        Parameters
-        ----------
-        plot_kwargs : dict
-            Keyword arguments for the plot trace.
-
-        Examples
-        --------
-        >>> fig = SmartFigure()
-        >>> fig.add_plot_trace(x=[0, 1], y=[1, 0], mode="lines", name="diag")
-        """
-        self._figure.add_scatter(**plot_kwargs)
-
-    def _ipython_display_(self, **kwargs: Any) -> OneShotOutput:
-        """
-        IPython display hook to show the figure in Jupyter notebooks.
-        """
-        display(self._output)
-        return self._output
-
-    def update_layout(self, **layout_kwargs: Any) -> None:
-        """
-        Update the layout of the figure.
-
-        Parameters
-        ----------
-        layout_kwargs : dict
-            Keyword arguments for updating the figure layout.
-
-        Examples
-        --------
-        >>> fig = SmartFigure()
-        >>> fig.update_layout(title="My Plot", height=400, width=600)
-        """
-        self._figure.update_layout(**layout_kwargs)
+    # --- Public API ---
 
     def plot(
         self,
@@ -1805,245 +975,138 @@ class SmartFigure:
         var : sympy.Symbol
             Independent variable (e.g. ``x``).
         func : sympy.Expr
-            SymPy expression (e.g. ``sin(x)``, ``a*x**2 + b``).
+            SymPy expression (e.g. ``sin(x)``).
         parameters : list[sympy.Symbol] or None, optional
-            Parameter symbols whose numeric values come from sliders.
-            If ``None``, parameters are autodetected from ``func.free_symbols`` (excluding ``var``).
-            **Important:** In this version, pass ``[]`` when there are no parameters and you want to
-            explicitly disable autodetection.
+            Parameter symbols. If None, they are inferred from the expression.
         id : str, optional
-            Unique identifier for the plot.
-            - If ``id`` is new: creates a new plot.
-            - If ``id`` already exists: updates the existing plot in-place.
-            If not provided, the method tries to choose ``"f_0"``, ``"f_1"``, ...
-        x_domain : tuple (x_min, x_max), optional
-            Optional domain override for the plot. See ``SmartPlot.x_domain``.
-        sampling_points : int or "figure_default", optional
-            Number of sampling points for this plot.
-            - If not provided: use existing plot setting or figure default.
-            - If "figure_default": reset plot override to use figure default.
-
-        Returns
-        -------
-        SmartPlot
-            The created or updated plot object.
-
-        Notes for students
-        ------------------
-        Think of this as:
-        - “add a curve to the figure”
-        - and “keep it updated when sliders or viewport changes”.
-        If you omit ``parameters``, SmartFigure will infer them from the expression.
-        This is a convenience for quick exploration, but pass ``[]`` if you want no sliders.
-
-        Examples
-        --------
-        Basic plot:
-
-        >>> import sympy as sp
-        >>> x = sp.Symbol("x")
-        >>> fig = SmartFigure()
-        >>> fig.plot(x, sp.sin(x), parameters=[], id="sin")
-        >>> fig
-
-        Add a parameter slider:
-
-        >>> import sympy as sp
-        >>> x, a = sp.symbols("x a")
-        >>> fig = SmartFigure()
-        >>> fig.plot(x, a*sp.sin(x), parameters=[a], id="a_sin")
-        >>> fig
-
-        Update an existing plot:
-
-        >>> import sympy as sp
-        >>> x = sp.Symbol("x")
-        >>> fig = SmartFigure()
-        >>> fig.plot(x, x**2, parameters=[], id="f")
-        >>> fig.plot(x, x**3, parameters=[], id="f")  # same id => update curve
-
-        Autodetect parameters from the expression:
-
-        >>> import sympy as sp
-        >>> x, a, b = sp.symbols("x a b")
-        >>> fig = SmartFigure()
-        >>> fig.plot(x, a*x**2 + b, id="poly")  # parameters inferred as [a, b]
-
-        Choose a wider computation domain than the visible window:
-
-        >>> fig.plot(x, sp.sin(x), parameters=[], id="sin", x_domain=(-20, 20))
-
-        Increase resolution:
-
-        >>> fig.plot(x, sp.sin(x), parameters=[], id="sin", sampling_points=5000)
+            Unique identifier. If exists, the existing plot is updated in-place.
         """
-        id_was_none = id is None #Used mainly for debugging
+        # ID Generation
         if id is None:
-            # Choose the first free id among f_0, f_1, ...
-            for n in range(101):  # 0 to 100 inclusive
-                candidate = f"f_{n}"
-                if candidate not in self.plots:
-                    id = candidate
+            for i in range(100):
+                if f"f_{i}" not in self.plots:
+                    id = f"f_{i}"
                     break
-            if id is None:
-                raise ValueError("No available f_n identifiers (max 100 reached)")
+            if id is None: raise ValueError("Too many auto-generated IDs")
 
-        is_update = id in self.plots 
-
-        if self._debug:
-            with self._output:
-                print(f"Plotting {sp.latex(func)}, var={sp.latex(var)}")
-            if parameters is not None:
-                with self._output:
-                    print(f"Parameters: {parameters}")
-
-        autodetected = parameters is None #Used mainly for debugging
+        # Parameter Autodetection
         if parameters is None:
-            # Autodetect parameters (all free symbols except the plot variable).
-            # Use a stable order so logs and slider ordering are deterministic.
-            syms = func.free_symbols
-            parameters = sorted([s for s in syms if s != var], key=lambda s: s.sort_key())
-            if self._debug:
-                with self._output:
-                    print(f"Detected parameters: {parameters}")
-        else:
-            # Normalize to a plain list (callers may pass tuples/generators).
-            parameters = list(parameters)
+            parameters = sorted([s for s in func.free_symbols if s != var], key=lambda s: s.sort_key())
 
-        # Track which sliders were newly created during this call.
-        _before_syms = set(self._params.keys()) # Used mainly for debugging
+        # Ensure Sliders Exist (Delegate to Manager)
         for p in parameters:
-            self.add_param(p)
-        _after_syms = set(self._params.keys()) # Used mainly for debugging 
-        _new_syms = sorted(list(_after_syms - _before_syms), key=lambda s: s.sort_key()) # Used mainly for debugging
+            self._params.add_param(p)
+        
+        # Update UI visibility
+        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
 
-        # INFO: summary of plot creation/update and parameter inference.
-        # This is not a hot path (plot() is called by the user), so a single log is fine.
-        if logger.isEnabledFor(logging.INFO):
-            expr_s = str(func)
-            if len(expr_s) > 140:
-                expr_s = expr_s[:137] + "..."
-            params_s = [str(s) for s in parameters]
-            new_s = [str(s) for s in _new_syms]
-            logger.info(
-                "plot(%s id=%s auto_id=%s var=%s expr=%s params_mode=%s params=%s new_sliders=%s x_domain=%s sampling_points=%s)",
-                "update" if is_update else "create",
-                id,
-                id_was_none,
-                str(var),
-                expr_s,
-                "autodetect" if autodetected else "explicit",
-                params_s,
-                new_s,
-                x_domain,
-                sampling_points,
-            )
+        # Create or Update Plot
+        if id in self.plots:
+            self.plots[id].update(var=var, func=func, parameters=parameters, x_domain=x_domain, sampling_points=sampling_points)
+            return self.plots[id]
+        
+        new_plot = SmartPlot(
+            var=var, func=func, smart_figure=self, parameters=parameters,
+            x_domain=x_domain, sampling_points=sampling_points, label=id
+        )
+        self.plots[id] = new_plot
+        return new_plot
 
-        if is_update:
-            plot = self.plots[id]
-            plot.update(
-                var,
-                func,
-                parameters,
-                label=None,
-                x_domain=x_domain,
-                sampling_points=sampling_points,
-            )
-        else:
-            plot = SmartPlot(
-                var=var,
-                func=func,
-                smart_figure=self,
-                parameters=parameters,
-                x_domain=None,
-                label=str(id),
-                sampling_points=sampling_points,
-            )
-            self.plots[id] = plot
-
-        return plot
-
-    def render(self, *, reason: str = "manual", trigger: Any = None) -> None:
-        """Render all plots on the figure.
+    def render(self, reason: str = "manual", trigger: Any = None) -> None:
+        """
+        Render all plots on the figure.
 
         This is a *hot* method: it is called during slider drags and (throttled)
         pan/zoom relayout events.
-
-        Logging policy
-        --------------
-        - INFO logs are rate-limited to at most once every 1 second.
-        - DEBUG logs for ranges are rate-limited to at most once every 0.5 seconds.
-        - Messages are emitted **before** the expensive render loop.
-
-        Parameters
-        ----------
-        reason:
-            Short string explaining why a render is being requested.
-            Examples: "param_change", "relayout", "manual".
-        trigger:
-            Optional event payload used only for logging.
-            For slider changes this is typically an ipywidgets change dict.
-
-        Examples
-        --------
-        >>> fig = SmartFigure()
-        >>> fig.render()  # force a redraw after external changes
         """
+        self._log_render(reason, trigger)
+        
+        # 1. Update all plots
+        for plot in self.plots.values():
+            plot.render()
+        
+        # 2. Run hooks (if triggered by parameter change)
+        # Note: ParameterManager triggers this render, then we run hooks.
+        if reason == "param_change" and trigger:
+             hooks = self._params.get_hooks()
+             for h_id, callback in list(hooks.items()):
+                 try:
+                     callback(trigger, self) # Pass self (SmartFigure) to hooks
+                 except Exception as e:
+                     warnings.warn(f"Hook {h_id} failed: {e}")
+
+    def add_param(self, symbol: Symbol, **kwargs: Any) -> SmartFloatSlider:
+        """
+        Add a SmartFloatSlider parameter manually.
+        """
+        slider = self._params.add_param(symbol, **kwargs)
+        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
+        return slider
+
+    def get_info_output(self, id: Optional[Hashable] = None, **kwargs: Any) -> widgets.Output:
+        """
+        Create (or retrieve) an Output widget in the Info sidebar.
+        """
+        out = self._info.get_output(id, **kwargs)
+        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
+        return out
+
+    # Alias for backward compatibility
+    new_info_output = get_info_output
+
+    def add_info_component(self, id: Hashable, component_factory: Callable, hook_id: Optional[Hashable] = None, **kwargs: Any) -> Any:
+        """
+        Register (or replace) a stateful *info component*.
+
+        An info component is a class/function that:
+        1. Draws into an Info Output widget.
+        2. Implements an `update(change, fig, out)` method.
+        """
+        out = self.get_info_output(id, **kwargs)
+        inst = component_factory(out, self)
+        
+        if not hasattr(inst, 'update'):
+            raise TypeError(f"Component {id} must have an 'update' method")
+        
+        self._info.add_component(id, inst)
+        
+        # Register hook to update component on param change
+        if hook_id is None: hook_id = ("info_component", id)
+        
+        def _hook(change: Dict, fig: SmartFigure) -> None:
+            inst.update(change, fig, out)
+            
+        self.add_param_change_hook(_hook, hook_id=hook_id)
+        return inst
+
+    def add_param_change_hook(self, callback: Callable[[Dict, SmartFigure], Any], hook_id: Optional[Hashable] = None) -> Hashable:
+        """
+        Register a callback to run when *any* parameter value changes.
+        """
+        return self._params.add_hook(callback, hook_id, fig=self)
+
+    # --- Internal / Plumbing ---
+
+    def _throttled_relayout(self, *args: Any) -> None:
         now = time.monotonic()
+        if now - self._last_relayout > 0.5:
+            self._last_relayout = now
+            self.render(reason="relayout")
 
-        # --- INFO (once / 1s) ---
-        if logger.isEnabledFor(logging.INFO) and (now - self._render_info_last_log_t) >= 1.0:
+    def _log_render(self, reason: str, trigger: Any) -> None:
+        # Simple rate-limited logging implementation
+        now = time.monotonic()
+        if logger.isEnabledFor(logging.INFO) and (now - self._render_info_last_log_t) > 1.0:
             self._render_info_last_log_t = now
-
-            sym_name: Optional[str] = None
-            old_val: Any = None
-            new_val: Any = None
-
-            # Extract a small, informative summary for slider-triggered renders.
-            if isinstance(trigger, dict) and trigger.get("name") == "value":
-                old_val = trigger.get("old")
-                new_val = trigger.get("new")
-                owner = trigger.get("owner", None)
-                if owner is not None:
-                    # Do NOT attach attributes to the slider (it may use __slots__).
-                    # This scan is done only once per second (rate-limited).
-                    for s, sl in self._params.items():
-                        if sl is owner:
-                            sym_name = str(s)
-                            break
-
-                logger.info(
-                    "render(reason=%s sym=%s old=%s new=%s) plots=%d",
-                    reason,
-                    sym_name,
-                    old_val,
-                    new_val,
-                    len(self.plots),
-                )
-            else:
-                logger.info("render(reason=%s) plots=%d", reason, len(self.plots))
-
-        # --- DEBUG (once / 0.5s): ranges ---
-        if logger.isEnabledFor(logging.DEBUG) and (now - self._render_debug_last_log_t) >= 0.5:
+            logger.info(f"render(reason={reason}) plots={len(self.plots)}")
+        
+        if logger.isEnabledFor(logging.DEBUG) and (now - self._render_debug_last_log_t) > 0.5:
             self._render_debug_last_log_t = now
+            logger.debug(f"ranges x={self.x_range} y={self.y_range}")
 
-            cx = self.current_x_range
-            cy = self.current_y_range
-            cx_t = tuple(cx) if cx is not None else None
-            cy_t = tuple(cy) if cy is not None else None
-
-            logger.debug(
-                "ranges(reason=%s) x_range=%s y_range=%s current_x_range=%s current_y_range=%s",
-                reason,
-                tuple(self.x_range),
-                tuple(self.y_range),
-                cx_t,
-                cy_t,
-            )
-
-        with self._figure.batch_update():
-            for plot in self.plots.values():
-                plot.render()
-
-
-# === END SECTION: SmartFigure [id: SmartFigure]===
+    def _ipython_display_(self, **kwargs: Any) -> None:
+        """
+        Special method called by IPython to display the object.
+        Uses IPython.display.display() to render the underlying widget.
+        """
+        display(self._layout.output_widget)
