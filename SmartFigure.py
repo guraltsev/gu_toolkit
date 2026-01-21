@@ -539,7 +539,8 @@ class ParameterManager:
 
     def add_hook(self, callback: Callable, hook_id: Optional[Hashable] = None, fig: Any = None) -> Hashable:
         """
-        Register a parameter change hook.
+        Register a parameter change hook. 
+        The callback is run immediately on registration, with an empty change dict.
         
         Parameters
         ----------
@@ -677,9 +678,9 @@ class SmartPlot:
         var: Symbol,
         func: Expr,
         smart_figure: "SmartFigure",
-        parameters: Optional[Sequence[Symbol]] = None,
+        parameters: Sequence[Symbol] = [],
         x_domain: Optional[RangeLike] = None,
-        sampling_points: Optional[int] = None,
+        sampling_points: Optional[int,str] = None,
         label: str = "",
         visible: VisibleSpec = True,
     ) -> None:
@@ -695,22 +696,27 @@ class SmartPlot:
         self._suspend_render = True
         self.set_func(var, func, parameters)
         self.x_domain = x_domain
+        
+        if sampling_points == "figure_default":
+            sampling_points = None
         self.sampling_points = sampling_points
+
         self._suspend_render = False
         
         self.render()
 
-    def set_func(self, var: Symbol, func: Expr, parameters: Optional[Sequence[Symbol]] = None) -> None:
+    def set_func(self, var: Symbol, func: Expr, parameters: Sequence[Symbol] = []) -> None:
         """
         Set the independent variable and symbolic function for this plot.
         Triggers recompilation via ``numpify_cached``.
         """
-        self._var = var
-        self._parameters = tuple(parameters) if parameters is not None else None
-        self._func = func
+        parameters = list(parameters) 
         # Compile
-        args = [self._var] + (list(self._parameters) or [])
-        self._f_numpy = numpify_cached(func, args=args)
+        self._f_numpy = numpify_cached(func, args=[var] + parameters)
+        # Store
+        self._var = var
+        self._parameters = parameters
+        self._func = func
 
     @property
     def label(self) -> str:
@@ -726,13 +732,16 @@ class SmartPlot:
 
     @x_domain.setter
     def x_domain(self, value: Optional[RangeLike]) -> None:
-        if value is not None:
+        
+        if value is None:
+            self._x_domain = None
+        elif value == "figure_default":
+            self._x_domain = None
+        else:
             raw_min, raw_max = value
             self._x_domain = (float(InputConvert(raw_min, float)), float(InputConvert(raw_max, float)))
             if self._x_domain[0] > self._x_domain[1]:
                 raise ValueError("x_min must be <= x_max")
-        else:
-            self._x_domain = None
         self.render()
 
     @property
@@ -792,13 +801,24 @@ class SmartPlot:
     
     def update(self, **kwargs: Any) -> None:
         """Convenience to update multiple attributes (function, label, domain) at once."""
-        if 'label' in kwargs: self.label = kwargs['label']
+        if 'label' in kwargs: 
+            self.label = kwargs['label']
+        
         if 'x_domain' in kwargs: 
             val = kwargs['x_domain']
-            self.x_domain = None if val == "figure_default" else val
+            if val == "figure_default":
+                self.x_domain = None
+            else:
+                x_min = InputConvert(val[0], float)
+                x_max = InputConvert(val[1], float)
+                self.x_domain = (x_min, x_max)
+        
         if 'sampling_points' in kwargs:
             val = kwargs['sampling_points']
-            self.sampling_points = None if val == "figure_default" else int(InputConvert(val, int))
+            if val == "figure_default":
+                self.sampling_points = None
+            else:
+                self.sampling_points = InputConvert(val, int)
         
         # Function update
         if any(k in kwargs for k in ('var', 'func', 'parameters')):
@@ -978,6 +998,11 @@ class SmartFigure:
             SymPy expression (e.g. ``sin(x)``).
         parameters : list[sympy.Symbol] or None, optional
             Parameter symbols. If None, they are inferred from the expression.
+            If [], that means explicitly no parameters.
+        x_domain : RangeLike or None, optional
+            Domain of the independent variable (e.g. ``(-10, 10)``).
+            If "figure_default", the figure's range is used when plotting. 
+            If None, it is the same as "figure_default" for new plots while no change for existing plots.
         id : str, optional
             Unique identifier. If exists, the existing plot is updated in-place.
         """
@@ -1002,15 +1027,22 @@ class SmartFigure:
 
         # Create or Update Plot
         if id in self.plots:
+            update_dont_create = True
+        else: 
+            update_dont_create = False
+
+        if update_dont_create:
             self.plots[id].update(var=var, func=func, parameters=parameters, x_domain=x_domain, sampling_points=sampling_points)
-            return self.plots[id]
+            plot = self.plots[id]    
+        else: 
+            plot = SmartPlot(
+                var=var, func=func, smart_figure=self, parameters=parameters,
+                x_domain=x_domain, sampling_points=sampling_points, label=id
+            )
+            self.plots[id] = plot
         
-        new_plot = SmartPlot(
-            var=var, func=func, smart_figure=self, parameters=parameters,
-            x_domain=x_domain, sampling_points=sampling_points, label=id
-        )
-        self.plots[id] = new_plot
-        return new_plot
+        return plot
+        
 
     def render(self, reason: str = "manual", trigger: Any = None) -> None:
         """
