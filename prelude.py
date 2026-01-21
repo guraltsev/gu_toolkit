@@ -13,45 +13,72 @@ import pandas as pd
 __all__+=["pd"]
 
 # print("__all__ (from prelude):",__all__)
+import sympy as sp
 
+class SymbolFamily(sp.Symbol):
+    """
+    A SymPy Symbol that creates indexed children via [].
+    Inherits from sp.Symbol, so all math (x**2, diff, etc.) works natively.
+    """
+    def __new__(cls, name, **kwargs):
+        # Create the actual SymPy Symbol
+        obj = super().__new__(cls, name, **kwargs)
+        
+        # Attach our family-specific attributes to the new instance
+        # We use distinct names (e.g., _family_cache) to avoid colliding with SymPy internals
+        obj._family_cache = {}
+        obj._family_kwargs = kwargs
+        return obj
 
-class SymbolFamily:
-    def __init__(self, name: str, cls=None,**kwargs):
+    def __getitem__(self, k):
+        if not isinstance(k, tuple):
+            k = (k,)
+            
+        if k not in self._family_cache:
+            sub = ",".join(map(str, k))
+            child_name = f"{self.name}_{sub}"
+            # Create a standard Symbol for the child
+            self._family_cache[k] = sp.Symbol(child_name, **self._family_kwargs)
+            
+        return self._family_cache[k]
+
+class FunctionFamily:
+    """
+    A wrapper for SymPy Functions (e.g., f(x)).
+    SymPy Functions are complex to subclass directly, so this proxy 
+    is the standard way to handle them.
+    """
+    def __init__(self, name, **kwargs):
         self.name = name
         self._kwargs = kwargs
-        self._base = sp.Symbol(name, **self._kwargs)
+        # Create the base function (e.g. f)
+        self._base = sp.Function(name, **kwargs)
         self._cache = {}
-
-        if cls is None or cls is sp.Symbol:
-            self._factory = lambda s: sp.Symbol(s, **self._kwargs)
-        elif cls is sp.Function:
-            self._factory = lambda s: sp.Function(s, **self._kwargs)
-        else:
-            raise TypeError(
-                f"Unsupported cls={cls!r}. Use cls=sp.Symbol (default) or cls=sp.Function."
-            )
-
-
-    def _sympy_(self):
-        # lets SymPy convert `a` to Symbol('a') when needed
-        return self._base
 
     def __getitem__(self, k):
         if not isinstance(k, tuple):
             k = (k,)
         if k not in self._cache:
             sub = ",".join(map(str, k))
-            self._cache[k] = sp.Symbol(f"{self.name}_{sub}", **self._kwargs)
+            # Create a new Function for the child (e.g. f_1)
+            self._cache[k] = sp.Function(f"{self.name}_{sub}", **self._kwargs)
         return self._cache[k]
 
-    # Optional: make printing in plain Python show `a`
-    def __repr__(self):
-        return repr(self._base)
-
+    def __call__(self, *args):
+        # Allows f(x) to work
+        return self._base(*args)
+    
+    def _sympy_(self):
+        # Allows SymPy to recognize this object
+        return self._base
+    
     def __str__(self):
         return str(self._base)
     
-__all__+=["SymbolFamily"]
+    def __repr__(self):
+        return repr(self._base)
+
+__all__+=["SymbolFamily","FunctionFamily"]
 a = SymbolFamily('a')
 b = SymbolFamily('b')
 c = SymbolFamily('c')
@@ -70,9 +97,9 @@ m = SymbolFamily("m", integer=True)
 n = SymbolFamily("n", integer=True)
 __all__+=["k","l","m","n"]
 
-f=SymbolFamily("f",cls=sp.Function)
-g=SymbolFamily("g",cls=sp.Function)
-h=SymbolFamily("h",cls=sp.Function)
+f=FunctionFamily("f")
+g=FunctionFamily("g")
+h=FunctionFamily("h")
 __all__+=["f","g","h"]
 
 
