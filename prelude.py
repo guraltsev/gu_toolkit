@@ -104,7 +104,45 @@ __all__+=["f","g","h"]
 
 
 
+class Infix:
+    """Generic infix operator used as: a |OP| b."""
+    __slots__ = ("func",)
+
+    def __init__(self, func):
+        self.func = func
+
+    def __ror__(self, left):
+        return _InfixPartial(self.func, left)
+
+
+class _InfixPartial:
+    __slots__ = ("func", "left")
+
+    def __init__(self, func, left):
+        self.func = func
+        self.left = left
+
+    def __or__(self, right):
+        return self.func(self.left, right)
+
+eq = Infix(sp.Eq)
+lt = Infix(sp.Lt)
+le = Infix(sp.Le)
+gt = Infix(sp.Gt)
+ge = Infix(sp.Ge)
+__all__+=["Infix", "eq", "lt", "le", "gt", "ge"]
+
+## Demo:
+# x, y = sp.symbols("x y")
+# expr1 = x + 1
+# expr2 = 2*y
+
+# print(expr1 | eq | expr2)      # Eq(x + 1, 2*y)
+# print((x**2) | eq | (y**2))    # Eq(x**2, y**2)
+
 
 from IPython.display import Latex 
 __all__+=["Latex"]
 
+from pprint import pprint
+__all__+=["pprint"]
