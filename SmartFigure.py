@@ -293,10 +293,26 @@ class SmartFigureLayout:
         # 3. Controls Sidebar (The "Right" Panel)
         #    Initially hidden (display="none") until parameters or info widgets are added.
         self.params_header = widgets.HTML("<b>Parameters</b>", layout=widgets.Layout(display="none", margin="0"))
-        self.params_box = widgets.VBox(layout=widgets.Layout(width="100%", display="none"))
-        
+        self.params_box = widgets.VBox(
+            layout=widgets.Layout(
+                width="100%",
+                display="none",
+                padding="8px",
+                border="1px solid rgba(15,23,42,0.08)",
+                border_radius="10px",
+            )
+        )
+
         self.info_header = widgets.HTML("<b>Info</b>", layout=widgets.Layout(display="none", margin="10px 0 0 0"))
-        self.info_box = widgets.VBox(layout=widgets.Layout(width="100%", display="none"))
+        self.info_box = widgets.VBox(
+            layout=widgets.Layout(
+                width="100%",
+                display="none",
+                padding="8px",
+                border="1px solid rgba(15,23,42,0.08)",
+                border_radius="10px",
+            )
+        )
 
         self.sidebar_container = widgets.VBox(
             [self.params_header, self.params_box, self.info_header, self.info_box],
@@ -813,13 +829,61 @@ class SmartFigure:
         # 3. Initialize Plotly Figure
         self._figure = go.FigureWidget()
         self._figure.update_layout(
-            autosize=True, template="plotly_white", showlegend=True, margin=dict(l=20, r=20, t=20, b=20),
-            xaxis=dict(zeroline=True, zerolinewidth=2, zerolinecolor="black", showline=True, ticks="outside"),
-            yaxis=dict(zeroline=True, zerolinewidth=2, zerolinecolor="black", showline=True, ticks="outside"),
+            autosize=True,
+            template="plotly_white",
+            showlegend=True,
+            margin=dict(l=48, r=28, t=48, b=44),
+            font=dict(
+                family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                size=14,
+                color="#1f2933",
+            ),
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#f8fafc",
+            legend=dict(
+                bgcolor="rgba(255,255,255,0.7)",
+                bordercolor="rgba(15,23,42,0.08)",
+                borderwidth=1,
+            ),
+            xaxis=dict(
+                zeroline=True,
+                zerolinewidth=1.5,
+                zerolinecolor="#334155",
+                showline=True,
+                linecolor="#94a3b8",
+                linewidth=1,
+                mirror=True,
+                ticks="outside",
+                tickcolor="#94a3b8",
+                ticklen=6,
+                showgrid=True,
+                gridcolor="rgba(148,163,184,0.35)",
+                gridwidth=1,
+            ),
+            yaxis=dict(
+                zeroline=True,
+                zerolinewidth=1.5,
+                zerolinecolor="#334155",
+                showline=True,
+                linecolor="#94a3b8",
+                linewidth=1,
+                mirror=True,
+                ticks="outside",
+                tickcolor="#94a3b8",
+                ticklen=6,
+                showgrid=True,
+                gridcolor="rgba(148,163,184,0.35)",
+                gridwidth=1,
+            ),
         )
         self._pane = PlotlyPane(
             self._figure,
-            style=PlotlyPaneStyle(padding_px=0, border="0px", border_radius_px=0, overflow="hidden"),
+            style=PlotlyPaneStyle(
+                padding_px=8,
+                border="1px solid rgba(15,23,42,0.08)",
+                border_radius_px=10,
+                overflow="hidden",
+            ),
             autorange_mode="none",
             defer_reveal=True,
         )
