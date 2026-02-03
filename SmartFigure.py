@@ -813,9 +813,50 @@ class SmartFigure:
         # 3. Initialize Plotly Figure
         self._figure = go.FigureWidget()
         self._figure.update_layout(
-            autosize=True, template="plotly_white", showlegend=True, margin=dict(l=20, r=20, t=20, b=20),
-            xaxis=dict(zeroline=True, zerolinewidth=2, zerolinecolor="black", showline=True, ticks="outside"),
-            yaxis=dict(zeroline=True, zerolinewidth=2, zerolinecolor="black", showline=True, ticks="outside"),
+            autosize=True,
+            template="plotly_white",
+            showlegend=True,
+            margin=dict(l=48, r=28, t=48, b=44),
+            font=dict(
+                family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                size=14,
+                color="#1f2933",
+            ),
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#f8fafc",
+            legend=dict(
+                bgcolor="rgba(255,255,255,0.7)",
+                bordercolor="rgba(15,23,42,0.08)",
+                borderwidth=1,
+            ),
+            xaxis=dict(
+                zeroline=True,
+                zerolinewidth=1.5,
+                zerolinecolor="#334155",
+                showline=True,
+                linecolor="#94a3b8",
+                linewidth=1,
+                ticks="outside",
+                tickcolor="#94a3b8",
+                ticklen=6,
+                showgrid=True,
+                gridcolor="rgba(148,163,184,0.35)",
+                gridwidth=1,
+            ),
+            yaxis=dict(
+                zeroline=True,
+                zerolinewidth=1.5,
+                zerolinecolor="#334155",
+                showline=True,
+                linecolor="#94a3b8",
+                linewidth=1,
+                ticks="outside",
+                tickcolor="#94a3b8",
+                ticklen=6,
+                showgrid=True,
+                gridcolor="rgba(148,163,184,0.35)",
+                gridwidth=1,
+            ),
         )
         self._pane = PlotlyPane(
             self._figure,
