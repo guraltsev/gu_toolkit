@@ -103,13 +103,14 @@ import ipywidgets as widgets
 import numpy as np
 import plotly.graph_objects as go
 import sympy as sp
-from IPython.display import Javascript, display
+from IPython.display import display
 from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
 # Internal imports (assumed to exist in the same package)
 from .InputConvert import InputConvert
 from .numpify import numpify_cached
+from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
 from .SmartSlider import SmartFloatSlider
 
 
@@ -243,25 +244,22 @@ class OneShotOutput(widgets.Output):
 
 class SmartFigureLayout:
     """
-    Manages the visual structure, CSS/JS injection, and widget hierarchy of a SmartFigure.
+    Manages the visual structure and widget hierarchy of a SmartFigure.
     
     This class isolates all the "messy" UI code (CSS strings, JavaScript injection,
     VBox/HBox nesting) from the mathematical logic.
 
     Responsibilities:
     - Building the HBox/VBox structure.
-    - Injecting the specific CSS/JS for aspect ratio handling.
+    - Providing the plot container and layout toggles.
     - Exposing containers for Plots, Parameters, and Info.
     - Handling layout toggles (e.g. full width, sidebar visibility).
     """
 
     def __init__(self, title: str = "") -> None:
-        # 1. CSS and JS Injection
-        #    Invisible widgets that carry the bootstrap code for the browser.
-        self._css_widget = widgets.HTML(value=self._get_css())
-        self._js_widget = widgets.Output(layout=widgets.Layout(width="0px", height="0px", display="none"))
-        
-        # 2. Title Bar
+        self._reflow_callback: Optional[Callable[[], None]] = None
+
+        # 1. Title Bar
         #    We use HTMLMath for proper LaTeX title rendering.
         self.title_html = widgets.HTMLMath(value=title, layout=widgets.Layout(margin="0px"))
         self.full_width_checkbox = widgets.Checkbox(
@@ -277,17 +275,22 @@ class SmartFigureLayout:
             ),
         )
 
-        # 3. Plot Area (The "Left" Panel)
-        #    Note: CSS aspect-ratio controls height. We do NOT set a fixed height here.
+        # 2. Plot Area (The "Left" Panel)
+        #    Ensure a real pixel height for Plotly sizing.
         self.plot_container = widgets.Box(
             children=(),
             layout=widgets.Layout(
-                width="100%", min_width="320px", margin="0px", padding="0px", flex="1 1 560px"
+                width="100%",
+                height="60vh",
+                min_width="320px",
+                min_height="260px",
+                margin="0px",
+                padding="0px",
+                flex="1 1 560px",
             ),
         )
-        self.plot_container.add_class("sf-plot-aspect")
 
-        # 4. Controls Sidebar (The "Right" Panel)
+        # 3. Controls Sidebar (The "Right" Panel)
         #    Initially hidden (display="none") until parameters or info widgets are added.
         self.params_header = widgets.HTML("<b>Parameters</b>", layout=widgets.Layout(display="none", margin="0"))
         self.params_box = widgets.VBox(layout=widgets.Layout(width="100%", display="none"))
@@ -303,7 +306,7 @@ class SmartFigureLayout:
             ),
         )
 
-        # 5. Main Content Wrapper (Flex)
+        # 4. Main Content Wrapper (Flex)
         #    Uses flex-wrap so the sidebar drops below the plot on narrow screens.
         self.content_wrapper = widgets.Box(
             [self.plot_container, self.sidebar_container],
@@ -313,15 +316,14 @@ class SmartFigureLayout:
             ),
         )
 
-        # 6. Root Widget
+        # 5. Root Widget
         self.root_widget = widgets.VBox(
-            [self._css_widget, self._js_widget, self._titlebar, self.content_wrapper],
+            [self._titlebar, self.content_wrapper],
             layout=widgets.Layout(width="100%")
         )
 
         # Wire up internal logic
         self.full_width_checkbox.observe(self._on_full_width_change, names="value")
-        self._inject_js()
 
     @property
     def output_widget(self) -> OneShotOutput:
@@ -352,6 +354,15 @@ class SmartFigureLayout:
         show_sidebar = has_params or has_info
         self.sidebar_container.layout.display = "flex" if show_sidebar else "none"
 
+    def set_plot_widget(
+        self,
+        widget: widgets.Widget,
+        *,
+        reflow_callback: Optional[Callable[[], None]] = None,
+    ) -> None:
+        self.plot_container.children = (widget,)
+        self._reflow_callback = reflow_callback
+
     def _on_full_width_change(self, change: Dict[str, Any]) -> None:
         """Toggles CSS flex properties for full-width mode."""
         is_full = change["new"]
@@ -375,98 +386,8 @@ class SmartFigureLayout:
             sidebar_layout.max_width = "400px"
             sidebar_layout.width = "auto"
             sidebar_layout.padding = "0px 0px 0px 10px"
-
-    def _get_css(self) -> str:
-        """
-        Returns the CSS needed for the aspect-ratio hack and drag handle.
-        """
-        return """
-        <style>
-        /* Host plot panel: height governed by aspect-ratio. */
-        .sf-plot-aspect {
-            position: relative; width: 100%;
-            aspect-ratio: var(--sf-ar, 1.3333333333);
-            min-height: 260px; box-sizing: border-box;
-        }
-        /* Force Plotly to fill the host container */
-        .sf-plot-aspect .js-plotly-plot, .sf-plot-aspect .plotly-graph-div {
-            width: 100% !important; height: 100% !important;
-        }
-        /* Drag handle (bottom grip) */
-        .sf-aspect-handle {
-            position: absolute; left: 0; right: 0; bottom: 0; height: 14px;
-            cursor: ns-resize; z-index: 10;
-        }
-        .sf-aspect-handle::after {
-            content: ""; display: block; width: 56px; height: 4px;
-            margin: 5px auto; border-radius: 999px; background: rgba(0,0,0,0.25);
-        }
-        .sf-aspect-handle:hover::after { background: rgba(0,0,0,0.40); }
-        </style>
-        """
-
-    def _inject_js(self) -> None:
-        """
-        Injects the JavaScript Logic for the resize handle and Plotly resizing.
-        """
-        # Kept inline to ensure the file is self-contained.
-        js_code = r"""
-        (function () {
-            if (window.__smartfigure_plotly_aspect_resizer_installed) return;
-            window.__smartfigure_plotly_aspect_resizer_installed = true;
-
-            function safeResizePlotly(gd) {
-                try { if (window.Plotly && Plotly.Plots) Plotly.Plots.resize(gd); } catch (e) {}
-            }
-            
-            function ensureHandle(host) {
-                if (host.__sf_handle_installed) return;
-                host.__sf_handle_installed = true;
-                const handle = document.createElement('div');
-                handle.className = 'sf-aspect-handle';
-                host.appendChild(handle);
-                
-                let dragging = false, startY = 0, startH = 0;
-                
-                function onMove(ev) {
-                    if (!dragging) return;
-                    const newH = Math.max(180, Math.min(2200, startH + (ev.clientY - startY)));
-                    const rect = host.getBoundingClientRect();
-                    host.style.setProperty('--sf-ar', String((rect.width || 1) / newH));
-                    const gd = host.querySelector('.js-plotly-plot');
-                    if (gd) safeResizePlotly(gd);
-                }
-                function onUp(ev) {
-                    dragging = false; 
-                    window.removeEventListener('pointermove', onMove, true);
-                    window.removeEventListener('pointerup', onUp, true);
-                }
-                handle.addEventListener('pointerdown', (ev) => {
-                    ev.preventDefault(); dragging = true; startY = ev.clientY;
-                    startH = host.getBoundingClientRect().height || 1;
-                    window.addEventListener('pointermove', onMove, true);
-                    window.addEventListener('pointerup', onUp, true);
-                });
-            }
-
-            function attachAll() {
-                document.querySelectorAll('.sf-plot-aspect').forEach(ensureHandle);
-                document.querySelectorAll('.js-plotly-plot').forEach(gd => {
-                    if (!gd.__smartfigure_ro) {
-                        const ro = new ResizeObserver(() => safeResizePlotly(gd));
-                        ro.observe(gd);
-                        gd.__smartfigure_ro = ro;
-                    }
-                });
-            }
-
-            const mo = new MutationObserver(() => attachAll());
-            mo.observe(document.body, { childList: true, subtree: true });
-            setTimeout(attachAll, 1000); 
-        })();
-        """
-        with self._js_widget:
-            display(Javascript(js_code))
+        if self._reflow_callback is not None:
+            self._reflow_callback()
 
 
 # =============================================================================
@@ -865,7 +786,7 @@ class SmartFigure:
     """
     
     __slots__ = [
-        "_layout", "_params", "_info", "_figure", "plots",
+        "_layout", "_params", "_info", "_figure", "_pane", "plots",
         "_x_range", "_y_range", "_sampling_points", "_debug",
         "_last_relayout", "_render_info_last_log_t", "_render_debug_last_log_t"
     ]
@@ -896,7 +817,13 @@ class SmartFigure:
             xaxis=dict(zeroline=True, zerolinewidth=2, zerolinecolor="black", showline=True, ticks="outside"),
             yaxis=dict(zeroline=True, zerolinewidth=2, zerolinecolor="black", showline=True, ticks="outside"),
         )
-        self._layout.plot_container.children = (self._figure,)
+        self._pane = PlotlyPane(
+            self._figure,
+            style=PlotlyPaneStyle(padding_px=0, border="0px", border_radius_px=0, overflow="hidden"),
+            autorange_mode="none",
+            defer_reveal=True,
+        )
+        self._layout.set_plot_widget(self._pane.widget, reflow_callback=self._pane.reflow)
 
         # 4. Set Initial State
         self.x_range = x_range
