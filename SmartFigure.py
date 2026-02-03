@@ -293,10 +293,26 @@ class SmartFigureLayout:
         # 3. Controls Sidebar (The "Right" Panel)
         #    Initially hidden (display="none") until parameters or info widgets are added.
         self.params_header = widgets.HTML("<b>Parameters</b>", layout=widgets.Layout(display="none", margin="0"))
-        self.params_box = widgets.VBox(layout=widgets.Layout(width="100%", display="none"))
-        
+        self.params_box = widgets.VBox(
+            layout=widgets.Layout(
+                width="100%",
+                display="none",
+                padding="8px",
+                border="1px solid rgba(15,23,42,0.08)",
+                border_radius="10px",
+            )
+        )
+
         self.info_header = widgets.HTML("<b>Info</b>", layout=widgets.Layout(display="none", margin="10px 0 0 0"))
-        self.info_box = widgets.VBox(layout=widgets.Layout(width="100%", display="none"))
+        self.info_box = widgets.VBox(
+            layout=widgets.Layout(
+                width="100%",
+                display="none",
+                padding="8px",
+                border="1px solid rgba(15,23,42,0.08)",
+                border_radius="10px",
+            )
+        )
 
         self.sidebar_container = widgets.VBox(
             [self.params_header, self.params_box, self.info_header, self.info_box],
