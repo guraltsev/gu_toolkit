@@ -836,6 +836,7 @@ class SmartFigure:
                 showline=True,
                 linecolor="#94a3b8",
                 linewidth=1,
+                mirror=True,
                 ticks="outside",
                 tickcolor="#94a3b8",
                 ticklen=6,
@@ -850,6 +851,7 @@ class SmartFigure:
                 showline=True,
                 linecolor="#94a3b8",
                 linewidth=1,
+                mirror=True,
                 ticks="outside",
                 tickcolor="#94a3b8",
                 ticklen=6,
@@ -860,7 +862,12 @@ class SmartFigure:
         )
         self._pane = PlotlyPane(
             self._figure,
-            style=PlotlyPaneStyle(padding_px=0, border="0px", border_radius_px=0, overflow="hidden"),
+            style=PlotlyPaneStyle(
+                padding_px=8,
+                border="1px solid rgba(15,23,42,0.08)",
+                border_radius_px=10,
+                overflow="hidden",
+            ),
             autorange_mode="none",
             defer_reveal=True,
         )
