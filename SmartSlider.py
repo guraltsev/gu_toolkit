@@ -46,12 +46,12 @@ class SmartFloatSlider(widgets.VBox):
             continuous_update=True,
             readout=False,  # IMPORTANT: no built-in numeric field
             style={"description_width": "initial"},
-            layout=widgets.Layout(width="50%"),
+            layout=widgets.Layout(width="55%"),
         )
 
         self.description_label = widgets.HTMLMath(
             value=description,
-            layout=widgets.Layout(width="60px"),
+            layout=widgets.Layout(width="52px"),
         )
 
         #self._limit_style = widgets.HTML(
@@ -123,19 +123,37 @@ class SmartFloatSlider(widgets.VBox):
         self.number = widgets.Text(
             value=str(value),
             continuous_update=False,  # commit on Enter (and typically blur)
-            layout=widgets.Layout(width="70px"),
+            layout=widgets.Layout(width="64px"),
         )
 
+        button_layout = widgets.Layout(width="24px", height="24px", padding="0px")
         self.btn_reset = widgets.Button(
             description="↺",
             tooltip="Reset",
-            layout=widgets.Layout(width="22px", height="22px", padding="0px"),
+            layout=button_layout,
         )
         self.btn_settings = widgets.Button(
             description="⚙",
             tooltip="Settings",
-            layout=widgets.Layout(width="22px", height="22px", padding="0px"),
+            layout=button_layout,
         )
+        self.btn_play = widgets.ToggleButton(
+            value=False,
+            description="▶",
+            tooltip="Animate",
+            layout=button_layout,
+        )
+        self.play = widgets.Play(
+            value=value,
+            min=min,
+            max=max,
+            step=step if step != 0 else 0.01,
+            interval=60,
+            layout=widgets.Layout(display="none"),
+        )
+        self._play_syncing = False
+        self._play_button_syncing = False
+        self._play_direction = 1
 
         # --- Settings panel ---------------------------------------------------
         style_args = {"style": {"description_width": "50px"}, "layout": widgets.Layout(width="100px")}
@@ -156,13 +174,17 @@ class SmartFloatSlider(widgets.VBox):
             value=True,
             description="Live Update",
             indent=False,
-            layout=widgets.Layout(width="120px"),
+            layout=widgets.Layout(width="110px"),
         )
 
         self.settings_panel = widgets.VBox(
-            [widgets.HBox([self.set_step]), widgets.HBox([self.set_live])],
+            [widgets.HBox([self.set_step, self.set_live], layout=widgets.Layout(gap="8px"))],
             layout=widgets.Layout(
-                display="none", border="1px solid #eee", padding="5px", margin="5px 0"
+                display="none",
+                border="1px solid #e5e7eb",
+                padding="4px 6px",
+                margin="4px 0 0 0",
+                border_radius="6px",
             ),
         )
 
@@ -177,10 +199,11 @@ class SmartFloatSlider(widgets.VBox):
                 self.number,
                 self.btn_reset,
                 self.btn_settings,
+                self.btn_play,
             ],
             layout=widgets.Layout(align_items="center", gap="4px"),
         )
-        super().__init__([top_row, self.settings_panel], **kwargs)
+        super().__init__([top_row, self.settings_panel, self.play], **kwargs)
 
         # --- Wiring -----------------------------------------------------------
         # Keep self.value and slider.value in sync
@@ -189,6 +212,7 @@ class SmartFloatSlider(widgets.VBox):
         # Slider -> Text (display)
         self.slider.observe(self._sync_number_from_slider, names="value")
         self.slider.observe(self._sync_limit_texts, names=["min", "max"])
+        self.slider.observe(self._sync_play_bounds, names="step")
         # Text -> Slider (parse + clamp)
         self.number.observe(self._commit_text_value, names="value")
         self.set_min.observe(self._commit_min_value, names="value")
@@ -197,6 +221,8 @@ class SmartFloatSlider(widgets.VBox):
         # Buttons
         self.btn_reset.on_click(self._reset)
         self.btn_settings.on_click(self._toggle_settings)
+        self.btn_play.observe(self._toggle_play, names="value")
+        self.play.observe(self._sync_slider_from_play, names="value")
 
         # Settings -> slider traits
         widgets.link((self.set_step, "value"), (self.slider, "step"))
@@ -221,12 +247,15 @@ class SmartFloatSlider(widgets.VBox):
         """When the slider moves, update the single numeric field."""
         if self._syncing:
             return
+        if self.play.playing and not self._play_syncing:
+            self._stop_playback()
         self._sync_number_text(change.new)
 
     def _sync_limit_texts(self, change) -> None:
         """Update the min/max limit text fields from the slider limits."""
         if self._syncing:
             return
+        self._sync_play_bounds()
         self._syncing = True
         try:
             self.set_min.value = f"{self.slider.min:.4g}"
@@ -277,6 +306,7 @@ class SmartFloatSlider(widgets.VBox):
         """
         if self._syncing:
             return
+        self._stop_playback()
 
         raw = (change.new or "").strip()
         old_val = float(self.value)
@@ -293,9 +323,66 @@ class SmartFloatSlider(widgets.VBox):
     # --- Button handlers ------------------------------------------------------
 
     def _reset(self, _) -> None:
+        self._stop_playback()
         self.value = self._defaults["value"]  # slider sync + slider observer updates text
 
     def _toggle_settings(self, _) -> None:
         self.settings_panel.layout.display = (
             "none" if self.settings_panel.layout.display == "flex" else "flex"
         )
+
+    def _toggle_play(self, change) -> None:
+        if self._play_button_syncing:
+            return
+        if change.new:
+            self._start_playback()
+        else:
+            self._stop_playback()
+
+    def _start_playback(self) -> None:
+        self._sync_play_bounds()
+        self._play_direction = 1 if self.play.step >= 0 else -1
+        self.play.value = self.slider.value
+        self.play.playing = True
+        self._sync_play_button(True)
+
+    def _stop_playback(self) -> None:
+        if not self.play.playing and not self.btn_play.value:
+            return
+        self.play.playing = False
+        self._sync_play_button(False)
+
+    def _sync_play_button(self, playing: bool) -> None:
+        self._play_button_syncing = True
+        try:
+            self.btn_play.value = playing
+            self.btn_play.description = "⏸" if playing else "▶"
+        finally:
+            self._play_button_syncing = False
+
+    def _sync_play_bounds(self, change=None) -> None:
+        step = float(self.slider.step) if self.slider.step != 0 else 0.01
+        self.play.min = float(self.slider.min)
+        self.play.max = float(self.slider.max)
+        self.play.step = abs(step) * (1 if self._play_direction >= 0 else -1)
+
+    def _sync_slider_from_play(self, change) -> None:
+        if self._play_syncing:
+            return
+        self._play_syncing = True
+        try:
+            self.slider.value = change.new
+        finally:
+            self._play_syncing = False
+        self._update_play_direction(change.new)
+
+    def _update_play_direction(self, current: float) -> None:
+        if not self.play.playing:
+            return
+        max_val = float(self.slider.max)
+        min_val = float(self.slider.min)
+        if current >= max_val:
+            self._play_direction = -1
+        elif current <= min_val:
+            self._play_direction = 1
+        self.play.step = abs(float(self.slider.step) or 0.01) * self._play_direction

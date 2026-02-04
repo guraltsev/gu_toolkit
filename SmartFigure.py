@@ -98,6 +98,7 @@ import time
 import warnings
 import logging
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator, List
 
 import ipywidgets as widgets
@@ -166,6 +167,35 @@ NumberLike = Union[int, float]
 NumberLikeOrStr = Union[int, float, str]
 RangeLike = Tuple[NumberLikeOrStr, NumberLikeOrStr]
 VisibleSpec = Union[bool, str]  # Plotly uses True/False or the string "legendonly".
+
+
+@dataclass(frozen=True)
+class ParamConfig:
+    """Reusable configuration for parameter sliders."""
+    value: Optional[NumberLike] = None
+    min: Optional[NumberLike] = None
+    max: Optional[NumberLike] = None
+    step: Optional[NumberLike] = None
+
+    def merged(self, override: "ParamConfig") -> "ParamConfig":
+        return ParamConfig(
+            value=override.value if override.value is not None else self.value,
+            min=override.min if override.min is not None else self.min,
+            max=override.max if override.max is not None else self.max,
+            step=override.step if override.step is not None else self.step,
+        )
+
+    def to_kwargs(self) -> Dict[str, NumberLike]:
+        return {
+            key: value
+            for key, value in {
+                "value": self.value,
+                "min": self.min,
+                "max": self.max,
+                "step": self.step,
+            }.items()
+            if value is not None
+        }
 
 
 # =============================================================================
@@ -463,14 +493,25 @@ class ParameterManager:
     from the "rendering" of the figure.
     """
 
-    def __init__(self, render_callback: Callable[[str, Any], None], layout_box: widgets.Box) -> None:
+    def __init__(
+        self,
+        render_callback: Callable[[str, Any], None],
+        layout_box: widgets.Box,
+        defaults: Optional[ParamConfig] = None,
+    ) -> None:
         self._sliders: Dict[Symbol, SmartFloatSlider] = {}
         self._hooks: Dict[Hashable, Callable[[Dict, Any], Any]] = {}
         self._hook_counter: int = 0
         self._render_callback = render_callback
         self._layout_box = layout_box # The VBox where sliders live
+        self._defaults = defaults or ParamConfig(value=0.0, min=-1.0, max=1.0, step=0.01)
 
-    def add_param(self, symbol: Symbol, **kwargs: Any) -> SmartFloatSlider:
+    def add_param(
+        self,
+        symbol: Symbol,
+        config: Optional[ParamConfig] = None,
+        **kwargs: Any,
+    ) -> SmartFloatSlider:
         """
         Create or reuse a slider for the given symbol.
 
@@ -478,21 +519,24 @@ class ParameterManager:
         ----------
         symbol : sympy.Symbol
             The parameter symbol.
+        config : ParamConfig, optional
+            Structured configuration for the slider.
         **kwargs :
             Options for the slider (min, max, value, step).
         """
         if symbol in self._sliders:
             return self._sliders[symbol]
 
-        defaults = {'value': 0.0, 'min': -1.0, 'max': 1.0, 'step': 0.01}
-        config = {**defaults, **kwargs}
+        config_overrides = config or ParamConfig()
+        merged_config = self._defaults.merged(config_overrides)
+        merged_kwargs = {**merged_config.to_kwargs(), **kwargs}
         
         slider = SmartFloatSlider(
             description=f"${sp.latex(symbol)}$",
-            value=float(config['value']),
-            min=float(config['min']),
-            max=float(config['max']),
-            step=float(config['step'])
+            value=float(merged_kwargs["value"]),
+            min=float(merged_kwargs["min"]),
+            max=float(merged_kwargs["max"]),
+            step=float(merged_kwargs["step"]),
         )
         
         # Observe changes
@@ -501,6 +545,40 @@ class ParameterManager:
         self._sliders[symbol] = slider
         self._layout_box.children += (slider,)
         return slider
+
+    def update_limits(
+        self,
+        symbol: Symbol,
+        *,
+        min: Optional[NumberLike] = None,
+        max: Optional[NumberLike] = None,
+        step: Optional[NumberLike] = None,
+    ) -> None:
+        """Update slider limits and step for an existing parameter."""
+        if symbol not in self._sliders:
+            raise KeyError(f"Unknown parameter: {symbol}")
+        slider = self._sliders[symbol]
+        new_min = float(slider.min if min is None else min)
+        new_max = float(slider.max if max is None else max)
+        if new_min > new_max:
+            new_min, new_max = new_max, new_min
+        slider.min = new_min
+        slider.max = new_max
+        if step is not None:
+            step_value = float(step)
+            slider.step = abs(step_value) if step_value != 0 else slider.step
+        slider.value = max(new_min, min(float(slider.value), new_max))
+
+    def update_value(self, symbol: Symbol, value: NumberLike) -> None:
+        """Update a slider value while respecting its current limits."""
+        if symbol not in self._sliders:
+            raise KeyError(f"Unknown parameter: {symbol}")
+        slider = self._sliders[symbol]
+        slider.value = max(float(slider.min), min(float(value), float(slider.max)))
+
+    def update_defaults(self, defaults: ParamConfig) -> None:
+        """Update default slider configuration used for new parameters."""
+        self._defaults = defaults
 
     def get_value(self, symbol: Symbol) -> float:
         """Returns the current float value of a parameter."""
@@ -846,7 +924,7 @@ class SmartFigure:
         "_layout", "_params", "_info", "_figure", "_pane", "plots",
         "_x_range", "_y_range", "_sampling_points", "_debug",
         "_last_relayout", "_render_info_last_log_t", "_render_debug_last_log_t",
-        "_has_been_displayed"
+        "_has_been_displayed", "_param_defaults"
     ]
 
     def __init__(
@@ -866,7 +944,12 @@ class SmartFigure:
         
         # 2. Initialize Managers
         # Note: we pass a callback for rendering so params can trigger updates
-        self._params = ParameterManager(self.render, self._layout.params_box)
+        self._param_defaults = ParamConfig(value=0.0, min=-1.0, max=1.0, step=0.01)
+        self._params = ParameterManager(
+            self.render,
+            self._layout.params_box,
+            defaults=self._param_defaults,
+        )
         self._info = InfoPanelManager(self._layout.info_box)
 
         # 3. Initialize Plotly Figure
@@ -965,6 +1048,16 @@ class SmartFigure:
         Acts like a dictionary of `{Symbol: Slider}` for backward compatibility.
         """
         return self._params
+
+    @property
+    def param_defaults(self) -> ParamConfig:
+        """Default slider configuration applied to newly added parameters."""
+        return self._param_defaults
+
+    @param_defaults.setter
+    def param_defaults(self, defaults: ParamConfig) -> None:
+        self._param_defaults = defaults
+        self._params.update_defaults(defaults)
     
     @property
     def info_output(self) -> Dict[Hashable, widgets.Output]:
@@ -1101,11 +1194,16 @@ class SmartFigure:
                  except Exception as e:
                      warnings.warn(f"Hook {h_id} failed: {e}")
 
-    def add_param(self, symbol: Symbol, **kwargs: Any) -> SmartFloatSlider:
+    def add_param(
+        self,
+        symbol: Symbol,
+        config: Optional[ParamConfig] = None,
+        **kwargs: Any,
+    ) -> SmartFloatSlider:
         """
         Add a SmartFloatSlider parameter manually.
         """
-        slider = self._params.add_param(symbol, **kwargs)
+        slider = self._params.add_param(symbol, config=config, **kwargs)
         self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
         return slider
 
