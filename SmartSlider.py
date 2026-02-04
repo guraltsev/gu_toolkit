@@ -54,6 +54,12 @@ class SmartFloatSlider(widgets.VBox):
             layout=widgets.Layout(width="60px"),
         )
 
+        self._limit_style = widgets.HTML(
+            "<style>"
+            ".smart-slider-limit input{font-size:10px;color:#666;height:20px;}"
+            "</style>"
+        )
+
         # The *only* numeric field (editable; accepts expressions)
         self.number = widgets.Text(
             value=str(value),
@@ -74,12 +80,18 @@ class SmartFloatSlider(widgets.VBox):
 
         # --- Settings panel ---------------------------------------------------
         style_args = {"style": {"description_width": "50px"}, "layout": widgets.Layout(width="100px")}
-        self.set_min = widgets.FloatText(
-            value=min, description="", layout=widgets.Layout(width="60px")
+        self.set_min = widgets.Text(
+            value=f"{min:.4g}",
+            continuous_update=False,
+            layout=widgets.Layout(width="52px"),
         )
-        self.set_max = widgets.FloatText(
-            value=max, description="", layout=widgets.Layout(width="60px")
+        self.set_min.add_class("smart-slider-limit")
+        self.set_max = widgets.Text(
+            value=f"{max:.4g}",
+            continuous_update=False,
+            layout=widgets.Layout(width="52px"),
         )
+        self.set_max.add_class("smart-slider-limit")
         self.set_step = widgets.FloatText(value=step, description="Step:", **style_args)
         self.set_live = widgets.Checkbox(
             value=True,
@@ -98,6 +110,7 @@ class SmartFloatSlider(widgets.VBox):
         # --- Layout -----------------------------------------------------------
         top_row = widgets.HBox(
             [
+                self._limit_style,
                 self.description_label,
                 self.set_min,
                 self.slider,
@@ -116,22 +129,24 @@ class SmartFloatSlider(widgets.VBox):
 
         # Slider -> Text (display)
         self.slider.observe(self._sync_number_from_slider, names="value")
+        self.slider.observe(self._sync_limit_texts, names=["min", "max"])
         # Text -> Slider (parse + clamp)
         self.number.observe(self._commit_text_value, names="value")
+        self.set_min.observe(self._commit_min_value, names="value")
+        self.set_max.observe(self._commit_max_value, names="value")
 
         # Buttons
         self.btn_reset.on_click(self._reset)
         self.btn_settings.on_click(self._toggle_settings)
 
         # Settings -> slider traits
-        widgets.link((self.set_min, "value"), (self.slider, "min"))
-        widgets.link((self.set_max, "value"), (self.slider, "max"))
         widgets.link((self.set_step, "value"), (self.slider, "step"))
         widgets.link((self.set_live, "value"), (self.slider, "continuous_update"))
 
         # Initialize trait (and normalize displayed text)
         self.value = value
         self._sync_number_text(self.value)
+        self._sync_limit_texts(None)
 
     # --- Helpers --------------------------------------------------------------
 
@@ -148,6 +163,48 @@ class SmartFloatSlider(widgets.VBox):
         if self._syncing:
             return
         self._sync_number_text(change.new)
+
+    def _sync_limit_texts(self, change) -> None:
+        """Update the min/max limit text fields from the slider limits."""
+        if self._syncing:
+            return
+        self._syncing = True
+        try:
+            self.set_min.value = f"{self.slider.min:.4g}"
+            self.set_max.value = f"{self.slider.max:.4g}"
+        finally:
+            self._syncing = False
+
+    def _commit_limit_value(self, change, *, limit: str) -> None:
+        """Parse and apply min/max limits from text inputs."""
+        if self._syncing:
+            return
+        raw = (change.new or "").strip()
+        old_min = float(self.slider.min)
+        old_max = float(self.slider.max)
+
+        try:
+            new_val = float(InputConvert(raw, dest_type=float, truncate=True))
+            if limit == "min":
+                new_min = min(new_val, old_max)
+                self.slider.min = new_min
+            else:
+                new_max = max(new_val, old_min)
+                self.slider.max = new_max
+            self._sync_limit_texts(None)
+        except (ValueError, TypeError, SyntaxError):
+            self._syncing = True
+            try:
+                self.set_min.value = f"{old_min:.4g}"
+                self.set_max.value = f"{old_max:.4g}"
+            finally:
+                self._syncing = False
+
+    def _commit_min_value(self, change) -> None:
+        self._commit_limit_value(change, limit="min")
+
+    def _commit_max_value(self, change) -> None:
+        self._commit_limit_value(change, limit="max")
 
     def _commit_text_value(self, change) -> None:
         """
