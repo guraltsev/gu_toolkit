@@ -46,21 +46,30 @@ class SmartFloatSlider(widgets.VBox):
             continuous_update=True,
             readout=False,  # IMPORTANT: no built-in numeric field
             style={"description_width": "initial"},
-            layout=widgets.Layout(width="60%"),
+            layout=widgets.Layout(width="55%"),
+        )
+
+        self.min_label = widgets.HTML(
+            value="",
+            layout=widgets.Layout(width="50px"),
+        )
+        self.max_label = widgets.HTML(
+            value="",
+            layout=widgets.Layout(width="50px"),
         )
 
         # The *only* numeric field (editable; accepts expressions)
         self.number = widgets.Text(
             value=str(value),
             continuous_update=False,  # commit on Enter (and typically blur)
-            layout=widgets.Layout(width="90px"),
+            layout=widgets.Layout(width="80px"),
         )
 
         self.btn_reset = widgets.Button(
-            description="↺", tooltip="Reset", layout=widgets.Layout(width="35px")
+            description="↺", tooltip="Reset", layout=widgets.Layout(width="26px", height="26px")
         )
         self.btn_settings = widgets.Button(
-            description="⚙", tooltip="Settings", layout=widgets.Layout(width="35px")
+            description="⚙", tooltip="Settings", layout=widgets.Layout(width="26px", height="26px")
         )
 
         # --- Settings panel ---------------------------------------------------
@@ -86,8 +95,12 @@ class SmartFloatSlider(widgets.VBox):
         )
 
         # --- Layout -----------------------------------------------------------
+        slider_row = widgets.HBox(
+            [self.min_label, self.slider, self.max_label],
+            layout=widgets.Layout(align_items="center"),
+        )
         top_row = widgets.HBox(
-            [self.slider, self.number, self.btn_reset, self.btn_settings],
+            [slider_row, self.number, self.btn_reset, self.btn_settings],
             layout=widgets.Layout(align_items="center"),
         )
         super().__init__([top_row, self.settings_panel], **kwargs)
@@ -98,6 +111,7 @@ class SmartFloatSlider(widgets.VBox):
 
         # Slider -> Text (display)
         self.slider.observe(self._sync_number_from_slider, names="value")
+        self.slider.observe(self._sync_limit_labels, names=["min", "max"])
 
         # Text -> Slider (parse + clamp)
         self.number.observe(self._commit_text_value, names="value")
@@ -115,6 +129,7 @@ class SmartFloatSlider(widgets.VBox):
         # Initialize trait (and normalize displayed text)
         self.value = value
         self._sync_number_text(self.value)
+        self._sync_limit_labels(None)
 
     # --- Helpers --------------------------------------------------------------
 
@@ -131,6 +146,13 @@ class SmartFloatSlider(widgets.VBox):
         if self._syncing:
             return
         self._sync_number_text(change.new)
+
+    def _sync_limit_labels(self, change) -> None:
+        """Update the min/max labels from the slider's current limits."""
+        min_val = self.slider.min
+        max_val = self.slider.max
+        self.min_label.value = f"<span style='font-size:10px;color:#666'>{min_val:.4g}</span>"
+        self.max_label.value = f"<span style='font-size:10px;color:#666'>{max_val:.4g}</span>"
 
     def _commit_text_value(self, change) -> None:
         """
