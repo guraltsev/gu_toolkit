@@ -56,7 +56,16 @@ class SmartFloatSlider(widgets.VBox):
 
         self._limit_style = widgets.HTML(
             "<style>"
-            ".smart-slider-limit input{font-size:10px;color:#666;height:20px;}"
+            ".smart-slider-limit input{"
+            "font-size:10px;"
+            "color:#666;"
+            "height:18px;"
+            "border:none;"
+            "box-shadow:none;"
+            "background:transparent;"
+            "padding:0px;"
+            "text-align:center;"
+            "}"
             "</style>"
         )
 
@@ -83,13 +92,13 @@ class SmartFloatSlider(widgets.VBox):
         self.set_min = widgets.Text(
             value=f"{min:.4g}",
             continuous_update=False,
-            layout=widgets.Layout(width="52px"),
+            layout=widgets.Layout(width="40px"),
         )
         self.set_min.add_class("smart-slider-limit")
         self.set_max = widgets.Text(
             value=f"{max:.4g}",
             continuous_update=False,
-            layout=widgets.Layout(width="52px"),
+            layout=widgets.Layout(width="40px"),
         )
         self.set_max.add_class("smart-slider-limit")
         self.set_step = widgets.FloatText(value=step, description="Step:", **style_args)
