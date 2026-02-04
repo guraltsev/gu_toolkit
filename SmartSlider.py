@@ -54,21 +54,71 @@ class SmartFloatSlider(widgets.VBox):
             layout=widgets.Layout(width="60px"),
         )
 
-        self._limit_style = widgets.HTML(
-            "<style>"
-            ".smart-slider-limit input{"
-            "font-size:10px;"
-            "color:#666;"
-            "height:18px;"
-            "border:none;"
-            "box-shadow:none;"
-            "background:transparent;"
-            "padding:0px;"
-            "text-align:center;"
-            "}"
-            "</style>"
-        )
+        #self._limit_style = widgets.HTML(
+        #    "<style>"
+        #    ".smart-slider-limit input{"
+        #    "font-size:10px;"
+        #    "color:#666;"
+        #    "height:18px;"
+        #    "border:none;"
+        #    "box-shadow:none;"
+        #    "background:transparent;"
+        #    "padding:0px;"
+        #   "text-align:center;"
+        #    "}"
+        #    "</style>"
+        #)
 
+        self._limit_style = widgets.HTML(r"""
+<style>
+/* ============================================================
+   Min/Max look like small non-editable text until focus,
+   but remain fully editable on click.
+   Works without relying on a specific wrapper DOM.
+   ============================================================ */
+
+/* Shrink any wrapper(s) JupyterLab/ipywidgets might impose. */
+.smart-slider-limit,
+.smart-slider-limit * {
+  min-height: 0 !important;
+}
+
+/* The actual editable element(s): handle both input + textarea. */
+.smart-slider-limit :is(input, textarea) {
+  /* Make it small */
+  font-size: 10px !important;
+  line-height: 1.1 !important;
+
+  /* Force compact geometry despite JupyterLab theme defaults */
+  height: 16px !important;
+  min-height: 0 !important;
+  padding: 0 2px !important;
+  margin: 0 !important;
+
+  /* Make it look like static text */
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  box-shadow: none !important;
+  border-radius: 3px !important;
+
+  color: var(--jp-ui-font-color2, #666) !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+}
+
+/* Optional: subtle “this is clickable” affordance on hover */
+.smart-slider-limit :is(input, textarea):hover {
+  border-bottom-color: rgba(0,0,0,0.20) !important;
+}
+
+/* On focus: show edit chrome so users realize they can type */
+.smart-slider-limit :is(input, textarea):focus {
+  outline: none !important;
+  border-color: rgba(0,0,0,0.28) !important;
+  background: rgba(0,0,0,0.04) !important;
+}
+</style>
+""")
         # The *only* numeric field (editable; accepts expressions)
         self.number = widgets.Text(
             value=str(value),
@@ -90,16 +140,16 @@ class SmartFloatSlider(widgets.VBox):
         # --- Settings panel ---------------------------------------------------
         style_args = {"style": {"description_width": "50px"}, "layout": widgets.Layout(width="100px")}
         self.set_min = widgets.Text(
-            value=f"{min:.4g}",
-            continuous_update=False,
-            layout=widgets.Layout(width="40px"),
-        )
+    value=f"{min:.4g}",
+    continuous_update=False,
+    layout=widgets.Layout(width="40px", height="16px"),
+)
         self.set_min.add_class("smart-slider-limit")
         self.set_max = widgets.Text(
-            value=f"{max:.4g}",
-            continuous_update=False,
-            layout=widgets.Layout(width="40px"),
-        )
+    value=f"{max:.4g}",
+    continuous_update=False,
+    layout=widgets.Layout(width="40px", height="16px"),
+)
         self.set_max.add_class("smart-slider-limit")
         self.set_step = widgets.FloatText(value=step, description="Step:", **style_args)
         self.set_live = widgets.Checkbox(
