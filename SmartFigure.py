@@ -97,7 +97,8 @@ import re
 import time
 import warnings
 import logging
-from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator
+from contextlib import contextmanager
+from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator, List
 
 import ipywidgets as widgets
 import numpy as np
@@ -120,6 +121,42 @@ from .SmartSlider import SmartFloatSlider
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     logger.addHandler(logging.NullHandler())
+
+_FIGURE_STACK: List["SmartFigure"] = []
+
+
+def _current_figure() -> Optional["SmartFigure"]:
+    if not _FIGURE_STACK:
+        return None
+    return _FIGURE_STACK[-1]
+
+
+def _push_current_figure(fig: "SmartFigure", display_on_enter: bool) -> None:
+    _FIGURE_STACK.append(fig)
+    if display_on_enter and not fig._has_been_displayed:
+        display(fig)
+        fig._has_been_displayed = True
+
+
+def _pop_current_figure(fig: "SmartFigure") -> None:
+    if not _FIGURE_STACK:
+        return
+    if _FIGURE_STACK[-1] is fig:
+        _FIGURE_STACK.pop()
+        return
+    for i in range(len(_FIGURE_STACK) - 1, -1, -1):
+        if _FIGURE_STACK[i] is fig:
+            del _FIGURE_STACK[i]
+            break
+
+
+@contextmanager
+def _use_figure(fig: "SmartFigure", display_on_enter: bool) -> Iterator["SmartFigure"]:
+    _push_current_figure(fig, display_on_enter=display_on_enter)
+    try:
+        yield fig
+    finally:
+        _pop_current_figure(fig)
 
 
 # -----------------------------
@@ -663,6 +700,10 @@ class SmartPlot:
     def label(self, value: str) -> None:
         self._plot_handle.name = value
 
+    def figure(self) -> "SmartFigure":
+        """Return the SmartFigure that owns this plot."""
+        return self._smart_figure
+
     @property
     def x_domain(self) -> Optional[Tuple[float, float]]:
         return self._x_domain
@@ -804,7 +845,8 @@ class SmartFigure:
     __slots__ = [
         "_layout", "_params", "_info", "_figure", "_pane", "plots",
         "_x_range", "_y_range", "_sampling_points", "_debug",
-        "_last_relayout", "_render_info_last_log_t", "_render_debug_last_log_t"
+        "_last_relayout", "_render_info_last_log_t", "_render_debug_last_log_t",
+        "_has_been_displayed"
     ]
 
     def __init__(
@@ -817,6 +859,7 @@ class SmartFigure:
         self._debug = debug
         self._sampling_points = sampling_points
         self.plots: Dict[str, SmartPlot] = {}
+        self._has_been_displayed = False
 
         # 1. Initialize Layout (View)
         self._layout = SmartFigureLayout()
@@ -1106,7 +1149,11 @@ class SmartFigure:
         """
         Register a callback to run when *any* parameter value changes.
         """
-        return self._params.add_hook(callback, hook_id, fig=self)
+        def _wrapped(change: Dict, fig: SmartFigure) -> Any:
+            with _use_figure(self, display_on_enter=False):
+                return callback(change, self)
+
+        return self._params.add_hook(_wrapped, hook_id, fig=self)
 
     # --- Internal / Plumbing ---
 
@@ -1132,4 +1179,37 @@ class SmartFigure:
         Special method called by IPython to display the object.
         Uses IPython.display.display() to render the underlying widget.
         """
+        self._has_been_displayed = True
         display(self._layout.output_widget)
+
+    def __enter__(self) -> "SmartFigure":
+        _push_current_figure(self, display_on_enter=True)
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        _pop_current_figure(self)
+
+
+def plot(
+    var: Symbol,
+    func: Expr,
+    parameters: Optional[Sequence[Symbol]] = None,
+    id: Optional[str] = None,
+    x_domain: Optional[RangeLike] = None,
+    sampling_points: Optional[Union[int, str]] = None,
+) -> SmartPlot:
+    """
+    Plot a SymPy expression on the current figure, or create a new figure per call.
+    """
+    fig = _current_figure()
+    if fig is None:
+        fig = SmartFigure()
+        display(fig)
+    return fig.plot(
+        var,
+        func,
+        parameters=parameters,
+        id=id,
+        x_domain=x_domain,
+        sampling_points=sampling_points,
+    )
