@@ -49,10 +49,9 @@ class SmartFloatSlider(widgets.VBox):
             layout=widgets.Layout(width="50%"),
         )
 
-        self._description_text = description
-        self.description_label = widgets.HTML(
-            value="",
-            layout=widgets.Layout(width="90px"),
+        self.description_label = widgets.HTMLMath(
+            value=description,
+            layout=widgets.Layout(width="60px"),
         )
 
         # The *only* numeric field (editable; accepts expressions)
@@ -75,8 +74,12 @@ class SmartFloatSlider(widgets.VBox):
 
         # --- Settings panel ---------------------------------------------------
         style_args = {"style": {"description_width": "50px"}, "layout": widgets.Layout(width="100px")}
-        self.set_min = widgets.FloatText(value=min, description="Min:", **style_args)
-        self.set_max = widgets.FloatText(value=max, description="Max:", **style_args)
+        self.set_min = widgets.FloatText(
+            value=min, description="", layout=widgets.Layout(width="60px")
+        )
+        self.set_max = widgets.FloatText(
+            value=max, description="", layout=widgets.Layout(width="60px")
+        )
         self.set_step = widgets.FloatText(value=step, description="Step:", **style_args)
         self.set_live = widgets.Checkbox(
             value=True,
@@ -86,10 +89,7 @@ class SmartFloatSlider(widgets.VBox):
         )
 
         self.settings_panel = widgets.VBox(
-            [
-                widgets.HBox([self.set_min, self.set_max, self.set_step]),
-                widgets.HBox([self.set_live]),
-            ],
+            [widgets.HBox([self.set_step]), widgets.HBox([self.set_live])],
             layout=widgets.Layout(
                 display="none", border="1px solid #eee", padding="5px", margin="5px 0"
             ),
@@ -97,7 +97,15 @@ class SmartFloatSlider(widgets.VBox):
 
         # --- Layout -----------------------------------------------------------
         top_row = widgets.HBox(
-            [self.description_label, self.slider, self.number, self.btn_reset, self.btn_settings],
+            [
+                self.description_label,
+                self.set_min,
+                self.slider,
+                self.set_max,
+                self.number,
+                self.btn_reset,
+                self.btn_settings,
+            ],
             layout=widgets.Layout(align_items="center", gap="4px"),
         )
         super().__init__([top_row, self.settings_panel], **kwargs)
@@ -108,8 +116,6 @@ class SmartFloatSlider(widgets.VBox):
 
         # Slider -> Text (display)
         self.slider.observe(self._sync_number_from_slider, names="value")
-        self.slider.observe(self._sync_description_label, names=["min", "max"])
-
         # Text -> Slider (parse + clamp)
         self.number.observe(self._commit_text_value, names="value")
 
@@ -126,7 +132,6 @@ class SmartFloatSlider(widgets.VBox):
         # Initialize trait (and normalize displayed text)
         self.value = value
         self._sync_number_text(self.value)
-        self._sync_description_label(None)
 
     # --- Helpers --------------------------------------------------------------
 
@@ -143,17 +148,6 @@ class SmartFloatSlider(widgets.VBox):
         if self._syncing:
             return
         self._sync_number_text(change.new)
-
-    def _sync_description_label(self, change) -> None:
-        """Update the description label with min/max limits."""
-        min_val = self.slider.min
-        max_val = self.slider.max
-        self.description_label.value = (
-            "<div style='line-height:1.1'>"
-            f"<div>{self._description_text}</div>"
-            f"<div style='font-size:10px;color:#666'>{min_val:.4g}–{max_val:.4g}</div>"
-            "</div>"
-        )
 
     def _commit_text_value(self, change) -> None:
         """
