@@ -149,7 +149,13 @@ class SmartFloatSlider(widgets.VBox):
             max=max,
             step=step if step != 0 else 0.01,
             interval=60,
-            layout=widgets.Layout(display="none"),
+            layout=widgets.Layout(
+                visibility="hidden",
+                width="0px",
+                height="0px",
+                margin="0px",
+                padding="0px",
+            ),
         )
         self._play_syncing = False
         self._play_button_syncing = False
