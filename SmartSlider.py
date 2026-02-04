@@ -1,7 +1,187 @@
+import anywidget
 import ipywidgets as widgets
 import traitlets
+from ipywidgets import widget_serialization
 
 from .InputConvert import InputConvert
+
+
+class SliderAnimationDriver(anywidget.AnyWidget):
+    """
+    Frontend-only animation driver for a FloatSlider.
+
+    This widget is intended to be hidden in the widget tree. It listens to a
+    play/pause toggle and updates the slider value on a fixed interval entirely
+    in the browser, avoiding integer-only `ipywidgets.Play` constraints.
+    """
+
+    slider = traitlets.Any().tag(sync=True, **widget_serialization)
+    play_button = traitlets.Any().tag(sync=True, **widget_serialization)
+    interval_ms = traitlets.Int(100).tag(sync=True)
+    debug_js = traitlets.Bool(False).tag(sync=True)
+
+    _esm = r"""
+    function safeNumber(v, fallback) {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fallback;
+    }
+
+    export default {
+      render({ model, el }) {
+        el.style.display = "none";
+
+        const sliderModel = model.get("slider");
+        const playModel = model.get("play_button");
+
+        if (!sliderModel || !playModel) {
+          return;
+        }
+
+        let direction = 1;
+        let timer = null;
+        let listenerRoots = new Set();
+        let viewObserver = null;
+
+        function log(...args) {
+          if (model.get("debug_js")) {
+            console.log("[SliderAnimationDriver]", ...args);
+          }
+        }
+
+        function computeNext() {
+          const min = safeNumber(sliderModel.get("min"), 0);
+          const max = safeNumber(sliderModel.get("max"), 1);
+          const step = safeNumber(sliderModel.get("step"), 0);
+          const value = safeNumber(sliderModel.get("value"), min);
+
+          if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(step) || step === 0) {
+            return null;
+          }
+
+          const span = max - min;
+          if (!Number.isFinite(span) || span <= 0) {
+            return null;
+          }
+
+          const maxIndex = Math.round(span / step);
+          if (!Number.isFinite(maxIndex) || maxIndex <= 0) {
+            return null;
+          }
+
+          let idx = Math.round((value - min) / step);
+          if (!Number.isFinite(idx)) {
+            idx = 0;
+          }
+
+          let nextIndex = idx + direction;
+          if (nextIndex > maxIndex) {
+            nextIndex = maxIndex;
+            direction = -1;
+          } else if (nextIndex < 0) {
+            nextIndex = 0;
+            direction = 1;
+          }
+
+          let next = min + nextIndex * step;
+          if (next > max) next = max;
+          if (next < min) next = min;
+
+          return next;
+        }
+
+        function tick() {
+          const next = computeNext();
+          if (next === null) return;
+          sliderModel.set("value", next);
+          sliderModel.save_changes();
+        }
+
+        function getInterval() {
+          const ms = safeNumber(model.get("interval_ms"), 100);
+          return ms > 0 ? ms : 100;
+        }
+
+        function startLoop() {
+          stopLoop();
+          direction = 1;
+          const interval = getInterval();
+          timer = setInterval(tick, interval);
+          log("start", interval);
+        }
+
+        function stopLoop() {
+          if (timer !== null) {
+            clearInterval(timer);
+            timer = null;
+            log("stop");
+          }
+        }
+
+        function stopFromUser() {
+          if (!playModel.get("value")) return;
+          playModel.set("value", false);
+          playModel.save_changes();
+        }
+
+        function addListenerRoot(root) {
+          if (!root || listenerRoots.has(root)) return;
+          listenerRoots.add(root);
+          root.addEventListener("pointerdown", stopFromUser, { passive: true });
+          root.addEventListener("keydown", stopFromUser);
+        }
+
+        function attachListeners() {
+          const views = sliderModel.views;
+          if (views && typeof views.forEach === "function") {
+            views.forEach((view) => {
+              if (view && view.el) addListenerRoot(view.el);
+            });
+          }
+
+          const selector = `[data-model-id="${sliderModel.model_id}"]`;
+          const dom = document.querySelector(selector);
+          if (dom) addListenerRoot(dom);
+        }
+
+        function syncPlayState() {
+          if (playModel.get("value")) {
+            startLoop();
+          } else {
+            stopLoop();
+          }
+        }
+
+        const onIntervalChange = () => {
+          if (playModel.get("value")) {
+            startLoop();
+          }
+        };
+
+        playModel.on("change:value", syncPlayState);
+        model.on("change:interval_ms", onIntervalChange);
+
+        attachListeners();
+        viewObserver = new MutationObserver(() => attachListeners());
+        viewObserver.observe(document.body, { childList: true, subtree: true });
+
+        if (playModel.get("value")) {
+          startLoop();
+        }
+
+        return () => {
+          stopLoop();
+          playModel.off("change:value", syncPlayState);
+          model.off("change:interval_ms", onIntervalChange);
+          if (viewObserver) viewObserver.disconnect();
+          listenerRoots.forEach((root) => {
+            root.removeEventListener("pointerdown", stopFromUser);
+            root.removeEventListener("keydown", stopFromUser);
+          });
+          listenerRoots.clear();
+        };
+      }
+    }
+    """
 
 
 class SmartFloatSlider(widgets.VBox):
@@ -28,6 +208,7 @@ class SmartFloatSlider(widgets.VBox):
         max=1.0,
         step=0.1,
         description="Value:",
+        play_interval_ms=100,
         **kwargs,
     ):
         # Remember defaults for reset
@@ -136,6 +317,12 @@ class SmartFloatSlider(widgets.VBox):
             tooltip="Settings",
             layout=widgets.Layout(width="22px", height="22px", padding="0px"),
         )
+        self.btn_play = widgets.ToggleButton(
+            value=False,
+            description="▶",
+            tooltip="Play",
+            layout=widgets.Layout(width="22px", height="22px", padding="0px"),
+        )
 
         # --- Settings panel ---------------------------------------------------
         style_args = {"style": {"description_width": "50px"}, "layout": widgets.Layout(width="100px")}
@@ -177,10 +364,16 @@ class SmartFloatSlider(widgets.VBox):
                 self.number,
                 self.btn_reset,
                 self.btn_settings,
+                self.btn_play,
             ],
             layout=widgets.Layout(align_items="center", gap="4px"),
         )
-        super().__init__([top_row, self.settings_panel], **kwargs)
+        self._animation_driver = SliderAnimationDriver(
+            slider=self.slider,
+            play_button=self.btn_play,
+            interval_ms=int(play_interval_ms),
+        )
+        super().__init__([top_row, self.settings_panel, self._animation_driver], **kwargs)
 
         # --- Wiring -----------------------------------------------------------
         # Keep self.value and slider.value in sync
@@ -197,15 +390,19 @@ class SmartFloatSlider(widgets.VBox):
         # Buttons
         self.btn_reset.on_click(self._reset)
         self.btn_settings.on_click(self._toggle_settings)
+        self.btn_play.observe(self._sync_play_button, names="value")
 
         # Settings -> slider traits
         widgets.link((self.set_step, "value"), (self.slider, "step"))
         widgets.link((self.set_live, "value"), (self.slider, "continuous_update"))
+        self.set_step.observe(self._stop_playback_on_change, names="value")
+        self.set_live.observe(self._stop_playback_on_change, names="value")
 
         # Initialize trait (and normalize displayed text)
         self.value = value
         self._sync_number_text(self.value)
         self._sync_limit_texts(None)
+        self._sync_play_button(None)
 
     # --- Helpers --------------------------------------------------------------
 
@@ -238,6 +435,7 @@ class SmartFloatSlider(widgets.VBox):
         """Parse and apply min/max limits from text inputs."""
         if self._syncing:
             return
+        self._stop_playback()
         raw = (change.new or "").strip()
         old_min = float(self.slider.min)
         old_max = float(self.slider.max)
@@ -277,6 +475,7 @@ class SmartFloatSlider(widgets.VBox):
         """
         if self._syncing:
             return
+        self._stop_playback()
 
         raw = (change.new or "").strip()
         old_val = float(self.value)
@@ -293,9 +492,21 @@ class SmartFloatSlider(widgets.VBox):
     # --- Button handlers ------------------------------------------------------
 
     def _reset(self, _) -> None:
+        self._stop_playback()
         self.value = self._defaults["value"]  # slider sync + slider observer updates text
 
     def _toggle_settings(self, _) -> None:
         self.settings_panel.layout.display = (
             "none" if self.settings_panel.layout.display == "flex" else "flex"
         )
+
+    def _stop_playback_on_change(self, _) -> None:
+        self._stop_playback()
+
+    def _stop_playback(self) -> None:
+        if self.btn_play.value:
+            self.btn_play.value = False
+
+    def _sync_play_button(self, change) -> None:
+        self.btn_play.description = "⏸" if self.btn_play.value else "▶"
+        self.btn_play.tooltip = "Pause" if self.btn_play.value else "Play"
