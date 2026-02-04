@@ -42,34 +42,35 @@ class SmartFloatSlider(widgets.VBox):
             min=min,
             max=max,
             step=step,
-            description=description,
+            description="",
             continuous_update=True,
             readout=False,  # IMPORTANT: no built-in numeric field
             style={"description_width": "initial"},
-            layout=widgets.Layout(width="55%"),
+            layout=widgets.Layout(width="50%"),
         )
 
-        self.min_label = widgets.HTML(
+        self._description_text = description
+        self.description_label = widgets.HTML(
             value="",
-            layout=widgets.Layout(width="50px"),
-        )
-        self.max_label = widgets.HTML(
-            value="",
-            layout=widgets.Layout(width="50px"),
+            layout=widgets.Layout(width="90px"),
         )
 
         # The *only* numeric field (editable; accepts expressions)
         self.number = widgets.Text(
             value=str(value),
             continuous_update=False,  # commit on Enter (and typically blur)
-            layout=widgets.Layout(width="80px"),
+            layout=widgets.Layout(width="70px"),
         )
 
         self.btn_reset = widgets.Button(
-            description="↺", tooltip="Reset", layout=widgets.Layout(width="26px", height="26px")
+            description="↺",
+            tooltip="Reset",
+            layout=widgets.Layout(width="22px", height="22px", padding="0px"),
         )
         self.btn_settings = widgets.Button(
-            description="⚙", tooltip="Settings", layout=widgets.Layout(width="26px", height="26px")
+            description="⚙",
+            tooltip="Settings",
+            layout=widgets.Layout(width="22px", height="22px", padding="0px"),
         )
 
         # --- Settings panel ---------------------------------------------------
@@ -95,13 +96,9 @@ class SmartFloatSlider(widgets.VBox):
         )
 
         # --- Layout -----------------------------------------------------------
-        slider_row = widgets.HBox(
-            [self.min_label, self.slider, self.max_label],
-            layout=widgets.Layout(align_items="center"),
-        )
         top_row = widgets.HBox(
-            [slider_row, self.number, self.btn_reset, self.btn_settings],
-            layout=widgets.Layout(align_items="center"),
+            [self.description_label, self.slider, self.number, self.btn_reset, self.btn_settings],
+            layout=widgets.Layout(align_items="center", gap="4px"),
         )
         super().__init__([top_row, self.settings_panel], **kwargs)
 
@@ -111,7 +108,7 @@ class SmartFloatSlider(widgets.VBox):
 
         # Slider -> Text (display)
         self.slider.observe(self._sync_number_from_slider, names="value")
-        self.slider.observe(self._sync_limit_labels, names=["min", "max"])
+        self.slider.observe(self._sync_description_label, names=["min", "max"])
 
         # Text -> Slider (parse + clamp)
         self.number.observe(self._commit_text_value, names="value")
@@ -129,7 +126,7 @@ class SmartFloatSlider(widgets.VBox):
         # Initialize trait (and normalize displayed text)
         self.value = value
         self._sync_number_text(self.value)
-        self._sync_limit_labels(None)
+        self._sync_description_label(None)
 
     # --- Helpers --------------------------------------------------------------
 
@@ -147,12 +144,16 @@ class SmartFloatSlider(widgets.VBox):
             return
         self._sync_number_text(change.new)
 
-    def _sync_limit_labels(self, change) -> None:
-        """Update the min/max labels from the slider's current limits."""
+    def _sync_description_label(self, change) -> None:
+        """Update the description label with min/max limits."""
         min_val = self.slider.min
         max_val = self.slider.max
-        self.min_label.value = f"<span style='font-size:10px;color:#666'>{min_val:.4g}</span>"
-        self.max_label.value = f"<span style='font-size:10px;color:#666'>{max_val:.4g}</span>"
+        self.description_label.value = (
+            "<div style='line-height:1.1'>"
+            f"<div>{self._description_text}</div>"
+            f"<div style='font-size:10px;color:#666'>{min_val:.4g}–{max_val:.4g}</div>"
+            "</div>"
+        )
 
     def _commit_text_value(self, change) -> None:
         """
