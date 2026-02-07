@@ -126,12 +126,32 @@ _FIGURE_STACK: List["SmartFigure"] = []
 
 
 def _current_figure() -> Optional["SmartFigure"]:
+    """Return the most recently pushed SmartFigure, if any.
+
+    Returns
+    -------
+    SmartFigure or None
+        The current figure on the stack, or ``None`` if no figure is active.
+    """
     if not _FIGURE_STACK:
         return None
     return _FIGURE_STACK[-1]
 
 
 def _push_current_figure(fig: "SmartFigure", display_on_enter: bool) -> None:
+    """Push a SmartFigure onto the global stack and optionally display it.
+
+    Parameters
+    ----------
+    fig : SmartFigure
+        The figure to mark as current.
+    display_on_enter : bool
+        Whether to display the figure immediately (first time only).
+
+    Returns
+    -------
+    None
+    """
     _FIGURE_STACK.append(fig)
     if display_on_enter and not fig._has_been_displayed:
         display(fig)
@@ -139,6 +159,17 @@ def _push_current_figure(fig: "SmartFigure", display_on_enter: bool) -> None:
 
 
 def _pop_current_figure(fig: "SmartFigure") -> None:
+    """Remove a specific SmartFigure from the global stack if present.
+
+    Parameters
+    ----------
+    fig : SmartFigure
+        The figure to remove.
+
+    Returns
+    -------
+    None
+    """
     if not _FIGURE_STACK:
         return
     if _FIGURE_STACK[-1] is fig:
@@ -152,6 +183,20 @@ def _pop_current_figure(fig: "SmartFigure") -> None:
 
 @contextmanager
 def _use_figure(fig: "SmartFigure", display_on_enter: bool) -> Iterator["SmartFigure"]:
+    """Context manager that temporarily sets a SmartFigure as current.
+
+    Parameters
+    ----------
+    fig : SmartFigure
+        The figure to make current within the context.
+    display_on_enter : bool
+        Whether to display the figure when entering.
+
+    Yields
+    ------
+    SmartFigure
+        The same figure passed in.
+    """
     _push_current_figure(fig, display_on_enter=display_on_enter)
     try:
         yield fig
@@ -232,7 +277,18 @@ class OneShotOutput(widgets.Output):
     __slots__ = ("_displayed",)
 
     def __init__(self) -> None:
-        """Initialize a new OneShotOutput widget."""
+        """Initialize a new OneShotOutput widget.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> out = OneShotOutput()  # doctest: +SKIP
+        >>> out.has_been_displayed
+        False
+        """
         super().__init__()
         self._displayed = False
 
@@ -242,6 +298,20 @@ class OneShotOutput(widgets.Output):
 
         This is what gets called when the widget is displayed (including via
         `display(self)` or by being the last expression in a cell).
+
+        Parameters
+        ----------
+        include : Any, optional
+            MIME types to include, forwarded to the base widget.
+        exclude : Any, optional
+            MIME types to exclude, forwarded to the base widget.
+        **kwargs : Any
+            Additional arguments passed to ``ipywidgets.Output``.
+
+        Returns
+        -------
+        Any
+            The rich display representation.
         """
         if self._displayed:
             raise RuntimeError(
@@ -260,6 +330,12 @@ class OneShotOutput(widgets.Output):
         -------
         bool
             True if the widget has been displayed, False otherwise.
+
+        Examples
+        --------
+        >>> out = OneShotOutput()  # doctest: +SKIP
+        >>> out.has_been_displayed
+        False
         """
         return self._displayed
 
@@ -271,6 +347,15 @@ class OneShotOutput(widgets.Output):
         -------
         This method should be used with caution as it bypasses the
         one-time display protection.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> out = OneShotOutput()  # doctest: +SKIP
+        >>> out.reset_display_state()
         """
         self._displayed = False
 
@@ -294,6 +379,23 @@ class SmartFigureLayout:
     """
 
     def __init__(self, title: str = "") -> None:
+        """Initialize the layout manager and build the widget tree.
+
+        Parameters
+        ----------
+        title : str, optional
+            Initial title text (rendered as HTML/LaTeX in the header).
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> layout = SmartFigureLayout(title="My Plot")  # doctest: +SKIP
+        >>> layout.get_title()  # doctest: +SKIP
+        'My Plot'
+        """
         self._reflow_callback: Optional[Callable[[], None]] = None
 
         # 1. Title Bar
@@ -380,16 +482,56 @@ class SmartFigureLayout:
 
     @property
     def output_widget(self) -> OneShotOutput:
-        """Returns a OneShotOutput wrapping the layout, ready for display."""
+        """Return a OneShotOutput wrapping the layout, ready for display.
+
+        Returns
+        -------
+        OneShotOutput
+            A display-ready output widget containing the layout.
+
+        Examples
+        --------
+        >>> layout = SmartFigureLayout()  # doctest: +SKIP
+        >>> out = layout.output_widget  # doctest: +SKIP
+        """
         out = OneShotOutput()
         with out:
             display(self.root_widget)
         return out
 
     def set_title(self, text: str) -> None:
+        """Set the title text shown above the plot.
+
+        Parameters
+        ----------
+        text : str
+            Title text (HTML/LaTeX supported).
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> layout = SmartFigureLayout()  # doctest: +SKIP
+        >>> layout.set_title("Demo")  # doctest: +SKIP
+        """
         self.title_html.value = text
 
     def get_title(self) -> str:
+        """Get the current title text.
+
+        Returns
+        -------
+        str
+            The current title string.
+
+        Examples
+        --------
+        >>> layout = SmartFigureLayout(title="Demo")  # doctest: +SKIP
+        >>> layout.get_title()  # doctest: +SKIP
+        'Demo'
+        """
         return self.title_html.value
 
     def update_sidebar_visibility(self, has_params: bool, has_info: bool) -> None:
@@ -397,6 +539,22 @@ class SmartFigureLayout:
         Updates visibility of headers and the sidebar itself based on content.
         
         This prevents empty "Parameters" or "Info" headers from cluttering the UI.
+
+        Parameters
+        ----------
+        has_params : bool
+            Whether parameter sliders exist.
+        has_info : bool
+            Whether info outputs exist.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> layout = SmartFigureLayout()  # doctest: +SKIP
+        >>> layout.update_sidebar_visibility(has_params=True, has_info=False)  # doctest: +SKIP
         """
         self.params_header.layout.display = "block" if has_params else "none"
         self.params_box.layout.display = "flex" if has_params else "none"
@@ -413,11 +571,40 @@ class SmartFigureLayout:
         *,
         reflow_callback: Optional[Callable[[], None]] = None,
     ) -> None:
+        """Attach the plot widget to the layout and store a reflow callback.
+
+        Parameters
+        ----------
+        widget : ipywidgets.Widget
+            The plot widget to display.
+        reflow_callback : callable, optional
+            Callback to trigger when layout changes (e.g., full-width toggle).
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> layout = SmartFigureLayout()  # doctest: +SKIP
+        >>> dummy = widgets.Box()  # doctest: +SKIP
+        >>> layout.set_plot_widget(dummy)  # doctest: +SKIP
+        """
         self.plot_container.children = (widget,)
         self._reflow_callback = reflow_callback
 
     def _on_full_width_change(self, change: Dict[str, Any]) -> None:
-        """Toggles CSS flex properties for full-width mode."""
+        """Toggle CSS flex properties for full-width mode.
+
+        Parameters
+        ----------
+        change : dict
+            Traitlets change dictionary from the checkbox.
+
+        Returns
+        -------
+        None
+        """
         is_full = change["new"]
         layout = self.content_wrapper.layout
         plot_layout = self.plot_container.layout
@@ -464,6 +651,24 @@ class ParameterManager:
     """
 
     def __init__(self, render_callback: Callable[[str, Any], None], layout_box: widgets.Box) -> None:
+        """Initialize the manager with a render callback and layout container.
+
+        Parameters
+        ----------
+        render_callback : callable
+            Function invoked when parameters change. Signature: ``(reason, change)``.
+        layout_box : ipywidgets.Box
+            Container where slider widgets will be added.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        """
         self._sliders: Dict[Symbol, SmartFloatSlider] = {}
         self._hooks: Dict[Hashable, Callable[[Dict, Any], Any]] = {}
         self._hook_counter: int = 0
@@ -480,6 +685,18 @@ class ParameterManager:
             The parameter symbol.
         **kwargs :
             Options for the slider (min, max, value, step).
+
+        Returns
+        -------
+        SmartFloatSlider
+            The slider instance for the symbol.
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> a = sp.symbols("a")  # doctest: +SKIP
+        >>> slider = mgr.add_param(a, min=-2, max=2)  # doctest: +SKIP
         """
         if symbol in self._sliders:
             return self._sliders[symbol]
@@ -503,12 +720,44 @@ class ParameterManager:
         return slider
 
     def get_value(self, symbol: Symbol) -> float:
-        """Returns the current float value of a parameter."""
+        """Return the current float value of a parameter.
+
+        Parameters
+        ----------
+        symbol : sympy.Symbol
+            Parameter symbol to query.
+
+        Returns
+        -------
+        float
+            Current slider value, or ``0.0`` if no slider exists.
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> a = sp.symbols("a")  # doctest: +SKIP
+        >>> mgr.get_value(a)
+        0.0
+        """
         return self._sliders[symbol].value if symbol in self._sliders else 0.0
 
     @property
     def has_params(self) -> bool:
-        """True if any parameters (sliders) have been created."""
+        """Whether any parameters (sliders) have been created.
+
+        Returns
+        -------
+        bool
+            ``True`` if at least one slider exists.
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> mgr.has_params
+        False
+        """
         return len(self._sliders) > 0
 
     def add_hook(self, callback: Callable, hook_id: Optional[Hashable] = None, fig: Any = None) -> Hashable:
@@ -530,6 +779,12 @@ class ParameterManager:
         -------
         Hashable
             The hook ID.
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> hook_id = mgr.add_hook(lambda *_: None)  # doctest: +SKIP
         """
         if hook_id is None:
             self._hook_counter += 1
@@ -544,31 +799,160 @@ class ParameterManager:
         return hook_id
 
     def _on_slider_change(self, change: Dict[str, Any]) -> None:
+        """Handle slider changes by triggering the render callback.
+
+        Parameters
+        ----------
+        change : dict
+            Traitlets change dictionary emitted by the slider.
+
+        Returns
+        -------
+        None
+        """
         # 1. Trigger main render via the callback passed in __init__
         self._render_callback("param_change", change)
     
     def get_hooks(self) -> Dict[Hashable, Callable]:
+        """Return a copy of the registered hook dictionary.
+
+        Returns
+        -------
+        dict
+            Mapping of hook IDs to callbacks.
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> isinstance(mgr.get_hooks(), dict)
+        True
+        """
         return self._hooks
 
     # --- Dict-like Interface for Backward Compatibility ---
     # This allows `fig.params[symbol]` to work in user hooks.
     
     def __getitem__(self, key: Symbol) -> SmartFloatSlider:
+        """Return the slider for the given symbol.
+
+        Parameters
+        ----------
+        key : sympy.Symbol
+            Parameter symbol.
+
+        Returns
+        -------
+        SmartFloatSlider
+            Slider associated with the symbol.
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> a = sp.symbols("a")  # doctest: +SKIP
+        >>> mgr.add_param(a)  # doctest: +SKIP
+        >>> mgr[a]  # doctest: +SKIP
+        """
         return self._sliders[key]
     
     def __contains__(self, key: Symbol) -> bool:
+        """Check if a slider exists for a symbol.
+
+        Parameters
+        ----------
+        key : sympy.Symbol
+            Parameter symbol.
+
+        Returns
+        -------
+        bool
+            ``True`` if the symbol is present.
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> a = sp.symbols("a")  # doctest: +SKIP
+        >>> a in mgr
+        False
+        """
         return key in self._sliders
     
     def items(self) -> Iterator[Tuple[Symbol, SmartFloatSlider]]:
+        """Iterate over ``(Symbol, SmartFloatSlider)`` pairs.
+
+        Returns
+        -------
+        iterator
+            Iterator over the internal slider mapping.
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> list(mgr.items())
+        []
+        """
         return self._sliders.items()
     
     def keys(self) -> Iterator[Symbol]:
+        """Iterate over parameter symbols.
+
+        Returns
+        -------
+        iterator
+            Iterator over parameter symbols.
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> list(mgr.keys())
+        []
+        """
         return self._sliders.keys()
     
     def values(self) -> Iterator[SmartFloatSlider]:
+        """Iterate over slider instances.
+
+        Returns
+        -------
+        iterator
+            Iterator over sliders.
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> list(mgr.values())
+        []
+        """
         return self._sliders.values()
     
     def get(self, key: Symbol, default: Any = None) -> Any:
+        """Return a slider if present; otherwise return a default.
+
+        Parameters
+        ----------
+        key : sympy.Symbol
+            Parameter symbol.
+        default : Any, optional
+            Default value returned if no slider exists.
+
+        Returns
+        -------
+        Any
+            Slider instance or the default value.
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> a = sp.symbols("a")  # doctest: +SKIP
+        >>> mgr.get(a) is None
+        True
+        """
         return self._sliders.get(key, default)
 
 
@@ -587,6 +971,21 @@ class InfoPanelManager:
     _ID_REGEX = re.compile(r"^info:(\d+)$")
 
     def __init__(self, layout_box: widgets.Box) -> None:
+        """Initialize the info panel manager.
+
+        Parameters
+        ----------
+        layout_box : ipywidgets.Box
+            Container where info outputs will be added.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> panel = InfoPanelManager(widgets.VBox())  # doctest: +SKIP
+        """
         self._outputs: Dict[Hashable, widgets.Output] = {}
         self._components: Dict[Hashable, Any] = {}
         self._layout_box = layout_box
@@ -595,6 +994,23 @@ class InfoPanelManager:
     def get_output(self, id: Optional[Hashable] = None, **layout_kwargs: Any) -> widgets.Output:
         """
         Get or create an Info Output widget.
+
+        Parameters
+        ----------
+        id : hashable, optional
+            Unique identifier for the output. If omitted, a new ID is generated.
+        **layout_kwargs : Any
+            Keyword arguments forwarded to ``ipywidgets.Layout``.
+
+        Returns
+        -------
+        ipywidgets.Output
+            Output widget associated with the ID.
+
+        Examples
+        --------
+        >>> panel = InfoPanelManager(widgets.VBox())  # doctest: +SKIP
+        >>> out = panel.get_output("info:1")  # doctest: +SKIP
         """
         if id is None:
             self._counter += 1
@@ -620,13 +1036,62 @@ class InfoPanelManager:
         return out
 
     def add_component(self, id: Hashable, component_inst: Any) -> None:
+        """Register an info component instance.
+
+        Parameters
+        ----------
+        id : hashable
+            Unique identifier for the component.
+        component_inst : Any
+            Component instance to store.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> panel = InfoPanelManager(widgets.VBox())  # doctest: +SKIP
+        >>> panel.add_component("demo", object())  # doctest: +SKIP
+        """
         self._components[id] = component_inst
 
     def get_component(self, id: Hashable) -> Any:
+        """Retrieve a previously registered info component.
+
+        Parameters
+        ----------
+        id : hashable
+            Component identifier.
+
+        Returns
+        -------
+        Any
+            The registered component instance.
+
+        Examples
+        --------
+        >>> panel = InfoPanelManager(widgets.VBox())  # doctest: +SKIP
+        >>> panel.add_component("demo", object())  # doctest: +SKIP
+        >>> panel.get_component("demo")  # doctest: +SKIP
+        """
         return self._components[id]
 
     @property
     def has_info(self) -> bool:
+        """Whether any info outputs exist.
+
+        Returns
+        -------
+        bool
+            ``True`` if at least one output has been created.
+
+        Examples
+        --------
+        >>> panel = InfoPanelManager(widgets.VBox())  # doctest: +SKIP
+        >>> panel.has_info
+        False
+        """
         return len(self._outputs) > 0
 
 
@@ -660,6 +1125,35 @@ class SmartPlot:
     ) -> None:
         """
         Create a new SmartPlot instance. (Usually called by SmartFigure.plot)
+
+        Parameters
+        ----------
+        var : sympy.Symbol
+            Independent variable for the function.
+        func : sympy.Expr
+            Symbolic expression to plot.
+        smart_figure : SmartFigure
+            Owning figure.
+        parameters : sequence[sympy.Symbol], optional
+            Parameter symbols used in the expression.
+        x_domain : RangeLike or None, optional
+            Optional domain override for this plot.
+        sampling_points : int or str, optional
+            Number of samples; use ``"figure_default"`` to inherit from the figure.
+        label : str, optional
+            Trace label shown in the legend.
+        visible : bool or "legendonly", optional
+            Plotly visibility setting.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> x = sp.symbols("x")  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
         """
         self._smart_figure = smart_figure
         
@@ -683,6 +1177,26 @@ class SmartPlot:
         """
         Set the independent variable and symbolic function for this plot.
         Triggers recompilation via ``numpify_cached``.
+
+        Parameters
+        ----------
+        var : sympy.Symbol
+            Independent variable.
+        func : sympy.Expr
+            Symbolic expression to plot.
+        parameters : sequence[sympy.Symbol], optional
+            Parameter symbols used in the expression.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> x, a = sp.symbols("x a")  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> plot.set_func(x, a * sp.cos(x), parameters=[a])  # doctest: +SKIP
         """
         parameters = list(parameters) 
         # Compile
@@ -694,22 +1208,102 @@ class SmartPlot:
 
     @property
     def label(self) -> str:
+        """Return the legend label for this plot.
+
+        Returns
+        -------
+        str
+            The trace name.
+
+        Examples
+        --------
+        >>> x = sp.symbols("x")  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> plot = SmartPlot(x, sp.sin(x), fig, label="sin")  # doctest: +SKIP
+        >>> plot.label  # doctest: +SKIP
+        'sin'
+        """
         return self._plot_handle.name
 
     @label.setter
     def label(self, value: str) -> None:
+        """Set the legend label for this plot.
+
+        Parameters
+        ----------
+        value : str
+            New legend label.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> x = sp.symbols("x")  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> plot.label = "sin(x)"  # doctest: +SKIP
+        """
         self._plot_handle.name = value
 
     def figure(self) -> "SmartFigure":
-        """Return the SmartFigure that owns this plot."""
+        """Return the SmartFigure that owns this plot.
+
+        Returns
+        -------
+        SmartFigure
+            Owning figure instance.
+
+        Examples
+        --------
+        >>> x = sp.symbols("x")  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> plot.figure() is fig  # doctest: +SKIP
+        True
+        """
         return self._smart_figure
 
     @property
     def x_domain(self) -> Optional[Tuple[float, float]]:
+        """Return the explicit x-domain override for this plot.
+
+        Returns
+        -------
+        tuple[float, float] or None
+            Explicit domain override or ``None`` to use the figure range.
+
+        Examples
+        --------
+        >>> x = sp.symbols("x")  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> plot = SmartPlot(x, sp.sin(x), fig, x_domain=(-2, 2))  # doctest: +SKIP
+        >>> plot.x_domain  # doctest: +SKIP
+        (-2.0, 2.0)
+        """
         return self._x_domain
 
     @x_domain.setter
     def x_domain(self, value: Optional[RangeLike]) -> None:
+        """Set the explicit x-domain for this plot.
+
+        Parameters
+        ----------
+        value : RangeLike or None
+            Domain override or ``None`` to use the figure range.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> x = sp.symbols("x")  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> plot.x_domain = (-1, 1)  # doctest: +SKIP
+        """
         
         if value is None:
             self._x_domain = None
@@ -724,19 +1318,85 @@ class SmartPlot:
 
     @property
     def sampling_points(self) -> Optional[int]:
+        """Return the number of sampling points for this plot.
+
+        Returns
+        -------
+        int or None
+            Number of samples, or ``None`` to use the figure default.
+
+        Examples
+        --------
+        >>> x = sp.symbols("x")  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> plot = SmartPlot(x, sp.sin(x), fig, sampling_points=200)  # doctest: +SKIP
+        >>> plot.sampling_points  # doctest: +SKIP
+        200
+        """
         return self._sampling_points
 
     @sampling_points.setter
     def sampling_points(self, value: Optional[int]) -> None:
+        """Set the number of sampling points for this plot.
+
+        Parameters
+        ----------
+        value : int or None
+            Number of samples, or ``None`` to inherit from the figure.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> x = sp.symbols("x")  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> plot.sampling_points = 400  # doctest: +SKIP
+        """
         self._sampling_points = int(InputConvert(value, int)) if value is not None else None
         self.render()
 
     @property
     def visible(self) -> VisibleSpec:
+        """Return Plotly's visibility state for the trace.
+
+        Returns
+        -------
+        bool or str
+            ``True``, ``False``, or ``"legendonly"``.
+
+        Examples
+        --------
+        >>> x = sp.symbols("x")  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> plot.visible  # doctest: +SKIP
+        True
+        """
         return self._plot_handle.visible
 
     @visible.setter
     def visible(self, value: VisibleSpec) -> None:
+        """Set Plotly's visibility state for the trace.
+
+        Parameters
+        ----------
+        value : bool or "legendonly"
+            Visibility state.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> x = sp.symbols("x")  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> plot.visible = "legendonly"  # doctest: +SKIP
+        """
         self._plot_handle.visible = value
         if value is True:
             self.render()
@@ -745,6 +1405,17 @@ class SmartPlot:
         """
         Compute (x, y) samples and update the Plotly trace.
         Skips computation if the plot is hidden.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> x = sp.symbols("x")  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> plot.render()  # doctest: +SKIP
         """
         if self._suspend_render or self.visible is not True:
             return
@@ -778,7 +1449,25 @@ class SmartPlot:
             self._plot_handle.y = y_values
     
     def update(self, **kwargs: Any) -> None:
-        """Convenience to update multiple attributes (function, label, domain) at once."""
+        """Update multiple plot attributes at once.
+
+        Parameters
+        ----------
+        **kwargs : Any
+            Supported keys include ``label``, ``x_domain``, ``sampling_points``,
+            ``var``, ``func``, and ``parameters``.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> x, a = sp.symbols("x a")  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> plot.update(label="sin", func=a * sp.sin(x), parameters=[a])  # doctest: +SKIP
+        """
         if 'label' in kwargs: 
             self.label = kwargs['label']
         
@@ -856,6 +1545,29 @@ class SmartFigure:
         y_range: RangeLike = (-3, 3),
         debug: bool = False,
     ) -> None:
+        """Initialize a SmartFigure instance with default ranges and sampling.
+
+        Parameters
+        ----------
+        sampling_points : int, optional
+            Default number of samples per plot.
+        x_range : RangeLike, optional
+            Initial x-axis range.
+        y_range : RangeLike, optional
+            Initial y-axis range.
+        debug : bool, optional
+            Enable debug logging for renders and ranges.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> fig = SmartFigure(x_range=(-6, 6), y_range=(-2, 2))  # doctest: +SKIP
+        >>> fig.sampling_points  # doctest: +SKIP
+        500
+        """
         self._debug = debug
         self._sampling_points = sampling_points
         self.plots: Dict[str, SmartPlot] = {}
@@ -946,16 +1658,57 @@ class SmartFigure:
 
     @property
     def title(self) -> str:
-        """Title text shown above the figure (renders LaTeX)."""
+        """Return the title text shown above the figure.
+
+        Returns
+        -------
+        str
+            Current title (HTML/LaTeX is allowed).
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig.title = "Demo"  # doctest: +SKIP
+        >>> fig.title  # doctest: +SKIP
+        'Demo'
+        """
         return self._layout.get_title()
 
     @title.setter
     def title(self, value: str) -> None:
+        """Set the title text shown above the figure.
+
+        Parameters
+        ----------
+        value : str
+            Title text (HTML/LaTeX supported).
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig.title = r"$y=\\sin(x)$"  # doctest: +SKIP
+        """
         self._layout.set_title(value)
     
     @property
     def figure_widget(self) -> go.FigureWidget:
-        """Access the underlying Plotly FigureWidget."""
+        """Access the underlying Plotly FigureWidget.
+
+        Returns
+        -------
+        plotly.graph_objects.FigureWidget
+            The interactive Plotly widget.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> isinstance(fig.figure_widget, go.FigureWidget)  # doctest: +SKIP
+        True
+        """
         return self._figure
     
     @property
@@ -963,51 +1716,180 @@ class SmartFigure:
         """
         The ParameterManager instance.
         Acts like a dictionary of `{Symbol: Slider}` for backward compatibility.
+
+        Returns
+        -------
+        ParameterManager
+            Parameter manager for slider state and hooks.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig.params.has_params  # doctest: +SKIP
+        False
         """
         return self._params
     
     @property
     def info_output(self) -> Dict[Hashable, widgets.Output]:
-        """Dictionary of Info Output widgets indexed by id."""
+        """Dictionary of Info Output widgets indexed by id.
+
+        Returns
+        -------
+        dict
+            Mapping of output IDs to ``ipywidgets.Output`` instances.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> isinstance(fig.info_output, dict)
+        True
+        """
         return self._info._outputs # Direct access for backward compat or advanced use
 
     @property
     def x_range(self) -> Tuple[float, float]:
-        """Default x-axis range (restored on double-click)."""
+        """Return the default x-axis range.
+
+        Returns
+        -------
+        tuple[float, float]
+            Default x-axis range restored on double-click.
+
+        Examples
+        --------
+        >>> fig = SmartFigure(x_range=(-2, 2))  # doctest: +SKIP
+        >>> fig.x_range  # doctest: +SKIP
+        (-2.0, 2.0)
+        """
         return self._x_range
     
     @x_range.setter
     def x_range(self, value: RangeLike) -> None:
+        """Set the default x-axis range.
+
+        Parameters
+        ----------
+        value : RangeLike
+            New axis range (min, max).
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig.x_range = (-5, 5)  # doctest: +SKIP
+        """
         self._x_range = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
         self._figure.update_xaxes(range=self._x_range)
 
     @property
     def y_range(self) -> Tuple[float, float]:
-        """Default y-axis range."""
+        """Return the default y-axis range.
+
+        Returns
+        -------
+        tuple[float, float]
+            Default y-axis range.
+
+        Examples
+        --------
+        >>> fig = SmartFigure(y_range=(-1, 1))  # doctest: +SKIP
+        >>> fig.y_range  # doctest: +SKIP
+        (-1.0, 1.0)
+        """
         return self._y_range
     
     @y_range.setter
     def y_range(self, value: RangeLike) -> None:
+        """Set the default y-axis range.
+
+        Parameters
+        ----------
+        value : RangeLike
+            New axis range (min, max).
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig.y_range = (-2, 2)  # doctest: +SKIP
+        """
         self._y_range = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
         self._figure.update_yaxes(range=self._y_range)
 
     @property
     def current_x_range(self) -> Optional[Tuple[float, float]]:
-        """Current viewport x-range (read-only)."""
+        """Return the current viewport x-range (read-only).
+
+        Returns
+        -------
+        tuple[float, float] or None
+            Current Plotly x-axis range, or ``None`` if not set.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig.current_x_range  # doctest: +SKIP
+        """
         return self._figure.layout.xaxis.range
 
     @property
     def current_y_range(self) -> Optional[Tuple[float, float]]:
-        """Current viewport y-range (read-only)."""
+        """Return the current viewport y-range (read-only).
+
+        Returns
+        -------
+        tuple[float, float] or None
+            Current Plotly y-axis range, or ``None`` if not set.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig.current_y_range  # doctest: +SKIP
+        """
         return self._figure.layout.yaxis.range
     
     @property
     def sampling_points(self) -> Optional[int]:
-        """Default number of sampling points per plot."""
+        """Return the default number of sampling points per plot.
+
+        Returns
+        -------
+        int or None
+            Default sample count, or ``None`` for Plotly defaults.
+
+        Examples
+        --------
+        >>> fig = SmartFigure(sampling_points=300)  # doctest: +SKIP
+        >>> fig.sampling_points  # doctest: +SKIP
+        300
+        """
         return self._sampling_points
 
     @sampling_points.setter
     def sampling_points(self, val: Union[int, str, None]) -> None:
+        """Set the default number of sampling points per plot.
+
+        Parameters
+        ----------
+        val : int, str, or None
+            Sample count or ``"figure_default"`` to clear.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig.sampling_points = 200  # doctest: +SKIP
+        """
         self._sampling_points = int(InputConvert(val, int)) if isinstance(val, (int, float, str)) and val != "figure_default" else None
 
     # --- Public API ---
@@ -1039,6 +1921,21 @@ class SmartFigure:
             If None, it is the same as "figure_default" for new plots while no change for existing plots.
         id : str, optional
             Unique identifier. If exists, the existing plot is updated in-place.
+
+        sampling_points : int or str, optional
+            Number of sampling points for this plot. Use ``"figure_default"``
+            to inherit from the figure setting.
+
+        Returns
+        -------
+        SmartPlot
+            The created or updated plot instance.
+
+        Examples
+        --------
+        >>> x, a = sp.symbols("x a")  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig.plot(x, a * sp.sin(x), parameters=[a], id="a_sin")  # doctest: +SKIP
         """
         # ID Generation
         if id is None:
@@ -1084,6 +1981,22 @@ class SmartFigure:
 
         This is a *hot* method: it is called during slider drags and (throttled)
         pan/zoom relayout events.
+
+        Parameters
+        ----------
+        reason : str, optional
+            Reason for rendering (e.g., ``"manual"``, ``"param_change"``, ``"relayout"``).
+        trigger : Any, optional
+            Change payload from the event that triggered rendering.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig.render()  # doctest: +SKIP
         """
         self._log_render(reason, trigger)
         
@@ -1104,6 +2017,24 @@ class SmartFigure:
     def add_param(self, symbol: Symbol, **kwargs: Any) -> SmartFloatSlider:
         """
         Add a SmartFloatSlider parameter manually.
+
+        Parameters
+        ----------
+        symbol : sympy.Symbol
+            Parameter symbol to create a slider for.
+        **kwargs : Any
+            Slider configuration (min, max, value, step).
+
+        Returns
+        -------
+        SmartFloatSlider
+            The created or reused slider.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> a = sp.symbols("a")  # doctest: +SKIP
+        >>> fig.add_param(a, min=-2, max=2)  # doctest: +SKIP
         """
         slider = self._params.add_param(symbol, **kwargs)
         self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
@@ -1112,6 +2043,23 @@ class SmartFigure:
     def get_info_output(self, id: Optional[Hashable] = None, **kwargs: Any) -> widgets.Output:
         """
         Create (or retrieve) an Output widget in the Info sidebar.
+
+        Parameters
+        ----------
+        id : hashable, optional
+            Unique identifier for the output. If omitted, a new ID is generated.
+        **kwargs : Any
+            Layout keyword arguments for ``ipywidgets.Layout``.
+
+        Returns
+        -------
+        ipywidgets.Output
+            Output widget for the info panel.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> out = fig.get_info_output("summary")  # doctest: +SKIP
         """
         out = self._info.get_output(id, **kwargs)
         self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
@@ -1127,6 +2075,32 @@ class SmartFigure:
         An info component is a class/function that:
         1. Draws into an Info Output widget.
         2. Implements an `update(change, fig, out)` method.
+
+        Parameters
+        ----------
+        id : hashable
+            Unique identifier for the component.
+        component_factory : callable
+            Callable that accepts ``(out, fig)`` and returns a component instance.
+        hook_id : hashable, optional
+            Hook identifier for updates; defaults to ``("info_component", id)``.
+        **kwargs : Any
+            Layout keyword arguments forwarded to the output widget.
+
+        Returns
+        -------
+        Any
+            The created component instance.
+
+        Examples
+        --------
+        >>> class ExampleComponent:  # doctest: +SKIP
+        ...     def __init__(self, out, fig):  # doctest: +SKIP
+        ...         self.out = out  # doctest: +SKIP
+        ...     def update(self, change, fig, out):  # doctest: +SKIP
+        ...         pass  # doctest: +SKIP
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig.add_info_component("example", ExampleComponent)  # doctest: +SKIP
         """
         out = self.get_info_output(id, **kwargs)
         inst = component_factory(out, self)
@@ -1148,6 +2122,23 @@ class SmartFigure:
     def add_param_change_hook(self, callback: Callable[[Dict, SmartFigure], Any], hook_id: Optional[Hashable] = None) -> Hashable:
         """
         Register a callback to run when *any* parameter value changes.
+
+        Parameters
+        ----------
+        callback : callable
+            Function with signature ``(change, fig)``.
+        hook_id : hashable, optional
+            Unique identifier for the hook.
+
+        Returns
+        -------
+        hashable
+            The hook identifier used for registration.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig.add_param_change_hook(lambda *_: None)  # doctest: +SKIP
         """
         def _wrapped(change: Dict, fig: SmartFigure) -> Any:
             with _use_figure(self, display_on_enter=False):
@@ -1158,12 +2149,36 @@ class SmartFigure:
     # --- Internal / Plumbing ---
 
     def _throttled_relayout(self, *args: Any) -> None:
+        """Handle plot relayout events with throttling.
+
+        Parameters
+        ----------
+        *args : Any
+            Plotly relayout event payload (unused).
+
+        Returns
+        -------
+        None
+        """
         now = time.monotonic()
         if now - self._last_relayout > 0.5:
             self._last_relayout = now
             self.render(reason="relayout")
 
     def _log_render(self, reason: str, trigger: Any) -> None:
+        """Log render information with rate-limiting.
+
+        Parameters
+        ----------
+        reason : str
+            Render reason string.
+        trigger : Any
+            Trigger payload (unused except for context).
+
+        Returns
+        -------
+        None
+        """
         # Simple rate-limited logging implementation
         now = time.monotonic()
         if logger.isEnabledFor(logging.INFO) and (now - self._render_info_last_log_t) > 1.0:
@@ -1178,15 +2193,52 @@ class SmartFigure:
         """
         Special method called by IPython to display the object.
         Uses IPython.display.display() to render the underlying widget.
+
+        Parameters
+        ----------
+        **kwargs : Any
+            Display keyword arguments forwarded by IPython (unused).
+
+        Returns
+        -------
+        None
         """
         self._has_been_displayed = True
         display(self._layout.output_widget)
 
     def __enter__(self) -> "SmartFigure":
+        """Enter a context where this figure is the current target.
+
+        Returns
+        -------
+        SmartFigure
+            The same instance, for use with ``with`` blocks.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> with fig:  # doctest: +SKIP
+        ...     pass
+        """
         _push_current_figure(self, display_on_enter=True)
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        """Exit the current-figure context.
+
+        Parameters
+        ----------
+        exc_type : Any
+            Exception type, if any.
+        exc : Any
+            Exception instance, if any.
+        tb : Any
+            Traceback, if any.
+
+        Returns
+        -------
+        None
+        """
         _pop_current_figure(self)
 
 
@@ -1200,6 +2252,31 @@ def plot(
 ) -> SmartPlot:
     """
     Plot a SymPy expression on the current figure, or create a new figure per call.
+
+    Parameters
+    ----------
+    var : sympy.Symbol
+        Independent variable for the expression.
+    func : sympy.Expr
+        SymPy expression to plot.
+    parameters : sequence[sympy.Symbol], optional
+        Parameter symbols used in the expression. If ``None``, they are inferred.
+    id : str, optional
+        Plot identifier for update or creation.
+    x_domain : RangeLike or None, optional
+        Explicit x-domain override.
+    sampling_points : int or str, optional
+        Number of samples, or ``"figure_default"`` to inherit from the figure.
+
+    Returns
+    -------
+    SmartPlot
+        The created or updated plot instance.
+
+    Examples
+    --------
+    >>> x, a = sp.symbols("x a")  # doctest: +SKIP
+    >>> plot(x, a * sp.sin(x), parameters=[a], id="a_sin")  # doctest: +SKIP
     """
     fig = _current_figure()
     if fig is None:
