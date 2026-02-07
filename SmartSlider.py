@@ -30,6 +30,36 @@ class SmartFloatSlider(widgets.VBox):
         description="Value:",
         **kwargs,
     ):
+        """Create a slider with a single editable numeric field and settings panel.
+
+        Parameters
+        ----------
+        value : float, optional
+            Initial value for the slider and numeric text field.
+        min : float, optional
+            Lower bound for the slider.
+        max : float, optional
+            Upper bound for the slider.
+        step : float, optional
+            Increment for the slider and step control.
+        description : str, optional
+            Label displayed to the left of the control.
+        **kwargs : Any
+            Additional keyword arguments forwarded to ``widgets.VBox``.
+
+        Returns
+        -------
+        None
+            This constructor initializes the widget in place.
+
+        Examples
+        --------
+        Create a slider and read its value::
+
+            >>> slider = SmartFloatSlider(value=0.25, min=0.0, max=1.0, step=0.05)
+            >>> float(slider.value)
+            0.25
+        """
         # Remember defaults for reset
         self._defaults = {"value": value, "min": min, "max": max, "step": step}
 
@@ -210,7 +240,18 @@ class SmartFloatSlider(widgets.VBox):
     # --- Helpers --------------------------------------------------------------
 
     def _sync_number_text(self, val: float) -> None:
-        """Set the text field from a numeric value, without triggering parse logic."""
+        """Set the text field from a numeric value without triggering parse logic.
+
+        Parameters
+        ----------
+        val : float
+            The numeric value to format and display in the text field.
+
+        Returns
+        -------
+        None
+            This method updates widget state in place.
+        """
         self._syncing = True
         try:
             self.number.value = f"{val:.4g}"
@@ -218,13 +259,35 @@ class SmartFloatSlider(widgets.VBox):
             self._syncing = False
 
     def _sync_number_from_slider(self, change) -> None:
-        """When the slider moves, update the single numeric field."""
+        """Update the numeric field when the slider moves.
+
+        Parameters
+        ----------
+        change : traitlets.utils.bunch.Bunch
+            Traitlets change object that contains the new slider value.
+
+        Returns
+        -------
+        None
+            This method updates widget state in place.
+        """
         if self._syncing:
             return
         self._sync_number_text(change.new)
 
     def _sync_limit_texts(self, change) -> None:
-        """Update the min/max limit text fields from the slider limits."""
+        """Refresh min/max limit text fields from the slider limits.
+
+        Parameters
+        ----------
+        change : traitlets.utils.bunch.Bunch or None
+            Traitlets change object (unused) or ``None`` when called manually.
+
+        Returns
+        -------
+        None
+            This method updates widget state in place.
+        """
         if self._syncing:
             return
         self._syncing = True
@@ -235,7 +298,20 @@ class SmartFloatSlider(widgets.VBox):
             self._syncing = False
 
     def _commit_limit_value(self, change, *, limit: str) -> None:
-        """Parse and apply min/max limits from text inputs."""
+        """Parse and apply min/max limits from text inputs.
+
+        Parameters
+        ----------
+        change : traitlets.utils.bunch.Bunch
+            Traitlets change object carrying the new text value.
+        limit : {"min", "max"}
+            Selects which limit to update.
+
+        Returns
+        -------
+        None
+            This method updates widget state in place.
+        """
         if self._syncing:
             return
         raw = (change.new or "").strip()
@@ -260,13 +336,39 @@ class SmartFloatSlider(widgets.VBox):
                 self._syncing = False
 
     def _commit_min_value(self, change) -> None:
+        """Commit the minimum limit from the min text field.
+
+        Parameters
+        ----------
+        change : traitlets.utils.bunch.Bunch
+            Traitlets change object carrying the new text value.
+
+        Returns
+        -------
+        None
+            This method updates widget state in place.
+        """
         self._commit_limit_value(change, limit="min")
 
     def _commit_max_value(self, change) -> None:
+        """Commit the maximum limit from the max text field.
+
+        Parameters
+        ----------
+        change : traitlets.utils.bunch.Bunch
+            Traitlets change object carrying the new text value.
+
+        Returns
+        -------
+        None
+            This method updates widget state in place.
+        """
         self._commit_limit_value(change, limit="max")
 
     def _commit_text_value(self, change) -> None:
         """
+        Commit text input to the slider when the user finishes editing.
+
         When the user commits text (Enter / blur):
           - parse via InputConvert,
           - clamp to [min, max],
@@ -274,6 +376,25 @@ class SmartFloatSlider(widgets.VBox):
           - normalize the displayed text.
 
         On any error, revert to the value *before* this edit.
+
+        Parameters
+        ----------
+        change : traitlets.utils.bunch.Bunch
+            Traitlets change object carrying the new text value.
+
+        Returns
+        -------
+        None
+            This method updates widget state in place.
+
+        Examples
+        --------
+        Update the value by simulating a commit::
+
+            >>> slider = SmartFloatSlider(value=0.0, min=0.0, max=1.0)
+            >>> slider.number.value = "0.5"
+            >>> float(slider.value)
+            0.5
         """
         if self._syncing:
             return
@@ -293,9 +414,33 @@ class SmartFloatSlider(widgets.VBox):
     # --- Button handlers ------------------------------------------------------
 
     def _reset(self, _) -> None:
+        """Reset the slider to its initial defaults.
+
+        Parameters
+        ----------
+        _ : object
+            Click event payload (unused).
+
+        Returns
+        -------
+        None
+            This method updates widget state in place.
+        """
         self.value = self._defaults["value"]  # slider sync + slider observer updates text
 
     def _toggle_settings(self, _) -> None:
+        """Toggle visibility of the settings panel.
+
+        Parameters
+        ----------
+        _ : object
+            Click event payload (unused).
+
+        Returns
+        -------
+        None
+            This method updates widget state in place.
+        """
         self.settings_panel.layout.display = (
             "none" if self.settings_panel.layout.display == "flex" else "flex"
         )
