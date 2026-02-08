@@ -414,7 +414,7 @@ class SmartFloatSlider(widgets.VBox):
     # --- Button handlers ------------------------------------------------------
 
     def _reset(self, _) -> None:
-        """Reset the slider to its initial defaults.
+        """Reset the slider value to its initial default.
 
         Parameters
         ----------
@@ -424,7 +424,7 @@ class SmartFloatSlider(widgets.VBox):
         Returns
         -------
         None
-            This method updates widget state in place.
+            This method updates the value in place (limits are unchanged).
         """
         self.value = self._defaults["value"]  # slider sync + slider observer updates text
 
@@ -461,7 +461,7 @@ class SmartFloatSlider(widgets.VBox):
         self.slider.step = float(value)
 
     def reset(self) -> None:
-        """Reset the slider to its initial defaults."""
+        """Reset the slider value to its initial default."""
         self._reset(None)
 
     def make_refs(self, symbols):

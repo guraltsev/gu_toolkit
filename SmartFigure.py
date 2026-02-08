@@ -679,14 +679,14 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         self._render_callback = render_callback
         self._layout_box = layout_box # The VBox where sliders live
 
-    def ensure(self, symbol: Symbol, *, control: Optional[Any] = None, **control_kwargs: Any) -> ParamRef:
+    def parameter(self, symbols: Union[Symbol, Sequence[Symbol]], *, control: Optional[Any] = None, **control_kwargs: Any):
         """
-        Create or reuse a parameter reference for the given symbol.
+        Create or reuse parameter references for the given symbols.
 
         Parameters
         ----------
-        symbol : sympy.Symbol
-            The parameter symbol.
+        symbols : sympy.Symbol or sequence[sympy.Symbol]
+            Parameter symbol(s) to ensure.
         control : Any, optional
             Optional control instance (or compatible) to use.
         **control_kwargs :
@@ -694,37 +694,65 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
 
         Returns
         -------
-        ParamRef
-            The parameter reference for the symbol.
+        ParamRef or dict[Symbol, ParamRef]
+            ParamRef for a single symbol, or mapping for multiple symbols.
         """
-        if symbol in self._refs:
-            return self._refs[symbol]
+        if isinstance(symbols, Symbol):
+            symbols = [symbols]
+            single = True
+        else:
+            symbols = list(symbols)
+            single = False
+
+        existing = [s for s in symbols if s in self._refs]
+        missing = [s for s in symbols if s not in self._refs]
+
+        if control is not None and existing:
+            for symbol in existing:
+                if self._refs[symbol].widget is not control:
+                    raise ValueError(f"Symbol {symbol} is already bound to a different control.")
 
         defaults = {'value': 0.0, 'min': -1.0, 'max': 1.0, 'step': 0.01}
-        config = {**defaults, **control_kwargs}
 
         if control is None:
-            control = SmartFloatSlider(
-                description=f"${sp.latex(symbol)}$",
-                value=float(config['value']),
-                min=float(config['min']),
-                max=float(config['max']),
-                step=float(config['step'])
-            )
+            for symbol in missing:
+                config = {**defaults, **control_kwargs}
+                new_control = SmartFloatSlider(
+                    description=f"${sp.latex(symbol)}$",
+                    value=float(config['value']),
+                    min=float(config['min']),
+                    max=float(config['max']),
+                    step=float(config['step'])
+                )
+                refs = new_control.make_refs([symbol])
+                if symbol not in refs:
+                    raise KeyError(f"Control did not provide a ref for symbol {symbol}.")
+                ref = refs[symbol]
+                ref.observe(self._on_param_change)
+                self._refs[symbol] = ref
+                if new_control not in self._controls:
+                    self._controls.append(new_control)
+                    self._layout_box.children += (new_control,)
+        elif missing:
+            refs = control.make_refs(missing)
+            for symbol in missing:
+                if symbol not in refs:
+                    raise KeyError(f"Control did not provide a ref for symbol {symbol}.")
+                ref = refs[symbol]
+                ref.observe(self._on_param_change)
+                self._refs[symbol] = ref
+            if control not in self._controls:
+                self._controls.append(control)
+                self._layout_box.children += (control,)
 
-        refs = control.make_refs([symbol])
-        if symbol not in refs:
-            raise KeyError(f"Control did not provide a ref for symbol {symbol}.")
+        for symbol in symbols:
+            ref = self._refs[symbol]
+            for name, value in control_kwargs.items():
+                setattr(ref, name, value)
 
-        ref = refs[symbol]
-        ref.observe(self._on_param_change)
-        self._refs[symbol] = ref
-
-        if control not in self._controls:
-            self._controls.append(control)
-            self._layout_box.children += (control,)
-
-        return ref
+        if single:
+            return self._refs[symbols[0]]
+        return {symbol: self._refs[symbol] for symbol in symbols}
 
     @property
     def has_params(self) -> bool:
@@ -744,7 +772,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         """
         return len(self._refs) > 0
 
-    def add_hook(self, callback: Callable[[ParamEvent], Any], hook_id: Optional[Hashable] = None) -> Hashable:
+    def add_hook(self, callback: Callable[[Optional[ParamEvent]], Any], hook_id: Optional[Hashable] = None) -> Hashable:
         """
         Register a parameter change hook.
         
@@ -772,7 +800,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         
         return hook_id
 
-    def fire_hook(self, hook_id: Hashable, event: ParamEvent) -> None:
+    def fire_hook(self, hook_id: Hashable, event: Optional[ParamEvent]) -> None:
         """Fire a specific hook with a ParamEvent."""
         callback = self._hooks.get(hook_id)
         if callback is None:
@@ -821,7 +849,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         >>> layout = widgets.VBox()  # doctest: +SKIP
         >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> mgr.ensure(a)  # doctest: +SKIP
+        >>> mgr.parameter(a)  # doctest: +SKIP
         >>> mgr[a]  # doctest: +SKIP
         """
         return self._refs[key]
@@ -901,7 +929,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         return self._refs.values()
     
     def get(self, key: Symbol, default: Any = None) -> Any:
-        """Return a slider if present; otherwise return a default.
+        """Return a param ref if present; otherwise return a default.
 
         Parameters
         ----------
@@ -913,7 +941,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         Returns
         -------
         Any
-            Slider instance or the default value.
+            Param ref or the default value.
 
         Examples
         --------
@@ -1932,9 +1960,9 @@ class SmartFigure:
         if parameters is None:
             parameters = sorted([s for s in func.free_symbols if s != var], key=lambda s: s.sort_key())
 
-        # Ensure Sliders Exist (Delegate to Manager)
-        for p in parameters:
-            self._params.ensure(p)
+        # Ensure Parameters Exist (Delegate to Manager)
+        if parameters:
+            self.parameter(parameters)
         
         # Update UI visibility
         self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
@@ -1975,16 +2003,9 @@ class SmartFigure:
         ParamRef or dict[Symbol, ParamRef]
             ParamRef for a single symbol, or mapping for multiple symbols.
         """
-        if isinstance(symbols, Symbol):
-            ref = self._params.ensure(symbols, control=control, **control_kwargs)
-            self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
-            return ref
-
-        refs = {}
-        for sym in symbols:
-            refs[sym] = self._params.ensure(sym, control=control, **control_kwargs)
+        result = self._params.parameter(symbols, control=control, **control_kwargs)
         self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
-        return refs
+        return result
         
 
     def render(self, reason: str = "manual", trigger: Optional[ParamEvent] = None) -> None:
@@ -2048,9 +2069,7 @@ class SmartFigure:
         >>> a = sp.symbols("a")  # doctest: +SKIP
         >>> fig.add_param(a, min=-2, max=2)  # doctest: +SKIP
         """
-        ref = self._params.ensure(symbol, **kwargs)
-        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
-        return ref
+        return self.parameter(symbol, **kwargs)
 
     def get_info_output(self, id: Optional[Hashable] = None, **kwargs: Any) -> widgets.Output:
         """
@@ -2125,86 +2144,51 @@ class SmartFigure:
         # Register hook to update component on param change
         if hook_id is None: hook_id = ("info_component", id)
         
-        def _hook(event: ParamEvent) -> None:
+        def _hook(event: Optional[ParamEvent]) -> None:
             inst.update(event, self, out)
             
         self.add_param_change_hook(_hook, hook_id=hook_id)
         return inst
 
-    def add_hook(self, callback: Callable[[ParamEvent], Any], *, run_now: bool = True) -> Hashable:
+    def add_hook(self, callback: Callable[[Optional[ParamEvent]], Any], *, run_now: bool = True) -> Hashable:
+        """Alias for add_param_change_hook."""
+        return self.add_param_change_hook(callback, hook_id=None, run_now=run_now)
+
+    def add_param_change_hook(
+        self,
+        callback: Callable[[Optional[ParamEvent]], Any],
+        hook_id: Optional[Hashable] = None,
+        *,
+        run_now: bool = True,
+    ) -> Hashable:
         """
         Register a callback to run when *any* parameter value changes.
 
         Parameters
         ----------
         callback : callable
-            Function with signature ``(event)``.
-        run_now : bool, optional
-            Whether to run once immediately with a synthetic event.
-
-        Returns
-        -------
-        hashable
-            The hook identifier used for registration.
-        """
-        def _wrapped(event: ParamEvent) -> Any:
-            with _use_figure(self, display_on_enter=False):
-                return callback(event)
-
-        hook_id = self._params.add_hook(_wrapped)
-
-        if run_now and self._params.has_params:
-            first_ref = next(iter(self._params.values()))
-            init_event = ParamEvent(
-                parameter=first_ref.parameter,
-                old=first_ref.value,
-                new=first_ref.value,
-                ref=first_ref,
-                raw=None,
-            )
-            try:
-                _wrapped(init_event)
-            except Exception as e:
-                warnings.warn(f"Hook failed on init: {e}")
-
-        return hook_id
-
-    def add_param_change_hook(self, callback: Callable[[ParamEvent], Any], hook_id: Optional[Hashable] = None) -> Hashable:
-        """
-        Register a callback to run when *any* parameter value changes.
-
-        Parameters
-        ----------
-        callback : callable
-            Function with signature ``(event)``.
+            Function with signature ``(event)``. For ``run_now=True``, the
+            callback is invoked once with ``None`` after a manual render.
         hook_id : hashable, optional
             Unique identifier for the hook.
+        run_now : bool, optional
+            Whether to run once immediately with a ``None`` event.
 
         Returns
         -------
         hashable
             The hook identifier used for registration.
         """
-        if hook_id is None:
-            return self.add_hook(callback, run_now=True)
-
-        def _wrapped(event: ParamEvent) -> Any:
+        def _wrapped(event: Optional[ParamEvent]) -> Any:
             with _use_figure(self, display_on_enter=False):
                 return callback(event)
 
         hook_id = self._params.add_hook(_wrapped, hook_id)
 
-        if self._params.has_params:
-            first_ref = next(iter(self._params.values()))
-            init_event = ParamEvent(
-                parameter=first_ref.parameter,
-                old=first_ref.value,
-                new=first_ref.value,
-                ref=first_ref,
-                raw=None,
-            )
+        if run_now:
             try:
-                _wrapped(init_event)
+                self.render(reason="manual", trigger=None)
+                _wrapped(None)
             except Exception as e:
                 warnings.warn(f"Hook failed on init: {e}")
 
