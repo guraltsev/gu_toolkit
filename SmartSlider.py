@@ -429,6 +429,28 @@ class SmartFloatSlider(widgets.VBox):
         self.value = self._defaults["value"]  # slider sync + slider observer updates text
 
     @property
+    def default_value(self) -> float:
+        """Return the stored default value used by reset.
+
+        Returns
+        -------
+        float
+            Default value for the slider reset.
+        """
+        return float(self._defaults["value"])
+
+    @default_value.setter
+    def default_value(self, value: float) -> None:
+        """Set the stored default value used by reset.
+
+        Parameters
+        ----------
+        value : float
+            New default value (does not change the current value).
+        """
+        self._defaults["value"] = float(value)
+
+    @property
     def min(self) -> float:
         """Return the current minimum slider limit.
 

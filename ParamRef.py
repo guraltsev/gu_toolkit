@@ -49,6 +49,16 @@ class ProxyParamRef:
     def value(self, v: Any) -> None:
         self._widget.value = v
 
+    @property
+    def default_value(self) -> Any:
+        return self._require_attr("default_value")
+
+    @default_value.setter
+    def default_value(self, v: Any) -> None:
+        if not hasattr(self._widget, "default_value"):
+            raise AttributeError("default_value not supported for this control.")
+        self._widget.default_value = v
+
     def observe(self, callback: Callable[[ParamEvent], None], *, fire: bool = False) -> None:
         def _handler(change: Any) -> None:
             event = ParamEvent(
@@ -82,6 +92,36 @@ class ProxyParamRef:
         if not hasattr(self._widget, name):
             raise AttributeError(f"{name} not supported for this control.")
         return getattr(self._widget, name)
+
+    def capabilities(self) -> dict[str, bool]:
+        """Return a mapping of supported optional attributes.
+
+        Returns
+        -------
+        dict[str, bool]
+            Keys for known optional attributes with a boolean indicating support.
+        """
+        return {
+            "default_value": hasattr(self._widget, "default_value"),
+            "min": hasattr(self._widget, "min"),
+            "max": hasattr(self._widget, "max"),
+            "step": hasattr(self._widget, "step"),
+        }
+
+    def __dir__(self) -> list[str]:
+        base = {
+            "parameter",
+            "widget",
+            "value",
+            "observe",
+            "reset",
+        }
+        optional = []
+        for name in ("default_value", "min", "max", "step"):
+            if hasattr(self._widget, name):
+                optional.append(name)
+        base.update(optional)
+        return sorted(base.union(set(super().__dir__())))
 
     @property
     def min(self) -> Any:
