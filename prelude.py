@@ -78,29 +78,89 @@ class FunctionFamily:
     def __repr__(self):
         return repr(self._base)
 
-__all__+=["SymbolFamily","FunctionFamily"]
-a = SymbolFamily('a')
-b = SymbolFamily('b')
-c = SymbolFamily('c')
+__all__ += ["SymbolFamily", "FunctionFamily"]
+
+# -----------------------
+# Roman (lowercase)
+# -----------------------
+for _ch in "abcdefghijklmnopqrstuvwxyz":
+    globals()[_ch] = SymbolFamily(_ch)
+
+# conventional function letters
+for _ch in "fgh":
+    globals()[_ch] = FunctionFamily(_ch)
+
+# conventional integer indices (as in your original snippet)
+for _ch in "klmnij":
+    globals()[_ch] = SymbolFamily(_ch, integer=True)
+
+__all__ += list("abcdefghijklmnopqrstuvwxyz")
+
+# -----------------------
+# Roman (uppercase)
+# -----------------------
+for _ch in "ABCDEFGHIJKLOPQRSTUVWXYZ":
+    globals()[_ch] = SymbolFamily(_ch)
+
+for _ch in "MN":
+    globals()[_ch] = SymbolFamily(_ch, integer=True)
+
+# conventional function letters
+for _ch in "FGH":
+    globals()[_ch] = FunctionFamily(_ch)
+
+__all__ += list("ABCDEFGHJKLMNOPQRSTUVWXYZ")
+
+# -----------------------
+# Greek (lowercase): SymPy canonical names (not LaTeX macros)
+# -----------------------
+alpha = SymbolFamily("alpha")
+beta = SymbolFamily("beta")
+gamma = SymbolFamily("gamma")
+delta = SymbolFamily("delta")
+
+epsilon = SymbolFamily("epsilon")
+varepsilon = SymbolFamily("varepsilon")
+
+zeta = SymbolFamily("zeta")
+eta = SymbolFamily("eta")
+
+theta = SymbolFamily("theta")
+vartheta = SymbolFamily("vartheta")
+
+kappa = SymbolFamily("kappa")
+lam = SymbolFamily("lambda")  # "lambda" is a Python keyword
+mu = SymbolFamily("mu")
+nu = SymbolFamily("nu")
+xi = SymbolFamily("xi")
+
+rho = SymbolFamily("rho")
+
+sigma = SymbolFamily("sigma")
+varsigma = SymbolFamily("varsigma")
+tau = SymbolFamily("tau")
+
+phi = SymbolFamily("phi")
+varphi = SymbolFamily("varphi")
+
+chi = SymbolFamily("chi")
+psi = SymbolFamily("psi")
+omega = SymbolFamily("omega")
+
+__all__ += [
+    "alpha","beta","gamma","delta",
+    "epsilon","varepsilon",
+    "zeta","eta",
+    "theta","vartheta",
+    "kappa","lam","mu","nu","xi","rho",
+    "sigma","varsigma","tau",
+    "phi","varphi",
+    "chi","psi","omega",
+]
+
+del _ch
 
 
-x = SymbolFamily('x')
-y = SymbolFamily('y')
-z = SymbolFamily('z')
-t = SymbolFamily('t')
-__all__+=["a","b","c","x","y","z","t"]
-
-
-k = SymbolFamily("k", integer=True)
-l = SymbolFamily("l", integer=True)
-m = SymbolFamily("m", integer=True)
-n = SymbolFamily("n", integer=True)
-__all__+=["k","l","m","n"]
-
-f=FunctionFamily("f")
-g=FunctionFamily("g")
-h=FunctionFamily("h")
-__all__+=["f","g","h"]
 
 
 
