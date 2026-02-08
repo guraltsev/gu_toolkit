@@ -430,42 +430,141 @@ class SmartFloatSlider(widgets.VBox):
 
     @property
     def min(self) -> float:
-        """Return the current minimum slider limit."""
+        """Return the current minimum slider limit.
+
+        Returns
+        -------
+        float
+            Minimum slider value.
+
+        Examples
+        --------
+        >>> slider = SmartFloatSlider(min=-1.0, max=1.0)  # doctest: +SKIP
+        >>> slider.min  # doctest: +SKIP
+        -1.0
+        """
         return float(self.slider.min)
 
     @min.setter
     def min(self, value: float) -> None:
-        """Set the minimum slider limit."""
+        """Set the minimum slider limit.
+
+        Parameters
+        ----------
+        value : float
+            New minimum value.
+
+        Returns
+        -------
+        None
+        """
         self.slider.min = float(value)
         self._sync_limit_texts(None)
 
     @property
     def max(self) -> float:
-        """Return the current maximum slider limit."""
+        """Return the current maximum slider limit.
+
+        Returns
+        -------
+        float
+            Maximum slider value.
+
+        Examples
+        --------
+        >>> slider = SmartFloatSlider(min=-1.0, max=1.0)  # doctest: +SKIP
+        >>> slider.max  # doctest: +SKIP
+        1.0
+        """
         return float(self.slider.max)
 
     @max.setter
     def max(self, value: float) -> None:
-        """Set the maximum slider limit."""
+        """Set the maximum slider limit.
+
+        Parameters
+        ----------
+        value : float
+            New maximum value.
+
+        Returns
+        -------
+        None
+        """
         self.slider.max = float(value)
         self._sync_limit_texts(None)
 
     @property
     def step(self) -> float:
-        """Return the current slider step."""
+        """Return the current slider step.
+
+        Returns
+        -------
+        float
+            Step size for the slider.
+
+        Examples
+        --------
+        >>> slider = SmartFloatSlider(step=0.25)  # doctest: +SKIP
+        >>> slider.step  # doctest: +SKIP
+        0.25
+        """
         return float(self.slider.step)
 
     @step.setter
     def step(self, value: float) -> None:
-        """Set the slider step size."""
+        """Set the slider step size.
+
+        Parameters
+        ----------
+        value : float
+            New step size.
+
+        Returns
+        -------
+        None
+        """
         self.slider.step = float(value)
 
     def reset(self) -> None:
-        """Reset the slider value to its initial default."""
+        """Reset the slider value to its initial default.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> slider = SmartFloatSlider(value=2.0)  # doctest: +SKIP
+        >>> slider.reset()  # doctest: +SKIP
+        """
         self._reset(None)
 
     def make_refs(self, symbols):
-        """Create ParamRef mappings for provided symbols."""
+        """Create ParamRef mappings for provided symbols.
+
+        Parameters
+        ----------
+        symbols : sequence[sympy.Symbol]
+            Symbols to bind to this control (must contain exactly one symbol).
+
+        Returns
+        -------
+        dict
+            Mapping of the symbol to a ``ProxyParamRef``.
+
+        Raises
+        ------
+        ValueError
+            If more than one symbol is provided.
+
+        Examples
+        --------
+        >>> slider = SmartFloatSlider()  # doctest: +SKIP
+        >>> import sympy as sp  # doctest: +SKIP
+        >>> a = sp.symbols("a")  # doctest: +SKIP
+        >>> slider.make_refs([a])  # doctest: +SKIP
+        """
         if len(symbols) != 1:
             raise ValueError("SmartFloatSlider only supports a single symbol.")
         from .ParamRef import ProxyParamRef
