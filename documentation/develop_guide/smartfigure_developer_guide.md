@@ -23,7 +23,7 @@ SmartFigure (Coordinator)
 
 **Design goals:**
 - Keep UI layout concerns (CSS, widget tree) isolated from math/plotting logic.
-- Keep parameter state and change hooks in a dedicated manager.
+- Keep parameter state and change hooks in a dedicated manager using a ref-first parameter API.
 - Keep the plot-by-plot rendering logic separate for extensibility.
 - Ensure Plotly resizes reliably inside Jupyter layouts (especially flex or sidebar layouts).【F:SmartFigure.py†L138-L1687】【F:PlotlyPane.py†L1-L157】
 
@@ -36,6 +36,8 @@ SmartFigure (Coordinator)
 | `SmartFigure.py` | Main SmartFigure system (layout, parameter manager, info manager, SmartPlot, plot registry, render pipeline). | Defines most architecture components and their collaboration. |【F:SmartFigure.py†L138-L2097】 |
 | `PlotlyPane.py` | Plotly resizing pane for reliable layout handling in Jupyter. | Uses `anywidget` + JS observers to resize plots when container size changes. |【F:PlotlyPane.py†L1-L157】 |
 | `SmartSlider.py` | Custom slider widget used for parameters. | Provides a single numeric field plus slider and a settings panel. |【F:SmartSlider.py†L1-L200】 |
+| `ParamRef.py` | Parameter reference contract + proxy implementation. | Defines `ParamRef` protocol and `ProxyParamRef` wrapper for controls. |【F:ParamRef.py†L1-L100】 |
+| `ParamEvent.py` | Normalized parameter change event. | Shared event payload for callbacks and render triggers. |【F:ParamEvent.py†L1-L40】 |
 | `numpify.py` | SymPy → NumPy compilation pipeline. | Compiles SymPy expressions into callable NumPy functions, with binding support. |【F:numpify.py†L1-L200】 |
 | `InputConvert.py` | User input parsing/conversion. | Converts text or numeric inputs into float/int/complex with SymPy fallback. |【F:InputConvert.py†L1-L119】 |
 | `NamedFunction.py` | SymPy function class generator. | Enables custom symbolic functions with numeric implementations. |【F:NamedFunction.py†L1-L200】 |
@@ -72,12 +74,24 @@ Key behaviors:
 
 ### 3. `ParameterManager` (Parameter state + sliders)
 
-The `ParameterManager` is the “model” for slider state and change hooks. It creates `SmartFloatSlider` instances and stores them by SymPy symbol. It also executes hooks when a slider changes and provides dictionary-like access for compatibility (`fig.params[symbol]`).【F:SmartFigure.py†L637-L940】
+The `ParameterManager` is the “model” for slider state and change hooks. It creates `SmartFloatSlider` instances and stores **parameter references** (`ParamRef`) by SymPy symbol. It also executes hooks when a parameter changes and provides dictionary-like access for compatibility (`fig.params[symbol]`).【F:SmartFigure.py†L637-L940】【F:ParamRef.py†L1-L100】
 
 Key behaviors:
 - Uses `SmartFloatSlider`, which combines a slider with a single editable numeric field and a settings panel for min/max/step values.【F:SmartSlider.py†L1-L200】
-- Adds and reuses sliders based on symbol identity.
-- Supports registering hooks (`add_hook`) that run on change and at registration time to initialize state.【F:SmartFigure.py†L637-L940】
+- Adds and reuses controls based on symbol identity and stores the resulting `ParamRef` objects in `_refs`.
+- Supports registering hooks (`add_hook`) that run on change and at registration time to initialize state.
+- Routes changes via `ParamRef.observe(...)` into a normalized `ParamEvent`, then triggers the figure render callback with `reason="param_change"`.【F:SmartFigure.py†L697-L833】【F:ParamRef.py†L1-L100】
+
+#### Widgets + ParamRef refactor (ref-first parameter API)
+
+The parameter system was refactored to be **ref-first**, meaning the public parameter API now returns `ParamRef` objects instead of widgets:
+
+- `fig.parameter(symbol)` returns a `ParamRef`, not a widget.
+- `fig.params[symbol]` yields a `ParamRef` for compatibility with dict-like access.
+- The `ParamRef` exposes `.value`, `.parameter`, and `.widget` (for direct widget access when needed).
+- Change handling is normalized via `ParamEvent` objects, so callbacks no longer depend on raw traitlets change dicts.【F:ParamRef.py†L1-L100】【F:ParamEvent.py†L1-L40】
+
+Controls participate in a **control → refs handshake**: each control exposes `make_refs(symbols)` that returns a mapping of `Symbol → ParamRef`. This allows multi-symbol controls to map multiple parameters onto a shared widget while preserving per-symbol references. The default `SmartFloatSlider` only supports one symbol and returns a `ProxyParamRef` that forwards to the slider’s value and range properties.【F:SmartSlider.py†L430-L480】【F:ParamRef.py†L1-L100】
 
 ### 4. `InfoPanelManager` (Info outputs + stateful components)
 
@@ -122,8 +136,9 @@ When a user calls `fig.plot(x, expr, ...)`, SmartFigure:
 ### 2. Parameter updates
 
 When a slider changes:
-1. `ParameterManager` receives the change event and calls the registered render callback.
-2. SmartFigure re-renders the relevant plots using the updated parameter values.
+1. `ParamRef.observe(...)` normalizes the widget change into a `ParamEvent`.
+2. `ParameterManager` receives the event and calls the render callback with `reason="param_change"`.
+3. SmartFigure re-renders the relevant plots using the updated parameter values.
 3. Plot traces are updated in-place (no need to re-display the figure widget).【F:SmartFigure.py†L637-L1687】
 
 ### 3. Pan/zoom updates
