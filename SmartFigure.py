@@ -688,14 +688,28 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         symbols : sympy.Symbol or sequence[sympy.Symbol]
             Parameter symbol(s) to ensure.
         control : Any, optional
-            Optional control instance (or compatible) to use.
+            Optional control instance (or compatible) to use. When provided, the
+            control must implement ``make_refs`` and return a mapping for the
+            requested symbol(s).
         **control_kwargs :
-            Control configuration (min, max, value, step).
+            Control configuration (min, max, value, step). These are applied to
+            the resulting :class:`ParamRef` objects.
 
         Returns
         -------
         ParamRef or dict[Symbol, ParamRef]
             ParamRef for a single symbol, or mapping for multiple symbols.
+
+        Examples
+        --------
+        Create a single slider and fetch its ref:
+
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> a = sp.symbols("a")  # doctest: +SKIP
+        >>> ref = mgr.parameter(a, min=-2, max=2)  # doctest: +SKIP
+        >>> ref.symbol  # doctest: +SKIP
+        a
         """
         if isinstance(symbols, Symbol):
             symbols = [symbols]
@@ -801,14 +815,43 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         return hook_id
 
     def fire_hook(self, hook_id: Hashable, event: Optional[ParamEvent]) -> None:
-        """Fire a specific hook with a ParamEvent."""
+        """Fire a specific hook with a ParamEvent.
+
+        Parameters
+        ----------
+        hook_id : hashable
+            Identifier for the hook to invoke.
+        event : ParamEvent or None
+            Event payload to forward to the callback.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> hook_id = mgr.add_hook(lambda *_: None)  # doctest: +SKIP
+        >>> mgr.fire_hook(hook_id, None)  # doctest: +SKIP
+        """
         callback = self._hooks.get(hook_id)
         if callback is None:
             return
         callback(event)
 
     def _on_param_change(self, event: ParamEvent) -> None:
-        """Handle parameter changes by triggering the render callback."""
+        """Handle parameter changes by triggering the render callback.
+
+        Parameters
+        ----------
+        event : ParamEvent
+            Parameter change payload.
+
+        Returns
+        -------
+        None
+        """
         self._render_callback("param_change", event)
     
     def get_hooks(self) -> Dict[Hashable, Callable]:
@@ -954,17 +997,63 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         return self._refs.get(key, default)
 
     def __iter__(self) -> Iterator[Symbol]:
+        """Iterate over parameter symbols.
+
+        Returns
+        -------
+        iterator
+            Iterator over parameter symbols.
+        """
         return iter(self._refs)
 
     def __len__(self) -> int:
+        """Return the number of stored parameter refs.
+
+        Returns
+        -------
+        int
+            Number of parameter refs in the manager.
+        """
         return len(self._refs)
 
     def widget(self, symbol: Symbol) -> Any:
-        """Return the widget/control for a symbol."""
+        """Return the widget/control for a symbol.
+
+        Parameters
+        ----------
+        symbol : sympy.Symbol
+            Parameter symbol.
+
+        Returns
+        -------
+        Any
+            The underlying widget/control instance.
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> a = sp.symbols("a")  # doctest: +SKIP
+        >>> mgr.parameter(a)  # doctest: +SKIP
+        >>> mgr.widget(a)  # doctest: +SKIP
+        """
         return self._refs[symbol].widget
 
     def widgets(self) -> List[Any]:
-        """Return unique widgets/controls suitable for display."""
+        """Return unique widgets/controls suitable for display.
+
+        Returns
+        -------
+        list
+            Unique control instances created by the manager.
+
+        Examples
+        --------
+        >>> layout = widgets.VBox()  # doctest: +SKIP
+        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+        >>> mgr.widgets()  # doctest: +SKIP
+        []
+        """
         return list(self._controls)
 
 
@@ -1925,7 +2014,8 @@ class SmartFigure:
             SymPy expression (e.g. ``sin(x)``).
         parameters : list[sympy.Symbol] or None, optional
             Parameter symbols. If None, they are inferred from the expression.
-            If [], that means explicitly no parameters.
+            If [], that means explicitly no parameters. Parameter creation and
+            updates are delegated to :class:`ParameterManager` (refactored API).
         x_domain : RangeLike or None, optional
             Domain of the independent variable (e.g. ``(-10, 10)``).
             If "figure_default", the figure's range is used when plotting. 
@@ -2002,6 +2092,12 @@ class SmartFigure:
         -------
         ParamRef or dict[Symbol, ParamRef]
             ParamRef for a single symbol, or mapping for multiple symbols.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> a = sp.symbols("a")  # doctest: +SKIP
+        >>> fig.parameter(a, min=-2, max=2)  # doctest: +SKIP
         """
         result = self._params.parameter(symbols, control=control, **control_kwargs)
         self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
@@ -2151,7 +2247,25 @@ class SmartFigure:
         return inst
 
     def add_hook(self, callback: Callable[[Optional[ParamEvent]], Any], *, run_now: bool = True) -> Hashable:
-        """Alias for add_param_change_hook."""
+        """Alias for :meth:`add_param_change_hook`.
+
+        Parameters
+        ----------
+        callback : callable
+            Function with signature ``(event)``.
+        run_now : bool, optional
+            Whether to run once immediately with a ``None`` event.
+
+        Returns
+        -------
+        hashable
+            The hook identifier used for registration.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig.add_hook(lambda *_: None)  # doctest: +SKIP
+        """
         return self.add_param_change_hook(callback, hook_id=None, run_now=run_now)
 
     def add_param_change_hook(
@@ -2178,6 +2292,11 @@ class SmartFigure:
         -------
         hashable
             The hook identifier used for registration.
+
+        Examples
+        --------
+        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig.add_param_change_hook(lambda *_: None, run_now=False)  # doctest: +SKIP
         """
         def _wrapped(event: Optional[ParamEvent]) -> Any:
             with _use_figure(self, display_on_enter=False):
