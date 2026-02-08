@@ -52,16 +52,6 @@ with fig:
 
 This is the **explicit** creation path, consistent with strict `params[a]` lookup.
 
-### 3) Optional: module-level `set_param(symbol, value)` convenience
-
-For cases where the user wants one-liners:
-
-```python
-with fig:
-    set_param(a, 5)  # equivalent to params[a].value = 5 (requires existence)
-```
-
-Not required if you want to keep the surface area minimal.
 
 ## Semantics (spec)
 
@@ -76,10 +66,9 @@ All module-level parameter operations resolve the target figure via:
 - `params[a]` delegates to `current_fig.params[a]` and therefore raises `KeyError` if `a` is missing.
 - `a in params` returns `False` if missing and does not create anything.
 
-### Semantics 2: Creation is explicit via `parameter(...)` or `params.parameter(...)`
+### Semantics 2: Creation is explicit via `parameter(...)`
 
 - `parameter(symbols, **kwargs)` forwards to `current_fig.params.parameter(...)`.
-- `params.parameter(symbols, **kwargs)` is an equivalent method on the proxy for convenience.
 
 ### Semantics 3: Behavior when no current figure is active (Decision 1)
 
@@ -91,22 +80,8 @@ Two viable behaviors:
 
 Rationale: parameter mutation without an active figure is usually accidental, and auto-creating a figure for silent state changes is surprising.
 
-**Decision 1B (mirror `plot(...)` more literally): auto-create**  
-- If no current figure exists:
-  - create `fig = SmartFigure()`,
-  - display(fig),
-  - treat it as the implicit target for `parameter(...)` (and possibly for `params[...]`).
+### Semantics 4: sugar `params[a] = value`
 
-Rationale: parity with `plot(...)`. Drawback: it makes it easy to create “orphan” figures (created only to host parameters).
-
-This blueprint supports either; the implementation section indicates the branching point.
-
-### Semantics 4: Optional sugar `params[a] = value` (Decision 2)
-
-**Decision 2A: do not support**  
-Keep `params` strictly a mapping to refs. Users write `params[a].value = 5`.
-
-**Decision 2B: support**  
 Implement `__setitem__` so `params[a] = 5` sets `params[a].value`.
 
 This is purely ergonomic and does not change core semantics.
@@ -186,7 +161,7 @@ Notes:
 
 ### Step 3: Documentation + examples
 
-Add to docstring / README:
+Add a comprehensive docstring (similar to):
 
 ```python
 x, a = sp.symbols("x a")
@@ -215,10 +190,9 @@ Add tests at the module level (or in your existing test harness) that verify:
 - `with fig: parameter(a)` returns a `ParamRef`, and then `params[a]` succeeds.
 
 4) **No-context behavior**:
-- Decision 1A: `params[a]` and `parameter(a)` raise `RuntimeError`.
-- Decision 1B: they create/display a figure (harder to test; can test that a `SmartFigure` was constructed, and `_current_figure()` is not `None` after call if you push it, or that `display` was invoked if you mock it).
+- Decision 1: `params[a]` and `parameter(a)` raise `RuntimeError`.
 
-5) **Optional assignment sugar** (if Decision 2B):
+5) **Optional assignment sugar** (if Decision 2):
 - `with fig: params[a] = 7` sets `params[a].value == 7`.
 
 ### Step 5: Export surface
@@ -233,8 +207,3 @@ If you use `__all__`, add:
 - No changes required for existing `fig.params` usage.
 - Users who prefer explicit figure access can continue using `fig.params[a].value = ...`.
 - Users who prefer pyplot-like usage can use the module-level `params` under `with fig:`.
-
-## Follow-on (separate future blueprint)
-
-- Add a “batch update” context (suppress multiple renders, trigger one render on exit).
-- Add `params.ensure(a, **kwargs)` as a synonym for `parameter(a, **kwargs)` if you want a more explicit name.

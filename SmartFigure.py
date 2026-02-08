@@ -141,6 +141,14 @@ def _current_figure() -> Optional["SmartFigure"]:
     return _FIGURE_STACK[-1]
 
 
+def _require_current_figure() -> "SmartFigure":
+    """Return the current SmartFigure, or raise if none is active."""
+    fig = _current_figure()
+    if fig is None:
+        raise RuntimeError("No current SmartFigure. Use `with fig:` first.")
+    return fig
+
+
 def _push_current_figure(fig: "SmartFigure", display_on_enter: bool) -> None:
     """Push a SmartFigure onto the global stack and optionally display it.
 
@@ -2407,6 +2415,64 @@ class SmartFigure:
         None
         """
         _pop_current_figure(self)
+
+
+class _CurrentParamsProxy(Mapping):
+    """Module-level proxy to the current figure's ParameterManager.
+
+    Examples
+    --------
+    >>> x, a = sp.symbols("x a")  # doctest: +SKIP
+    >>> fig = SmartFigure()  # doctest: +SKIP
+    >>> with fig:  # doctest: +SKIP
+    ...     fig.plot(x, a * sp.sin(x), parameters=[a])  # doctest: +SKIP
+    ...     params[a].value = 5  # doctest: +SKIP
+    ...     parameter(a, min=-10, max=10)  # doctest: +SKIP
+    """
+
+    def _fig(self) -> "SmartFigure":
+        return _require_current_figure()
+
+    def _mgr(self) -> "ParameterManager":
+        return self._fig().params
+
+    def __getitem__(self, key: Hashable) -> ParamRef:
+        return self._mgr()[key]
+
+    def __iter__(self) -> Iterator[Hashable]:
+        return iter(self._mgr())
+
+    def __len__(self) -> int:
+        return len(self._mgr())
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._mgr()
+
+    def __setitem__(self, key: Hashable, value: Any) -> None:
+        self[key].value = value
+
+    def parameter(
+        self,
+        symbols: Union[Symbol, Sequence[Symbol]],
+        *,
+        control: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Union[ParamRef, Dict[Symbol, ParamRef]]:
+        return self._mgr().parameter(symbols, control=control, **kwargs)
+
+
+params = _CurrentParamsProxy()
+
+
+def parameter(
+    symbols: Union[Symbol, Sequence[Symbol]],
+    *,
+    control: Optional[str] = None,
+    **kwargs: Any,
+) -> Union[ParamRef, Dict[Symbol, ParamRef]]:
+    """Ensure parameter(s) exist on the current figure and return their refs."""
+    fig = _require_current_figure()
+    return fig.params.parameter(symbols, control=control, **kwargs)
 
 
 def plot(
