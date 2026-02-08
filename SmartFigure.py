@@ -98,6 +98,7 @@ import time
 import warnings
 import logging
 from contextlib import contextmanager
+from collections.abc import Mapping
 from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator, List
 
 import ipywidgets as widgets
@@ -113,6 +114,8 @@ from .InputConvert import InputConvert
 from .numpify import numpify_cached
 from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
 from .SmartSlider import SmartFloatSlider
+from .ParamEvent import ParamEvent
+from .ParamRef import ParamRef
 
 
 # Module logger
@@ -634,15 +637,15 @@ class SmartFigureLayout:
 # SECTION: ParameterManager (The Model for Parameters) [id: ParameterManager]
 # =============================================================================
 
-class ParameterManager:
+class ParameterManager(Mapping[Symbol, ParamRef]):
     """
     Manages the collection of parameter sliders and change hooks.
 
     Responsibilities:
-    - Creating and reusing SmartFloatSlider widgets.
-    - Storing current parameter values.
+    - Creating and reusing parameter controls.
+    - Storing parameter refs.
     - Executing hooks when parameters change.
-    - **Backward Compatibility:** Acts like a dictionary so `fig.params[sym]` works.
+    - Acts like a dictionary so `fig.params[sym]` works.
 
     Design Note:
     ------------
@@ -650,13 +653,13 @@ class ParameterManager:
     from the "rendering" of the figure.
     """
 
-    def __init__(self, render_callback: Callable[[str, Any], None], layout_box: widgets.Box) -> None:
+    def __init__(self, render_callback: Callable[[str, ParamEvent], None], layout_box: widgets.Box) -> None:
         """Initialize the manager with a render callback and layout container.
 
         Parameters
         ----------
         render_callback : callable
-            Function invoked when parameters change. Signature: ``(reason, change)``.
+            Function invoked when parameters change. Signature: ``(reason, event)``.
         layout_box : ipywidgets.Box
             Container where slider widgets will be added.
 
@@ -669,82 +672,63 @@ class ParameterManager:
         >>> layout = widgets.VBox()  # doctest: +SKIP
         >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
         """
-        self._sliders: Dict[Symbol, SmartFloatSlider] = {}
-        self._hooks: Dict[Hashable, Callable[[Dict, Any], Any]] = {}
+        self._refs: Dict[Symbol, ParamRef] = {}
+        self._controls: List[Any] = []
+        self._hooks: Dict[Hashable, Callable[[ParamEvent], Any]] = {}
         self._hook_counter: int = 0
         self._render_callback = render_callback
         self._layout_box = layout_box # The VBox where sliders live
 
-    def add_param(self, symbol: Symbol, **kwargs: Any) -> SmartFloatSlider:
+    def ensure(self, symbol: Symbol, *, control: Optional[Any] = None, **control_kwargs: Any) -> ParamRef:
         """
-        Create or reuse a slider for the given symbol.
+        Create or reuse a parameter reference for the given symbol.
 
         Parameters
         ----------
         symbol : sympy.Symbol
             The parameter symbol.
-        **kwargs :
-            Options for the slider (min, max, value, step).
+        control : Any, optional
+            Optional control instance (or compatible) to use.
+        **control_kwargs :
+            Control configuration (min, max, value, step).
 
         Returns
         -------
-        SmartFloatSlider
-            The slider instance for the symbol.
-
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> slider = mgr.add_param(a, min=-2, max=2)  # doctest: +SKIP
+        ParamRef
+            The parameter reference for the symbol.
         """
-        if symbol in self._sliders:
-            return self._sliders[symbol]
+        if symbol in self._refs:
+            return self._refs[symbol]
 
         defaults = {'value': 0.0, 'min': -1.0, 'max': 1.0, 'step': 0.01}
-        config = {**defaults, **kwargs}
-        
-        slider = SmartFloatSlider(
-            description=f"${sp.latex(symbol)}$",
-            value=float(config['value']),
-            min=float(config['min']),
-            max=float(config['max']),
-            step=float(config['step'])
-        )
-        
-        # Observe changes
-        slider.observe(self._on_slider_change, names="value")
-        
-        self._sliders[symbol] = slider
-        self._layout_box.children += (slider,)
-        return slider
+        config = {**defaults, **control_kwargs}
 
-    def get_value(self, symbol: Symbol) -> float:
-        """Return the current float value of a parameter.
+        if control is None:
+            control = SmartFloatSlider(
+                description=f"${sp.latex(symbol)}$",
+                value=float(config['value']),
+                min=float(config['min']),
+                max=float(config['max']),
+                step=float(config['step'])
+            )
 
-        Parameters
-        ----------
-        symbol : sympy.Symbol
-            Parameter symbol to query.
+        refs = control.make_refs([symbol])
+        if symbol not in refs:
+            raise KeyError(f"Control did not provide a ref for symbol {symbol}.")
 
-        Returns
-        -------
-        float
-            Current slider value, or ``0.0`` if no slider exists.
+        ref = refs[symbol]
+        ref.observe(self._on_param_change)
+        self._refs[symbol] = ref
 
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> mgr.get_value(a)
-        0.0
-        """
-        return self._sliders[symbol].value if symbol in self._sliders else 0.0
+        if control not in self._controls:
+            self._controls.append(control)
+            self._layout_box.children += (control,)
+
+        return ref
 
     @property
     def has_params(self) -> bool:
-        """Whether any parameters (sliders) have been created.
+        """Whether any parameters have been created.
 
         Returns
         -------
@@ -758,23 +742,18 @@ class ParameterManager:
         >>> mgr.has_params
         False
         """
-        return len(self._sliders) > 0
+        return len(self._refs) > 0
 
-    def add_hook(self, callback: Callable, hook_id: Optional[Hashable] = None, fig: Any = None) -> Hashable:
+    def add_hook(self, callback: Callable[[ParamEvent], Any], hook_id: Optional[Hashable] = None) -> Hashable:
         """
-        Register a parameter change hook. 
-        The callback is run immediately on registration, with an empty change dict.
+        Register a parameter change hook.
         
         Parameters
         ----------
         callback: Callable
-            The function to call (signature: (change, fig)).
+            The function to call (signature: (event)).
         hook_id: Hashable, optional
             Optional unique identifier.
-        fig: SmartFigure
-            The SmartFigure instance. Crucial for passing to the callback immediately
-            so the hook can initialize.
-
         Returns
         -------
         Hashable
@@ -791,27 +770,18 @@ class ParameterManager:
             hook_id = f"hook:{self._hook_counter}"
         self._hooks[hook_id] = callback
         
-        # Run immediately on registration
-        try:
-            callback({}, fig) 
-        except Exception as e:
-            warnings.warn(f"Hook failed on init: {e}")
         return hook_id
 
-    def _on_slider_change(self, change: Dict[str, Any]) -> None:
-        """Handle slider changes by triggering the render callback.
+    def fire_hook(self, hook_id: Hashable, event: ParamEvent) -> None:
+        """Fire a specific hook with a ParamEvent."""
+        callback = self._hooks.get(hook_id)
+        if callback is None:
+            return
+        callback(event)
 
-        Parameters
-        ----------
-        change : dict
-            Traitlets change dictionary emitted by the slider.
-
-        Returns
-        -------
-        None
-        """
-        # 1. Trigger main render via the callback passed in __init__
-        self._render_callback("param_change", change)
+    def _on_param_change(self, event: ParamEvent) -> None:
+        """Handle parameter changes by triggering the render callback."""
+        self._render_callback("param_change", event)
     
     def get_hooks(self) -> Dict[Hashable, Callable]:
         """Return a copy of the registered hook dictionary.
@@ -828,13 +798,13 @@ class ParameterManager:
         >>> isinstance(mgr.get_hooks(), dict)
         True
         """
-        return self._hooks
+        return self._hooks.copy()
 
     # --- Dict-like Interface for Backward Compatibility ---
     # This allows `fig.params[symbol]` to work in user hooks.
     
-    def __getitem__(self, key: Symbol) -> SmartFloatSlider:
-        """Return the slider for the given symbol.
+    def __getitem__(self, key: Symbol) -> ParamRef:
+        """Return the param ref for the given symbol.
 
         Parameters
         ----------
@@ -843,18 +813,18 @@ class ParameterManager:
 
         Returns
         -------
-        SmartFloatSlider
-            Slider associated with the symbol.
+        ParamRef
+            Ref associated with the symbol.
 
         Examples
         --------
         >>> layout = widgets.VBox()  # doctest: +SKIP
         >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> mgr.add_param(a)  # doctest: +SKIP
+        >>> mgr.ensure(a)  # doctest: +SKIP
         >>> mgr[a]  # doctest: +SKIP
         """
-        return self._sliders[key]
+        return self._refs[key]
     
     def __contains__(self, key: Symbol) -> bool:
         """Check if a slider exists for a symbol.
@@ -877,15 +847,15 @@ class ParameterManager:
         >>> a in mgr
         False
         """
-        return key in self._sliders
+        return key in self._refs
     
-    def items(self) -> Iterator[Tuple[Symbol, SmartFloatSlider]]:
-        """Iterate over ``(Symbol, SmartFloatSlider)`` pairs.
+    def items(self) -> Iterator[Tuple[Symbol, ParamRef]]:
+        """Iterate over ``(Symbol, ParamRef)`` pairs.
 
         Returns
         -------
         iterator
-            Iterator over the internal slider mapping.
+            Iterator over the internal ref mapping.
 
         Examples
         --------
@@ -894,7 +864,7 @@ class ParameterManager:
         >>> list(mgr.items())
         []
         """
-        return self._sliders.items()
+        return self._refs.items()
     
     def keys(self) -> Iterator[Symbol]:
         """Iterate over parameter symbols.
@@ -911,15 +881,15 @@ class ParameterManager:
         >>> list(mgr.keys())
         []
         """
-        return self._sliders.keys()
+        return self._refs.keys()
     
-    def values(self) -> Iterator[SmartFloatSlider]:
-        """Iterate over slider instances.
+    def values(self) -> Iterator[ParamRef]:
+        """Iterate over param refs.
 
         Returns
         -------
         iterator
-            Iterator over sliders.
+            Iterator over param refs.
 
         Examples
         --------
@@ -928,7 +898,7 @@ class ParameterManager:
         >>> list(mgr.values())
         []
         """
-        return self._sliders.values()
+        return self._refs.values()
     
     def get(self, key: Symbol, default: Any = None) -> Any:
         """Return a slider if present; otherwise return a default.
@@ -953,7 +923,21 @@ class ParameterManager:
         >>> mgr.get(a) is None
         True
         """
-        return self._sliders.get(key, default)
+        return self._refs.get(key, default)
+
+    def __iter__(self) -> Iterator[Symbol]:
+        return iter(self._refs)
+
+    def __len__(self) -> int:
+        return len(self._refs)
+
+    def widget(self, symbol: Symbol) -> Any:
+        """Return the widget/control for a symbol."""
+        return self._refs[symbol].widget
+
+    def widgets(self) -> List[Any]:
+        """Return unique widgets/controls suitable for display."""
+        return list(self._controls)
 
 
 # =============================================================================
@@ -1437,9 +1421,8 @@ class SmartPlot:
         x_values = np.linspace(x_min, x_max, num=int(num))
         args = [x_values]
         if self._parameters:
-            # Retrieve values from the manager
             for p in self._parameters:
-                args.append(fig.params.get_value(p))
+                args.append(fig.params[p].value)
         
         y_values = np.asarray(self._f_numpy(*args))
         
@@ -1951,7 +1934,7 @@ class SmartFigure:
 
         # Ensure Sliders Exist (Delegate to Manager)
         for p in parameters:
-            self._params.add_param(p)
+            self._params.ensure(p)
         
         # Update UI visibility
         self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
@@ -1973,9 +1956,38 @@ class SmartFigure:
             self.plots[id] = plot
         
         return plot
+
+    def parameter(self, symbols: Union[Symbol, Sequence[Symbol]], *, control: Optional[Any] = None, **control_kwargs: Any):
+        """
+        Create or ensure parameters and return refs.
+
+        Parameters
+        ----------
+        symbols : sympy.Symbol or sequence[sympy.Symbol]
+            Parameter symbol(s) to ensure.
+        control : Any, optional
+            Optional control instance to use for the parameter(s).
+        **control_kwargs : Any
+            Control configuration options (min, max, value, step).
+
+        Returns
+        -------
+        ParamRef or dict[Symbol, ParamRef]
+            ParamRef for a single symbol, or mapping for multiple symbols.
+        """
+        if isinstance(symbols, Symbol):
+            ref = self._params.ensure(symbols, control=control, **control_kwargs)
+            self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
+            return ref
+
+        refs = {}
+        for sym in symbols:
+            refs[sym] = self._params.ensure(sym, control=control, **control_kwargs)
+        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
+        return refs
         
 
-    def render(self, reason: str = "manual", trigger: Any = None) -> None:
+    def render(self, reason: str = "manual", trigger: Optional[ParamEvent] = None) -> None:
         """
         Render all plots on the figure.
 
@@ -2007,16 +2019,16 @@ class SmartFigure:
         # 2. Run hooks (if triggered by parameter change)
         # Note: ParameterManager triggers this render, then we run hooks.
         if reason == "param_change" and trigger:
-             hooks = self._params.get_hooks()
-             for h_id, callback in list(hooks.items()):
-                 try:
-                     callback(trigger, self) # Pass self (SmartFigure) to hooks
-                 except Exception as e:
-                     warnings.warn(f"Hook {h_id} failed: {e}")
+            hooks = self._params.get_hooks()
+            for h_id, callback in list(hooks.items()):
+                try:
+                    callback(trigger)
+                except Exception as e:
+                    warnings.warn(f"Hook {h_id} failed: {e}")
 
-    def add_param(self, symbol: Symbol, **kwargs: Any) -> SmartFloatSlider:
+    def add_param(self, symbol: Symbol, **kwargs: Any) -> ParamRef:
         """
-        Add a SmartFloatSlider parameter manually.
+        Add a parameter manually.
 
         Parameters
         ----------
@@ -2027,8 +2039,8 @@ class SmartFigure:
 
         Returns
         -------
-        SmartFloatSlider
-            The created or reused slider.
+        ParamRef
+            The created or reused parameter reference.
 
         Examples
         --------
@@ -2036,9 +2048,9 @@ class SmartFigure:
         >>> a = sp.symbols("a")  # doctest: +SKIP
         >>> fig.add_param(a, min=-2, max=2)  # doctest: +SKIP
         """
-        slider = self._params.add_param(symbol, **kwargs)
+        ref = self._params.ensure(symbol, **kwargs)
         self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
-        return slider
+        return ref
 
     def get_info_output(self, id: Optional[Hashable] = None, **kwargs: Any) -> widgets.Output:
         """
@@ -2074,7 +2086,7 @@ class SmartFigure:
 
         An info component is a class/function that:
         1. Draws into an Info Output widget.
-        2. Implements an `update(change, fig, out)` method.
+        2. Implements an `update(event, fig, out)` method.
 
         Parameters
         ----------
@@ -2097,7 +2109,7 @@ class SmartFigure:
         >>> class ExampleComponent:  # doctest: +SKIP
         ...     def __init__(self, out, fig):  # doctest: +SKIP
         ...         self.out = out  # doctest: +SKIP
-        ...     def update(self, change, fig, out):  # doctest: +SKIP
+        ...     def update(self, event, fig, out):  # doctest: +SKIP
         ...         pass  # doctest: +SKIP
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> fig.add_info_component("example", ExampleComponent)  # doctest: +SKIP
@@ -2113,20 +2125,58 @@ class SmartFigure:
         # Register hook to update component on param change
         if hook_id is None: hook_id = ("info_component", id)
         
-        def _hook(change: Dict, fig: SmartFigure) -> None:
-            inst.update(change, fig, out)
+        def _hook(event: ParamEvent) -> None:
+            inst.update(event, self, out)
             
         self.add_param_change_hook(_hook, hook_id=hook_id)
         return inst
 
-    def add_param_change_hook(self, callback: Callable[[Dict, SmartFigure], Any], hook_id: Optional[Hashable] = None) -> Hashable:
+    def add_hook(self, callback: Callable[[ParamEvent], Any], *, run_now: bool = True) -> Hashable:
         """
         Register a callback to run when *any* parameter value changes.
 
         Parameters
         ----------
         callback : callable
-            Function with signature ``(change, fig)``.
+            Function with signature ``(event)``.
+        run_now : bool, optional
+            Whether to run once immediately with a synthetic event.
+
+        Returns
+        -------
+        hashable
+            The hook identifier used for registration.
+        """
+        def _wrapped(event: ParamEvent) -> Any:
+            with _use_figure(self, display_on_enter=False):
+                return callback(event)
+
+        hook_id = self._params.add_hook(_wrapped)
+
+        if run_now and self._params.has_params:
+            first_ref = next(iter(self._params.values()))
+            init_event = ParamEvent(
+                parameter=first_ref.parameter,
+                old=first_ref.value,
+                new=first_ref.value,
+                ref=first_ref,
+                raw=None,
+            )
+            try:
+                _wrapped(init_event)
+            except Exception as e:
+                warnings.warn(f"Hook failed on init: {e}")
+
+        return hook_id
+
+    def add_param_change_hook(self, callback: Callable[[ParamEvent], Any], hook_id: Optional[Hashable] = None) -> Hashable:
+        """
+        Register a callback to run when *any* parameter value changes.
+
+        Parameters
+        ----------
+        callback : callable
+            Function with signature ``(event)``.
         hook_id : hashable, optional
             Unique identifier for the hook.
 
@@ -2134,17 +2184,31 @@ class SmartFigure:
         -------
         hashable
             The hook identifier used for registration.
-
-        Examples
-        --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> fig.add_param_change_hook(lambda *_: None)  # doctest: +SKIP
         """
-        def _wrapped(change: Dict, fig: SmartFigure) -> Any:
-            with _use_figure(self, display_on_enter=False):
-                return callback(change, self)
+        if hook_id is None:
+            return self.add_hook(callback, run_now=True)
 
-        return self._params.add_hook(_wrapped, hook_id, fig=self)
+        def _wrapped(event: ParamEvent) -> Any:
+            with _use_figure(self, display_on_enter=False):
+                return callback(event)
+
+        hook_id = self._params.add_hook(_wrapped, hook_id)
+
+        if self._params.has_params:
+            first_ref = next(iter(self._params.values()))
+            init_event = ParamEvent(
+                parameter=first_ref.parameter,
+                old=first_ref.value,
+                new=first_ref.value,
+                ref=first_ref,
+                raw=None,
+            )
+            try:
+                _wrapped(init_event)
+            except Exception as e:
+                warnings.warn(f"Hook failed on init: {e}")
+
+        return hook_id
 
     # --- Internal / Plumbing ---
 

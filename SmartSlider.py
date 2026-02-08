@@ -428,6 +428,50 @@ class SmartFloatSlider(widgets.VBox):
         """
         self.value = self._defaults["value"]  # slider sync + slider observer updates text
 
+    @property
+    def min(self) -> float:
+        """Return the current minimum slider limit."""
+        return float(self.slider.min)
+
+    @min.setter
+    def min(self, value: float) -> None:
+        """Set the minimum slider limit."""
+        self.slider.min = float(value)
+        self._sync_limit_texts(None)
+
+    @property
+    def max(self) -> float:
+        """Return the current maximum slider limit."""
+        return float(self.slider.max)
+
+    @max.setter
+    def max(self, value: float) -> None:
+        """Set the maximum slider limit."""
+        self.slider.max = float(value)
+        self._sync_limit_texts(None)
+
+    @property
+    def step(self) -> float:
+        """Return the current slider step."""
+        return float(self.slider.step)
+
+    @step.setter
+    def step(self, value: float) -> None:
+        """Set the slider step size."""
+        self.slider.step = float(value)
+
+    def reset(self) -> None:
+        """Reset the slider to its initial defaults."""
+        self._reset(None)
+
+    def make_refs(self, symbols):
+        """Create ParamRef mappings for provided symbols."""
+        if len(symbols) != 1:
+            raise ValueError("SmartFloatSlider only supports a single symbol.")
+        from .ParamRef import ProxyParamRef
+        symbol = symbols[0]
+        return {symbol: ProxyParamRef(symbol, self)}
+
     def _toggle_settings(self, _) -> None:
         """Toggle visibility of the settings panel.
 
