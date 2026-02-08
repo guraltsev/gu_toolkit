@@ -59,6 +59,17 @@ class SmartFloatSlider(widgets.VBox):
             >>> slider = SmartFloatSlider(value=0.25, min=0.0, max=1.0, step=0.05)
             >>> float(slider.value)
             0.25
+
+        Notes
+        -----
+        - The text input accepts simple expressions (e.g., ``"pi/2"``) via
+          :class:`~gu_toolkit.InputConvert.InputConvert`.
+        - Use ``slider.slider`` to access the underlying ``FloatSlider`` instance.
+
+        See Also
+        --------
+        SmartFloatSlider._commit_text_value : Parsing/validation for text edits.
+        SmartFloatSlider._commit_limit_value : Parsing/validation for min/max edits.
         """
         # Remember defaults for reset
         self._defaults = {"value": value, "min": min, "max": max, "step": step}

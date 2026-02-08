@@ -336,6 +336,14 @@ class OneShotOutput(widgets.Output):
         >>> out = OneShotOutput()  # doctest: +SKIP
         >>> out.has_been_displayed
         False
+
+        Notes
+        -----
+        This flag is only updated when the widget is actually displayed in Jupyter.
+
+        See Also
+        --------
+        OneShotOutput.reset_display_state : Reset the display flag.
         """
         return self._displayed
 
@@ -356,6 +364,15 @@ class OneShotOutput(widgets.Output):
         --------
         >>> out = OneShotOutput()  # doctest: +SKIP
         >>> out.reset_display_state()
+
+        Notes
+        -----
+        Use this sparingly; it re-enables multiple displays of the same widget
+        which can be confusing in notebooks.
+
+        See Also
+        --------
+        OneShotOutput.has_been_displayed : Check whether the widget was shown.
         """
         self._displayed = False
 
@@ -395,6 +412,16 @@ class SmartFigureLayout:
         >>> layout = SmartFigureLayout(title="My Plot")  # doctest: +SKIP
         >>> layout.get_title()  # doctest: +SKIP
         'My Plot'
+
+        Notes
+        -----
+        The plot container is given a concrete height (``60vh``) to ensure Plotly
+        has a real size to render into.
+
+        See Also
+        --------
+        SmartFigureLayout.set_plot_widget : Attach the plot widget.
+        SmartFigureLayout.update_sidebar_visibility : Control sidebar visibility.
         """
         self._reflow_callback: Optional[Callable[[], None]] = None
 
@@ -493,6 +520,14 @@ class SmartFigureLayout:
         --------
         >>> layout = SmartFigureLayout()  # doctest: +SKIP
         >>> out = layout.output_widget  # doctest: +SKIP
+
+        Notes
+        -----
+        ``OneShotOutput`` prevents accidental double-display of the same widget.
+
+        See Also
+        --------
+        OneShotOutput : Output wrapper that enforces single display.
         """
         out = OneShotOutput()
         with out:
@@ -515,6 +550,14 @@ class SmartFigureLayout:
         --------
         >>> layout = SmartFigureLayout()  # doctest: +SKIP
         >>> layout.set_title("Demo")  # doctest: +SKIP
+
+        Notes
+        -----
+        HTML/LaTeX rendering is handled by the underlying ``HTMLMath`` widget.
+
+        See Also
+        --------
+        SmartFigureLayout.get_title : Read the current title.
         """
         self.title_html.value = text
 
@@ -531,6 +574,14 @@ class SmartFigureLayout:
         >>> layout = SmartFigureLayout(title="Demo")  # doctest: +SKIP
         >>> layout.get_title()  # doctest: +SKIP
         'Demo'
+
+        Notes
+        -----
+        The title is stored on the underlying ``HTMLMath`` widget.
+
+        See Also
+        --------
+        SmartFigureLayout.set_title : Update the title.
         """
         return self.title_html.value
 
@@ -555,6 +606,14 @@ class SmartFigureLayout:
         --------
         >>> layout = SmartFigureLayout()  # doctest: +SKIP
         >>> layout.update_sidebar_visibility(has_params=True, has_info=False)  # doctest: +SKIP
+
+        Notes
+        -----
+        The sidebar container is hidden entirely when both sections are empty.
+
+        See Also
+        --------
+        SmartFigureLayout.set_plot_widget : Attach the main plot widget.
         """
         self.params_header.layout.display = "block" if has_params else "none"
         self.params_box.layout.display = "flex" if has_params else "none"
@@ -589,6 +648,15 @@ class SmartFigureLayout:
         >>> layout = SmartFigureLayout()  # doctest: +SKIP
         >>> dummy = widgets.Box()  # doctest: +SKIP
         >>> layout.set_plot_widget(dummy)  # doctest: +SKIP
+
+        Notes
+        -----
+        The reflow callback is used to trigger Plotly resize logic when the
+        layout changes (e.g., full-width toggle).
+
+        See Also
+        --------
+        SmartFigureLayout._on_full_width_change : Layout toggle handler.
         """
         self.plot_container.children = (widget,)
         self._reflow_callback = reflow_callback
@@ -668,6 +736,15 @@ class ParameterManager:
         --------
         >>> layout = widgets.VBox()  # doctest: +SKIP
         >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
+
+        Notes
+        -----
+        ``render_callback`` is invoked on slider changes with ``(reason, change)``.
+
+        See Also
+        --------
+        ParameterManager.add_param : Create a slider for a symbol.
+        SmartFigure.render : Render callback used by the figure.
         """
         self._sliders: Dict[Symbol, SmartFloatSlider] = {}
         self._hooks: Dict[Hashable, Callable[[Dict, Any], Any]] = {}
@@ -697,6 +774,15 @@ class ParameterManager:
         >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
         >>> slider = mgr.add_param(a, min=-2, max=2)  # doctest: +SKIP
+
+        Notes
+        -----
+        Existing sliders are reused, so calling ``add_param`` repeatedly is safe.
+
+        See Also
+        --------
+        ParameterManager.get_value : Read the current parameter value.
+        SmartFigure.add_param : Public facade for adding sliders.
         """
         if symbol in self._sliders:
             return self._sliders[symbol]
@@ -739,6 +825,14 @@ class ParameterManager:
         >>> a = sp.symbols("a")  # doctest: +SKIP
         >>> mgr.get_value(a)
         0.0
+
+        Notes
+        -----
+        Returns ``0.0`` when the symbol has not been added as a slider.
+
+        See Also
+        --------
+        ParameterManager.add_param : Create a slider for a symbol.
         """
         return self._sliders[symbol].value if symbol in self._sliders else 0.0
 
@@ -757,6 +851,14 @@ class ParameterManager:
         >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
         >>> mgr.has_params
         False
+
+        Notes
+        -----
+        This is used to toggle sidebar visibility in the layout.
+
+        See Also
+        --------
+        SmartFigureLayout.update_sidebar_visibility : Sidebar toggling logic.
         """
         return len(self._sliders) > 0
 
@@ -785,6 +887,15 @@ class ParameterManager:
         >>> layout = widgets.VBox()  # doctest: +SKIP
         >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
         >>> hook_id = mgr.add_hook(lambda *_: None)  # doctest: +SKIP
+
+        Notes
+        -----
+        The callback signature is ``(change, fig)``, where ``change`` is a
+        traitlets change dictionary and ``fig`` may be ``None`` if not provided.
+
+        See Also
+        --------
+        SmartFigure.add_param_change_hook : Public hook registration API.
         """
         if hook_id is None:
             self._hook_counter += 1
@@ -827,6 +938,14 @@ class ParameterManager:
         >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
         >>> isinstance(mgr.get_hooks(), dict)
         True
+
+        Notes
+        -----
+        The returned dictionary maps hook IDs to callbacks.
+
+        See Also
+        --------
+        ParameterManager.add_hook : Register a hook.
         """
         return self._hooks
 
@@ -853,6 +972,14 @@ class ParameterManager:
         >>> a = sp.symbols("a")  # doctest: +SKIP
         >>> mgr.add_param(a)  # doctest: +SKIP
         >>> mgr[a]  # doctest: +SKIP
+
+        Notes
+        -----
+        This is provided for backwards compatibility with dict-like usage.
+
+        See Also
+        --------
+        ParameterManager.get : Safe access with a default.
         """
         return self._sliders[key]
     
@@ -876,6 +1003,14 @@ class ParameterManager:
         >>> a = sp.symbols("a")  # doctest: +SKIP
         >>> a in mgr
         False
+
+        Notes
+        -----
+        Use this to guard access with ``mgr[key]``.
+
+        See Also
+        --------
+        ParameterManager.get : Safe access with a default.
         """
         return key in self._sliders
     
@@ -893,6 +1028,15 @@ class ParameterManager:
         >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
         >>> list(mgr.items())
         []
+
+        Notes
+        -----
+        Mirrors ``dict.items()`` for compatibility.
+
+        See Also
+        --------
+        ParameterManager.keys : Iterate over symbols only.
+        ParameterManager.values : Iterate over slider widgets only.
         """
         return self._sliders.items()
     
@@ -910,6 +1054,14 @@ class ParameterManager:
         >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
         >>> list(mgr.keys())
         []
+
+        Notes
+        -----
+        Mirrors ``dict.keys()`` for compatibility.
+
+        See Also
+        --------
+        ParameterManager.items : Iterate over (symbol, slider) pairs.
         """
         return self._sliders.keys()
     
@@ -927,6 +1079,14 @@ class ParameterManager:
         >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
         >>> list(mgr.values())
         []
+
+        Notes
+        -----
+        Mirrors ``dict.values()`` for compatibility.
+
+        See Also
+        --------
+        ParameterManager.items : Iterate over (symbol, slider) pairs.
         """
         return self._sliders.values()
     
@@ -952,6 +1112,14 @@ class ParameterManager:
         >>> a = sp.symbols("a")  # doctest: +SKIP
         >>> mgr.get(a) is None
         True
+
+        Notes
+        -----
+        This mirrors ``dict.get`` and avoids ``KeyError``.
+
+        See Also
+        --------
+        ParameterManager.__getitem__ : Direct access that may raise ``KeyError``.
         """
         return self._sliders.get(key, default)
 
@@ -985,6 +1153,14 @@ class InfoPanelManager:
         Examples
         --------
         >>> panel = InfoPanelManager(widgets.VBox())  # doctest: +SKIP
+
+        Notes
+        -----
+        Outputs are stored by ID so they can be reused and updated in place.
+
+        See Also
+        --------
+        InfoPanelManager.get_output : Create or retrieve an output widget.
         """
         self._outputs: Dict[Hashable, widgets.Output] = {}
         self._components: Dict[Hashable, Any] = {}
@@ -1011,6 +1187,15 @@ class InfoPanelManager:
         --------
         >>> panel = InfoPanelManager(widgets.VBox())  # doctest: +SKIP
         >>> out = panel.get_output("info:1")  # doctest: +SKIP
+
+        Notes
+        -----
+        If ``id`` matches the ``info:<n>`` pattern, the internal counter is updated
+        to avoid collisions with auto-generated IDs.
+
+        See Also
+        --------
+        SmartFigure.get_info_output : Public facade for info outputs.
         """
         if id is None:
             self._counter += 1
@@ -1053,6 +1238,15 @@ class InfoPanelManager:
         --------
         >>> panel = InfoPanelManager(widgets.VBox())  # doctest: +SKIP
         >>> panel.add_component("demo", object())  # doctest: +SKIP
+
+        Notes
+        -----
+        Components are stored by ID and can be retrieved later for updates.
+
+        See Also
+        --------
+        InfoPanelManager.get_component : Retrieve a registered component.
+        SmartFigure.add_info_component : Higher-level component registration.
         """
         self._components[id] = component_inst
 
@@ -1074,6 +1268,14 @@ class InfoPanelManager:
         >>> panel = InfoPanelManager(widgets.VBox())  # doctest: +SKIP
         >>> panel.add_component("demo", object())  # doctest: +SKIP
         >>> panel.get_component("demo")  # doctest: +SKIP
+
+        Notes
+        -----
+        This raises ``KeyError`` if the component is not registered.
+
+        See Also
+        --------
+        InfoPanelManager.add_component : Register a component instance.
         """
         return self._components[id]
 
@@ -1091,6 +1293,14 @@ class InfoPanelManager:
         >>> panel = InfoPanelManager(widgets.VBox())  # doctest: +SKIP
         >>> panel.has_info
         False
+
+        Notes
+        -----
+        This is used to toggle sidebar visibility in the layout.
+
+        See Also
+        --------
+        SmartFigureLayout.update_sidebar_visibility : Sidebar toggling logic.
         """
         return len(self._outputs) > 0
 
@@ -1154,6 +1364,15 @@ class SmartPlot:
         >>> x = sp.symbols("x")  # doctest: +SKIP
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+
+        Notes
+        -----
+        ``SmartPlot`` instances are normally created via :meth:`SmartFigure.plot`.
+
+        See Also
+        --------
+        SmartFigure.plot : Public API for creating plots.
+        SmartPlot.update : Update plot attributes in place.
         """
         self._smart_figure = smart_figure
         
@@ -1197,6 +1416,14 @@ class SmartPlot:
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.set_func(x, a * sp.cos(x), parameters=[a])  # doctest: +SKIP
+
+        Notes
+        -----
+        Changing the function updates the internal NumPy-compiled callable.
+
+        See Also
+        --------
+        SmartPlot.update : Update multiple attributes in one call.
         """
         parameters = list(parameters) 
         # Compile
@@ -1222,6 +1449,14 @@ class SmartPlot:
         >>> plot = SmartPlot(x, sp.sin(x), fig, label="sin")  # doctest: +SKIP
         >>> plot.label  # doctest: +SKIP
         'sin'
+
+        Notes
+        -----
+        This maps to the Plotly trace ``name`` property.
+
+        See Also
+        --------
+        SmartPlot.label : Setter to update the label.
         """
         return self._plot_handle.name
 
@@ -1244,6 +1479,14 @@ class SmartPlot:
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.label = "sin(x)"  # doctest: +SKIP
+
+        Notes
+        -----
+        The label appears in the Plotly legend.
+
+        See Also
+        --------
+        SmartPlot.label : Getter for the current label.
         """
         self._plot_handle.name = value
 
@@ -1262,6 +1505,14 @@ class SmartPlot:
         >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.figure() is fig  # doctest: +SKIP
         True
+
+        Notes
+        -----
+        Use this to access shared settings like ranges or parameter values.
+
+        See Also
+        --------
+        SmartFigure.params : Parameter manager for the owning figure.
         """
         return self._smart_figure
 
@@ -1281,6 +1532,14 @@ class SmartPlot:
         >>> plot = SmartPlot(x, sp.sin(x), fig, x_domain=(-2, 2))  # doctest: +SKIP
         >>> plot.x_domain  # doctest: +SKIP
         (-2.0, 2.0)
+
+        Notes
+        -----
+        When set, the plot will extend sampling beyond the figure's viewport.
+
+        See Also
+        --------
+        SmartPlot.x_domain : Setter for domain overrides.
         """
         return self._x_domain
 
@@ -1303,6 +1562,14 @@ class SmartPlot:
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.x_domain = (-1, 1)  # doctest: +SKIP
+
+        Notes
+        -----
+        Setting to ``None`` or ``"figure_default"`` uses the figure's current range.
+
+        See Also
+        --------
+        SmartFigure.x_range : Default figure range.
         """
         
         if value is None:
@@ -1332,6 +1599,14 @@ class SmartPlot:
         >>> plot = SmartPlot(x, sp.sin(x), fig, sampling_points=200)  # doctest: +SKIP
         >>> plot.sampling_points  # doctest: +SKIP
         200
+
+        Notes
+        -----
+        ``None`` indicates the plot should inherit the figure default.
+
+        See Also
+        --------
+        SmartFigure.sampling_points : Default sampling count for all plots.
         """
         return self._sampling_points
 
@@ -1354,6 +1629,14 @@ class SmartPlot:
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.sampling_points = 400  # doctest: +SKIP
+
+        Notes
+        -----
+        A higher sample count yields smoother curves at the cost of performance.
+
+        See Also
+        --------
+        SmartPlot.render : Recompute samples after updates.
         """
         self._sampling_points = int(InputConvert(value, int)) if value is not None else None
         self.render()
@@ -1374,6 +1657,14 @@ class SmartPlot:
         >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.visible  # doctest: +SKIP
         True
+
+        Notes
+        -----
+        Plotly supports ``True``, ``False``, or ``"legendonly"``.
+
+        See Also
+        --------
+        SmartPlot.visible : Setter to update visibility.
         """
         return self._plot_handle.visible
 
@@ -1396,6 +1687,14 @@ class SmartPlot:
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.visible = "legendonly"  # doctest: +SKIP
+
+        Notes
+        -----
+        If visibility is set to ``True``, the plot re-renders immediately.
+
+        See Also
+        --------
+        SmartPlot.render : Manually trigger a render.
         """
         self._plot_handle.visible = value
         if value is True:
@@ -1416,6 +1715,14 @@ class SmartPlot:
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.render()  # doctest: +SKIP
+
+        Notes
+        -----
+        Rendering is skipped when the trace is hidden or when render is suspended.
+
+        See Also
+        --------
+        SmartFigure.render : Render all plots in the figure.
         """
         if self._suspend_render or self.visible is not True:
             return
@@ -1467,6 +1774,14 @@ class SmartPlot:
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.update(label="sin", func=a * sp.sin(x), parameters=[a])  # doctest: +SKIP
+
+        Notes
+        -----
+        ``update`` will call :meth:`set_func` if any function-related keys appear.
+
+        See Also
+        --------
+        SmartPlot.set_func : Update the underlying symbolic function.
         """
         if 'label' in kwargs: 
             self.label = kwargs['label']
@@ -1567,6 +1882,16 @@ class SmartFigure:
         >>> fig = SmartFigure(x_range=(-6, 6), y_range=(-2, 2))  # doctest: +SKIP
         >>> fig.sampling_points  # doctest: +SKIP
         500
+
+        Notes
+        -----
+        The underlying Plotly widget is wrapped in :class:`PlotlyPane` to ensure
+        responsive sizing in Jupyter layouts.
+
+        See Also
+        --------
+        SmartFigure.plot : Add curves to the figure.
+        SmartFigureLayout : Layout manager for the widget tree.
         """
         self._debug = debug
         self._sampling_points = sampling_points
@@ -1671,6 +1996,14 @@ class SmartFigure:
         >>> fig.title = "Demo"  # doctest: +SKIP
         >>> fig.title  # doctest: +SKIP
         'Demo'
+
+        Notes
+        -----
+        Title text is rendered by the underlying ``HTMLMath`` widget.
+
+        See Also
+        --------
+        SmartFigure.title : Setter to update the title.
         """
         return self._layout.get_title()
 
@@ -1691,6 +2024,14 @@ class SmartFigure:
         --------
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> fig.title = r"$y=\\sin(x)$"  # doctest: +SKIP
+
+        Notes
+        -----
+        LaTeX is supported via ``HTMLMath``.
+
+        See Also
+        --------
+        SmartFigure.title : Getter for the current title.
         """
         self._layout.set_title(value)
     
@@ -1708,6 +2049,14 @@ class SmartFigure:
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> isinstance(fig.figure_widget, go.FigureWidget)  # doctest: +SKIP
         True
+
+        Notes
+        -----
+        Use this for low-level Plotly configuration beyond SmartFigure's API.
+
+        See Also
+        --------
+        SmartFigure.plot : High-level plotting API.
         """
         return self._figure
     
@@ -1727,6 +2076,15 @@ class SmartFigure:
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> fig.params.has_params  # doctest: +SKIP
         False
+
+        Notes
+        -----
+        Use ``fig.params[symbol]`` to access the slider widget directly.
+
+        See Also
+        --------
+        SmartFigure.add_param : Explicitly add a slider.
+        ParameterManager.add_hook : Register parameter change hooks.
         """
         return self._params
     
@@ -1744,6 +2102,14 @@ class SmartFigure:
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> isinstance(fig.info_output, dict)
         True
+
+        Notes
+        -----
+        This is a direct view of the underlying mapping for advanced use cases.
+
+        See Also
+        --------
+        SmartFigure.get_info_output : Preferred API for creating outputs.
         """
         return self._info._outputs # Direct access for backward compat or advanced use
 
@@ -1761,6 +2127,14 @@ class SmartFigure:
         >>> fig = SmartFigure(x_range=(-2, 2))  # doctest: +SKIP
         >>> fig.x_range  # doctest: +SKIP
         (-2.0, 2.0)
+
+        Notes
+        -----
+        This is the range restored on Plotly double-click reset.
+
+        See Also
+        --------
+        SmartFigure.current_x_range : Current viewport range.
         """
         return self._x_range
     
@@ -1781,6 +2155,14 @@ class SmartFigure:
         --------
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> fig.x_range = (-5, 5)  # doctest: +SKIP
+
+        Notes
+        -----
+        Values are converted via :class:`InputConvert` to allow string inputs.
+
+        See Also
+        --------
+        SmartFigure.y_range : Set the default y-axis range.
         """
         self._x_range = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
         self._figure.update_xaxes(range=self._x_range)
@@ -1799,6 +2181,14 @@ class SmartFigure:
         >>> fig = SmartFigure(y_range=(-1, 1))  # doctest: +SKIP
         >>> fig.y_range  # doctest: +SKIP
         (-1.0, 1.0)
+
+        Notes
+        -----
+        This is the range restored on Plotly double-click reset.
+
+        See Also
+        --------
+        SmartFigure.current_y_range : Current viewport range.
         """
         return self._y_range
     
@@ -1819,6 +2209,14 @@ class SmartFigure:
         --------
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> fig.y_range = (-2, 2)  # doctest: +SKIP
+
+        Notes
+        -----
+        Values are converted via :class:`InputConvert` to allow string inputs.
+
+        See Also
+        --------
+        SmartFigure.x_range : Set the default x-axis range.
         """
         self._y_range = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
         self._figure.update_yaxes(range=self._y_range)
@@ -1836,6 +2234,15 @@ class SmartFigure:
         --------
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> fig.current_x_range  # doctest: +SKIP
+
+        Notes
+        -----
+        This reflects the live Plotly viewport and may be ``None`` until the
+        figure has rendered.
+
+        See Also
+        --------
+        SmartFigure.x_range : Default range used for resets.
         """
         return self._figure.layout.xaxis.range
 
@@ -1852,6 +2259,15 @@ class SmartFigure:
         --------
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> fig.current_y_range  # doctest: +SKIP
+
+        Notes
+        -----
+        This reflects the live Plotly viewport and may be ``None`` until the
+        figure has rendered.
+
+        See Also
+        --------
+        SmartFigure.y_range : Default range used for resets.
         """
         return self._figure.layout.yaxis.range
     
@@ -1869,6 +2285,14 @@ class SmartFigure:
         >>> fig = SmartFigure(sampling_points=300)  # doctest: +SKIP
         >>> fig.sampling_points  # doctest: +SKIP
         300
+
+        Notes
+        -----
+        Individual plots can override this setting via ``SmartPlot.sampling_points``.
+
+        See Also
+        --------
+        SmartPlot.sampling_points : Per-plot sampling override.
         """
         return self._sampling_points
 
@@ -1889,6 +2313,14 @@ class SmartFigure:
         --------
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> fig.sampling_points = 200  # doctest: +SKIP
+
+        Notes
+        -----
+        Use ``"figure_default"`` to clear the custom value and defer to Plotly.
+
+        See Also
+        --------
+        SmartPlot.sampling_points : Per-plot sampling override.
         """
         self._sampling_points = int(InputConvert(val, int)) if isinstance(val, (int, float, str)) and val != "figure_default" else None
 
@@ -1936,6 +2368,16 @@ class SmartFigure:
         >>> x, a = sp.symbols("x a")  # doctest: +SKIP
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> fig.plot(x, a * sp.sin(x), parameters=[a], id="a_sin")  # doctest: +SKIP
+
+        Notes
+        -----
+        - Passing ``parameters=None`` enables auto-detection of free symbols.
+        - Sliders are created (or reused) via :class:`ParameterManager`.
+
+        See Also
+        --------
+        SmartFigure.add_param : Manually create a slider.
+        SmartPlot.update : Update an existing plot by ID.
         """
         # ID Generation
         if id is None:
@@ -1997,6 +2439,16 @@ class SmartFigure:
         --------
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> fig.render()  # doctest: +SKIP
+
+        Notes
+        -----
+        Parameter-change hooks are executed after plot updates when
+        ``reason == "param_change"``.
+
+        See Also
+        --------
+        SmartFigure.add_param_change_hook : Register change hooks.
+        SmartPlot.render : Per-plot rendering logic.
         """
         self._log_render(reason, trigger)
         
@@ -2035,6 +2487,15 @@ class SmartFigure:
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
         >>> fig.add_param(a, min=-2, max=2)  # doctest: +SKIP
+
+        Notes
+        -----
+        This does not plot anything by itself; it only creates the slider.
+
+        See Also
+        --------
+        SmartFigure.plot : Create plots that can consume parameters.
+        ParameterManager.add_param : Internal slider creation logic.
         """
         slider = self._params.add_param(symbol, **kwargs)
         self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
@@ -2060,6 +2521,14 @@ class SmartFigure:
         --------
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> out = fig.get_info_output("summary")  # doctest: +SKIP
+
+        Notes
+        -----
+        The output widget can be reused by passing the same ``id``.
+
+        See Also
+        --------
+        SmartFigure.add_info_component : Register components that update outputs.
         """
         out = self._info.get_output(id, **kwargs)
         self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
@@ -2101,6 +2570,15 @@ class SmartFigure:
         ...         pass  # doctest: +SKIP
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> fig.add_info_component("example", ExampleComponent)  # doctest: +SKIP
+
+        Notes
+        -----
+        The component's ``update`` method is wired to parameter-change hooks.
+
+        See Also
+        --------
+        SmartFigure.add_param_change_hook : Register hook callbacks manually.
+        SmartFigure.get_info_output : Access the underlying output widget.
         """
         out = self.get_info_output(id, **kwargs)
         inst = component_factory(out, self)
@@ -2139,6 +2617,15 @@ class SmartFigure:
         --------
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> fig.add_param_change_hook(lambda *_: None)  # doctest: +SKIP
+
+        Notes
+        -----
+        ``change`` is the traitlets change dictionary for the underlying slider.
+        The callback runs after plots have re-rendered.
+
+        See Also
+        --------
+        ParameterManager.add_hook : Lower-level hook registration.
         """
         def _wrapped(change: Dict, fig: SmartFigure) -> Any:
             with _use_figure(self, display_on_enter=False):
@@ -2219,6 +2706,15 @@ class SmartFigure:
         >>> fig = SmartFigure()  # doctest: +SKIP
         >>> with fig:  # doctest: +SKIP
         ...     pass
+
+        Notes
+        -----
+        Calls to the module-level :func:`plot` inside the context target this figure.
+
+        See Also
+        --------
+        SmartFigure.__exit__ : Exit the context.
+        plot : Module-level plotting helper.
         """
         _push_current_figure(self, display_on_enter=True)
         return self
@@ -2238,6 +2734,14 @@ class SmartFigure:
         Returns
         -------
         None
+
+        Notes
+        -----
+        The figure is removed from the global stack when exiting the context.
+
+        See Also
+        --------
+        SmartFigure.__enter__ : Enter the figure context.
         """
         _pop_current_figure(self)
 
@@ -2277,6 +2781,16 @@ def plot(
     --------
     >>> x, a = sp.symbols("x a")  # doctest: +SKIP
     >>> plot(x, a * sp.sin(x), parameters=[a], id="a_sin")  # doctest: +SKIP
+
+    Notes
+    -----
+    If no figure is active, this function creates a new ``SmartFigure`` and
+    displays it automatically.
+
+    See Also
+    --------
+    SmartFigure.plot : Equivalent instance method.
+    SmartFigure.__enter__ : Context manager for routing plots.
     """
     fig = _current_figure()
     if fig is None:
