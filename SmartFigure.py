@@ -1825,7 +1825,18 @@ class SmartPlot:
         if dash is not None:
             line_updates["dash"] = dash
         if line_updates:
-            current_line = dict(self._plot_handle.line) if self._plot_handle.line else {}
+            current_line: Dict[str, Any] = {}
+            if self._plot_handle.line:
+                line_value = self._plot_handle.line
+                if isinstance(line_value, Mapping):
+                    current_line = dict(line_value)
+                elif hasattr(line_value, "to_plotly_json"):
+                    current_line = line_value.to_plotly_json()
+                else:
+                    try:
+                        current_line = dict(line_value)
+                    except (TypeError, ValueError):
+                        current_line = {}
             current_line.update(line_updates)
             self._plot_handle.line = current_line
     
