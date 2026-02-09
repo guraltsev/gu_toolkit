@@ -1823,7 +1823,14 @@ class SmartFigure:
     def params(self) -> ParameterManager:
         """
         The ParameterManager instance.
-        Acts like a dictionary of `{Symbol: Slider}` for backward compatibility.
+        Acts like a dictionary of `{Symbol: ParamRef}` for backward compatibility.
+
+        ParamRef objects expose common controls such as:
+        - ``value`` (current value)
+        - ``default_value`` (reset target)
+        - ``min`` / ``max`` / ``step`` (range configuration, when supported)
+        - ``observe(...)`` / ``reset()`` / ``widget``
+        - ``capabilities()`` to inspect optional attribute support at runtime
 
         Returns
         -------
