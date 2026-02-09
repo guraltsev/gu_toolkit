@@ -1384,6 +1384,11 @@ class SmartPlot:
         sampling_points: Optional[int,str] = None,
         label: str = "",
         visible: VisibleSpec = True,
+        color: Optional[str] = None,
+        thickness: Optional[Union[int, float]] = None,
+        dash: Optional[str] = None,
+        line: Optional[Mapping[str, Any]] = None,
+        trace: Optional[Mapping[str, Any]] = None,
     ) -> None:
         """
         Create a new SmartPlot instance. (Usually called by SmartFigure.plot)
@@ -1406,6 +1411,16 @@ class SmartPlot:
             Trace label shown in the legend.
         visible : bool or "legendonly", optional
             Plotly visibility setting.
+        color : str or None, optional
+            Line color override (Plotly color string).
+        thickness : int or float, optional
+            Line thickness (Plotly ``line.width``).
+        dash : str or None, optional
+            Line dash style (e.g., ``"dash"``, ``"dot"``).
+        line : mapping or None, optional
+            Additional Plotly ``line`` attributes to apply.
+        trace : mapping or None, optional
+            Additional Plotly trace attributes to apply.
 
         Returns
         -------
@@ -1429,6 +1444,9 @@ class SmartPlot:
         self._plot_handle = self._smart_figure.figure_widget.data[-1]
 
         self._suspend_render = True
+        self._update_line_style(color=color, thickness=thickness, dash=dash, line=line)
+        if trace:
+            self._plot_handle.update(**dict(trace))
         self.set_func(var, func, parameters)
         self.x_domain = x_domain
         
@@ -1525,6 +1543,42 @@ class SmartPlot:
         label : Read the current legend label.
         """
         self._plot_handle.name = value
+
+    @property
+    def color(self) -> Optional[str]:
+        """Return the current line color for this plot."""
+        if self._plot_handle.line is None:
+            return None
+        return self._plot_handle.line.color
+
+    @color.setter
+    def color(self, value: Optional[str]) -> None:
+        """Set the line color for this plot."""
+        self._update_line_style(color=value)
+
+    @property
+    def thickness(self) -> Optional[float]:
+        """Return the current line thickness for this plot."""
+        if self._plot_handle.line is None:
+            return None
+        return self._plot_handle.line.width
+
+    @thickness.setter
+    def thickness(self, value: Optional[Union[int, float]]) -> None:
+        """Set the line thickness for this plot."""
+        self._update_line_style(thickness=value)
+
+    @property
+    def dash(self) -> Optional[str]:
+        """Return the current line dash style for this plot."""
+        if self._plot_handle.line is None:
+            return None
+        return self._plot_handle.line.dash
+
+    @dash.setter
+    def dash(self, value: Optional[str]) -> None:
+        """Set the line dash style for this plot."""
+        self._update_line_style(dash=value)
 
     def figure(self) -> "SmartFigure":
         """Return the SmartFigure that owns this plot.
@@ -1759,6 +1813,28 @@ class SmartPlot:
         with fig.figure_widget.batch_update():
             self._plot_handle.x = x_values
             self._plot_handle.y = y_values
+
+    def _update_line_style(
+        self,
+        *,
+        color: Optional[str] = None,
+        thickness: Optional[Union[int, float]] = None,
+        dash: Optional[str] = None,
+        line: Optional[Mapping[str, Any]] = None,
+    ) -> None:
+        line_updates: Dict[str, Any] = {}
+        if line:
+            line_updates.update(dict(line))
+        if color is not None:
+            line_updates["color"] = color
+        if thickness is not None:
+            line_updates["width"] = float(InputConvert(thickness, float))
+        if dash is not None:
+            line_updates["dash"] = dash
+        if line_updates:
+            current_line = dict(self._plot_handle.line) if self._plot_handle.line else {}
+            current_line.update(line_updates)
+            self._plot_handle.line = current_line
     
     def update(self, **kwargs: Any) -> None:
         """Update multiple plot attributes at once.
@@ -1767,7 +1843,8 @@ class SmartPlot:
         ----------
         **kwargs : Any
             Supported keys include ``label``, ``x_domain``, ``sampling_points``,
-            ``var``, ``func``, and ``parameters``.
+            ``var``, ``func``, ``parameters``, ``color``, ``thickness``, ``dash``,
+            ``line``, and ``trace``.
 
         Returns
         -------
@@ -1803,6 +1880,15 @@ class SmartPlot:
                 self.sampling_points = None
             else:
                 self.sampling_points = InputConvert(val, int)
+
+        self._update_line_style(
+            color=kwargs.get("color"),
+            thickness=kwargs.get("thickness"),
+            dash=kwargs.get("dash"),
+            line=kwargs.get("line"),
+        )
+        if kwargs.get("trace"):
+            self._plot_handle.update(**dict(kwargs["trace"]))
         
         # Function update
         if any(k in kwargs for k in ('var', 'func', 'parameters')):
@@ -2284,6 +2370,11 @@ class SmartFigure:
         id: Optional[str] = None,
         x_domain: Optional[RangeLike] = None,
         sampling_points: Optional[Union[int, str]] = None,
+        color: Optional[str] = None,
+        thickness: Optional[Union[int, float]] = None,
+        dash: Optional[str] = None,
+        line: Optional[Mapping[str, Any]] = None,
+        trace: Optional[Mapping[str, Any]] = None,
     ) -> SmartPlot:
         """
         Plot a SymPy expression on the figure (and keep it “live”).
@@ -2308,6 +2399,16 @@ class SmartFigure:
         sampling_points : int or str, optional
             Number of sampling points for this plot. Use ``"figure_default"``
             to inherit from the figure setting.
+        color : str or None, optional
+            Line color override (Plotly color string).
+        thickness : int or float, optional
+            Line thickness (Plotly ``line.width``).
+        dash : str or None, optional
+            Line dash style (e.g., ``"dash"``, ``"dot"``).
+        line : mapping or None, optional
+            Additional Plotly ``line`` attributes to apply.
+        trace : mapping or None, optional
+            Additional Plotly trace attributes to apply.
 
         Returns
         -------
@@ -2355,12 +2456,24 @@ class SmartFigure:
             update_dont_create = False
 
         if update_dont_create:
-            self.plots[id].update(var=var, func=func, parameters=parameters, x_domain=x_domain, sampling_points=sampling_points)
+            self.plots[id].update(
+                var=var,
+                func=func,
+                parameters=parameters,
+                x_domain=x_domain,
+                sampling_points=sampling_points,
+                color=color,
+                thickness=thickness,
+                dash=dash,
+                line=line,
+                trace=trace,
+            )
             plot = self.plots[id]    
         else: 
             plot = SmartPlot(
                 var=var, func=func, smart_figure=self, parameters=parameters,
-                x_domain=x_domain, sampling_points=sampling_points, label=id
+                x_domain=x_domain, sampling_points=sampling_points, label=id,
+                color=color, thickness=thickness, dash=dash, line=line, trace=trace
             )
             self.plots[id] = plot
         
@@ -2838,6 +2951,11 @@ def plot(
     id: Optional[str] = None,
     x_domain: Optional[RangeLike] = None,
     sampling_points: Optional[Union[int, str]] = None,
+    color: Optional[str] = None,
+    thickness: Optional[Union[int, float]] = None,
+    dash: Optional[str] = None,
+    line: Optional[Mapping[str, Any]] = None,
+    trace: Optional[Mapping[str, Any]] = None,
 ) -> SmartPlot:
     """
     Plot a SymPy expression on the current figure, or create a new figure per call.
@@ -2856,6 +2974,16 @@ def plot(
         Explicit x-domain override.
     sampling_points : int or str, optional
         Number of samples, or ``"figure_default"`` to inherit from the figure.
+    color : str or None, optional
+        Line color override (Plotly color string).
+    thickness : int or float, optional
+        Line thickness (Plotly ``line.width``).
+    dash : str or None, optional
+        Line dash style (e.g., ``"dash"``, ``"dot"``).
+    line : mapping or None, optional
+        Additional Plotly ``line`` attributes to apply.
+    trace : mapping or None, optional
+        Additional Plotly trace attributes to apply.
 
     Returns
     -------
@@ -2887,4 +3015,9 @@ def plot(
         id=id,
         x_domain=x_domain,
         sampling_points=sampling_points,
+        color=color,
+        thickness=thickness,
+        dash=dash,
+        line=line,
+        trace=trace,
     )
