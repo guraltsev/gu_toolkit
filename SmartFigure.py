@@ -160,24 +160,19 @@ def _require_current_figure() -> "SmartFigure":
     return fig
 
 
-def _push_current_figure(fig: "SmartFigure", display_on_enter: bool) -> None:
-    """Push a SmartFigure onto the global stack and optionally display it.
+def _push_current_figure(fig: "SmartFigure") -> None:
+    """Push a SmartFigure onto the global stack.
 
     Parameters
     ----------
     fig : SmartFigure
         The figure to mark as current.
-    display_on_enter : bool
-        Whether to display the figure immediately (first time only).
 
     Returns
     -------
     None
     """
     _FIGURE_STACK.append(fig)
-    if display_on_enter and not fig._has_been_displayed:
-        display(fig)
-        fig._has_been_displayed = True
 
 
 def _pop_current_figure(fig: "SmartFigure") -> None:
@@ -204,22 +199,20 @@ def _pop_current_figure(fig: "SmartFigure") -> None:
 
 
 @contextmanager
-def _use_figure(fig: "SmartFigure", display_on_enter: bool) -> Iterator["SmartFigure"]:
+def _use_figure(fig: "SmartFigure") -> Iterator["SmartFigure"]:
     """Context manager that temporarily sets a SmartFigure as current.
 
     Parameters
     ----------
     fig : SmartFigure
         The figure to make current within the context.
-    display_on_enter : bool
-        Whether to display the figure when entering.
 
     Yields
     ------
     SmartFigure
         The same figure passed in.
     """
-    _push_current_figure(fig, display_on_enter=display_on_enter)
+    _push_current_figure(fig)
     try:
         yield fig
     finally:
@@ -2733,7 +2726,7 @@ class SmartFigure:
         Hooks are executed after the figure re-renders in response to changes.
         """
         def _wrapped(event: Optional[ParamEvent]) -> Any:
-            with _use_figure(self, display_on_enter=False):
+            with _use_figure(self):
                 return callback(event)
 
         hook_id = self._params.add_hook(_wrapped, hook_id)
@@ -2825,7 +2818,7 @@ class SmartFigure:
         --------
         plot : Module-level helper that uses the current figure if available.
         """
-        _push_current_figure(self, display_on_enter=True)
+        _push_current_figure(self)
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
