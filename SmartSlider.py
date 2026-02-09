@@ -17,6 +17,18 @@ class SmartFloatSlider(widgets.VBox):
     - The Text field commits on Enter (continuous_update=False). This avoids fighting the
       user while they type partial expressions like "pi/2".
     - If parsing fails, the Text field reverts to the previous committed value.
+
+    Notes
+    -----
+    The slider exposes ``default_value``, ``min``, ``max``, and ``step`` so it
+    can be wrapped by :class:`ParamRef` implementations and used with
+    :class:`SmartFigure` parameter management.
+
+    Examples
+    --------
+    >>> slider = SmartFloatSlider(value=1.0, min=-2.0, max=2.0, step=0.1)  # doctest: +SKIP
+    >>> slider.value  # doctest: +SKIP
+    1.0
     """
 
     value = traitlets.Float(0.0)
@@ -59,6 +71,11 @@ class SmartFloatSlider(widgets.VBox):
             >>> slider = SmartFloatSlider(value=0.25, min=0.0, max=1.0, step=0.05)
             >>> float(slider.value)
             0.25
+
+        Notes
+        -----
+        Use :meth:`make_refs` to bind the slider to a SymPy symbol when working
+        with :class:`SmartFigure` or :class:`ParameterManager`.
         """
         # Remember defaults for reset
         self._defaults = {"value": value, "min": min, "max": max, "step": step}
@@ -425,6 +442,10 @@ class SmartFloatSlider(widgets.VBox):
         -------
         None
             This method updates the value in place (limits are unchanged).
+
+        Notes
+        -----
+        Public callers should prefer :meth:`reset`.
         """
         self.value = self._defaults["value"]  # slider sync + slider observer updates text
 
@@ -436,6 +457,10 @@ class SmartFloatSlider(widgets.VBox):
         -------
         float
             Default value for the slider reset.
+
+        Notes
+        -----
+        Setting ``default_value`` does not change the current slider value.
         """
         return float(self._defaults["value"])
 
@@ -447,6 +472,14 @@ class SmartFloatSlider(widgets.VBox):
         ----------
         value : float
             New default value (does not change the current value).
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        reset : Apply the stored default value to the slider.
         """
         self._defaults["value"] = float(value)
 
@@ -464,6 +497,11 @@ class SmartFloatSlider(widgets.VBox):
         >>> slider = SmartFloatSlider(min=-1.0, max=1.0)  # doctest: +SKIP
         >>> slider.min  # doctest: +SKIP
         -1.0
+
+        Notes
+        -----
+        Updating the minimum may clamp the current value if it falls below the
+        new bound.
         """
         return float(self.slider.min)
 
@@ -479,6 +517,10 @@ class SmartFloatSlider(widgets.VBox):
         Returns
         -------
         None
+
+        See Also
+        --------
+        max : Update the upper bound.
         """
         self.slider.min = float(value)
         self._sync_limit_texts(None)
@@ -497,6 +539,11 @@ class SmartFloatSlider(widgets.VBox):
         >>> slider = SmartFloatSlider(min=-1.0, max=1.0)  # doctest: +SKIP
         >>> slider.max  # doctest: +SKIP
         1.0
+
+        Notes
+        -----
+        Updating the maximum may clamp the current value if it exceeds the
+        new bound.
         """
         return float(self.slider.max)
 
@@ -512,6 +559,10 @@ class SmartFloatSlider(widgets.VBox):
         Returns
         -------
         None
+
+        See Also
+        --------
+        min : Update the lower bound.
         """
         self.slider.max = float(value)
         self._sync_limit_texts(None)
@@ -530,6 +581,10 @@ class SmartFloatSlider(widgets.VBox):
         >>> slider = SmartFloatSlider(step=0.25)  # doctest: +SKIP
         >>> slider.step  # doctest: +SKIP
         0.25
+
+        Notes
+        -----
+        The step size affects both the slider and the settings panel control.
         """
         return float(self.slider.step)
 
@@ -545,6 +600,10 @@ class SmartFloatSlider(widgets.VBox):
         Returns
         -------
         None
+
+        See Also
+        --------
+        default_value : Set the reset target without changing the current value.
         """
         self.slider.step = float(value)
 
@@ -559,6 +618,10 @@ class SmartFloatSlider(widgets.VBox):
         --------
         >>> slider = SmartFloatSlider(value=2.0)  # doctest: +SKIP
         >>> slider.reset()  # doctest: +SKIP
+
+        Notes
+        -----
+        This uses the stored ``default_value``.
         """
         self._reset(None)
 
@@ -586,6 +649,11 @@ class SmartFloatSlider(widgets.VBox):
         >>> import sympy as sp  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
         >>> slider.make_refs([a])  # doctest: +SKIP
+
+        Notes
+        -----
+        This method exists to integrate with :class:`ParameterManager` and
+        :class:`SmartFigure` parameter creation.
         """
         if len(symbols) != 1:
             raise ValueError("SmartFloatSlider only supports a single symbol.")
