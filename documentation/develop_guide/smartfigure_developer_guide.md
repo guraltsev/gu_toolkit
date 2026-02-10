@@ -70,7 +70,7 @@ Design notes:
 Key behaviors:
 - Sidebar starts hidden and is shown when parameters or info outputs are added.
 - Controls are laid out using nested `VBox`/`HBox` widgets and a flex container (`display: flex`).
-- The plot container uses explicit minimum sizes plus a concrete parent/root height so Plotly always has a real pixel sizing target (important for `PlotlyPane` reflow behavior).【F:SmartFigure.py†L485-L555】
+- The plot container keeps the original default sizing (`height="60vh"` with minimum constraints), which provides a stable pixel sizing target for Plotly while preserving the prior default layout behavior.【F:SmartFigure.py†L485-L550】
 
 ### 3. `ParameterManager` (Parameter state + sliders)
 
