@@ -244,6 +244,15 @@ NumberLikeOrStr = Union[int, float, str]
 RangeLike = Tuple[NumberLikeOrStr, NumberLikeOrStr]
 VisibleSpec = Union[bool, str]  # Plotly uses True/False or the string "legendonly".
 
+PLOT_STYLE_OPTIONS: Dict[str, str] = {
+    "color": "Line color shortcut (maps to Plotly trace line.color).",
+    "thickness": "Line width shortcut (maps to Plotly trace line.width).",
+    "dash": "Line dash shortcut (maps to Plotly trace line.dash).",
+    "opacity": "Trace opacity from 0.0 (transparent) to 1.0 (opaque).",
+    "line": "Additional Plotly line mapping applied to trace.line.",
+    "trace": "Additional Plotly trace mapping applied to the full trace.",
+}
+
 
 # =============================================================================
 # SECTION: OneShotOutput [id: OneShotOutput]
@@ -1398,6 +1407,7 @@ class SmartPlot:
         thickness: Optional[Union[int, float]] = None,
         dash: Optional[str] = None,
         line: Optional[Mapping[str, Any]] = None,
+        opacity: Optional[Union[int, float]] = None,
         trace: Optional[Mapping[str, Any]] = None,
     ) -> None:
         """
@@ -1427,6 +1437,8 @@ class SmartPlot:
             Line thickness (Plotly ``line.width``).
         dash : str or None, optional
             Line dash style (e.g., ``"dash"``, ``"dot"``).
+        opacity : int or float, optional
+            Trace opacity from 0.0 (transparent) to 1.0 (opaque).
         line : mapping or None, optional
             Additional Plotly ``line`` attributes to apply.
         trace : mapping or None, optional
@@ -1455,6 +1467,7 @@ class SmartPlot:
 
         self._suspend_render = True
         self._update_line_style(color=color, thickness=thickness, dash=dash, line=line)
+        self.opacity = opacity
         if trace:
             self._plot_handle.update(**dict(trace))
         self.set_func(var, func, parameters)
@@ -1589,6 +1602,22 @@ class SmartPlot:
     def dash(self, value: Optional[str]) -> None:
         """Set the line dash style for this plot."""
         self._update_line_style(dash=value)
+
+    @property
+    def opacity(self) -> Optional[float]:
+        """Return the current trace opacity for this plot."""
+        return self._plot_handle.opacity
+
+    @opacity.setter
+    def opacity(self, value: Optional[Union[int, float]]) -> None:
+        """Set the trace opacity for this plot (0.0 to 1.0)."""
+        if value is None:
+            self._plot_handle.opacity = None
+            return
+        opacity = float(InputConvert(value, float))
+        if not 0.0 <= opacity <= 1.0:
+            raise ValueError("opacity must be between 0.0 and 1.0")
+        self._plot_handle.opacity = opacity
 
     def figure(self) -> "SmartFigure":
         """Return the SmartFigure that owns this plot.
@@ -1868,7 +1897,7 @@ class SmartPlot:
         **kwargs : Any
             Supported keys include ``label``, ``x_domain``, ``sampling_points``,
             ``var``, ``func``, ``parameters``, ``color``, ``thickness``, ``dash``,
-            ``line``, and ``trace``.
+            ``opacity``, ``line``, and ``trace``.
 
         Returns
         -------
@@ -1917,6 +1946,8 @@ class SmartPlot:
             dash=kwargs.get("dash"),
             line=kwargs.get("line"),
         )
+        if "opacity" in kwargs:
+            self.opacity = kwargs["opacity"]
         if kwargs.get("trace"):
             self._plot_handle.update(**dict(kwargs["trace"]))
         
@@ -2394,6 +2425,21 @@ class SmartFigure:
 
     # --- Public API ---
 
+    @staticmethod
+    def plot_style_options() -> Dict[str, str]:
+        """Return discoverable plot-style options supported by :meth:`plot`.
+
+        Returns
+        -------
+        dict[str, str]
+            Mapping of option names to short descriptions.
+
+        Notes
+        -----
+        These options can be passed directly to :meth:`plot` and :func:`plot`.
+        """
+        return dict(PLOT_STYLE_OPTIONS)
+
     def plot(
         self,
         var: Symbol,
@@ -2406,6 +2452,7 @@ class SmartFigure:
         thickness: Optional[Union[int, float]] = None,
         dash: Optional[str] = None,
         line: Optional[Mapping[str, Any]] = None,
+        opacity: Optional[Union[int, float]] = None,
         trace: Optional[Mapping[str, Any]] = None,
     ) -> SmartPlot:
         """
@@ -2439,6 +2486,8 @@ class SmartFigure:
             Line dash style (e.g., ``"dash"``, ``"dot"``).
         line : mapping or None, optional
             Additional Plotly ``line`` attributes to apply.
+        opacity : int or float, optional
+            Trace opacity from 0.0 (transparent) to 1.0 (opaque).
         trace : mapping or None, optional
             Additional Plotly trace attributes to apply.
 
@@ -2498,6 +2547,7 @@ class SmartFigure:
                 thickness=thickness,
                 dash=dash,
                 line=line,
+                opacity=opacity,
                 trace=trace,
             )
             plot = self.plots[id]    
@@ -2505,7 +2555,7 @@ class SmartFigure:
             plot = SmartPlot(
                 var=var, func=func, smart_figure=self, parameters=parameters,
                 x_domain=x_domain, sampling_points=sampling_points, label=id,
-                color=color, thickness=thickness, dash=dash, line=line, trace=trace
+                color=color, thickness=thickness, dash=dash, line=line, opacity=opacity, trace=trace
             )
             self.plots[id] = plot
         
@@ -2933,6 +2983,17 @@ class _CurrentParamsProxy(Mapping):
 
 params = _CurrentParamsProxy()
 
+def plot_style_options() -> Dict[str, str]:
+    """Return discoverable SmartFigure plot-style options.
+
+    Returns
+    -------
+    dict[str, str]
+        Mapping of style keyword names to descriptions.
+    """
+    return SmartFigure.plot_style_options()
+
+
 
 def parameter(
     symbols: Union[Symbol, Sequence[Symbol]],
@@ -2986,6 +3047,7 @@ def plot(
     color: Optional[str] = None,
     thickness: Optional[Union[int, float]] = None,
     dash: Optional[str] = None,
+    opacity: Optional[Union[int, float]] = None,
     line: Optional[Mapping[str, Any]] = None,
     trace: Optional[Mapping[str, Any]] = None,
 ) -> SmartPlot:
@@ -3014,6 +3076,8 @@ def plot(
         Line dash style (e.g., ``"dash"``, ``"dot"``).
     line : mapping or None, optional
         Additional Plotly ``line`` attributes to apply.
+    opacity : int or float, optional
+        Trace opacity from 0.0 (transparent) to 1.0 (opaque).
     trace : mapping or None, optional
         Additional Plotly trace attributes to apply.
 
@@ -3051,5 +3115,6 @@ def plot(
         thickness=thickness,
         dash=dash,
         line=line,
+        opacity=opacity,
         trace=trace,
     )
