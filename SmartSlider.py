@@ -164,6 +164,18 @@ class SmartFloatSlider(widgets.VBox):
   border-color: rgba(0,0,0,0.28) !important;
   background: rgba(0,0,0,0.04) !important;
 }
+
+/* Modal overlay and panel styling */
+.smart-slider-settings-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+}
+
+.smart-slider-settings-panel {
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.32) !important;
+  border-radius: 10px !important;
+}
 </style>
 """)
         # The *only* numeric field (editable; accepts expressions)
@@ -246,6 +258,8 @@ class SmartFloatSlider(widgets.VBox):
                 z_index="1000",
             ),
         )
+        self.settings_panel.add_class("smart-slider-settings-panel")
+        self.settings_modal.add_class("smart-slider-settings-modal")
         self._top_row = None
         self._modal_host = None
 
@@ -740,13 +754,13 @@ class SmartFloatSlider(widgets.VBox):
             self.children = (self._top_row,)
             if self.settings_modal not in host.children:
                 host.children += (self.settings_modal,)
-            self.settings_modal.layout.position = "absolute"
+            self.settings_modal.layout.position = "fixed"
             self.settings_modal.layout.top = "0"
             self.settings_modal.layout.left = "0"
-            self.settings_modal.layout.right = "0"
-            self.settings_modal.layout.bottom = "0"
-            self.settings_modal.layout.width = "100%"
-            self.settings_modal.layout.height = "100%"
+            self.settings_modal.layout.right = ""
+            self.settings_modal.layout.bottom = ""
+            self.settings_modal.layout.width = "100vw"
+            self.settings_modal.layout.height = "100vh"
 
         self._modal_host = host
 
