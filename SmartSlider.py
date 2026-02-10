@@ -185,7 +185,10 @@ class SmartFloatSlider(widgets.VBox):
         )
 
         # --- Settings panel ---------------------------------------------------
-        style_args = {"style": {"description_width": "50px"}, "layout": widgets.Layout(width="100px")}
+        style_args = {
+            "style": {"description_width": "36px"},
+            "layout": widgets.Layout(width="170px"),
+        }
         self.set_min = widgets.Text(
     value=f"{min:.4g}",
     continuous_update=False,
@@ -206,10 +209,41 @@ class SmartFloatSlider(widgets.VBox):
             layout=widgets.Layout(width="120px"),
         )
 
+        self.btn_close_settings = widgets.Button(
+            description="✕",
+            tooltip="Close settings",
+            layout=widgets.Layout(width="24px", height="24px", padding="0px"),
+        )
+        settings_header = widgets.HBox(
+            [widgets.HTML("<b>Slider settings</b>"), self.btn_close_settings],
+            layout=widgets.Layout(justify_content="space-between", align_items="center"),
+        )
+
         self.settings_panel = widgets.VBox(
-            [widgets.HBox([self.set_step]), widgets.HBox([self.set_live])],
+            [settings_header, widgets.HBox([self.set_step]), widgets.HBox([self.set_live])],
             layout=widgets.Layout(
-                display="none", border="1px solid #eee", padding="5px", margin="5px 0"
+                width="230px",
+                display="none",
+                border="1px solid #ddd",
+                padding="8px",
+                gap="6px",
+                background_color="white",
+                box_shadow="0 6px 20px rgba(0, 0, 0, 0.25)",
+            ),
+        )
+        self.settings_modal = widgets.Box(
+            [self.settings_panel],
+            layout=widgets.Layout(
+                display="none",
+                position="fixed",
+                top="0",
+                left="0",
+                width="100vw",
+                height="100vh",
+                align_items="center",
+                justify_content="center",
+                background_color="rgba(0, 0, 0, 0.20)",
+                z_index="1000",
             ),
         )
 
@@ -227,7 +261,7 @@ class SmartFloatSlider(widgets.VBox):
             ],
             layout=widgets.Layout(align_items="center", gap="4px"),
         )
-        super().__init__([top_row, self.settings_panel], **kwargs)
+        super().__init__([top_row, self.settings_modal], **kwargs)
 
         # --- Wiring -----------------------------------------------------------
         # Keep self.value and slider.value in sync
@@ -244,6 +278,7 @@ class SmartFloatSlider(widgets.VBox):
         # Buttons
         self.btn_reset.on_click(self._reset)
         self.btn_settings.on_click(self._toggle_settings)
+        self.btn_close_settings.on_click(self._toggle_settings)
 
         # Settings -> slider traits
         widgets.link((self.set_step, "value"), (self.slider, "step"))
@@ -680,6 +715,6 @@ class SmartFloatSlider(widgets.VBox):
         None
             This method updates widget state in place.
         """
-        self.settings_panel.layout.display = (
-            "none" if self.settings_panel.layout.display == "flex" else "flex"
-        )
+        is_open = self.settings_modal.layout.display == "flex"
+        self.settings_modal.layout.display = "none" if is_open else "flex"
+        self.settings_panel.layout.display = "none" if is_open else "flex"
