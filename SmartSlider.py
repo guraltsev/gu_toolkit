@@ -228,7 +228,7 @@ class SmartFloatSlider(widgets.VBox):
                 padding="8px",
                 gap="6px",
                 background_color="white",
-                box_shadow="0 6px 20px rgba(0, 0, 0, 0.25)",
+                box_shadow="0 10px 28px rgba(15, 23, 42, 0.28)",
             ),
         )
         self.settings_modal = widgets.Box(
@@ -730,6 +730,10 @@ class SmartFloatSlider(widgets.VBox):
             if self.settings_modal not in self.children:
                 self.children = (self._top_row, self.settings_modal)
             self.settings_modal.layout.position = "fixed"
+            self.settings_modal.layout.top = "0"
+            self.settings_modal.layout.left = "0"
+            self.settings_modal.layout.right = ""
+            self.settings_modal.layout.bottom = ""
             self.settings_modal.layout.width = "100vw"
             self.settings_modal.layout.height = "100vh"
         else:
@@ -737,6 +741,10 @@ class SmartFloatSlider(widgets.VBox):
             if self.settings_modal not in host.children:
                 host.children += (self.settings_modal,)
             self.settings_modal.layout.position = "absolute"
+            self.settings_modal.layout.top = "0"
+            self.settings_modal.layout.left = "0"
+            self.settings_modal.layout.right = "0"
+            self.settings_modal.layout.bottom = "0"
             self.settings_modal.layout.width = "100%"
             self.settings_modal.layout.height = "100%"
 
