@@ -522,7 +522,10 @@ class SmartFloatSlider(widgets.VBox):
         --------
         max : Update the upper bound.
         """
-        self.slider.min = float(value)
+        new_min = float(value)
+        if new_min > float(self.slider.max):
+            self.slider.max = new_min
+        self.slider.min = new_min
         self._sync_limit_texts(None)
 
     @property
@@ -564,7 +567,10 @@ class SmartFloatSlider(widgets.VBox):
         --------
         min : Update the lower bound.
         """
-        self.slider.max = float(value)
+        new_max = float(value)
+        if new_max < float(self.slider.min):
+            self.slider.min = new_max
+        self.slider.max = new_max
         self._sync_limit_texts(None)
 
     @property
