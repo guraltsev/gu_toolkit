@@ -460,11 +460,17 @@ class SmartFigureLayout:
             <style>
               .sf-root-resizable {
                 resize: vertical;
-                overflow: auto;
+                overflow: auto !important;
+                display: flex;
+                position: relative;
+                border: 1px solid rgba(15,23,42,0.08);
+                border-radius: 10px;
               }
               .sf-plot-resizable {
                 resize: horizontal;
-                overflow: auto;
+                overflow: auto !important;
+                display: block;
+                position: relative;
               }
             </style>
             """
@@ -485,14 +491,15 @@ class SmartFigureLayout:
         self.plot_container = widgets.Box(
             children=(),
             layout=widgets.Layout(
-                width="100%",
-                height="60vh",
+                width="560px",
+                max_width="100%",
+                height="100%",
                 min_width="320px",
                 min_height="260px",
                 margin="0px",
                 padding="0px",
                 overflow="auto",
-                flex="1 1 560px",
+                flex="0 0 auto",
             ),
         )
         self.plot_container.add_class("sf-plot-resizable")
@@ -535,7 +542,7 @@ class SmartFigureLayout:
             [self.plot_container, self.sidebar_container],
             layout=widgets.Layout(
                 display="flex", flex_flow="row wrap", align_items="flex-start",
-                width="100%", gap="8px", flex="1 1 auto", min_height="0"
+                width="100%", gap="8px", flex="1 1 auto", min_height="0", overflow="auto"
             ),
         )
 
@@ -544,7 +551,7 @@ class SmartFigureLayout:
             [self._style, self._titlebar, self.content_wrapper],
             layout=widgets.Layout(
                 width="100%",
-                height="70vh",
+                height="600px",
                 min_height="320px",
                 max_height="95vh",
                 overflow="auto",
