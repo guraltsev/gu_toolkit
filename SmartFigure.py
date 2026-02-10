@@ -425,9 +425,9 @@ class SmartFigureLayout:
 
     Responsibilities:
     - Building the HBox/VBox structure.
-    - Providing the plot container and layout toggles.
+    - Providing the plot container and resizable layout areas.
     - Exposing containers for Plots, Parameters, and Info.
-    - Handling layout toggles (e.g. full width, sidebar visibility).
+    - Handling sidebar visibility and responsive wrapping behavior.
     """
 
     def __init__(self, title: str = "") -> None:
@@ -455,17 +455,26 @@ class SmartFigureLayout:
         """
         self._reflow_callback: Optional[Callable[[], None]] = None
 
+        self._style = widgets.HTML(
+            """
+            <style>
+              .sf-root-resizable {
+                resize: vertical;
+                overflow: auto;
+              }
+              .sf-plot-resizable {
+                resize: horizontal;
+                overflow: auto;
+              }
+            </style>
+            """
+        )
+
         # 1. Title Bar
         #    We use HTMLMath for proper LaTeX title rendering.
         self.title_html = widgets.HTMLMath(value=title, layout=widgets.Layout(margin="0px"))
-        self.full_width_checkbox = widgets.Checkbox(
-            value=False,
-            description="Full width plot",
-            indent=False,
-            layout=widgets.Layout(width="160px", margin="0px"),
-        )
         self._titlebar = widgets.HBox(
-            [self.title_html, self.full_width_checkbox],
+            [self.title_html],
             layout=widgets.Layout(
                 width="100%", align_items="center", justify_content="space-between", margin="0 0 6px 0"
             ),
@@ -482,9 +491,11 @@ class SmartFigureLayout:
                 min_height="260px",
                 margin="0px",
                 padding="0px",
+                overflow="auto",
                 flex="1 1 560px",
             ),
         )
+        self.plot_container.add_class("sf-plot-resizable")
 
         # 3. Controls Sidebar (The "Right" Panel)
         #    Initially hidden (display="none") until parameters or info widgets are added.
@@ -524,18 +535,24 @@ class SmartFigureLayout:
             [self.plot_container, self.sidebar_container],
             layout=widgets.Layout(
                 display="flex", flex_flow="row wrap", align_items="flex-start",
-                width="100%", gap="8px"
+                width="100%", gap="8px", flex="1 1 auto", min_height="0"
             ),
         )
 
         # 5. Root Widget
         self.root_widget = widgets.VBox(
-            [self._titlebar, self.content_wrapper],
-            layout=widgets.Layout(width="100%")
+            [self._style, self._titlebar, self.content_wrapper],
+            layout=widgets.Layout(
+                width="100%",
+                height="70vh",
+                min_height="320px",
+                max_height="95vh",
+                overflow="auto",
+                display="flex",
+                flex_flow="column",
+            )
         )
-
-        # Wire up internal logic
-        self.full_width_checkbox.observe(self._on_full_width_change, names="value")
+        self.root_widget.add_class("sf-root-resizable")
 
     @property
     def output_widget(self) -> OneShotOutput:
@@ -652,7 +669,7 @@ class SmartFigureLayout:
         widget : ipywidgets.Widget
             The plot widget to display.
         reflow_callback : callable, optional
-            Callback to trigger when layout changes (e.g., full-width toggle).
+            Callback to trigger when layout changes (e.g., container resize).
 
         Returns
         -------
@@ -667,46 +684,10 @@ class SmartFigureLayout:
         Notes
         -----
         The ``reflow_callback`` is typically used to notify Plotly of size
-        changes when the sidebar toggles.
+        changes when the layout changes.
         """
         self.plot_container.children = (widget,)
         self._reflow_callback = reflow_callback
-
-    def _on_full_width_change(self, change: Dict[str, Any]) -> None:
-        """Toggle CSS flex properties for full-width mode.
-
-        Parameters
-        ----------
-        change : dict
-            Traitlets change dictionary from the checkbox.
-
-        Returns
-        -------
-        None
-        """
-        is_full = change["new"]
-        layout = self.content_wrapper.layout
-        plot_layout = self.plot_container.layout
-        sidebar_layout = self.sidebar_container.layout
-
-        if is_full:
-            # Stack vertically, full width
-            layout.flex_flow = "column"
-            plot_layout.flex = "0 0 auto"
-            sidebar_layout.flex = "0 0 auto"
-            sidebar_layout.max_width = ""
-            sidebar_layout.width = "100%"
-            sidebar_layout.padding = "0px"
-        else:
-            # Side-by-side (wrapping), restricted width for sidebar
-            layout.flex_flow = "row wrap"
-            plot_layout.flex = "1 1 560px"
-            sidebar_layout.flex = "0 1 380px"
-            sidebar_layout.max_width = "400px"
-            sidebar_layout.width = "auto"
-            sidebar_layout.padding = "0px 0px 0px 10px"
-        if self._reflow_callback is not None:
-            self._reflow_callback()
 
 
 # =============================================================================

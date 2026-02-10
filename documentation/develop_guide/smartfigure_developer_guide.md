@@ -65,7 +65,7 @@ Design notes:
 
 ### 2. `SmartFigureLayout` (View / widget hierarchy)
 
-`SmartFigureLayout` builds the Jupyter widget tree: a title bar, a plot container, and a sidebar that can show parameters and info content. It also contains the “Full width plot” toggle and layout configuration for responsive behavior (sidebar below plot on narrow widths).【F:SmartFigure.py†L367-L620】
+`SmartFigureLayout` builds the Jupyter widget tree: a title bar, a plot container, and a sidebar that can show parameters and info content. The layout supports responsive behavior (sidebar below plot on narrow widths) and native drag-resizing for the plot area (horizontal) and overall figure layout (vertical).【F:SmartFigure.py†L414-L571】
 
 Key behaviors:
 - Sidebar starts hidden and is shown when parameters or info outputs are added.
