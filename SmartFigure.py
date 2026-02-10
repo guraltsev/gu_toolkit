@@ -1815,9 +1815,21 @@ class SmartPlot:
         dash: Optional[str] = None,
         line: Optional[Mapping[str, Any]] = None,
     ) -> None:
+        def _coerce_line_value(value: Any) -> Dict[str, Any]:
+            if not value:
+                return {}
+            if isinstance(value, Mapping):
+                return dict(value)
+            if hasattr(value, "to_plotly_json"):
+                return value.to_plotly_json()
+            try:
+                return dict(value)
+            except (TypeError, ValueError):
+                return {}
+
         line_updates: Dict[str, Any] = {}
         if line:
-            line_updates.update(dict(line))
+            line_updates.update(_coerce_line_value(line))
         if color is not None:
             line_updates["color"] = color
         if thickness is not None:
@@ -1825,18 +1837,7 @@ class SmartPlot:
         if dash is not None:
             line_updates["dash"] = dash
         if line_updates:
-            current_line: Dict[str, Any] = {}
-            if self._plot_handle.line:
-                line_value = self._plot_handle.line
-                if isinstance(line_value, Mapping):
-                    current_line = dict(line_value)
-                elif hasattr(line_value, "to_plotly_json"):
-                    current_line = line_value.to_plotly_json()
-                else:
-                    try:
-                        current_line = dict(line_value)
-                    except (TypeError, ValueError):
-                        current_line = {}
+            current_line = _coerce_line_value(self._plot_handle.line)
             current_line.update(line_updates)
             self._plot_handle.line = current_line
     
