@@ -128,6 +128,23 @@ if not logger.handlers:
 _FIGURE_STACK: List["SmartFigure"] = []
 
 
+
+class _FigureDefaultSentinel:
+    """Sentinel value meaning "inherit from figure defaults"."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "FIGURE_DEFAULT"
+
+
+FIGURE_DEFAULT = _FigureDefaultSentinel()
+
+
+def _is_figure_default(value: Any) -> bool:
+    """Return True when *value* requests figure-default behavior."""
+    return value is FIGURE_DEFAULT or (isinstance(value, str) and value.lower() == "figure_default")
+
 def _current_figure() -> Optional["SmartFigure"]:
     """Return the most recently pushed SmartFigure, if any.
 
@@ -1443,7 +1460,7 @@ class SmartPlot:
         self.set_func(var, func, parameters)
         self.x_domain = x_domain
         
-        if sampling_points == "figure_default":
+        if _is_figure_default(sampling_points):
             sampling_points = None
         self.sampling_points = sampling_points
 
@@ -1626,7 +1643,8 @@ class SmartPlot:
         Parameters
         ----------
         value : RangeLike or None
-            Domain override or ``None`` to use the figure range.
+            Domain override or ``None``/``"figure_default"``/``"FIGURE_DEFAULT"``/``FIGURE_DEFAULT``
+            to use the figure range.
 
         Returns
         -------
@@ -1646,7 +1664,7 @@ class SmartPlot:
         
         if value is None:
             self._x_domain = None
-        elif value == "figure_default":
+        elif _is_figure_default(value):
             self._x_domain = None
         else:
             raw_min, raw_max = value
@@ -1679,13 +1697,14 @@ class SmartPlot:
         return self._sampling_points
 
     @sampling_points.setter
-    def sampling_points(self, value: Optional[int]) -> None:
+    def sampling_points(self, value: Optional[Union[int, str, _FigureDefaultSentinel]]) -> None:
         """Set the number of sampling points for this plot.
 
         Parameters
         ----------
-        value : int or None
-            Number of samples, or ``None`` to inherit from the figure.
+        value : int, str, FIGURE_DEFAULT, or None
+            Number of samples, or ``None``/``"figure_default"``/``"FIGURE_DEFAULT"``/``FIGURE_DEFAULT``
+            to inherit from the figure.
 
         Returns
         -------
@@ -1702,7 +1721,7 @@ class SmartPlot:
         --------
         sampling_points : Read the current sampling density.
         """
-        self._sampling_points = int(InputConvert(value, int)) if value is not None else None
+        self._sampling_points = int(InputConvert(value, int)) if value is not None and not _is_figure_default(value) else None
         self.render()
 
     @property
@@ -1872,7 +1891,10 @@ class SmartPlot:
         
         if 'x_domain' in kwargs: 
             val = kwargs['x_domain']
-            if val == "figure_default":
+            if val is None:
+                # None means "no change" during in-place updates.
+                pass
+            elif _is_figure_default(val):
                 self.x_domain = None
             else:
                 x_min = InputConvert(val[0], float)
@@ -1881,7 +1903,10 @@ class SmartPlot:
         
         if 'sampling_points' in kwargs:
             val = kwargs['sampling_points']
-            if val == "figure_default":
+            if val is None:
+                # None means "no change" during in-place updates.
+                pass
+            elif _is_figure_default(val):
                 self.sampling_points = None
             else:
                 self.sampling_points = InputConvert(val, int)
@@ -2342,13 +2367,14 @@ class SmartFigure:
         return self._sampling_points
 
     @sampling_points.setter
-    def sampling_points(self, val: Union[int, str, None]) -> None:
+    def sampling_points(self, val: Union[int, str, _FigureDefaultSentinel, None]) -> None:
         """Set the default number of sampling points per plot.
 
         Parameters
         ----------
-        val : int, str, or None
-            Sample count or ``"figure_default"`` to clear.
+        val : int, str, FIGURE_DEFAULT, or None
+            Sample count, or ``None``/``"figure_default"``/``"FIGURE_DEFAULT"``/``FIGURE_DEFAULT``
+            to clear.
 
         Returns
         -------
@@ -2361,9 +2387,10 @@ class SmartFigure:
 
         Notes
         -----
-        Use ``"figure_default"`` or ``None`` to clear the override.
+        Use ``None``/``"figure_default"``/``"FIGURE_DEFAULT"``/``FIGURE_DEFAULT``
+        to clear the override.
         """
-        self._sampling_points = int(InputConvert(val, int)) if isinstance(val, (int, float, str)) and val != "figure_default" else None
+        self._sampling_points = int(InputConvert(val, int)) if isinstance(val, (int, float, str)) and not _is_figure_default(val) else None
 
     # --- Public API ---
 
