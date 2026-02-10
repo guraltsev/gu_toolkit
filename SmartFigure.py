@@ -2437,6 +2437,8 @@ class SmartFigure:
         Notes
         -----
         These options can be passed directly to :meth:`plot` and :func:`plot`.
+        Current supported shortcut keys are: ``color``, ``thickness``,
+        ``dash``, ``opacity``, ``line``, and ``trace``.
         """
         return dict(PLOT_STYLE_OPTIONS)
 
@@ -2507,9 +2509,14 @@ class SmartFigure:
         Passing ``parameters=[]`` disables automatic parameter creation even if
         the expression has free symbols other than ``var``.
 
+        All supported style options for this method are discoverable via
+        :meth:`SmartFigure.plot_style_options`.
+
         See Also
         --------
         parameter : Create sliders without plotting.
+        plot_style_options : List supported style kwargs (`color`, `thickness`,
+            `dash`, `opacity`, `line`, `trace`).
         """
         # ID Generation
         if id is None:
@@ -2990,6 +2997,11 @@ def plot_style_options() -> Dict[str, str]:
     -------
     dict[str, str]
         Mapping of style keyword names to descriptions.
+
+    Notes
+    -----
+    Current supported shortcut keys are: ``color``, ``thickness``, ``dash``,
+    ``opacity``, ``line``, and ``trace``.
     """
     return SmartFigure.plot_style_options()
 
@@ -3096,9 +3108,14 @@ def plot(
     If no current figure is active, this function creates and displays a new
     :class:`SmartFigure`.
 
+    All supported style options for this helper are discoverable via
+    :func:`plot_style_options`.
+
     See Also
     --------
     SmartFigure.plot : Instance method with the same signature.
+    plot_style_options : List supported style kwargs (`color`, `thickness`,
+        `dash`, `opacity`, `line`, `trace`).
     """
     fig = _current_figure()
     if fig is None:
