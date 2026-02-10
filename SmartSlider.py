@@ -246,6 +246,8 @@ class SmartFloatSlider(widgets.VBox):
                 z_index="1000",
             ),
         )
+        self._top_row = None
+        self._modal_host = None
 
         # --- Layout -----------------------------------------------------------
         top_row = widgets.HBox(
@@ -261,6 +263,7 @@ class SmartFloatSlider(widgets.VBox):
             ],
             layout=widgets.Layout(align_items="center", gap="4px"),
         )
+        self._top_row = top_row
         super().__init__([top_row, self.settings_modal], **kwargs)
 
         # --- Wiring -----------------------------------------------------------
@@ -701,6 +704,43 @@ class SmartFloatSlider(widgets.VBox):
         from .ParamRef import ProxyParamRef
         symbol = symbols[0]
         return {symbol: ProxyParamRef(symbol, self)}
+
+    def set_modal_host(self, host) -> None:
+        """Attach the settings modal to a host container.
+
+        Parameters
+        ----------
+        host : ipywidgets.Box or None
+            Host container to overlay. If ``None``, the modal stays local to the slider.
+
+        Returns
+        -------
+        None
+            Updates widget parenting/layout in place.
+        """
+        if host is self._modal_host:
+            return
+
+        if self._modal_host is not None:
+            self._modal_host.children = tuple(
+                child for child in self._modal_host.children if child is not self.settings_modal
+            )
+
+        if host is None:
+            if self.settings_modal not in self.children:
+                self.children = (self._top_row, self.settings_modal)
+            self.settings_modal.layout.position = "fixed"
+            self.settings_modal.layout.width = "100vw"
+            self.settings_modal.layout.height = "100vh"
+        else:
+            self.children = (self._top_row,)
+            if self.settings_modal not in host.children:
+                host.children += (self.settings_modal,)
+            self.settings_modal.layout.position = "absolute"
+            self.settings_modal.layout.width = "100%"
+            self.settings_modal.layout.height = "100%"
+
+        self._modal_host = host
 
     def _toggle_settings(self, _) -> None:
         """Toggle visibility of the settings panel.

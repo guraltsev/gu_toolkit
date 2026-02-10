@@ -531,7 +531,7 @@ class SmartFigureLayout:
         # 5. Root Widget
         self.root_widget = widgets.VBox(
             [self._titlebar, self.content_wrapper],
-            layout=widgets.Layout(width="100%")
+            layout=widgets.Layout(width="100%", position="relative")
         )
 
         # Wire up internal logic
@@ -729,7 +729,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
     from the "rendering" of the figure.
     """
 
-    def __init__(self, render_callback: Callable[[str, ParamEvent], None], layout_box: widgets.Box) -> None:
+    def __init__(self, render_callback: Callable[[str, ParamEvent], None], layout_box: widgets.Box, modal_host: Optional[widgets.Box] = None) -> None:
         """Initialize the manager with a render callback and layout container.
 
         Parameters
@@ -738,6 +738,8 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
             Function invoked when parameters change. Signature: ``(reason, event)``.
         layout_box : ipywidgets.Box
             Container where slider widgets will be added.
+        modal_host : ipywidgets.Box, optional
+            Host container used by controls that support full-layout modal overlays.
 
         Returns
         -------
@@ -759,6 +761,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         self._hook_counter: int = 0
         self._render_callback = render_callback
         self._layout_box = layout_box # The VBox where sliders live
+        self._modal_host = modal_host
 
     def parameter(self, symbols: Union[Symbol, Sequence[Symbol]], *, control: Optional[Any] = None, **control_kwargs: Any):
         """
@@ -824,6 +827,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
                     max=float(config['max']),
                     step=float(config['step'])
                 )
+                self._attach_modal_host(new_control)
                 refs = new_control.make_refs([symbol])
                 if symbol not in refs:
                     raise KeyError(f"Control did not provide a ref for symbol {symbol}.")
@@ -834,6 +838,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
                     self._controls.append(new_control)
                     self._layout_box.children += (new_control,)
         elif missing:
+            self._attach_modal_host(control)
             refs = control.make_refs(missing)
             for symbol in missing:
                 if symbol not in refs:
@@ -853,6 +858,25 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         if single:
             return self._refs[symbols[0]]
         return {symbol: self._refs[symbol] for symbol in symbols}
+
+    def _attach_modal_host(self, control: Any) -> None:
+        """Attach modal host to controls that support it.
+
+        Parameters
+        ----------
+        control : Any
+            Candidate control widget.
+
+        Returns
+        -------
+        None
+            Applies host binding when supported.
+        """
+        if self._modal_host is None:
+            return
+        attach_fn = getattr(control, "set_modal_host", None)
+        if callable(attach_fn):
+            attach_fn(self._modal_host)
 
     @property
     def has_params(self) -> bool:
@@ -2016,7 +2040,11 @@ class SmartFigure:
         
         # 2. Initialize Managers
         # Note: we pass a callback for rendering so params can trigger updates
-        self._params = ParameterManager(self.render, self._layout.params_box)
+        self._params = ParameterManager(
+            self.render,
+            self._layout.params_box,
+            modal_host=self._layout.root_widget,
+        )
         self._info = InfoPanelManager(self._layout.info_box)
 
         # 3. Initialize Plotly Figure
