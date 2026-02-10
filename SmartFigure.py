@@ -245,12 +245,12 @@ RangeLike = Tuple[NumberLikeOrStr, NumberLikeOrStr]
 VisibleSpec = Union[bool, str]  # Plotly uses True/False or the string "legendonly".
 
 PLOT_STYLE_OPTIONS: Dict[str, str] = {
-    "color": "Line color shortcut (maps to Plotly trace line.color).",
-    "thickness": "Line width shortcut (maps to Plotly trace line.width).",
-    "dash": "Line dash shortcut (maps to Plotly trace line.dash).",
-    "opacity": "Trace opacity from 0.0 (transparent) to 1.0 (opaque).",
-    "line": "Additional Plotly line mapping applied to trace.line.",
-    "trace": "Additional Plotly trace mapping applied to the full trace.",
+    "color": "Line color. Accepts CSS-like names (e.g., red), hex (#RRGGBB), or rgb()/rgba() strings.",
+    "thickness": "Line width in pixels. Larger values draw thicker lines.",
+    "dash": "Line pattern. Supported values: solid, dot, dash, longdash, dashdot, longdashdot.",
+    "opacity": "Overall trace opacity from 0.0 (fully transparent) to 1.0 (fully opaque).",
+    "line": "Extra line-style fields as a mapping (for advanced per-line styling).",
+    "trace": "Extra trace fields as a mapping (for advanced full-trace styling).",
 }
 
 
@@ -1432,17 +1432,20 @@ class SmartPlot:
         visible : bool or "legendonly", optional
             Plotly visibility setting.
         color : str or None, optional
-            Line color override (Plotly color string).
+            Line color. Common formats include named colors (e.g., ``"red"``),
+            hex values (e.g., ``"#ff0000"``), and ``rgb(...)``/``rgba(...)``.
         thickness : int or float, optional
-            Line thickness (Plotly ``line.width``).
+            Line width in pixels. ``1`` is thin; larger values produce thicker lines.
         dash : str or None, optional
-            Line dash style (e.g., ``"dash"``, ``"dot"``).
+            Line pattern. Supported values: ``"solid"``, ``"dot"``, ``"dash"``,
+            ``"longdash"``, ``"dashdot"``, ``"longdashdot"``.
         opacity : int or float, optional
-            Trace opacity from 0.0 (transparent) to 1.0 (opaque).
+            Overall curve opacity between ``0.0`` (fully transparent) and
+            ``1.0`` (fully opaque).
         line : mapping or None, optional
-            Additional Plotly ``line`` attributes to apply.
+            Extra per-line style fields as a mapping (advanced usage).
         trace : mapping or None, optional
-            Additional Plotly trace attributes to apply.
+            Extra full-trace style fields as a mapping (advanced usage).
 
         Returns
         -------
@@ -2437,6 +2440,8 @@ class SmartFigure:
         Notes
         -----
         These options can be passed directly to :meth:`plot` and :func:`plot`.
+        Current supported shortcut keys are: ``color``, ``thickness``,
+        ``dash``, ``opacity``, ``line``, and ``trace``.
         """
         return dict(PLOT_STYLE_OPTIONS)
 
@@ -2479,17 +2484,20 @@ class SmartFigure:
             Number of sampling points for this plot. Use ``"figure_default"``
             to inherit from the figure setting.
         color : str or None, optional
-            Line color override (Plotly color string).
+            Line color. Common formats include named colors (e.g., ``"red"``),
+            hex values (e.g., ``"#ff0000"``), and ``rgb(...)``/``rgba(...)``.
         thickness : int or float, optional
-            Line thickness (Plotly ``line.width``).
+            Line width in pixels. ``1`` is thin; larger values produce thicker lines.
         dash : str or None, optional
-            Line dash style (e.g., ``"dash"``, ``"dot"``).
+            Line pattern. Supported values: ``"solid"``, ``"dot"``, ``"dash"``,
+            ``"longdash"``, ``"dashdot"``, ``"longdashdot"``.
         line : mapping or None, optional
-            Additional Plotly ``line`` attributes to apply.
+            Extra per-line style fields as a mapping (advanced usage).
         opacity : int or float, optional
-            Trace opacity from 0.0 (transparent) to 1.0 (opaque).
+            Overall curve opacity between ``0.0`` (fully transparent) and
+            ``1.0`` (fully opaque).
         trace : mapping or None, optional
-            Additional Plotly trace attributes to apply.
+            Extra full-trace style fields as a mapping (advanced usage).
 
         Returns
         -------
@@ -2507,9 +2515,14 @@ class SmartFigure:
         Passing ``parameters=[]`` disables automatic parameter creation even if
         the expression has free symbols other than ``var``.
 
+        All supported style options for this method are discoverable via
+        :meth:`SmartFigure.plot_style_options`.
+
         See Also
         --------
         parameter : Create sliders without plotting.
+        plot_style_options : List supported style kwargs and meanings
+            (`color`, `thickness`, `dash`, `opacity`, `line`, `trace`).
         """
         # ID Generation
         if id is None:
@@ -2990,6 +3003,11 @@ def plot_style_options() -> Dict[str, str]:
     -------
     dict[str, str]
         Mapping of style keyword names to descriptions.
+
+    Notes
+    -----
+    Current supported shortcut keys are: ``color``, ``thickness``, ``dash``,
+    ``opacity``, ``line``, and ``trace``.
     """
     return SmartFigure.plot_style_options()
 
@@ -3069,17 +3087,20 @@ def plot(
     sampling_points : int or str, optional
         Number of samples, or ``"figure_default"`` to inherit from the figure.
     color : str or None, optional
-        Line color override (Plotly color string).
+        Line color. Common formats include named colors (e.g., ``"red"``),
+        hex values (e.g., ``"#ff0000"``), and ``rgb(...)``/``rgba(...)``.
     thickness : int or float, optional
-        Line thickness (Plotly ``line.width``).
+        Line width in pixels. ``1`` is thin; larger values produce thicker lines.
     dash : str or None, optional
-        Line dash style (e.g., ``"dash"``, ``"dot"``).
+        Line pattern. Supported values: ``"solid"``, ``"dot"``, ``"dash"``,
+        ``"longdash"``, ``"dashdot"``, ``"longdashdot"``.
     line : mapping or None, optional
-        Additional Plotly ``line`` attributes to apply.
+        Extra per-line style fields as a mapping (advanced usage).
     opacity : int or float, optional
-        Trace opacity from 0.0 (transparent) to 1.0 (opaque).
+        Overall curve opacity between ``0.0`` (fully transparent) and
+        ``1.0`` (fully opaque).
     trace : mapping or None, optional
-        Additional Plotly trace attributes to apply.
+        Extra full-trace style fields as a mapping (advanced usage).
 
     Returns
     -------
@@ -3096,9 +3117,14 @@ def plot(
     If no current figure is active, this function creates and displays a new
     :class:`SmartFigure`.
 
+    All supported style options for this helper are discoverable via
+    :func:`plot_style_options`.
+
     See Also
     --------
     SmartFigure.plot : Instance method with the same signature.
+    plot_style_options : List supported style kwargs and meanings
+        (`color`, `thickness`, `dash`, `opacity`, `line`, `trace`).
     """
     fig = _current_figure()
     if fig is None:
