@@ -109,8 +109,9 @@ Each plotted expression is represented as a `SmartPlot`. It converts a SymPy exp
 Key behaviors:
 - Tracks its own variable, expression, parameters, label, and visibility.
 - Supports per-plot overrides for `x_domain` and sampling density.
-- Supports per-plot line styling (color, thickness, dash) plus additional Plotly trace/line attributes via the plot/update APIs.【F:SmartFigure.py†L1102-L1632】
+- Supports per-plot line styling (color, thickness, dash), trace opacity, plus additional Plotly trace/line attributes via the plot/update APIs.【F:SmartFigure.py†L1102-L1632】
 - Calls `render()` to update its trace based on the latest parameters and ranges.【F:SmartFigure.py†L1102-L1460】
+- Plot-style kwargs are explicitly discoverable via `SmartFigure.plot_style_options()` and module-level `plot_style_options()`, which enumerate all supported style shortcuts (`color`, `thickness`, `dash`, `opacity`, `line`, `trace`).【F:SmartFigure.py†L2431-L2443】
 
 ### 6. `PlotlyPane` (Resilient Plotly sizing)
 

@@ -16,7 +16,7 @@ import sympy as sp
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT.parent))
 
-from gu_toolkit import SmartFigure, params, parameter  # noqa: E402
+from gu_toolkit import SmartFigure, params, parameter, plot_style_options  # noqa: E402
 
 
 def _assert_raises(exc_type, fn, *args, **kwargs):
@@ -68,6 +68,28 @@ def test_params_setitem_sugar() -> None:
         assert params[a].value == 7
 
 
+
+def test_plot_opacity_shortcut_and_validation() -> None:
+    x = sp.symbols("x")
+    fig = SmartFigure()
+    plot = fig.plot(x, sp.sin(x), id="sin", opacity=0.4)
+    assert plot.opacity == 0.4
+
+    plot.update(opacity=0.7)
+    assert plot.opacity == 0.7
+
+    _assert_raises(ValueError, setattr, plot, "opacity", 1.2)
+
+
+def test_plot_style_options_are_discoverable() -> None:
+    options = plot_style_options()
+    for key in ("color", "thickness", "dash", "opacity", "line", "trace"):
+        assert key in options
+
+    fig_options = SmartFigure.plot_style_options()
+    assert fig_options == options
+
+
 def main() -> None:
     tests = [
         test_params_proxy_context_access,
@@ -75,6 +97,8 @@ def main() -> None:
         test_parameter_creation_path,
         test_no_context_behavior,
         test_params_setitem_sugar,
+        test_plot_opacity_shortcut_and_validation,
+        test_plot_style_options_are_discoverable,
     ]
     for test in tests:
         test()
