@@ -97,7 +97,7 @@ import re
 import time
 import warnings
 import logging
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from collections.abc import Mapping
 from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator, List
 
@@ -539,9 +539,26 @@ class SmartFigureLayout:
             ),
         )
 
+        # 4.5. Default print/output area (below the entire figure content)
+        self.print_header = widgets.HTML("<b>Output</b>", layout=widgets.Layout(margin="8px 0 4px 0"))
+        self.print_output = widgets.Output(
+            layout=widgets.Layout(
+                width="100%",
+                min_height="48px",
+                padding="8px",
+                border="1px solid rgba(15,23,42,0.08)",
+                border_radius="10px",
+                overflow="auto",
+            )
+        )
+        self.print_area = widgets.VBox(
+            [self.print_header, self.print_output],
+            layout=widgets.Layout(width="100%", margin="6px 0 0 0"),
+        )
+
         # 5. Root Widget
         self.root_widget = widgets.VBox(
-            [self._titlebar, self.content_wrapper],
+            [self._titlebar, self.content_wrapper, self.print_area],
             layout=widgets.Layout(width="100%", position="relative")
         )
 
@@ -2058,7 +2075,7 @@ class SmartFigure:
         "_layout", "_params", "_info", "_figure", "_pane", "plots",
         "_x_range", "_y_range", "_sampling_points", "_debug",
         "_last_relayout", "_render_info_last_log_t", "_render_debug_last_log_t",
-        "_has_been_displayed"
+        "_has_been_displayed", "_print_capture"
     ]
 
     def __init__(
@@ -2100,6 +2117,7 @@ class SmartFigure:
         self._sampling_points = sampling_points
         self.plots: Dict[str, SmartPlot] = {}
         self._has_been_displayed = False
+        self._print_capture: Optional[ExitStack] = None
 
         # 1. Initialize Layout (View)
         self._layout = SmartFigureLayout()
@@ -2981,6 +2999,10 @@ class SmartFigure:
         plot : Module-level helper that uses the current figure if available.
         """
         _push_current_figure(self)
+        if self._print_capture is None:
+            stack = ExitStack()
+            stack.enter_context(self._layout.print_output)
+            self._print_capture = stack
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
@@ -3004,7 +3026,12 @@ class SmartFigure:
         This removes the figure from the module-level stack used by
         :func:`plot` and :func:`parameter`.
         """
-        _pop_current_figure(self)
+        try:
+            _pop_current_figure(self)
+        finally:
+            if self._print_capture is not None:
+                self._print_capture.close()
+                self._print_capture = None
 
 
 class _CurrentParamsProxy(Mapping):
@@ -3053,8 +3080,106 @@ class _CurrentParamsProxy(Mapping):
         """Proxy to the current figure's :meth:`ParameterManager.parameter`."""
         return self._mgr().parameter(symbols, control=control, **kwargs)
 
+    def snapshot(self) -> ParameterSnapshot:
+        """Return a snapshot of current parameter values/settings."""
+        return self._mgr().snapshot()
+
+
+class _CurrentPlotsProxy(Mapping):
+    """Module-level proxy to the current figure's plots mapping."""
+
+    def _fig(self) -> "SmartFigure":
+        return _require_current_figure()
+
+    def __getitem__(self, key: Hashable) -> SmartPlot:
+        return self._fig().plots[key]
+
+    def __iter__(self) -> Iterator[Hashable]:
+        return iter(self._fig().plots)
+
+    def __len__(self) -> int:
+        return len(self._fig().plots)
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._fig().plots
+
 
 params = _CurrentParamsProxy()
+parameters = params
+plots = _CurrentPlotsProxy()
+
+
+def set_title(text: str) -> None:
+    """Set the title of the current figure."""
+    _require_current_figure().title = text
+
+
+def get_title() -> str:
+    """Get the title of the current figure."""
+    return _require_current_figure().title
+
+def render(reason: str = "manual", trigger: Optional[ParamEvent] = None) -> None:
+    """Render the current figure.
+
+    Parameters
+    ----------
+    reason : str, optional
+        Render reason string for logging/debugging.
+    trigger : ParamEvent or None, optional
+        Optional event payload forwarded to :meth:`SmartFigure.render`.
+    """
+    _require_current_figure().render(reason=reason, trigger=trigger)
+
+
+def get_info_output(id: Optional[Hashable] = None, **kwargs: Any) -> widgets.Output:
+    """Return or create an output widget in the current figure's info panel."""
+    return _require_current_figure().get_info_output(id=id, **kwargs)
+
+
+def add_info_component(
+    id: Hashable,
+    component_factory: Callable,
+    hook_id: Optional[Hashable] = None,
+    **kwargs: Any,
+) -> Any:
+    """Register an info component on the current figure and return it."""
+    return _require_current_figure().add_info_component(
+        id,
+        component_factory,
+        hook_id=hook_id,
+        **kwargs,
+    )
+
+
+def set_x_range(value: RangeLike) -> None:
+    """Set x-axis range on the current figure."""
+    _require_current_figure().x_range = value
+
+
+def get_x_range() -> Tuple[float, float]:
+    """Get x-axis range from the current figure."""
+    return _require_current_figure().x_range
+
+
+def set_y_range(value: RangeLike) -> None:
+    """Set y-axis range on the current figure."""
+    _require_current_figure().y_range = value
+
+
+def get_y_range() -> Tuple[float, float]:
+    """Get y-axis range from the current figure."""
+    return _require_current_figure().y_range
+
+
+def set_sampling_points(value: Union[int, str, _FigureDefaultSentinel, None]) -> None:
+    """Set default sampling points on the current figure."""
+    _require_current_figure().sampling_points = value
+
+
+def get_sampling_points() -> Optional[int]:
+    """Get default sampling points from the current figure."""
+    return _require_current_figure().sampling_points
+
 
 def plot_style_options() -> Dict[str, str]:
     """Return discoverable SmartFigure plot-style options.
