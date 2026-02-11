@@ -225,3 +225,53 @@ __all__+=["Latex"]
 
 from pprint import pprint
 __all__+=["pprint"]
+
+
+def NIntegrate(expr, var_and_limits):
+    """Numerically integrate a SymPy expression over a 1D interval.
+
+    Parameters
+    ----------
+    expr:
+        SymPy expression containing the integration variable.
+    var_and_limits:
+        Tuple ``(x, a, b)`` where ``x`` is a SymPy Symbol and ``a``/``b`` are
+        scalar bounds (including ``sympy.oo``/``-sympy.oo``).
+
+    Returns
+    -------
+    float
+        Numeric integral value computed with ``scipy.integrate.quad``.
+    """
+    try:
+        x, a, b = var_and_limits
+    except Exception as exc:  # pragma: no cover - defensive shape validation
+        raise TypeError("NIntegrate expects limits as a tuple: (x, a, b)") from exc
+
+    if not isinstance(x, sp.Symbol):
+        raise TypeError(f"NIntegrate expects x to be a sympy Symbol, got {type(x)}")
+
+    try:
+        from .numpify import numpify_cached as _numpify_cached
+    except ImportError:
+        from numpify import numpify_cached as _numpify_cached
+
+    from scipy.integrate import quad
+
+    def _to_quad_limit(v):
+        if v == sp.oo:
+            return np.inf
+        if v == -sp.oo:
+            return -np.inf
+        return float(sp.N(v))
+
+    f = _numpify_cached(expr, args=x)
+
+    def _integrand(t):
+        return float(np.asarray(f(t)))
+
+    value, _error = quad(_integrand, _to_quad_limit(a), _to_quad_limit(b))
+    return value
+
+
+__all__ += ["NIntegrate"]
