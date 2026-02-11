@@ -936,8 +936,15 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         if callable(attach_fn):
             attach_fn(self._modal_host)
 
-    def snapshot(self) -> ParameterSnapshot:
-        """Return an immutable ordered snapshot of current parameter state."""
+    def snapshot(self, *, full: bool = False) -> Dict[Symbol, Any] | ParameterSnapshot:
+        """Return parameter values or a full immutable metadata snapshot.
+
+        Parameters
+        ----------
+        full : bool, default=False
+            If False, return a detached ``dict[Symbol, value]``.
+            If True, return a full :class:`ParameterSnapshot` including metadata.
+        """
         entries: Dict[Symbol, Dict[str, Any]] = {}
         for symbol, ref in self._refs.items():
             entry: Dict[str, Any] = {"value": ref.value}
@@ -946,7 +953,11 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
             for name in caps:
                 entry[name] = getattr(ref, name)
             entries[symbol] = entry
-        return ParameterSnapshot(entries)
+
+        snapshot = ParameterSnapshot(entries)
+        if full:
+            return snapshot
+        return snapshot.value_map()
 
     @property
     def has_params(self) -> bool:
@@ -3102,9 +3113,9 @@ class _CurrentParametersProxy(Mapping):
         """Proxy to the current figure's :meth:`ParameterManager.parameter`."""
         return self._mgr().parameter(symbols, control=control, **kwargs)
 
-    def snapshot(self) -> ParameterSnapshot:
-        """Return a snapshot of current parameter values/settings."""
-        return self._mgr().snapshot()
+    def snapshot(self, *, full: bool = False) -> Dict[Symbol, Any] | ParameterSnapshot:
+        """Return current-figure parameter values or full snapshot metadata."""
+        return self._mgr().snapshot(full=full)
 
     def __getattr__(self, name: str) -> Any:
         """Forward unknown attributes/methods to active figure parameters."""

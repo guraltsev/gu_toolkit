@@ -41,8 +41,8 @@ class ParameterSnapshot(Mapping[Symbol, Mapping[str, Any]]):
         """Return the number of parameter entries in the snapshot."""
         return len(self._entries)
 
-    def values(self) -> Dict[Symbol, Any]:
-        """Return an ordered ``Symbol -> value`` projection.
+    def value_map(self) -> Dict[Symbol, Any]:
+        """Return a plain detached ``Symbol -> value`` dictionary.
 
         Returns
         -------
@@ -54,7 +54,7 @@ class ParameterSnapshot(Mapping[Symbol, Mapping[str, Any]]):
         >>> import sympy as sp
         >>> a = sp.Symbol("a")
         >>> snap = ParameterSnapshot({a: {"value": 1.5, "min": 0.0}})
-        >>> snap.values()[a]
+        >>> snap.value_map()[a]
         1.5
         """
         return {symbol: deepcopy(entry["value"]) for symbol, entry in self._entries.items()}

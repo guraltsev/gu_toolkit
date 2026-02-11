@@ -28,9 +28,8 @@ def test_snapshot_order_and_values() -> None:
     fig = SmartFigure()
     fig.parameter([a, b, c], value=1)
 
-    snap = fig.params.snapshot()
+    snap = fig.parameters.snapshot()
     assert list(snap.keys()) == [a, b, c]
-    assert list(snap.values().keys()) == [a, b, c]
 
 
 def test_snapshot_entry_immutability() -> None:
@@ -38,7 +37,7 @@ def test_snapshot_entry_immutability() -> None:
     fig = SmartFigure()
     fig.parameter(a, min=-2, max=2, step=0.5, value=0)
 
-    snap = fig.params.snapshot()
+    snap = fig.parameters.snapshot(full=True)
     entry = dict(snap[a])
     entry["value"] = 99
     assert snap[a]["value"] != 99
@@ -80,14 +79,14 @@ def test_live_vs_snapshot_bound() -> None:
     fig = SmartFigure()
     plot = fig.plot(x, a * x, parameters=[a], id="ax")
 
-    fig.params[a].value = 2.0
+    fig.parameters[a].value = 2.0
     x_values = np.array([1.0, 2.0, 3.0])
     y_live = np.asarray(plot.numeric_expression(x_values))
     assert np.allclose(y_live, np.array([2.0, 4.0, 6.0]))
 
-    snap = fig.params.snapshot()
-    bound = plot.numeric_expression.bind(snap.values())
-    fig.params[a].value = 4.0
+    snap = fig.parameters.snapshot()
+    bound = plot.numeric_expression.bind(snap)
+    fig.parameters[a].value = 4.0
 
     y_bound = np.asarray(bound(x_values))
     y_live_2 = np.asarray(plot.numeric_expression(x_values))
