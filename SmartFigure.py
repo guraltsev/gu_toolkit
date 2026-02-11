@@ -118,13 +118,13 @@ from sympy.core.symbol import Symbol
 
 # Internal imports (assumed to exist in the same package)
 from .InputConvert import InputConvert
-from .numpify import numpify_cached
+from .numpify import NumpifiedFunction, numpify_cached
 from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
 from .SmartSlider import SmartFloatSlider
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .ParameterSnapshot import ParameterSnapshot
-from .NumericExpression import LiveNumericExpression
+from .NumericExpression import PlotView
 
 
 # Module logger
@@ -184,6 +184,28 @@ def _require_current_figure() -> "SmartFigure":
     fig = _current_figure()
     if fig is None:
         raise RuntimeError("No current SmartFigure. Use `with fig:` first.")
+    return fig
+
+
+def current_figure(*, required: bool = True) -> Optional["SmartFigure"]:
+    """Return the active SmartFigure from the context stack.
+
+    Parameters
+    ----------
+    required : bool, default=True
+        If True, raise when no figure is currently active.
+
+    Returns
+    -------
+    SmartFigure or None
+        Active figure, or None when ``required=False`` and no context is active.
+    """
+    fig = _current_figure()
+    if fig is None and required:
+        raise RuntimeError(
+            "No active SmartFigure. Use `with fig:` to set one, "
+            "or pass an explicit figure to .bind()."
+        )
     return fig
 
 
@@ -757,7 +779,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
     - Creating and reusing parameter controls.
     - Storing parameter refs.
     - Executing hooks when parameters change.
-    - Acts like a dictionary so `fig.params[sym]` works.
+    - Acts like a dictionary so `fig.parameters[sym]` works.
 
     Design Note:
     ------------
@@ -914,8 +936,15 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         if callable(attach_fn):
             attach_fn(self._modal_host)
 
-    def snapshot(self) -> ParameterSnapshot:
-        """Return an immutable ordered snapshot of current parameter state."""
+    def snapshot(self, *, full: bool = False) -> Dict[Symbol, Any] | ParameterSnapshot:
+        """Return parameter values or a full immutable metadata snapshot.
+
+        Parameters
+        ----------
+        full : bool, default=False
+            If False, return a detached ``dict[Symbol, value]``.
+            If True, return a full :class:`ParameterSnapshot` including metadata.
+        """
         entries: Dict[Symbol, Dict[str, Any]] = {}
         for symbol, ref in self._refs.items():
             entry: Dict[str, Any] = {"value": ref.value}
@@ -924,7 +953,11 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
             for name in caps:
                 entry[name] = getattr(ref, name)
             entries[symbol] = entry
-        return ParameterSnapshot(entries)
+
+        snapshot = ParameterSnapshot(entries)
+        if full:
+            return snapshot
+        return snapshot.value_map()
 
     @property
     def has_params(self) -> bool:
@@ -1048,7 +1081,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         return self._hooks.copy()
 
     # --- Dict-like Interface for Backward Compatibility ---
-    # This allows `fig.params[symbol]` to work in user hooks.
+    # This allows `fig.parameters[symbol]` to work in user hooks.
     
     def __getitem__(self, key: Symbol) -> ParamRef:
         """Return the param ref for the given symbol.
@@ -1578,10 +1611,9 @@ class SmartPlot:
         """
         parameters = list(parameters) 
         # Compile
-        self._core = numpify_cached(func, args=[var] + parameters)
+        self._numpified = numpify_cached(func, args=[var] + parameters)
         # Store
         self._var = var
-        self._parameters = tuple(parameters)
         self._func = func
 
     @property
@@ -1592,20 +1624,25 @@ class SmartPlot:
     @property
     def parameters(self) -> tuple[Symbol, ...]:
         """Return parameter symbols in deterministic numeric-argument order."""
-        return self._parameters
+        return self._numpified.args[1:]
 
     @property
-    def numeric_expression(self) -> LiveNumericExpression:
+    def numpified(self) -> NumpifiedFunction:
+        """Return compiled numpified callable for this plot."""
+        return self._numpified
+
+    @property
+    def numeric_expression(self) -> PlotView:
         """Return a live numeric evaluator proxy for this plot."""
-        return LiveNumericExpression(self)
+        return PlotView(_numpified=self._numpified, _provider=self._smart_figure)
 
     def _eval_numeric_live(self, x: np.ndarray) -> np.ndarray:
         """Evaluate the numeric core against current figure parameter values."""
         fig = self._smart_figure
         args = [x]
-        for symbol in self._parameters:
-            args.append(fig.params[symbol].value)
-        return self._core(*args)
+        for symbol in self._numpified.args[1:]:
+            args.append(fig.parameters[symbol].value)
+        return self._numpified(*args)
 
     @property
     def label(self) -> str:
@@ -2042,7 +2079,7 @@ class SmartPlot:
         if any(k in kwargs for k in ('var', 'func', 'parameters')):
             v = kwargs.get('var', self._var)
             f = kwargs.get('func', self._func)
-            p = kwargs.get('parameters', self._parameters)
+            p = kwargs.get('parameters', self.parameters)
             self.set_func(v, f, p)
             self.render()
 
@@ -2286,34 +2323,14 @@ class SmartFigure:
         return self._figure
     
     @property
-    def params(self) -> ParameterManager:
-        """
-        The ParameterManager instance.
-        Acts like a dictionary of `{Symbol: ParamRef}` for backward compatibility.
-
-        ParamRef objects expose common controls such as:
-        - ``value`` (current value)
-        - ``default_value`` (reset target)
-        - ``min`` / ``max`` / ``step`` (range configuration, when supported)
-        - ``observe(...)`` / ``reset()`` / ``widget``
-        - ``capabilities`` to inspect optional attribute support at runtime
-
-        Returns
-        -------
-        ParameterManager
-            Parameter manager for slider state and hooks.
-
-        Examples
-        --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> fig.params.has_params  # doctest: +SKIP
-        False
-
-        See Also
-        --------
-        parameter : Create or reuse parameter controls.
-        """
+    def parameters(self) -> ParameterManager:
+        """The figure ParameterManager (preferred name)."""
         return self._params
+
+    @property
+    def params(self) -> ParameterManager:
+        """Alias for :attr:`parameters` for backward compatibility."""
+        return self.parameters
     
     @property
     def info_output(self) -> Dict[Hashable, widgets.Output]:
@@ -3045,7 +3062,7 @@ class SmartFigure:
                 self._print_capture = None
 
 
-class _CurrentParamsProxy(Mapping):
+class _CurrentParametersProxy(Mapping):
     """Module-level proxy to the current figure's ParameterManager.
 
     Examples
@@ -3064,7 +3081,7 @@ class _CurrentParamsProxy(Mapping):
 
     def _mgr(self) -> "ParameterManager":
         """Return the current figure's ParameterManager."""
-        return self._fig().params
+        return self._fig().parameters
 
     def __getitem__(self, key: Hashable) -> ParamRef:
         """Return the current figure's parameter reference for ``key``."""
@@ -3096,9 +3113,20 @@ class _CurrentParamsProxy(Mapping):
         """Proxy to the current figure's :meth:`ParameterManager.parameter`."""
         return self._mgr().parameter(symbols, control=control, **kwargs)
 
-    def snapshot(self) -> ParameterSnapshot:
-        """Return a snapshot of current parameter values/settings."""
-        return self._mgr().snapshot()
+    def snapshot(self, *, full: bool = False) -> Dict[Symbol, Any] | ParameterSnapshot:
+        """Return current-figure parameter values or full snapshot metadata."""
+        return self._mgr().snapshot(full=full)
+
+    def __getattr__(self, name: str) -> Any:
+        """Forward unknown attributes/methods to active figure parameters."""
+        return getattr(self._mgr(), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Forward attribute assignment to active figure parameters."""
+        if name.startswith("_"):
+            object.__setattr__(self, name, value)
+            return
+        setattr(self._mgr(), name, value)
 
 
 class _CurrentPlotsProxy(Mapping):
@@ -3120,8 +3148,8 @@ class _CurrentPlotsProxy(Mapping):
         return key in self._fig().plots
 
 
-params = _CurrentParamsProxy()
-parameters = params
+parameters = _CurrentParametersProxy()
+params = parameters
 plots = _CurrentPlotsProxy()
 
 
@@ -3253,7 +3281,7 @@ def parameter(
     SmartFigure.parameter : Instance method for parameter creation.
     """
     fig = _require_current_figure()
-    return fig.params.parameter(symbols, control=control, **kwargs)
+    return fig.parameters.parameter(symbols, control=control, **kwargs)
 
 
 def plot(

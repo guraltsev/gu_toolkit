@@ -41,23 +41,23 @@ class ParameterSnapshot(Mapping[Symbol, Mapping[str, Any]]):
         """Return the number of parameter entries in the snapshot."""
         return len(self._entries)
 
-    def values_only(self) -> Dict[Symbol, Any]:
-        """Return an ordered ``Symbol -> value`` projection.
+    def value_map(self) -> Dict[Symbol, Any]:
+        """Return a plain detached ``Symbol -> value`` dictionary.
 
         Returns
         -------
         dict[sympy.Symbol, Any]
-            Mapping containing only current parameter values.
+            Plain detached dictionary containing only current parameter values.
 
         Examples
         --------
         >>> import sympy as sp
         >>> a = sp.Symbol("a")
         >>> snap = ParameterSnapshot({a: {"value": 1.5, "min": 0.0}})
-        >>> snap.values_only()[a]
+        >>> snap.value_map()[a]
         1.5
         """
-        return {symbol: entry["value"] for symbol, entry in self._entries.items()}
+        return {symbol: deepcopy(entry["value"]) for symbol, entry in self._entries.items()}
 
     def __eq__(self, other: object) -> bool:
         """Compare snapshots by ordered item content."""
