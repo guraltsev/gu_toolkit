@@ -170,6 +170,10 @@ class SmartFloatSlider(widgets.VBox):
   z-index: 99999 !important;
 }
 
+.smart-slider-modal-host {
+  position: relative !important;
+}
+
 .smart-slider-settings-panel {
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.32) !important;
   border-radius: 10px !important;
@@ -760,8 +764,9 @@ class SmartFloatSlider(widgets.VBox):
             self.settings_modal.layout.height = "100vh"
         else:
             self.children = (self._top_row,)
-            if host.layout.position in (None, "", "static"):
-                host.layout.position = "relative"
+            add_class = getattr(host, "add_class", None)
+            if callable(add_class):
+                add_class("smart-slider-modal-host")
             if self.settings_modal not in host.children:
                 host.children += (self.settings_modal,)
             self.settings_modal.layout.position = "absolute"
