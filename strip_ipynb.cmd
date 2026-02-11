@@ -22,16 +22,25 @@ echo Done.
 exit /b 0
 
 :HANDLE
+REM Skip anything under .ipynb_checkpoints
 echo %~1 | findstr /i "\.ipynb_checkpoints\\" >nul
-if not errorlevel 1 goto :SKIP
+if not errorlevel 1 goto :SKIP_CHECKPOINT
+
+REM Skip anything under .git
+echo %~1 | findstr /i "\.git\\" >nul
+if not errorlevel 1 goto :SKIP_GIT
 
 echo Stripping: %~1
-nbstripout %1
+python -m nbstripout "%~1"
 if errorlevel 1 goto :FAIL_FILE
 goto :EOF
 
-:SKIP
+:SKIP_CHECKPOINT
 echo Skipping (checkpoint): %~1
+goto :EOF
+
+:SKIP_GIT
+echo Skipping (git): %~1
 goto :EOF
 
 :FAIL_FILE
