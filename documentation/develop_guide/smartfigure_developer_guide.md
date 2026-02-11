@@ -232,3 +232,70 @@ SmartFigure’s architecture is intentionally modular:
 - **PlotlyPane** solves Plotly sizing issues in dynamic Jupyter layouts.
 
 Together these components provide a flexible, extensible environment for interactive symbolic plotting inside notebooks.【F:SmartFigure.py†L138-L1687】【F:PlotlyPane.py†L1-L157】
+
+---
+
+## Source-level documentation and discoverability index
+
+This section is a maintenance-oriented index to keep all Python source files discoverable. It mirrors the in-code docstring style used across the toolkit and serves as a quick map when navigating internals.
+
+### Package entry points
+
+- `__init__.py` re-exports the high-level API (`SmartFigure`, `Figure`, `plot`, `parameter`, `plot_style_options`, parser/event/ref helpers, numeric-expression wrappers, and the symbolic prelude). Use this as the first discovery stop for notebook users and downstream imports.【F:__init__.py†L1-L24】
+- `prelude.py` defines notebook-friendly symbols/functions (`SymbolFamily`, `FunctionFamily`, infix relations) plus convenient imports (`sp`, `np`, `pd`). It is intentionally broad to reduce friction in teaching and exploratory contexts.【F:prelude.py†L1-L223】
+
+### SmartFigure core stack
+
+- `SmartFigure.py`
+  - Module-level helpers manage “current figure” stack semantics for `with fig:` usage and global helper functions. Private helpers (`_current_figure`, `_require_current_figure`, `_push_current_figure`, `_pop_current_figure`, `_use_figure`) should remain lightweight and side-effect scoped to stack state.【F:SmartFigure.py†L1-L336】
+  - `SmartFigureLayout` owns widget composition and responsive layout behavior (title area, plot container, sidebar/full-width controls).【F:SmartFigure.py†L450-L739】
+  - `ParameterManager` owns parameter control registration, change propagation, snapshots, and dictionary-like access for backward compatibility/discoverability (`keys`, `values`, `items`, iteration, `parameter`).【F:SmartFigure.py†L749-L1276】
+  - `InfoPanelManager` owns info components and output routing for sidebar content.【F:SmartFigure.py†L1282-L1428】
+  - `SmartPlot` encapsulates symbolic expression + numeric core + trace updates. Style update helpers (`_update_line_style`) are intentionally private and local to trace mutation behavior.【F:SmartFigure.py†L1434-L2062】
+  - `SmartFigure` orchestrates figure/widget lifecycle, render triggers, pan/zoom throttling, and context-manager behavior for global helper routing.【F:SmartFigure.py†L2065-L3008】
+  - `_CurrentParamsProxy` exposes module-level discoverable access (`params[...]`, `params.parameter(...)`) to the active figure’s parameter manager.【F:SmartFigure.py†L3014-L3070】
+
+### Plotly host + parameter controls
+
+- `PlotlyPane.py` provides the anywidget-backed resize driver (`PlotlyResizeDriver`) and wrapper (`PlotlyPane`) to keep Plotly correctly sized in dynamic notebook layouts. `PlotlyPaneStyle` centralizes style knobs for consistent embedding in parent layouts.【F:PlotlyPane.py†L1-L747】
+- `SmartSlider.py` defines `SmartFloatSlider`, the canonical parameter control. It encapsulates value synchronization (slider/text), setting edits (min/max/step/default), reset behavior, and modal-host integration for settings UI.【F:SmartSlider.py†L1-L403】
+
+### Numeric compilation and expression wrappers
+
+- `numpify.py` is the SymPy→NumPy compilation bridge (`numpify`, `numpify_cached`) with binding normalization and cache-aware helpers (`_FrozenFNumPy`, `_numpify_cached_impl`). Private helpers are intentionally documented for maintainers due to non-trivial cache-key behavior and function-binding rules.【F:numpify.py†L1-L616】
+- `NumericExpression.py` formalizes live vs. detached expression states:
+  - `LiveNumericExpression` (widget/live values),
+  - `DeadBoundNumericExpression` (frozen values),
+  - `DeadUnboundNumericExpression` (core + parameter order only).【F:NumericExpression.py†L1-L115】
+
+### Parameter contracts and events
+
+- `ParamRef.py` defines the `ParamRef` protocol and `ProxyParamRef` adapter. Public API docs describe parameter metadata capabilities (`default_value`, `min`, `max`, `step`), observer behavior, and reset semantics for robust extension points.【F:ParamRef.py†L1-L348】
+- `ParamEvent.py` defines `ParamEvent`, the immutable normalized payload emitted to hooks and observers.【F:ParamEvent.py†L1-L50】
+- `ParameterSnapshot.py` defines immutable ordered snapshots for deterministic binding and comparisons in parameterized evaluations.【F:ParameterSnapshot.py†L1-L69】
+
+### Parsing and conversion helpers
+
+- `InputConvert.py` centralizes conversion of user-provided numeric values (Python numeric inputs, strings, and SymPy-parsable text) with explicit truncation rules and predictable errors.【F:InputConvert.py†L1-L126】
+- `SmartParseLaTeX.py` provides `parse_latex` with backend fallback (`lark` then `antlr`) and structured error context via `LatexParseError`.【F:SmartParseLaTeX.py†L1-L74】
+
+### Symbolic function authoring
+
+- `NamedFunction.py` provides the `@NamedFunction` API for creating SymPy function classes with symbolic definitions and numeric implementations while preserving inspectable signatures and generated docs.【F:NamedFunction.py†L1-L689】
+
+### Documentation maintenance checklist (for contributors)
+
+When adding or modifying code in this toolkit, keep these standards:
+
+1. **Every module has a top-level docstring** describing purpose, design intent, and where it sits in the architecture.
+2. **Every public function/class/method includes thorough API docs**:
+   - parameter meanings,
+   - return values,
+   - expected error conditions,
+   - examples/doctests (use `# doctest: +SKIP` for notebook/UI-heavy paths),
+   - “See Also” links to related APIs where appropriate.
+3. **Every private helper gets at least a brief behavior docstring** to reduce maintenance friction and simplify refactors.
+4. **Class docs describe role and collaboration boundaries** (what state they own, what they delegate, and what triggers side effects).
+5. **Discoverability first**: module docstrings should point to neighboring modules/classes and mention likely extension points.
+
+By keeping source docstrings and this guide in sync, the toolkit remains approachable for both notebook users and maintainers.

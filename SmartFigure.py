@@ -1,3 +1,10 @@
+"""Core SmartFigure plotting system for interactive symbolic exploration.
+
+The module hosts the coordinator class, plot abstraction, layout/parameter/info
+managers, and notebook helper functions used to build responsive, parameterized
+Plotly visualizations from SymPy expressions.
+"""
+
 from __future__ import annotations
 
 # NOTE: This file is SmartFigure.py with the Info Components API implemented.
@@ -137,6 +144,7 @@ class _FigureDefaultSentinel:
     __slots__ = ()
 
     def __repr__(self) -> str:
+        """Return the stable debug token for the figure-default sentinel."""
         return "FIGURE_DEFAULT"
 
 
@@ -1922,7 +1930,10 @@ class SmartPlot:
         dash: Optional[str] = None,
         line: Optional[Mapping[str, Any]] = None,
     ) -> None:
+        """Apply incremental line-style updates to the backing Plotly trace."""
+
         def _coerce_line_value(value: Any) -> Dict[str, Any]:
+            """Normalize Plotly line-like structures to mutable dictionaries."""
             if not value:
                 return {}
             if isinstance(value, Mapping):
@@ -3029,18 +3040,23 @@ class _CurrentParamsProxy(Mapping):
         return self._fig().params
 
     def __getitem__(self, key: Hashable) -> ParamRef:
+        """Return the current figure's parameter reference for ``key``."""
         return self._mgr()[key]
 
     def __iter__(self) -> Iterator[Hashable]:
+        """Iterate parameter symbols from the active figure manager."""
         return iter(self._mgr())
 
     def __len__(self) -> int:
+        """Return number of parameters on the active figure."""
         return len(self._mgr())
 
     def __contains__(self, key: object) -> bool:
+        """Return whether ``key`` is present on the active figure."""
         return key in self._mgr()
 
     def __setitem__(self, key: Hashable, value: Any) -> None:
+        """Set the active figure parameter value via mapping syntax."""
         self[key].value = value
 
     def parameter(

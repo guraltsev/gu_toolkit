@@ -1,3 +1,9 @@
+"""Notebook-friendly symbolic-math prelude and convenience exports.
+
+Provides SymPy/NumPy/Pandas shortcuts, indexed symbol and function families,
+and infix relation operators tuned for discoverable notebook use.
+"""
+
 from __future__ import annotations
 
 __all__=[]
@@ -21,6 +27,7 @@ class SymbolFamily(sp.Symbol):
     Inherits from sp.Symbol, so all math (x**2, diff, etc.) works natively.
     """
     def __new__(cls, name, **kwargs):
+        """Create a family root symbol with cached indexed children support."""
         # Create the actual SymPy Symbol
         obj = super().__new__(cls, name, **kwargs)
         
@@ -31,6 +38,7 @@ class SymbolFamily(sp.Symbol):
         return obj
 
     def __getitem__(self, k):
+        """Return a cached indexed child symbol, creating it on first access."""
         if not isinstance(k, tuple):
             k = (k,)
             
@@ -49,6 +57,7 @@ class FunctionFamily:
     is the standard way to handle them.
     """
     def __init__(self, name, **kwargs):
+        """Initialize a function-family wrapper around a base SymPy Function."""
         self.name = name
         self._kwargs = kwargs
         # Create the base function (e.g. f)
@@ -56,6 +65,7 @@ class FunctionFamily:
         self._cache = {}
 
     def __getitem__(self, k):
+        """Return an indexed child function (for example ``f[1]`` -> ``f_1``)."""
         if not isinstance(k, tuple):
             k = (k,)
         if k not in self._cache:
@@ -65,17 +75,21 @@ class FunctionFamily:
         return self._cache[k]
 
     def __call__(self, *args):
+        """Call the base symbolic function with positional arguments."""
         # Allows f(x) to work
         return self._base(*args)
     
     def _sympy_(self):
+        """Return the underlying SymPy function for SymPy coercion."""
         # Allows SymPy to recognize this object
         return self._base
     
     def __str__(self):
+        """Return the string form of the wrapped base function."""
         return str(self._base)
     
     def __repr__(self):
+        """Return a representation matching the wrapped SymPy function."""
         return repr(self._base)
 
 __all__ += ["SymbolFamily", "FunctionFamily"]
@@ -169,20 +183,25 @@ class Infix:
     __slots__ = ("func",)
 
     def __init__(self, func):
+        """Store the binary callable implementing the infix operation."""
         self.func = func
 
     def __ror__(self, left):
+        """Capture the left operand during ``a |op`` parsing."""
         return _InfixPartial(self.func, left)
 
 
 class _InfixPartial:
+    """Intermediate state object used to complete ``a |op| b`` expressions."""
     __slots__ = ("func", "left")
 
     def __init__(self, func, left):
+        """Persist partial infix state until the right operand arrives."""
         self.func = func
         self.left = left
 
     def __or__(self, right):
+        """Apply the infix callable to the captured operands."""
         return self.func(self.left, right)
 
 eq = Infix(sp.Eq)

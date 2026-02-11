@@ -1,3 +1,9 @@
+"""Standardized parameter-change event payloads.
+
+This module defines ``ParamEvent``, the immutable structure emitted by
+``ParamRef.observe`` and consumed by SmartFigure parameter hooks.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

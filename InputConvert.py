@@ -1,3 +1,9 @@
+"""Utilities for converting interactive numeric inputs.
+
+``InputConvert`` centralizes parsing and truncation logic used by widgets and
+APIs that accept either Python numeric values or symbolic string expressions.
+"""
+
 # === SECTION: InputConvert [id: InputConvert]===
 from __future__ import annotations
 

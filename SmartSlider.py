@@ -1,3 +1,9 @@
+"""Custom slider widget used by SmartFigure parameters.
+
+Provides a synchronized slider/text control with advanced settings (min/max/
+step/default) and helper APIs for parameter-reference integration.
+"""
+
 import ipywidgets as widgets
 import traitlets
 
