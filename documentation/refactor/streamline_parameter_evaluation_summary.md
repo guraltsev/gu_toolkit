@@ -73,22 +73,32 @@ existing `DeadUnboundNumericExpression`, `DeadBoundNumericExpression`, and
 1. **Cache identity** — `numpify_cached` currently returns the raw callable;
    wrapping it in `NumpifiedFunction` must preserve caching semantics (same
    expression + args = same object, not a new wrapper each time).
+ANSWER: This must be designed and implemented
 
 2. **Live binding couples `numpify` to SmartFigure** — introducing a
    `.bind(smart_figure)` path creates a dependency from a low-level compilation
    module to the high-level figure system.  This should be managed via
    late/lazy imports or by accepting a generic protocol rather than a concrete
    `SmartFigure` type.
+ANSWER: The protocol is that it is something that exposes a ParameterManager which in turn exposes values()
 
 3. **`bind(None)` implicit context** — relying on global stack state is
    convenient but fragile in async/multi-figure scenarios.  Must document
    clearly and raise eagerly if no figure is active.
+ANSWER: Yes. It is necessary because exploratory math is a first class citizen. 
 
 4. **Back-compat** — existing code that indexes into `numpify(...)` return
    value or passes it where a plain callable is expected must keep working.
    `NumpifiedFunction.__call__` satisfies this, but type checkers and
    `isinstance(..., types.FunctionType)` checks may break.
+ANSWER: The toolkit itself is the only user of numpify for now. Backwards compatibility is not an issue.
 
 5. **Redundancy with `NumericExpression`** — there will be a transitional
    period where both systems coexist.  A clear deprecation / migration path is
    needed to avoid two parallel binding hierarchies.
+ANSWER: There is a bigger issue: a live numeric expression is a "view" to a current plot.
+This is different from a live numpified function that is a fixed function with a binding to the parameter manager of the figure. 
+Fuse the two systems immediately. 
+Introduce the notion of a "live view" of a plot (just forward everything to the live numpified function).
+Also modify the NumericExpression-related code so that bind accepts only the dict of values(). Rename values_only() to values
+Do not accept snapshot() as a binding. 
