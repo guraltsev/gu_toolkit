@@ -170,6 +170,20 @@ class SmartFloatSlider(widgets.VBox):
   z-index: 99999 !important;
 }
 
+.smart-slider-settings-modal-hosted {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.smart-slider-settings-modal-global {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+}
+
 .smart-slider-modal-host {
   position: relative !important;
 }
@@ -272,6 +286,7 @@ class SmartFloatSlider(widgets.VBox):
         )
         self.settings_panel.add_class("smart-slider-settings-panel")
         self.settings_modal.add_class("smart-slider-settings-modal")
+        self.settings_modal.add_class("smart-slider-settings-modal-global")
         self._top_row = None
         self._modal_host = None
 
@@ -752,16 +767,16 @@ class SmartFloatSlider(widgets.VBox):
                 child for child in self._modal_host.children if child is not self.settings_modal
             )
 
+        modal_add_class = getattr(self.settings_modal, "add_class", None)
+        modal_remove_class = getattr(self.settings_modal, "remove_class", None)
+
         if host is None:
             if self.settings_modal not in self.children:
                 self.children = (self._top_row, self.settings_modal)
-            self.settings_modal.layout.position = "fixed"
-            self.settings_modal.layout.top = "0"
-            self.settings_modal.layout.left = "0"
-            self.settings_modal.layout.right = ""
-            self.settings_modal.layout.bottom = ""
-            self.settings_modal.layout.width = "100vw"
-            self.settings_modal.layout.height = "100vh"
+            if callable(modal_remove_class):
+                modal_remove_class("smart-slider-settings-modal-hosted")
+            if callable(modal_add_class):
+                modal_add_class("smart-slider-settings-modal-global")
         else:
             self.children = (self._top_row,)
             add_class = getattr(host, "add_class", None)
@@ -769,13 +784,10 @@ class SmartFloatSlider(widgets.VBox):
                 add_class("smart-slider-modal-host")
             if self.settings_modal not in host.children:
                 host.children += (self.settings_modal,)
-            self.settings_modal.layout.position = "absolute"
-            self.settings_modal.layout.top = "0"
-            self.settings_modal.layout.left = "0"
-            self.settings_modal.layout.right = "0"
-            self.settings_modal.layout.bottom = "0"
-            self.settings_modal.layout.width = "100%"
-            self.settings_modal.layout.height = "100%"
+            if callable(modal_remove_class):
+                modal_remove_class("smart-slider-settings-modal-global")
+            if callable(modal_add_class):
+                modal_add_class("smart-slider-settings-modal-hosted")
 
         self._modal_host = host
 
