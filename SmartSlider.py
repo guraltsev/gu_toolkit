@@ -164,6 +164,36 @@ class SmartFloatSlider(widgets.VBox):
   border-color: rgba(0,0,0,0.28) !important;
   background: rgba(0,0,0,0.04) !important;
 }
+
+/* Modal overlay and panel styling */
+.smart-slider-settings-modal {
+  z-index: 99999 !important;
+}
+
+.smart-slider-settings-modal-hosted {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.smart-slider-settings-modal-global {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+}
+
+.smart-slider-modal-host {
+  position: relative !important;
+}
+
+.smart-slider-settings-panel {
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.32) !important;
+  border-radius: 10px !important;
+  opacity: 1 !important;
+  background: #ffffff !important;
+}
 </style>
 """)
         # The *only* numeric field (editable; accepts expressions)
@@ -185,7 +215,10 @@ class SmartFloatSlider(widgets.VBox):
         )
 
         # --- Settings panel ---------------------------------------------------
-        style_args = {"style": {"description_width": "50px"}, "layout": widgets.Layout(width="100px")}
+        style_args = {
+            "style": {"description_width": "36px"},
+            "layout": widgets.Layout(width="170px"),
+        }
         self.set_min = widgets.Text(
     value=f"{min:.4g}",
     continuous_update=False,
@@ -206,12 +239,56 @@ class SmartFloatSlider(widgets.VBox):
             layout=widgets.Layout(width="120px"),
         )
 
+        self.btn_close_settings = widgets.Button(
+            description="✕",
+            tooltip="Close settings",
+            layout=widgets.Layout(width="24px", height="24px", padding="0px"),
+        )
+        self.settings_title = widgets.HBox(
+            [
+                widgets.HTML("<b>Slider settings:</b>"),
+                widgets.HTMLMath(value=description),
+            ],
+            layout=widgets.Layout(align_items="center", gap="4px"),
+        )
+        settings_header = widgets.HBox(
+            [self.settings_title, self.btn_close_settings],
+            layout=widgets.Layout(justify_content="space-between", align_items="center"),
+        )
+
         self.settings_panel = widgets.VBox(
-            [widgets.HBox([self.set_step]), widgets.HBox([self.set_live])],
+            [settings_header, widgets.HBox([self.set_step]), widgets.HBox([self.set_live])],
             layout=widgets.Layout(
-                display="none", border="1px solid #eee", padding="5px", margin="5px 0"
+                width="230px",
+                display="none",
+                border="1px solid #ddd",
+                padding="8px",
+                gap="6px",
+                background_color="white",
+                opacity="1",
+                box_shadow="0 10px 28px rgba(15, 23, 42, 0.28)",
             ),
         )
+        self.settings_modal = widgets.Box(
+            [self.settings_panel],
+            layout=widgets.Layout(
+                display="none",
+                position="fixed",
+                top="0",
+                left="0",
+                width="100vw",
+                height="100vh",
+                align_items="center",
+                justify_content="center",
+                background_color="transparent",
+                z_index="1000",
+            ),
+        )
+        self.settings_panel.add_class("smart-slider-settings-panel")
+        self.settings_modal.add_class("smart-slider-settings-modal")
+        self.settings_modal.add_class("smart-slider-settings-modal-global")
+        self._top_row = None
+        self._modal_host = None
 
         # --- Layout -----------------------------------------------------------
         top_row = widgets.HBox(
@@ -227,7 +304,8 @@ class SmartFloatSlider(widgets.VBox):
             ],
             layout=widgets.Layout(align_items="center", gap="4px"),
         )
-        super().__init__([top_row, self.settings_panel], **kwargs)
+        self._top_row = top_row
+        super().__init__([top_row, self.settings_modal], **kwargs)
 
         # --- Wiring -----------------------------------------------------------
         # Keep self.value and slider.value in sync
@@ -244,6 +322,7 @@ class SmartFloatSlider(widgets.VBox):
         # Buttons
         self.btn_reset.on_click(self._reset)
         self.btn_settings.on_click(self._toggle_settings)
+        self.btn_close_settings.on_click(self._toggle_settings)
 
         # Settings -> slider traits
         widgets.link((self.set_step, "value"), (self.slider, "step"))
@@ -667,6 +746,51 @@ class SmartFloatSlider(widgets.VBox):
         symbol = symbols[0]
         return {symbol: ProxyParamRef(symbol, self)}
 
+    def set_modal_host(self, host) -> None:
+        """Attach the settings modal to a host container.
+
+        Parameters
+        ----------
+        host : ipywidgets.Box or None
+            Host container to overlay. If ``None``, the modal stays local to the slider.
+
+        Returns
+        -------
+        None
+            Updates widget parenting/layout in place.
+        """
+        if host is self._modal_host:
+            return
+
+        if self._modal_host is not None:
+            self._modal_host.children = tuple(
+                child for child in self._modal_host.children if child is not self.settings_modal
+            )
+
+        modal_add_class = getattr(self.settings_modal, "add_class", None)
+        modal_remove_class = getattr(self.settings_modal, "remove_class", None)
+
+        if host is None:
+            if self.settings_modal not in self.children:
+                self.children = (self._top_row, self.settings_modal)
+            if callable(modal_remove_class):
+                modal_remove_class("smart-slider-settings-modal-hosted")
+            if callable(modal_add_class):
+                modal_add_class("smart-slider-settings-modal-global")
+        else:
+            self.children = (self._top_row,)
+            add_class = getattr(host, "add_class", None)
+            if callable(add_class):
+                add_class("smart-slider-modal-host")
+            if self.settings_modal not in host.children:
+                host.children += (self.settings_modal,)
+            if callable(modal_remove_class):
+                modal_remove_class("smart-slider-settings-modal-global")
+            if callable(modal_add_class):
+                modal_add_class("smart-slider-settings-modal-hosted")
+
+        self._modal_host = host
+
     def _toggle_settings(self, _) -> None:
         """Toggle visibility of the settings panel.
 
@@ -680,6 +804,6 @@ class SmartFloatSlider(widgets.VBox):
         None
             This method updates widget state in place.
         """
-        self.settings_panel.layout.display = (
-            "none" if self.settings_panel.layout.display == "flex" else "flex"
-        )
+        is_open = self.settings_modal.layout.display == "flex"
+        self.settings_modal.layout.display = "none" if is_open else "flex"
+        self.settings_panel.layout.display = "none" if is_open else "flex"
