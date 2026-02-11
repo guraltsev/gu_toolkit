@@ -223,8 +223,8 @@ __all__+=["Infix", "eq", "lt", "le", "gt", "ge"]
 # print((x**2) | eq | (y**2))    # Eq(x**2, y**2)
 
 
-from IPython.display import Latex 
-__all__+=["Latex"]
+from IPython.display import HTML, Latex, display
+__all__+=["HTML", "Latex", "display"]
 
 from pprint import pprint
 __all__+=["pprint"]
@@ -428,3 +428,86 @@ def NIntegrate(expr, var_and_limits, binding=None):
 
 
 __all__ += ["NIntegrate"]
+
+
+def play(expr, var_and_limits, loop=True):
+    """Play a 1D SymPy expression as audio over a time interval.
+
+    Parameters
+    ----------
+    expr:
+        SymPy expression in one variable.
+    var_and_limits:
+        Tuple ``(x, a, b)`` where ``x`` is the time symbol and ``a``/``b``
+        are start/end times in seconds.
+    loop:
+        If ``True`` (default), playback restarts automatically when finished.
+
+    Returns
+    -------
+    IPython.display.HTML
+        Display object for an autoplaying audio element.
+    """
+    try:
+        x, a, b = var_and_limits
+    except Exception as exc:  # pragma: no cover - defensive shape validation
+        raise TypeError("play expects limits as a tuple: (x, a, b)") from exc
+
+    if not isinstance(expr, sp.Basic):
+        raise TypeError(f"play expects a SymPy expression, got {type(expr)}")
+    if not isinstance(x, sp.Symbol):
+        raise TypeError(f"play expects x to be a sympy Symbol, got {type(x)}")
+
+    try:
+        from .numpify import numpify_cached as _numpify_cached
+    except ImportError:
+        from numpify import numpify_cached as _numpify_cached
+
+    import base64
+    import io
+    import wave
+
+    sample_rate = 44100
+    start = float(sp.N(a))
+    stop = float(sp.N(b))
+    duration = stop - start
+    if duration <= 0:
+        raise ValueError("play expects b > a so the duration is positive")
+
+    sample_count = max(2, int(np.ceil(duration * sample_rate)))
+    t = np.linspace(start, stop, sample_count, endpoint=False, dtype=float)
+
+    fn = _numpify_cached(expr, args=x)
+    y = np.asarray(fn(t), dtype=float)
+    if y.ndim == 0:
+        y = np.full_like(t, float(y))
+    else:
+        y = np.ravel(y)
+        if y.shape[0] != sample_count:
+            raise ValueError("Expression must evaluate to one audio sample per time point")
+
+    y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
+    peak = float(np.max(np.abs(y))) if y.size else 0.0
+    if peak > 0:
+        y = 0.99 * y / peak
+
+    pcm = (np.clip(y, -1.0, 1.0) * 32767).astype(np.int16)
+
+    with io.BytesIO() as buffer:
+        with wave.open(buffer, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(sample_rate)
+            wav.writeframes(pcm.tobytes())
+        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+
+    loop_attr = " loop" if loop else ""
+    widget = HTML(
+        f'<audio controls autoplay{loop_attr} '
+        f'src="data:audio/wav;base64,{encoded}"></audio>'
+    )
+    display(widget)
+    return widget
+
+
+__all__ += ["play"]
