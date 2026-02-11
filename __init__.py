@@ -7,3 +7,6 @@ from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 # from .SmartException import *
 # from .SmartFigure import *
+
+from .ParameterSnapshot import ParameterSnapshot
+from .NumericExpression import LiveNumericExpression, DeadBoundNumericExpression, DeadUnboundNumericExpression

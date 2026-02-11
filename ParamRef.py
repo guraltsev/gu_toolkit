@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import Any, Callable, Protocol, Sequence, runtime_checkable
 
 from sympy.core.symbol import Symbol
 
@@ -125,6 +125,16 @@ class ParamRef(Protocol):
         support resetting.
         """
 
+    @property
+    def capabilities(self) -> Sequence[str]:
+        """Return optional metadata keys supported by this reference.
+
+        Returns
+        -------
+        Sequence[str]
+            Zero or more of: ``default_value``, ``min``, ``max``, ``step``.
+        """
+
 
 class ProxyParamRef:
     """Default ParamRef implementation that proxies to a widget/control.
@@ -140,7 +150,7 @@ class ProxyParamRef:
     -----
     Optional attributes such as ``min``/``max``/``step`` and ``default_value``
     are exposed when the underlying widget supports them. Use
-    :meth:`capabilities` to feature-detect support at runtime.
+    :attr:`capabilities` to feature-detect support at runtime.
     """
 
     def __init__(self, parameter: Symbol, widget: Any) -> None:
@@ -391,13 +401,14 @@ class ProxyParamRef:
             raise AttributeError(f"{name} not supported for this control.")
         return getattr(self._widget, name)
 
-    def capabilities(self) -> dict[str, bool]:
-        """Return a mapping of supported optional attributes.
+    @property
+    def capabilities(self) -> Sequence[str]:
+        """Return the optional metadata keys supported by this control.
 
         Returns
         -------
-        dict[str, bool]
-            Keys for known optional attributes with a boolean indicating support.
+        Sequence[str]
+            Zero or more of: ``default_value``, ``min``, ``max``, ``step``.
 
         Examples
         --------
@@ -405,19 +416,18 @@ class ProxyParamRef:
         >>> from SmartSlider import SmartFloatSlider  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
         >>> ref = ProxyParamRef(a, SmartFloatSlider())  # doctest: +SKIP
-        >>> ref.capabilities()["min"]  # doctest: +SKIP
+        >>> "min" in ref.capabilities  # doctest: +SKIP
         True
 
         Notes
         -----
         This is useful for generic code that supports multiple widget types.
         """
-        return {
-            "default_value": hasattr(self._widget, "default_value"),
-            "min": hasattr(self._widget, "min"),
-            "max": hasattr(self._widget, "max"),
-            "step": hasattr(self._widget, "step"),
-        }
+        supported = []
+        for name in ("default_value", "min", "max", "step"):
+            if hasattr(self._widget, name):
+                supported.append(name)
+        return tuple(supported)
 
     def __dir__(self) -> list[str]:
         """Return a dir listing that includes optional widget attributes.

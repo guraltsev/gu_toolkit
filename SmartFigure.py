@@ -116,6 +116,8 @@ from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
 from .SmartSlider import SmartFloatSlider
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
+from .ParameterSnapshot import ParameterSnapshot
+from .NumericExpression import LiveNumericExpression
 
 
 # Module logger
@@ -887,6 +889,18 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         if callable(attach_fn):
             attach_fn(self._modal_host)
 
+    def snapshot(self) -> ParameterSnapshot:
+        """Return an immutable ordered snapshot of current parameter state."""
+        entries: Dict[Symbol, Dict[str, Any]] = {}
+        for symbol, ref in self._refs.items():
+            entry: Dict[str, Any] = {"value": ref.value}
+            caps = list(ref.capabilities)
+            entry["capabilities"] = caps
+            for name in caps:
+                entry[name] = getattr(ref, name)
+            entries[symbol] = entry
+        return ParameterSnapshot(entries)
+
     @property
     def has_params(self) -> bool:
         """Whether any parameters have been created.
@@ -1539,11 +1553,34 @@ class SmartPlot:
         """
         parameters = list(parameters) 
         # Compile
-        self._f_numpy = numpify_cached(func, args=[var] + parameters)
+        self._core = numpify_cached(func, args=[var] + parameters)
         # Store
         self._var = var
-        self._parameters = parameters
+        self._parameters = tuple(parameters)
         self._func = func
+
+    @property
+    def symbolic_expression(self) -> Expr:
+        """Return the symbolic expression used by this plot."""
+        return self._func
+
+    @property
+    def parameters(self) -> tuple[Symbol, ...]:
+        """Return parameter symbols in deterministic numeric-argument order."""
+        return self._parameters
+
+    @property
+    def numeric_expression(self) -> LiveNumericExpression:
+        """Return a live numeric evaluator proxy for this plot."""
+        return LiveNumericExpression(self)
+
+    def _eval_numeric_live(self, x: np.ndarray) -> np.ndarray:
+        """Evaluate the numeric core against current figure parameter values."""
+        fig = self._smart_figure
+        args = [x]
+        for symbol in self._parameters:
+            args.append(fig.params[symbol].value)
+        return self._core(*args)
 
     @property
     def label(self) -> str:
@@ -1870,12 +1907,7 @@ class SmartPlot:
         
         # 3. Compute
         x_values = np.linspace(x_min, x_max, num=int(num))
-        args = [x_values]
-        if self._parameters:
-            for p in self._parameters:
-                args.append(fig.params[p].value)
-        
-        y_values = np.asarray(self._f_numpy(*args))
+        y_values = np.asarray(self.numeric_expression(x_values))
         
         # 4. Update Trace
         with fig.figure_widget.batch_update():
@@ -2235,7 +2267,7 @@ class SmartFigure:
         - ``default_value`` (reset target)
         - ``min`` / ``max`` / ``step`` (range configuration, when supported)
         - ``observe(...)`` / ``reset()`` / ``widget``
-        - ``capabilities()`` to inspect optional attribute support at runtime
+        - ``capabilities`` to inspect optional attribute support at runtime
 
         Returns
         -------
