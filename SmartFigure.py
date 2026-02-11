@@ -3118,6 +3118,69 @@ def get_title() -> str:
     """Get the title of the current figure."""
     return _require_current_figure().title
 
+def render(reason: str = "manual", trigger: Optional[ParamEvent] = None) -> None:
+    """Render the current figure.
+
+    Parameters
+    ----------
+    reason : str, optional
+        Render reason string for logging/debugging.
+    trigger : ParamEvent or None, optional
+        Optional event payload forwarded to :meth:`SmartFigure.render`.
+    """
+    _require_current_figure().render(reason=reason, trigger=trigger)
+
+
+def get_info_output(id: Optional[Hashable] = None, **kwargs: Any) -> widgets.Output:
+    """Return or create an output widget in the current figure's info panel."""
+    return _require_current_figure().get_info_output(id=id, **kwargs)
+
+
+def add_info_component(
+    id: Hashable,
+    component_factory: Callable,
+    hook_id: Optional[Hashable] = None,
+    **kwargs: Any,
+) -> Any:
+    """Register an info component on the current figure and return it."""
+    return _require_current_figure().add_info_component(
+        id,
+        component_factory,
+        hook_id=hook_id,
+        **kwargs,
+    )
+
+
+def set_x_range(value: RangeLike) -> None:
+    """Set x-axis range on the current figure."""
+    _require_current_figure().x_range = value
+
+
+def get_x_range() -> Tuple[float, float]:
+    """Get x-axis range from the current figure."""
+    return _require_current_figure().x_range
+
+
+def set_y_range(value: RangeLike) -> None:
+    """Set y-axis range on the current figure."""
+    _require_current_figure().y_range = value
+
+
+def get_y_range() -> Tuple[float, float]:
+    """Get y-axis range from the current figure."""
+    return _require_current_figure().y_range
+
+
+def set_sampling_points(value: Union[int, str, _FigureDefaultSentinel, None]) -> None:
+    """Set default sampling points on the current figure."""
+    _require_current_figure().sampling_points = value
+
+
+def get_sampling_points() -> Optional[int]:
+    """Get default sampling points from the current figure."""
+    return _require_current_figure().sampling_points
+
+
 def plot_style_options() -> Dict[str, str]:
     """Return discoverable SmartFigure plot-style options.
 
