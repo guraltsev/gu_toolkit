@@ -88,7 +88,7 @@ from functools import lru_cache
 import logging
 import time
 import textwrap
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple, Union, cast
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Protocol, Tuple, Union, cast, runtime_checkable
 
 import numpy as np
 import sympy as sp
@@ -96,7 +96,13 @@ from sympy.core.function import FunctionClass
 from sympy.printing.numpy import NumPyPrinter
 
 
-__all__ = ["numpify", "numpify_cached"]
+__all__ = [
+    "numpify",
+    "numpify_cached",
+    "ParameterProvider",
+    "NumpifiedFunction",
+    "BoundNumpifiedFunction",
+]
 
 
 logger = logging.getLogger(__name__)
@@ -110,6 +116,147 @@ _SymBindings = Dict[str, Any]
 _FuncBindings = Dict[str, Callable[..., Any]]
 
 
+@runtime_checkable
+class ParameterProvider(Protocol):
+    """Protocol for objects exposing parameter values via ``.params``."""
+
+    @property
+    def params(self) -> Any:
+        """Return a parameter manager-like object."""
+
+
+class NumpifiedFunction:
+    """Compiled SymPy->NumPy callable with expression metadata."""
+
+    __slots__ = ("_fn", "expr", "args", "source")
+
+    def __init__(
+        self,
+        fn: Callable[..., Any],
+        expr: sp.Basic,
+        args: tuple[sp.Symbol, ...],
+        source: str,
+    ) -> None:
+        self._fn = fn
+        self.expr = expr
+        self.args = args
+        self.source = source
+
+    def __call__(self, *positional_args: Any) -> Any:
+        """Evaluate using positional arguments in ``self.args`` order."""
+        return self._fn(*positional_args)
+
+    def bind(
+        self,
+        source: ParameterProvider | dict[sp.Symbol, Any] | None = None,
+    ) -> "BoundNumpifiedFunction":
+        """Bind values from a dict, provider, or current figure context."""
+        if source is None:
+            from .SmartFigure import current_figure
+
+            return BoundNumpifiedFunction(parent=self, provider=current_figure(required=True))
+
+        if isinstance(source, dict):
+            return BoundNumpifiedFunction(parent=self, snapshot=source)
+
+        if hasattr(source, "params"):
+            return BoundNumpifiedFunction(parent=self, provider=cast(ParameterProvider, source))
+
+        raise TypeError(
+            f"bind() expects a ParameterProvider (e.g. SmartFigure), "
+            f"dict[Symbol, value], or None; got {type(source).__name__}"
+        )
+
+    @property
+    def arg_names(self) -> tuple[str, ...]:
+        """Return argument symbol names in order."""
+        return tuple(symbol.name for symbol in self.args)
+
+    def __repr__(self) -> str:
+        args_str = ", ".join(sym.name for sym in self.args)
+        return f"NumpifiedFunction({self.expr!r}, args=({args_str}))"
+
+
+class BoundNumpifiedFunction:
+    """A ``NumpifiedFunction`` with snapshot or live provider bindings."""
+
+    __slots__ = ("parent", "_provider", "_snapshot_values", "_free_indices")
+
+    def __init__(
+        self,
+        parent: NumpifiedFunction,
+        *,
+        provider: ParameterProvider | None = None,
+        snapshot: dict[sp.Symbol, Any] | None = None,
+    ) -> None:
+        self.parent = parent
+        self._provider = provider
+        self._snapshot_values: tuple[Any, ...] | None = None
+        self._free_indices: tuple[int, ...] | None = None
+
+        if snapshot is not None:
+            self._resolve_snapshot(snapshot)
+
+    def _resolve_snapshot(self, value_map: dict[sp.Symbol, Any]) -> None:
+        """Order dict values according to ``parent.args`` and track free slots."""
+        non_symbol_keys = [key for key in value_map if not isinstance(key, sp.Symbol)]
+        if non_symbol_keys:
+            raise TypeError(f"bind(...) requires Symbol keys only; got: {non_symbol_keys!r}")
+
+        vals: list[Any] = []
+        free: list[int] = []
+        for index, sym in enumerate(self.parent.args):
+            if sym in value_map:
+                vals.append(value_map[sym])
+            else:
+                vals.append(None)
+                free.append(index)
+
+        self._snapshot_values = tuple(vals)
+        self._free_indices = tuple(free)
+
+    def __call__(self, *free_args: Any) -> Any:
+        """Evaluate in live mode (provider-backed) or dead mode (snapshot)."""
+        if self._provider is not None:
+            return self._eval_live(*free_args)
+        return self._eval_dead(*free_args)
+
+    def _eval_live(self, *free_args: Any) -> Any:
+        """Evaluate by reading trailing values from the live provider."""
+        assert self._provider is not None
+        params = self._provider.params
+        full: list[Any] = list(free_args)
+        n_free = len(free_args)
+        for sym in self.parent.args[n_free:]:
+            full.append(params[sym].value)
+        return self.parent._fn(*full)
+
+    def _eval_dead(self, *free_args: Any) -> Any:
+        """Evaluate with snapshot values plus explicitly supplied free args."""
+        assert self._snapshot_values is not None
+        assert self._free_indices is not None
+
+        full = list(self._snapshot_values)
+        if len(free_args) != len(self._free_indices):
+            raise TypeError(f"Expected {len(self._free_indices)} free arg(s), got {len(free_args)}")
+        for idx, val in zip(self._free_indices, free_args):
+            full[idx] = val
+        return self.parent._fn(*full)
+
+    def unbind(self) -> NumpifiedFunction:
+        """Return original unbound ``NumpifiedFunction``."""
+        return self.parent
+
+    @property
+    def is_live(self) -> bool:
+        """Whether this binding reads values from a live provider."""
+        return self._provider is not None
+
+    def __repr__(self) -> str:
+        mode = "live" if self.is_live else "dead"
+        return f"BoundNumpifiedFunction({self.parent!r}, mode={mode})"
+
+
 def numpify(
     expr: Any,
     *,
@@ -117,7 +264,7 @@ def numpify(
     f_numpy: Optional[Mapping[_BindingKey, Any]] = None,
     vectorize: bool = True,
     expand_definition: bool = True,
-) -> Callable[..., Any]:
+) -> NumpifiedFunction:
     """Compile a SymPy expression into a NumPy-evaluable Python function.
 
     Parameters
@@ -155,8 +302,8 @@ def numpify(
 
     Returns
     -------
-    Callable[..., Any]
-        A generated function. The function includes its generated source in ``__doc__``.
+    NumpifiedFunction
+        A generated callable wrapper with expression metadata and source text.
 
     Raises
     ------
@@ -279,11 +426,6 @@ def numpify(
         """
     ).strip()
 
-    # Store generated source for inspection in interactive sessions.
-    # Use setattr to avoid type-checker complaints on the Callable type.
-    setattr(fn, "_generated_source", src)
-    setattr(fn, "_generated_expr_code", expr_code)
-
     if log_debug:
         t_total_s = (time.perf_counter() - t_total0) if t_total0 is not None else None
         logger.debug(
@@ -294,7 +436,7 @@ def numpify(
             1000.0 * (t_total_s or 0.0),
         )
 
-    return fn
+    return NumpifiedFunction(fn=fn, expr=expr, args=args_tuple, source=src)
 
 
 def _normalize_args(expr: sp.Basic, args: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]]) -> Tuple[sp.Symbol, ...]:
@@ -485,7 +627,7 @@ def _numpify_cached_impl(
     frozen: _FrozenFNumPy,
     vectorize: bool,
     expand_definition: bool,
-) -> Callable[..., Any]:
+) -> NumpifiedFunction:
     """Compile an expression on cache misses for :func:`numpify_cached`."""
     # NOTE: This function body only runs on cache *misses*.
     if logger.isEnabledFor(logging.DEBUG):
@@ -512,7 +654,7 @@ def numpify_cached(
     f_numpy: Optional[Mapping[_BindingKey, Any]] = None,
     vectorize: bool = True,
     expand_definition: bool = True,
-) -> Callable[..., Any]:
+) -> NumpifiedFunction:
     """Cached version of :func:`numpify`.
 
     This is a convenience wrapper for interactive sessions where the same SymPy

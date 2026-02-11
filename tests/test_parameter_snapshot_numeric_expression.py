@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT.parent))
 
 from gu_toolkit import SmartFigure  # noqa: E402
-from gu_toolkit.NumericExpression import DeadBoundNumericExpression, DeadUnboundNumericExpression  # noqa: E402
+from gu_toolkit.NumericExpression import PlotView  # noqa: E402
 
 
 def _assert_raises(exc_type, fn, *args, **kwargs):
@@ -23,14 +23,14 @@ def _assert_raises(exc_type, fn, *args, **kwargs):
     raise AssertionError(f"Expected {exc_type} to be raised.")
 
 
-def test_snapshot_order_and_values_only() -> None:
+def test_snapshot_order_and_values() -> None:
     a, b, c = sp.symbols("a b c")
     fig = SmartFigure()
     fig.parameter([a, b, c], value=1)
 
     snap = fig.params.snapshot()
     assert list(snap.keys()) == [a, b, c]
-    assert list(snap.values_only().keys()) == [a, b, c]
+    assert list(snap.values().keys()) == [a, b, c]
 
 
 def test_snapshot_entry_immutability() -> None:
@@ -48,16 +48,21 @@ def test_snapshot_entry_immutability() -> None:
     assert "mutated" not in snap[a]["capabilities"]
 
 
-def test_bind_missing_keys_and_extra_keys() -> None:
+def test_bind_partial_and_key_validation() -> None:
     x, a, b, extra = sp.symbols("x a b extra")
     fig = SmartFigure()
     plot = fig.plot(x, a * x + b, parameters=[a, b], id="line")
+    assert isinstance(plot.numeric_expression, PlotView)
 
-    err = _assert_raises(KeyError, plot.numeric_expression.bind, {a: 1.0})
-    assert "b" in str(err)
+    bound_partial = plot.numeric_expression.bind({a: 2.0})
+    y_partial = np.asarray(bound_partial(np.array([1.0, 2.0]), 3.0))
+    assert np.allclose(y_partial, np.array([5.0, 7.0]))
 
-    bound = plot.numeric_expression.bind({a: 2.0, b: 3.0, extra: 99.0})
-    assert isinstance(bound, DeadBoundNumericExpression)
+    bound = plot.numeric_expression.bind({a: 2.0, b: 3.0, extra: 5.0})
+    assert bound.unbind() is plot.numpified
+
+    err = _assert_raises(TypeError, plot.numeric_expression.bind, {"a": 2.0})
+    assert "Symbol keys" in str(err)
 
 
 def test_unbind_requires_bind_before_call() -> None:
@@ -66,9 +71,8 @@ def test_unbind_requires_bind_before_call() -> None:
     plot = fig.plot(x, a * x, parameters=[a], id="ax")
 
     unbound = plot.numeric_expression.unbind()
-    assert isinstance(unbound, DeadUnboundNumericExpression)
-    err = _assert_raises(TypeError, unbound, np.array([0.0, 1.0]))
-    assert ".bind(...)" in str(err)
+    y = np.asarray(unbound(np.array([0.0, 1.0]), 2.0))
+    assert np.allclose(y, np.array([0.0, 2.0]))
 
 
 def test_live_vs_snapshot_bound() -> None:
@@ -82,7 +86,7 @@ def test_live_vs_snapshot_bound() -> None:
     assert np.allclose(y_live, np.array([2.0, 4.0, 6.0]))
 
     snap = fig.params.snapshot()
-    bound = plot.numeric_expression.bind(snap)
+    bound = plot.numeric_expression.bind(snap.values())
     fig.params[a].value = 4.0
 
     y_bound = np.asarray(bound(x_values))
@@ -93,9 +97,9 @@ def test_live_vs_snapshot_bound() -> None:
 
 def main() -> None:
     tests = [
-        test_snapshot_order_and_values_only,
+        test_snapshot_order_and_values,
         test_snapshot_entry_immutability,
-        test_bind_missing_keys_and_extra_keys,
+        test_bind_partial_and_key_validation,
         test_unbind_requires_bind_before_call,
         test_live_vs_snapshot_bound,
     ]

@@ -118,13 +118,13 @@ from sympy.core.symbol import Symbol
 
 # Internal imports (assumed to exist in the same package)
 from .InputConvert import InputConvert
-from .numpify import numpify_cached
+from .numpify import NumpifiedFunction, numpify_cached
 from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
 from .SmartSlider import SmartFloatSlider
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .ParameterSnapshot import ParameterSnapshot
-from .NumericExpression import LiveNumericExpression
+from .NumericExpression import PlotView
 
 
 # Module logger
@@ -184,6 +184,28 @@ def _require_current_figure() -> "SmartFigure":
     fig = _current_figure()
     if fig is None:
         raise RuntimeError("No current SmartFigure. Use `with fig:` first.")
+    return fig
+
+
+def current_figure(*, required: bool = True) -> Optional["SmartFigure"]:
+    """Return the active SmartFigure from the context stack.
+
+    Parameters
+    ----------
+    required : bool, default=True
+        If True, raise when no figure is currently active.
+
+    Returns
+    -------
+    SmartFigure or None
+        Active figure, or None when ``required=False`` and no context is active.
+    """
+    fig = _current_figure()
+    if fig is None and required:
+        raise RuntimeError(
+            "No active SmartFigure. Use `with fig:` to set one, "
+            "or pass an explicit figure to .bind()."
+        )
     return fig
 
 
@@ -1578,10 +1600,9 @@ class SmartPlot:
         """
         parameters = list(parameters) 
         # Compile
-        self._core = numpify_cached(func, args=[var] + parameters)
+        self._numpified = numpify_cached(func, args=[var] + parameters)
         # Store
         self._var = var
-        self._parameters = tuple(parameters)
         self._func = func
 
     @property
@@ -1592,20 +1613,25 @@ class SmartPlot:
     @property
     def parameters(self) -> tuple[Symbol, ...]:
         """Return parameter symbols in deterministic numeric-argument order."""
-        return self._parameters
+        return self._numpified.args[1:]
 
     @property
-    def numeric_expression(self) -> LiveNumericExpression:
+    def numpified(self) -> NumpifiedFunction:
+        """Return compiled numpified callable for this plot."""
+        return self._numpified
+
+    @property
+    def numeric_expression(self) -> PlotView:
         """Return a live numeric evaluator proxy for this plot."""
-        return LiveNumericExpression(self)
+        return PlotView(_numpified=self._numpified, _provider=self._smart_figure)
 
     def _eval_numeric_live(self, x: np.ndarray) -> np.ndarray:
         """Evaluate the numeric core against current figure parameter values."""
         fig = self._smart_figure
         args = [x]
-        for symbol in self._parameters:
+        for symbol in self._numpified.args[1:]:
             args.append(fig.params[symbol].value)
-        return self._core(*args)
+        return self._numpified(*args)
 
     @property
     def label(self) -> str:
@@ -2042,7 +2068,7 @@ class SmartPlot:
         if any(k in kwargs for k in ('var', 'func', 'parameters')):
             v = kwargs.get('var', self._var)
             f = kwargs.get('func', self._func)
-            p = kwargs.get('parameters', self._parameters)
+            p = kwargs.get('parameters', self.parameters)
             self.set_func(v, f, p)
             self.render()
 

@@ -12,8 +12,14 @@ for advanced integrations.
 
 from .prelude import *
 from .NamedFunction import NamedFunction as NamedFunction
-from .numpify import numpify as numpify, numpify_cached 
-from .SmartFigure import SmartFigure as Figure, SmartFigure, plot, params, parameters, plots, parameter, render, get_info_output, add_info_component, set_title, get_title, set_x_range, get_x_range, set_y_range, get_y_range, set_sampling_points, get_sampling_points, plot_style_options
+from .numpify import (
+    BoundNumpifiedFunction,
+    NumpifiedFunction,
+    ParameterProvider,
+    numpify as numpify,
+    numpify_cached,
+)
+from .SmartFigure import SmartFigure as Figure, SmartFigure, add_info_component, current_figure, get_info_output, get_sampling_points, get_title, get_x_range, get_y_range, parameter, parameters, params, plot, plot_style_options, plots, render, set_sampling_points, set_title, set_x_range, set_y_range
 from .SmartParseLaTeX import parse_latex
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
@@ -21,4 +27,4 @@ from .ParamRef import ParamRef
 # from .SmartFigure import *
 
 from .ParameterSnapshot import ParameterSnapshot
-from .NumericExpression import LiveNumericExpression, DeadBoundNumericExpression, DeadUnboundNumericExpression
+from .NumericExpression import PlotView
