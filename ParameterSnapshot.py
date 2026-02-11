@@ -47,7 +47,7 @@ class ParameterSnapshot(Mapping[Symbol, Mapping[str, Any]]):
         Returns
         -------
         dict[sympy.Symbol, Any]
-            Mapping containing only current parameter values.
+            Plain detached dictionary containing only current parameter values.
 
         Examples
         --------
@@ -57,7 +57,7 @@ class ParameterSnapshot(Mapping[Symbol, Mapping[str, Any]]):
         >>> snap.values()[a]
         1.5
         """
-        return {symbol: entry["value"] for symbol, entry in self._entries.items()}
+        return {symbol: deepcopy(entry["value"]) for symbol, entry in self._entries.items()}
 
     def __eq__(self, other: object) -> bool:
         """Compare snapshots by ordered item content."""
