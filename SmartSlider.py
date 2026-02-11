@@ -175,6 +175,8 @@ class SmartFloatSlider(widgets.VBox):
 .smart-slider-settings-panel {
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.32) !important;
   border-radius: 10px !important;
+  opacity: 1 !important;
+  background: #ffffff !important;
 }
 </style>
 """)
@@ -226,8 +228,15 @@ class SmartFloatSlider(widgets.VBox):
             tooltip="Close settings",
             layout=widgets.Layout(width="24px", height="24px", padding="0px"),
         )
+        self.settings_title = widgets.HBox(
+            [
+                widgets.HTML("<b>Slider settings:</b>"),
+                widgets.HTMLMath(value=description),
+            ],
+            layout=widgets.Layout(align_items="center", gap="4px"),
+        )
         settings_header = widgets.HBox(
-            [widgets.HTML("<b>Slider settings</b>"), self.btn_close_settings],
+            [self.settings_title, self.btn_close_settings],
             layout=widgets.Layout(justify_content="space-between", align_items="center"),
         )
 
@@ -240,6 +249,7 @@ class SmartFloatSlider(widgets.VBox):
                 padding="8px",
                 gap="6px",
                 background_color="white",
+                opacity="1",
                 box_shadow="0 10px 28px rgba(15, 23, 42, 0.28)",
             ),
         )
@@ -254,7 +264,7 @@ class SmartFloatSlider(widgets.VBox):
                 height="100vh",
                 align_items="center",
                 justify_content="center",
-                background_color="rgba(0, 0, 0, 0.20)",
+                background_color="transparent",
                 z_index="1000",
             ),
         )
