@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import sympy as sp
 
 from gu_toolkit import SmartFigure
-from prelude import NIntegrate
+from prelude import NIntegrate, NReal_Fourier_Series
 
 
 def test_nintegrate_finite_interval() -> None:
@@ -116,3 +117,35 @@ def test_nintegrate_unbound_callable_missing_binding_raises() -> None:
         assert "missing values" in str(exc) or "missing callable parameters" in str(exc)
     else:  # pragma: no cover - defensive
         raise AssertionError("Expected ValueError for missing callable binding")
+
+
+def test_nreal_fourier_series_symbolic_expr() -> None:
+    x = sp.Symbol("x")
+    cos_coeffs, sin_coeffs = NReal_Fourier_Series(sp.sin(x) + 2 * sp.cos(2 * x), (x, 0, 2 * sp.pi), samples=4096)
+
+    assert abs(cos_coeffs[0]) < 2e-2
+    assert abs(sin_coeffs[0]) < 1e-12
+    assert np.isclose(sin_coeffs[1], np.sqrt(np.pi), rtol=2e-2, atol=2e-2)
+    assert np.isclose(cos_coeffs[2], 2.0 * np.sqrt(np.pi), rtol=2e-2, atol=2e-2)
+    assert abs(cos_coeffs[1]) < 3e-2
+    assert abs(sin_coeffs[2]) < 3e-2
+
+
+def test_nreal_fourier_series_symbolic_expr_with_binding() -> None:
+    x, a = sp.symbols("x a")
+    cos_coeffs, sin_coeffs = NReal_Fourier_Series(a * sp.sin(x), (x, 0, 2 * sp.pi), samples=4096, binding={a: 3.0})
+    assert np.isclose(sin_coeffs[1], 3.0 * np.sqrt(np.pi), rtol=2e-2, atol=2e-2)
+
+
+def test_nreal_fourier_series_callable_unbound_and_binding() -> None:
+    def linear_combo(t, a, b):
+        return a * np.sin(t) + b * np.cos(2 * t)
+
+    cos_coeffs, sin_coeffs = NReal_Fourier_Series(
+        linear_combo,
+        ("ignored", 0, 2 * np.pi),
+        samples=4096,
+        binding={"a": 2.0, "b": 4.0},
+    )
+    assert np.isclose(sin_coeffs[1], 2.0 * np.sqrt(np.pi), rtol=2e-2, atol=2e-2)
+    assert np.isclose(cos_coeffs[2], 4.0 * np.sqrt(np.pi), rtol=2e-2, atol=2e-2)

@@ -230,6 +230,136 @@ from pprint import pprint
 __all__+=["pprint"]
 
 
+def _to_numeric_limit(v):
+    if v == sp.oo:
+        return np.inf
+    if v == -sp.oo:
+        return -np.inf
+    return float(sp.N(v))
+
+
+def _resolve_symbol_values(required_symbols, binding, *, missing_prefix, fallback_provider=None):
+    required_symbols = tuple(required_symbols)
+    if not required_symbols:
+        return {}
+
+    if binding is None:
+        if fallback_provider is None:
+            raise TypeError("binding is required to resolve symbols")
+        provider = fallback_provider(required=True)
+        if hasattr(provider, "parameters"):
+            source = provider.parameters
+        elif hasattr(provider, "params"):
+            source = provider.params
+        else:
+            raise TypeError("binding provider must expose .parameters or .params")
+        missing = [sym for sym in required_symbols if sym not in source]
+        if missing:
+            names = ", ".join(sym.name for sym in missing)
+            raise ValueError(f"{missing_prefix}: {names}")
+        return {sym: source[sym].value for sym in required_symbols}
+
+    if isinstance(binding, dict):
+        missing = [sym for sym in required_symbols if sym not in binding and sym.name not in binding]
+        if missing:
+            names = ", ".join(sym.name for sym in missing)
+            raise ValueError(f"{missing_prefix}: {names}")
+        return {sym: binding[sym] if sym in binding else binding[sym.name] for sym in required_symbols}
+
+    if hasattr(binding, "params"):
+        source = binding.params
+    elif hasattr(binding, "parameters"):
+        source = binding.parameters
+    else:
+        raise TypeError(
+            "binding must be dict[Symbol, value], SmartFigure-like provider, or None"
+        )
+
+    missing = [sym for sym in required_symbols if sym not in source]
+    if missing:
+        names = ", ".join(sym.name for sym in missing)
+        raise ValueError(f"{missing_prefix}: {names}")
+    return {sym: source[sym].value for sym in required_symbols}
+
+
+def _resolve_numeric_callable(expr, x, binding):
+    try:
+        from .numpify import (
+            BoundNumpifiedFunction as _BoundNumpifiedFunction,
+            NumpifiedFunction as _NumpifiedFunction,
+            numpify_cached as _numpify_cached,
+        )
+        from .SmartFigure import current_figure as _current_figure
+    except ImportError:
+        from numpify import (
+            BoundNumpifiedFunction as _BoundNumpifiedFunction,
+            NumpifiedFunction as _NumpifiedFunction,
+            numpify_cached as _numpify_cached,
+        )
+        from SmartFigure import current_figure as _current_figure
+
+    def _resolve_symbolic_callable(symbolic_expr, symbol):
+        required_symbols = tuple(sorted((sp.sympify(symbolic_expr).free_symbols - {symbol}), key=lambda s: s.name))
+        if not required_symbols:
+            return _numpify_cached(symbolic_expr, args=symbol)
+
+        value_map = _resolve_symbol_values(
+            required_symbols,
+            binding,
+            missing_prefix="binding is missing values for",
+            fallback_provider=_current_figure,
+        )
+
+        compiled = _numpify_cached(symbolic_expr, args=(symbol, *required_symbols))
+        return compiled.bind(value_map)
+
+    if isinstance(expr, _BoundNumpifiedFunction):
+        return expr
+
+    if isinstance(expr, _NumpifiedFunction):
+        if not expr.args:
+            raise TypeError("NIntegrate requires an x argument for numpified functions")
+        if len(expr.args) == 1:
+            return expr
+        if binding is None:
+            return expr.bind(_current_figure(required=True))
+        return expr.bind(binding)
+
+    if isinstance(expr, sp.Basic):
+        if not isinstance(x, sp.Symbol):
+            raise TypeError(f"NIntegrate expects x to be a sympy Symbol for symbolic expressions, got {type(x)}")
+        return _resolve_symbolic_callable(expr, x)
+
+    if callable(expr):
+        import inspect
+
+        signature = inspect.signature(expr)
+        positional = [
+            param for param in signature.parameters.values()
+            if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        ]
+        required = [param for param in positional if param.default is inspect._empty]
+
+        if len(required) <= 1:
+            return expr
+
+        required_symbols = tuple(sp.Symbol(param.name) for param in required[1:])
+        symbol_map = _resolve_symbol_values(
+            required_symbols,
+            binding,
+            missing_prefix="binding is missing values for callable parameters",
+            fallback_provider=_current_figure,
+        )
+        bound_values = [symbol_map[sym] for sym in required_symbols]
+
+        def _bound_callable(t):
+            return expr(t, *bound_values)
+
+        return _bound_callable
+
+    raise TypeError(f"Unsupported expr type for NIntegrate: {type(expr)}")
+
+
 def NIntegrate(expr, var_and_limits, binding=None):
     """Numerically integrate a symbolic or numeric 1D function.
 
@@ -263,168 +393,60 @@ def NIntegrate(expr, var_and_limits, binding=None):
     except Exception as exc:  # pragma: no cover - defensive shape validation
         raise TypeError("NIntegrate expects limits as a tuple: (x, a, b)") from exc
 
-    try:
-        from .numpify import (
-            BoundNumpifiedFunction as _BoundNumpifiedFunction,
-            NumpifiedFunction as _NumpifiedFunction,
-            numpify_cached as _numpify_cached,
-        )
-        from .SmartFigure import current_figure as _current_figure
-    except ImportError:
-        from numpify import (
-            BoundNumpifiedFunction as _BoundNumpifiedFunction,
-            NumpifiedFunction as _NumpifiedFunction,
-            numpify_cached as _numpify_cached,
-        )
-        from SmartFigure import current_figure as _current_figure
-
     from scipy.integrate import quad
-
-    def _to_quad_limit(v):
-        if v == sp.oo:
-            return np.inf
-        if v == -sp.oo:
-            return -np.inf
-        return float(sp.N(v))
-
-    def _resolve_symbolic_callable(symbolic_expr, symbol):
-        required_symbols = tuple(sorted((sp.sympify(symbolic_expr).free_symbols - {symbol}), key=lambda s: s.name))
-        if not required_symbols:
-            return _numpify_cached(symbolic_expr, args=symbol)
-
-        if binding is None:
-            fig = _current_figure(required=True)
-            value_map = {sym: fig.parameters[sym].value for sym in required_symbols}
-        elif isinstance(binding, dict):
-            missing = [sym for sym in required_symbols if sym not in binding]
-            if missing:
-                names = ", ".join(sym.name for sym in missing)
-                raise ValueError(f"binding is missing values for: {names}")
-            value_map = {sym: binding[sym] for sym in required_symbols}
-        elif hasattr(binding, "params"):
-            value_map = {sym: binding.params[sym].value for sym in required_symbols}
-        elif hasattr(binding, "parameters"):
-            value_map = {sym: binding.parameters[sym].value for sym in required_symbols}
-        else:
-            raise TypeError(
-                "binding must be dict[Symbol, value], SmartFigure-like provider, or None"
-            )
-
-        compiled = _numpify_cached(symbolic_expr, args=(symbol, *required_symbols))
-        bound = compiled.bind(value_map)
-        return bound
-
-    if isinstance(expr, _BoundNumpifiedFunction):
-        f = expr
-    elif isinstance(expr, _NumpifiedFunction):
-        if not expr.args:
-            raise TypeError("NIntegrate requires an x argument for numpified functions")
-        if len(expr.args) == 1:
-            f = expr
-        else:
-            if binding is None:
-                f = expr.bind(_current_figure(required=True))
-            else:
-                f = expr.bind(binding)
-    elif isinstance(expr, sp.Basic):
-        if not isinstance(x, sp.Symbol):
-            raise TypeError(f"NIntegrate expects x to be a sympy Symbol for symbolic expressions, got {type(x)}")
-        f = _resolve_symbolic_callable(expr, x)
-    elif callable(expr):
-        import inspect
-
-        signature = inspect.signature(expr)
-        positional = [
-            param for param in signature.parameters.values()
-            if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-        ]
-        required = [param for param in positional if param.default is inspect._empty]
-
-        if len(required) <= 1:
-            f = expr
-        else:
-            missing_count = len(required) - 1
-
-            def _map_from_dict(source):
-                values = []
-                missing_names = []
-                for param in required[1:]:
-                    name = param.name
-                    sym = sp.Symbol(name)
-                    if name in source:
-                        values.append(source[name])
-                    elif sym in source:
-                        values.append(source[sym])
-                    else:
-                        missing_names.append(name)
-                if missing_names:
-                    raise ValueError(
-                        "binding is missing values for callable parameters: " + ", ".join(missing_names)
-                    )
-                return values
-
-            if binding is None:
-                fig = _current_figure(required=True)
-                value_list = []
-                missing_names = []
-                for param in required[1:]:
-                    sym = sp.Symbol(param.name)
-                    if sym in fig.parameters:
-                        value_list.append(fig.parameters[sym].value)
-                    else:
-                        missing_names.append(param.name)
-                if missing_names:
-                    raise ValueError(
-                        "current figure is missing callable parameters: " + ", ".join(missing_names)
-                    )
-            elif isinstance(binding, dict):
-                value_list = _map_from_dict(binding)
-            elif hasattr(binding, "params"):
-                value_list = []
-                missing_names = []
-                for param in required[1:]:
-                    sym = sp.Symbol(param.name)
-                    if sym in binding.params:
-                        value_list.append(binding.params[sym].value)
-                    else:
-                        missing_names.append(param.name)
-                if missing_names:
-                    raise ValueError(
-                        "binding provider is missing callable parameters: " + ", ".join(missing_names)
-                    )
-            elif hasattr(binding, "parameters"):
-                value_list = []
-                missing_names = []
-                for param in required[1:]:
-                    sym = sp.Symbol(param.name)
-                    if sym in binding.parameters:
-                        value_list.append(binding.parameters[sym].value)
-                    else:
-                        missing_names.append(param.name)
-                if missing_names:
-                    raise ValueError(
-                        "binding provider is missing callable parameters: " + ", ".join(missing_names)
-                    )
-            else:
-                raise TypeError(
-                    "binding must be dict, SmartFigure-like provider, or None for callable expr"
-                )
-
-            if len(value_list) < missing_count:
-                raise ValueError(
-                    f"binding did not satisfy callable parameters: expected {missing_count}, got {len(value_list)}"
-                )
-
-            def f(t):
-                return expr(t, *value_list)
-    else:
-        raise TypeError(f"Unsupported expr type for NIntegrate: {type(expr)}")
+    f = _resolve_numeric_callable(expr, x, binding)
 
     def _integrand(t):
         return float(np.asarray(f(t)))
 
-    value, _error = quad(_integrand, _to_quad_limit(a), _to_quad_limit(b))
+    value, _error = quad(_integrand, _to_numeric_limit(a), _to_numeric_limit(b))
     return value
 
 
-__all__ += ["NIntegrate"]
+def NReal_Fourier_Series(expr, var_and_limits, samples=4000, binding=None):
+    """Return L2-normalized real Fourier coefficients on ``(a, b)``.
+
+    The basis uses argument ``2*pi*n/(b-a) * x`` and returns a pair
+    ``(cos_coeffs, sin_coeffs)`` as NumPy arrays.
+    """
+    try:
+        x, a, b = var_and_limits
+    except Exception as exc:  # pragma: no cover - defensive shape validation
+        raise TypeError("NReal_Fourier_Series expects limits as a tuple: (x, a, b)") from exc
+
+    sample_count = int(samples)
+    if sample_count < 2:
+        raise ValueError("samples must be at least 2")
+
+    a_float = _to_numeric_limit(a)
+    b_float = _to_numeric_limit(b)
+    if not np.isfinite(a_float) or not np.isfinite(b_float):
+        raise ValueError("NReal_Fourier_Series requires finite interval bounds")
+
+    period = b_float - a_float
+    if period <= 0:
+        raise ValueError("NReal_Fourier_Series requires b > a")
+
+    f = _resolve_numeric_callable(expr, x, binding)
+
+    x_grid = np.linspace(a_float, b_float, sample_count, endpoint=False, dtype=float)
+    y_grid = np.asarray(f(x_grid), dtype=float)
+    if y_grid.shape != x_grid.shape:
+        y_grid = np.asarray([f(t) for t in x_grid], dtype=float)
+
+    from scipy.fft import rfft
+
+    freq = rfft(y_grid)
+    dx = period / sample_count
+    harmonics = np.arange(freq.shape[0], dtype=float)
+    phase = np.exp(-1j * 2.0 * np.pi * harmonics * a_float / period)
+    integrals = dx * phase * freq
+
+    cos_coeffs = np.sqrt(2.0 / period) * np.real(integrals)
+    cos_coeffs[0] = np.real(integrals[0]) / np.sqrt(period)
+    sin_coeffs = -np.sqrt(2.0 / period) * np.imag(integrals)
+    sin_coeffs[0] = 0.0
+    return cos_coeffs, sin_coeffs
+
+
+__all__ += ["NIntegrate", "NReal_Fourier_Series"]
