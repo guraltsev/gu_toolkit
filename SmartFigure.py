@@ -779,7 +779,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
     - Creating and reusing parameter controls.
     - Storing parameter refs.
     - Executing hooks when parameters change.
-    - Acts like a dictionary so `fig.params[sym]` works.
+    - Acts like a dictionary so `fig.parameters[sym]` works.
 
     Design Note:
     ------------
@@ -1070,7 +1070,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         return self._hooks.copy()
 
     # --- Dict-like Interface for Backward Compatibility ---
-    # This allows `fig.params[symbol]` to work in user hooks.
+    # This allows `fig.parameters[symbol]` to work in user hooks.
     
     def __getitem__(self, key: Symbol) -> ParamRef:
         """Return the param ref for the given symbol.
@@ -1630,7 +1630,7 @@ class SmartPlot:
         fig = self._smart_figure
         args = [x]
         for symbol in self._numpified.args[1:]:
-            args.append(fig.params[symbol].value)
+            args.append(fig.parameters[symbol].value)
         return self._numpified(*args)
 
     @property
@@ -2312,34 +2312,14 @@ class SmartFigure:
         return self._figure
     
     @property
-    def params(self) -> ParameterManager:
-        """
-        The ParameterManager instance.
-        Acts like a dictionary of `{Symbol: ParamRef}` for backward compatibility.
-
-        ParamRef objects expose common controls such as:
-        - ``value`` (current value)
-        - ``default_value`` (reset target)
-        - ``min`` / ``max`` / ``step`` (range configuration, when supported)
-        - ``observe(...)`` / ``reset()`` / ``widget``
-        - ``capabilities`` to inspect optional attribute support at runtime
-
-        Returns
-        -------
-        ParameterManager
-            Parameter manager for slider state and hooks.
-
-        Examples
-        --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> fig.params.has_params  # doctest: +SKIP
-        False
-
-        See Also
-        --------
-        parameter : Create or reuse parameter controls.
-        """
+    def parameters(self) -> ParameterManager:
+        """The figure ParameterManager (preferred name)."""
         return self._params
+
+    @property
+    def params(self) -> ParameterManager:
+        """Alias for :attr:`parameters` for backward compatibility."""
+        return self.parameters
     
     @property
     def info_output(self) -> Dict[Hashable, widgets.Output]:
@@ -3071,7 +3051,7 @@ class SmartFigure:
                 self._print_capture = None
 
 
-class _CurrentParamsProxy(Mapping):
+class _CurrentParametersProxy(Mapping):
     """Module-level proxy to the current figure's ParameterManager.
 
     Examples
@@ -3090,7 +3070,7 @@ class _CurrentParamsProxy(Mapping):
 
     def _mgr(self) -> "ParameterManager":
         """Return the current figure's ParameterManager."""
-        return self._fig().params
+        return self._fig().parameters
 
     def __getitem__(self, key: Hashable) -> ParamRef:
         """Return the current figure's parameter reference for ``key``."""
@@ -3126,6 +3106,17 @@ class _CurrentParamsProxy(Mapping):
         """Return a snapshot of current parameter values/settings."""
         return self._mgr().snapshot()
 
+    def __getattr__(self, name: str) -> Any:
+        """Forward unknown attributes/methods to active figure parameters."""
+        return getattr(self._mgr(), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Forward attribute assignment to active figure parameters."""
+        if name.startswith("_"):
+            object.__setattr__(self, name, value)
+            return
+        setattr(self._mgr(), name, value)
+
 
 class _CurrentPlotsProxy(Mapping):
     """Module-level proxy to the current figure's plots mapping."""
@@ -3146,8 +3137,8 @@ class _CurrentPlotsProxy(Mapping):
         return key in self._fig().plots
 
 
-params = _CurrentParamsProxy()
-parameters = params
+parameters = _CurrentParametersProxy()
+params = parameters
 plots = _CurrentPlotsProxy()
 
 
@@ -3279,7 +3270,7 @@ def parameter(
     SmartFigure.parameter : Instance method for parameter creation.
     """
     fig = _require_current_figure()
-    return fig.params.parameter(symbols, control=control, **kwargs)
+    return fig.parameters.parameter(symbols, control=control, **kwargs)
 
 
 def plot(
