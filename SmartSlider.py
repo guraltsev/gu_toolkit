@@ -167,8 +167,6 @@ class SmartFloatSlider(widgets.VBox):
 
 /* Modal overlay and panel styling */
 .smart-slider-settings-modal {
-  position: fixed !important;
-  inset: 0 !important;
   z-index: 99999 !important;
 }
 
@@ -762,15 +760,17 @@ class SmartFloatSlider(widgets.VBox):
             self.settings_modal.layout.height = "100vh"
         else:
             self.children = (self._top_row,)
+            if host.layout.position in (None, "", "static"):
+                host.layout.position = "relative"
             if self.settings_modal not in host.children:
                 host.children += (self.settings_modal,)
-            self.settings_modal.layout.position = "fixed"
+            self.settings_modal.layout.position = "absolute"
             self.settings_modal.layout.top = "0"
             self.settings_modal.layout.left = "0"
-            self.settings_modal.layout.right = ""
-            self.settings_modal.layout.bottom = ""
-            self.settings_modal.layout.width = "100vw"
-            self.settings_modal.layout.height = "100vh"
+            self.settings_modal.layout.right = "0"
+            self.settings_modal.layout.bottom = "0"
+            self.settings_modal.layout.width = "100%"
+            self.settings_modal.layout.height = "100%"
 
         self._modal_host = host
 
