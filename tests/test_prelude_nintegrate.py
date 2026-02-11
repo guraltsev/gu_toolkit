@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import sympy as sp
 
 from gu_toolkit import SmartFigure
 from prelude import NIntegrate
+from prelude import NReal_Fourier_Series
 
 
 def test_nintegrate_finite_interval() -> None:
@@ -116,3 +118,45 @@ def test_nintegrate_unbound_callable_missing_binding_raises() -> None:
         assert "missing values" in str(exc) or "missing callable parameters" in str(exc)
     else:  # pragma: no cover - defensive
         raise AssertionError("Expected ValueError for missing callable binding")
+
+
+def test_nintegrate_sympy_lambda_with_dict_binding() -> None:
+    x, a, b = sp.symbols("x a b")
+    lam = sp.Lambda((x, a, b), a * x + b)
+    result = NIntegrate(lam, (x, 0, 1), binding={a: 2.0, b: 3.0})
+    assert math.isclose(result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
+
+
+def test_nintegrate_sympy_lambda_uses_current_figure_when_binding_absent() -> None:
+    x, a, b = sp.symbols("x a b")
+    lam = sp.Lambda((x, a, b), a * x + b)
+    fig = SmartFigure()
+    fig.parameter([a, b], value=0)
+    fig.parameters[a].value = 2.0
+    fig.parameters[b].value = 3.0
+
+    with fig:
+        result = NIntegrate(lam, (x, 0, 1))
+
+    assert math.isclose(result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
+
+
+def test_nreal_fourier_series_constant_l2_normalized() -> None:
+    x = sp.Symbol("x")
+    cos_coeffs, sin_coeffs = NReal_Fourier_Series(1, (x, 0, 2 * sp.pi), samples=4096)
+
+    assert cos_coeffs.shape == sin_coeffs.shape
+    assert math.isclose(cos_coeffs[0], math.sqrt(2.0 * math.pi), rel_tol=3e-3, abs_tol=3e-3)
+    assert np.all(np.abs(cos_coeffs[1:25]) < 1e-2)
+    assert np.all(np.abs(sin_coeffs[:25]) < 1e-2)
+
+
+def test_nreal_fourier_series_single_mode_matches_expected_component() -> None:
+    x = sp.Symbol("x")
+    cos_coeffs, sin_coeffs = NReal_Fourier_Series(sp.sin(3 * x), (x, 0, 2 * sp.pi), samples=4096)
+
+    assert math.isclose(sin_coeffs[3], math.sqrt(math.pi), rel_tol=3e-3, abs_tol=3e-3)
+    assert np.all(np.abs(cos_coeffs[:10]) < 1e-2)
+    near_zero = np.abs(sin_coeffs[:10])
+    near_zero[3] = 0.0
+    assert np.all(near_zero < 1e-2)
