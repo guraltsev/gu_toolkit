@@ -6,10 +6,11 @@
 2. [New class: `BoundNumpifiedFunction`](#2-new-class-boundnumpifiedfunction)
 3. [Changes to `numpify.py`](#3-changes-to-numpifypy)
 4. [Changes to `SmartFigure.py` context management](#4-changes-to-smartfigurepy-context-management)
-5. [Migration of `NumericExpression.py`](#5-migration-of-numericexpressionpy)
+5. [Fusion of `NumericExpression.py`](#5-fusion-of-numericexpressionpy)
 6. [Changes to `SmartPlot`](#6-changes-to-smartplot)
-7. [Public API / `__init__.py`](#7-public-api--__init__py)
-8. [Architectural critique](#8-architectural-critique)
+7. [Changes to `ParameterSnapshot`](#7-changes-to-parametersnapshot)
+8. [Public API / `__init__.py`](#8-public-api--__init__py)
+9. [Architectural critique](#9-architectural-critique)
 
 ---
 
@@ -19,18 +20,16 @@
 
 ```python
 from __future__ import annotations
-from dataclasses import dataclass, field
 from typing import Any, Callable, TYPE_CHECKING
 
 import sympy as sp
 
 if TYPE_CHECKING:
     from .SmartFigure import SmartFigure
-    from .ParameterSnapshot import ParameterSnapshot
 
 
 class NumpifiedFunction:
-    """A compiled sympy→numpy callable that carries its own metadata.
+    """A compiled sympy->numpy callable that carries its own metadata.
 
     Attributes
     ----------
@@ -66,42 +65,40 @@ class NumpifiedFunction:
 
     def bind(
         self,
-        source: "SmartFigure | ParameterSnapshot | dict[sp.Symbol, Any] | None" = None,
+        source: "ParameterProvider | dict[sp.Symbol, Any] | None" = None,
     ) -> "BoundNumpifiedFunction":
         """Bind parameter values and return a partially-applied callable.
 
         Parameters
         ----------
         source
-            - ``dict[Symbol, value]`` or ``ParameterSnapshot`` →
+            - ``dict[Symbol, value]`` ->
               dead (snapshot) binding.  Values are captured immediately.
-            - ``SmartFigure`` instance → live binding.
-              Parameter values are read from the figure on every call.
-            - ``None`` → live binding to the current figure from the
-              context stack (``_require_current_figure()``).
+            - Any object satisfying the ``ParameterProvider`` protocol
+              (has ``.params`` returning a ``Mapping[Symbol, ParamRef]``)
+              -> live binding.  ``SmartFigure`` satisfies this.
+            - ``None`` -> live binding to the current figure from the
+              context stack.
 
         Returns
         -------
         BoundNumpifiedFunction
         """
-        # Lazy import to avoid circular dependency
-        from .SmartFigure import SmartFigure as _SmartFigure, _require_current_figure
-        from .ParameterSnapshot import ParameterSnapshot as _Snap
-
         if source is None:
-            # Live-bind to current context figure
-            fig = _require_current_figure()
-            return BoundNumpifiedFunction(parent=self, figure=fig)
+            from .SmartFigure import current_figure as _current_figure
+            fig = _current_figure(required=True)
+            return BoundNumpifiedFunction(parent=self, provider=fig)
 
-        if isinstance(source, _SmartFigure):
-            return BoundNumpifiedFunction(parent=self, figure=source)
-
-        if isinstance(source, (_Snap, dict)):
+        if isinstance(source, dict):
             return BoundNumpifiedFunction(parent=self, snapshot=source)
 
+        # Duck-type: anything with a .params attribute exposing values
+        if hasattr(source, "params"):
+            return BoundNumpifiedFunction(parent=self, provider=source)
+
         raise TypeError(
-            f"bind() expects SmartFigure, ParameterSnapshot, dict, or None; "
-            f"got {type(source).__name__}"
+            f"bind() expects a ParameterProvider (e.g. SmartFigure), "
+            f"dict[Symbol, value], or None; got {type(source).__name__}"
         )
 
     # --- Introspection -----------------------------------------------
@@ -125,12 +122,39 @@ class NumpifiedFunction:
 - The class is intentionally **not a dataclass** because `__call__` semantics
   and custom `__repr__` are cleaner on a plain class, and frozen dataclasses
   forbid setting `_fn`.
+- **Protocol-based binding** — `bind()` duck-types on `hasattr(source, "params")`
+  rather than importing `SmartFigure`.  This keeps `numpify.py` decoupled from
+  the UI layer.  The only lazy import is for `bind(None)` which needs the
+  context stack.
 
 ---
 
 ## 2. New class: `BoundNumpifiedFunction`
 
 **File:** `numpify.py` (immediately after `NumpifiedFunction`)
+
+### `ParameterProvider` protocol
+
+```python
+from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class ParameterProvider(Protocol):
+    """Anything that exposes a ParameterManager via .params.
+
+    The ParameterManager must support ``__getitem__(symbol)`` returning
+    an object with a ``.value`` attribute (i.e. a ``ParamRef``).
+
+    ``SmartFigure`` satisfies this protocol.
+    """
+    @property
+    def params(self) -> Any: ...
+```
+
+This protocol lives in `numpify.py` (or a small `_protocols.py` if preferred)
+and is the **only** contract between the compilation layer and the figure layer.
+
+### Class definition
 
 ```python
 class BoundNumpifiedFunction:
@@ -139,41 +163,32 @@ class BoundNumpifiedFunction:
     Supports two mutually exclusive modes:
 
     Dead (snapshot) mode
-        Parameter values captured at bind-time.  Deterministic.
+        Parameter values captured at bind-time from a dict.  Deterministic.
 
-    Live (figure) mode
-        Parameter values read from a SmartFigure on every __call__.
+    Live (provider) mode
+        Parameter values read from a ParameterProvider (e.g. SmartFigure)
+        on every __call__.  Essential for exploratory/interactive math.
     """
 
-    __slots__ = ("parent", "_figure", "_snapshot_values", "_free_indices")
+    __slots__ = ("parent", "_provider", "_snapshot_values", "_free_indices")
 
     def __init__(
         self,
         parent: NumpifiedFunction,
         *,
-        figure: "SmartFigure | None" = None,
-        snapshot: "ParameterSnapshot | dict[sp.Symbol, Any] | None" = None,
+        provider: "ParameterProvider | None" = None,
+        snapshot: "dict[sp.Symbol, Any] | None" = None,
     ) -> None:
         self.parent = parent
-        self._figure = figure
+        self._provider = provider
         self._snapshot_values: tuple[Any, ...] | None = None
         self._free_indices: tuple[int, ...] | None = None
 
         if snapshot is not None:
             self._resolve_snapshot(snapshot)
 
-    def _resolve_snapshot(self, source: Any) -> None:
-        """Coerce snapshot/dict to an ordered tuple of values."""
-        from .ParameterSnapshot import ParameterSnapshot as _Snap
-
-        if isinstance(source, _Snap):
-            value_map = source.values_only()
-        elif isinstance(source, dict):
-            value_map = source
-        else:
-            raise TypeError(f"Expected ParameterSnapshot or dict, got {type(source)}")
-
-        # Build bound-value tuple aligned to self.parent.args
+    def _resolve_snapshot(self, value_map: dict) -> None:
+        """Order dict values according to parent.args, track free slots."""
         vals: list[Any] = []
         free: list[int] = []
         for i, sym in enumerate(self.parent.args):
@@ -195,20 +210,17 @@ class BoundNumpifiedFunction:
             ``free_args`` fills any unbound argument slots.
         In live-bind mode
             ``free_args`` fills the independent-variable slot(s).
-            Remaining args are fetched live from the figure.
+            Remaining args are fetched live from the provider.
         """
-        if self._figure is not None:
+        if self._provider is not None:
             return self._eval_live(*free_args)
         return self._eval_dead(*free_args)
 
     def _eval_live(self, *free_args: Any) -> Any:
-        """Read parameter values from the bound SmartFigure."""
-        assert self._figure is not None
-        params = self._figure.params
+        """Read parameter values from the bound provider."""
+        assert self._provider is not None
+        params = self._provider.params
         full: list[Any] = list(free_args)
-        # Append bound parameters in the order they appear in parent.args,
-        # skipping those already provided as free_args (assumed to be the
-        # leading positions — typically just the independent variable x).
         n_free = len(free_args)
         for sym in self.parent.args[n_free:]:
             full.append(params[sym].value)
@@ -222,7 +234,8 @@ class BoundNumpifiedFunction:
         full = list(self._snapshot_values)
         if len(free_args) != len(self._free_indices):
             raise TypeError(
-                f"Expected {len(self._free_indices)} free arg(s), got {len(free_args)}"
+                f"Expected {len(self._free_indices)} free arg(s), "
+                f"got {len(free_args)}"
             )
         for idx, val in zip(self._free_indices, free_args):
             full[idx] = val
@@ -236,7 +249,7 @@ class BoundNumpifiedFunction:
 
     @property
     def is_live(self) -> bool:
-        return self._figure is not None
+        return self._provider is not None
 
     def __repr__(self) -> str:
         mode = "live" if self.is_live else "dead"
@@ -245,14 +258,14 @@ class BoundNumpifiedFunction:
 
 ### Design decisions
 
-- **Two modes in one class** is simpler than a class hierarchy.  The modes are
-  mutually exclusive and small — a base class + two subclasses would add
-  indirection for no real benefit.
-- **`_free_indices`** enables partial binding (e.g., bind parameters but leave
-  the independent variable free).  This is the common case for
-  `SmartPlot._eval_numeric_live()`.
+- **`_provider` instead of `_figure`** — the field holds any `ParameterProvider`,
+  not specifically a `SmartFigure`.  This makes the binding layer independent
+  of the UI layer.
+- **`_resolve_snapshot` accepts only `dict`** — no `ParameterSnapshot` coercion.
+  Callers who have a snapshot use `snapshot.values()` before passing.  This
+  keeps the binding interface narrow and explicit.
 - **Live mode convention:** free args are the *leading* positional args (the
-  independent variable `x`), and the rest are fetched from the figure.  This
+  independent variable `x`), and the rest are fetched from the provider.  This
   mirrors the existing `[var] + parameters` ordering in `SmartPlot.set_func()`.
 
 ---
@@ -261,7 +274,7 @@ class BoundNumpifiedFunction:
 
 ### 3a. `numpify()` return type
 
-Replace the final section (currently lines 270–297) that builds docstring and
+Replace the final section (currently lines 270-297) that builds docstring and
 attaches `_generated_source`:
 
 ```python
@@ -278,40 +291,50 @@ attaches `_generated_source`:
 The `NumpifiedFunction` wraps the raw `fn` and carries `expr`, `args`, and
 `source` as first-class attributes.
 
-### 3b. `numpify_cached()` — preserve cache identity
+### 3b. `numpify_cached()` — cache identity design
 
-`_numpify_cached_impl` already returns whatever `numpify()` returns, so this
-change is transparent.  The LRU cache will store `NumpifiedFunction` instances.
+The LRU cache must store `NumpifiedFunction` instances and the wrapping must
+**not** defeat caching.  Concretely:
 
-**No further changes needed** — the `_FrozenFNumPy` cache key logic is
-unaffected.
-
-### 3c. Backward compatibility
-
-`NumpifiedFunction.__call__` delegates to the inner `_fn`, so existing code
-that calls the result of `numpify(...)` positionally keeps working.
-
-However:
-
-- `getattr(fn, "_generated_source")` → use `.source` instead.
-- `fn.__doc__` → the class can implement `__doc__` as a property or just not
-  set it on the inner `_fn`.  Decide based on whether any downstream code reads
-  it.
-- `isinstance(result, types.FunctionType)` → will now be `False`.  Audit
-  callers.
-
-### 3d. Deprecation shims (optional, short-term)
-
-```python
-@property
-def _generated_source(self) -> str:
-    import warnings
-    warnings.warn("Use .source instead of ._generated_source", DeprecationWarning)
-    return self.source
+**Current flow:**
 ```
+numpify_cached(expr, args=...) -> _numpify_cached_impl(key) -> numpify() -> fn
+```
+The LRU cache in `_numpify_cached_impl` returns the same `fn` object on cache
+hit.
 
-**Critique:** These shims add noise.  If the only consumers are internal
-(`SmartPlot`, `NumericExpression`), skip the shims and update callers directly.
+**New flow:**
+```
+numpify_cached(expr, args=...) -> _numpify_cached_impl(key) -> numpify() -> NumpifiedFunction
+```
+Since `numpify()` now returns `NumpifiedFunction`, and `_numpify_cached_impl`
+caches whatever `numpify()` returns, the LRU cache stores `NumpifiedFunction`
+directly.  On cache hit, the **same `NumpifiedFunction` instance** is returned.
+
+**What must be verified:**
+- `NumpifiedFunction` is **not** re-wrapped on each call.  Since
+  `_numpify_cached_impl` is the cached function and it calls `numpify()`
+  only on miss, this is satisfied by construction.
+- `NumpifiedFunction` must be **safe to share** — it is effectively immutable
+  (`__slots__`, no mutable state).  The inner `_fn` captures `_sym_bindings`
+  by reference (same as today), which is fine.
+- `numpify_cached.cache_info` / `cache_clear` forwarding is unchanged.
+
+**No code changes needed** beyond the `numpify()` return-type change in 3a.
+The cache wraps transparently.
+
+### 3c. No backward-compatibility shims
+
+The toolkit is the only consumer of `numpify`.  There are no external users.
+All internal callers (`SmartPlot`, `NumericExpression`, tests) will be updated
+directly.  No deprecation shims, no `_generated_source` property aliases.
+
+Callers to audit and update:
+- `SmartPlot.set_func()` — stores `_core`, switch to `_numpified`
+- `SmartPlot._eval_numeric_live()` — calls `self._core(...)`, switch to
+  `self._numpified(...)`
+- `NumericExpression._coerce_bound_values()` — removed (see section 5)
+- Tests that access `_generated_source` — switch to `.source`
 
 ---
 
@@ -328,11 +351,15 @@ Currently the stack helpers are private (`_current_figure`,
 def current_figure(*, required: bool = True) -> "SmartFigure | None":
     """Return the active SmartFigure from the context stack.
 
+    This is essential for exploratory math workflows where the user
+    operates inside a ``with fig:`` block and expects functions to
+    resolve the figure implicitly.
+
     Parameters
     ----------
     required : bool
         If True (default), raise RuntimeError when no figure is active.
-        If False, return None.
+        If False, return None silently.
     """
     fig = _current_figure()
     if fig is None and required:
@@ -356,91 +383,127 @@ from .SmartFigure import current_figure
 if source is None:
     from .SmartFigure import current_figure as _current_figure
     fig = _current_figure(required=True)
-    return BoundNumpifiedFunction(parent=self, figure=fig)
+    return BoundNumpifiedFunction(parent=self, provider=fig)
 ```
 
-### 4d. Critique: coupling direction
+This is the **only** lazy import from `SmartFigure` in `numpify.py`.  It fires
+only when the user explicitly asks for implicit context binding — the common
+exploratory-math path.
 
-`numpify.py` importing from `SmartFigure.py` creates an **upward dependency**
-(compilation layer → UI layer).  This is acceptable because:
+### 4d. Coupling direction
 
-- The import is **lazy** (inside `bind()`), so `numpify` can still be used
-  standalone without SmartFigure loaded.
-- An alternative is to define a `ParameterSource` protocol and have
-  `SmartFigure` implement it, but the protocol would be isomorphic to
-  "has `.params` returning a `Mapping[Symbol, ParamRef]`" — just a dict
-  lookup.  The protocol adds a file and an abstraction for one consumer.  Not
-  worth it now, but worth revisiting if more parameter sources appear.
+`numpify.py` importing from `SmartFigure.py` is an **upward dependency**
+(compilation layer -> UI layer).  It is acceptable because:
+
+- The import is **lazy** (inside `bind()` only when `source is None`).
+- All other binding paths use the `ParameterProvider` protocol — no import
+  needed.
+- `numpify` can still be used standalone without SmartFigure loaded.
 
 ---
 
-## 5. Migration of `NumericExpression.py`
+## 5. Fusion of `NumericExpression.py`
 
-### Current state
+### Decision: fuse immediately, no transitional facade
 
-Three dataclasses in `NumericExpression.py`:
+The existing `DeadUnboundNumericExpression`, `DeadBoundNumericExpression`, and
+`LiveNumericExpression` are replaced, not wrapped.
 
-| Class | Stores | Callable? |
-|-|-|-|
-| `DeadUnboundNumericExpression` | `core`, `parameters` | Raises on call |
-| `DeadBoundNumericExpression` | `core`, `parameters`, `bound_values` | Yes (dead) |
-| `LiveNumericExpression` | `plot` (SmartPlot ref) | Yes (live) |
+### What replaces what
 
-### Target state
+| Old class | Replacement |
+|-|-|
+| `DeadUnboundNumericExpression` | `NumpifiedFunction` directly |
+| `DeadBoundNumericExpression` | `BoundNumpifiedFunction` (dead mode) |
+| `LiveNumericExpression` | **`PlotView`** — a thin "live view" of a plot |
 
-These classes become **thin facades** over `NumpifiedFunction` /
-`BoundNumpifiedFunction`:
+### New: `PlotView` (replaces `LiveNumericExpression`)
+
+A `LiveNumericExpression` today is a "view" into a `SmartPlot` — it delegates
+`__call__` to `plot._eval_numeric_live(x)`.  This is conceptually different
+from a live-bound `NumpifiedFunction` because it is tied to a *plot* (which
+owns the var/parameter split), not just to a parameter source.
+
+The replacement keeps this distinction explicit:
 
 ```python
+# NumericExpression.py — slimmed down
+
 @dataclass(frozen=True)
-class DeadUnboundNumericExpression:
-    numpified: NumpifiedFunction
+class PlotView:
+    """Live view of a SmartPlot's numeric evaluation.
+
+    Forwards every call to the plot's live-bound NumpifiedFunction.
+    This is what SmartPlot.numeric_expression returns.
+    """
+    _numpified: NumpifiedFunction
+    _provider: Any  # ParameterProvider (SmartFigure)
+
+    def __call__(self, x: "np.ndarray") -> "np.ndarray":
+        """Evaluate using current live parameter values."""
+        bound = self._numpified.bind(self._provider)
+        return bound(x)
+
+    def bind(self, values: dict[Symbol, Any]) -> BoundNumpifiedFunction:
+        """Snapshot-bind with explicit values dict.
+
+        Parameters
+        ----------
+        values : dict[Symbol, Any]
+            Parameter values keyed by symbol.  Obtain from
+            ``fig.params.snapshot().values()`` or build manually.
+        """
+        return self._numpified.bind(values)
+
+    def unbind(self) -> NumpifiedFunction:
+        """Return the underlying NumpifiedFunction."""
+        return self._numpified
 
     @property
-    def core(self) -> Callable[..., Any]:
-        return self.numpified._fn
+    def expr(self) -> sp.Basic:
+        return self._numpified.expr
 
     @property
-    def parameters(self) -> tuple[Symbol, ...]:
-        return self.numpified.args
-
-    def bind(self, source: ...) -> DeadBoundNumericExpression:
-        bound = self.numpified.bind(source)
-        return DeadBoundNumericExpression(bound=bound)
-
-
-@dataclass(frozen=True)
-class DeadBoundNumericExpression:
-    bound: BoundNumpifiedFunction
-
-    def __call__(self, x: np.ndarray) -> np.ndarray:
-        return self.bound(x)
-
-    def unbind(self) -> DeadUnboundNumericExpression:
-        return DeadUnboundNumericExpression(numpified=self.bound.parent)
-
-
-@dataclass(frozen=True)
-class LiveNumericExpression:
-    bound: BoundNumpifiedFunction  # live-bound to a figure
-
-    def __call__(self, x: np.ndarray) -> np.ndarray:
-        return self.bound(x)
+    def args(self) -> tuple[Symbol, ...]:
+        return self._numpified.args
 ```
 
-### Critique: keep or remove the facade?
+### `bind()` accepts only `dict[Symbol, value]`
 
-**Argument to keep:** The facade gives semantic names (`LiveNumericExpression`
-vs `DeadBound...`) and constrains the API surface for plot-specific code.
-Notebook users who inspect objects see meaningful type names.
+This is a deliberate narrowing.  The old code accepted both `ParameterSnapshot`
+and `dict`.  The new rule:
 
-**Argument to remove:** The facade is now almost zero-logic delegation.
-`BoundNumpifiedFunction` already distinguishes live vs dead via `.is_live`.
-Removing the facade cuts ~80 lines and one file.
+- **`NumpifiedFunction.bind()`** accepts: `dict`, `ParameterProvider`, or `None`.
+- **`PlotView.bind()`** accepts: `dict` only.
+- **`BoundNumpifiedFunction`** stores snapshot as `dict` internally.
 
-**Recommendation:** Keep the facades for now as **type aliases with
-construction helpers**, deprecate direct instantiation, and revisit removal
-once all internal callers are migrated.
+If the caller has a `ParameterSnapshot`, they call `.values()` first (see
+section 7 for the rename).  This makes the data flow explicit and removes the
+hidden `values_only()` coercion inside binding logic.
+
+### Remove `_coerce_bound_values()`
+
+The helper `_coerce_bound_values()` in `NumericExpression.py` is deleted.
+Its logic (validate keys, order by parameters, check for missing) moves into
+`BoundNumpifiedFunction._resolve_snapshot()`, simplified because it only
+handles `dict`.
+
+### Removed classes
+
+- `DeadUnboundNumericExpression` — replaced by `NumpifiedFunction`
+- `DeadBoundNumericExpression` — replaced by `BoundNumpifiedFunction`
+- `LiveNumericExpression` — replaced by `PlotView`
+
+For a short transition, type aliases can be kept in `NumericExpression.py`:
+
+```python
+# Temporary aliases for any lingering references
+DeadUnboundNumericExpression = NumpifiedFunction
+DeadBoundNumericExpression = BoundNumpifiedFunction
+LiveNumericExpression = PlotView
+```
+
+These aliases should be removed once all references are updated.
 
 ---
 
@@ -474,23 +537,20 @@ def set_func(self, var, func, parameters=[]):
     self._numpified = numpify_cached(func, args=[var] + parameters)
     self._var = var
     self._func = func
-    # Parameters are now introspectable from self._numpified.args
+    # _parameters is gone — derived from self._numpified.args[1:]
 
 def _eval_numeric_live(self, x):
-    # Option A: use live binding (created once, reads figure each call)
-    bound = self._numpified.bind(self._smart_figure)
-    return bound(x)
-
-    # Option B: keep manual loop for zero-overhead (no wrapper allocation)
+    # Direct call for hot-path performance (no wrapper allocation)
     params = self._smart_figure.params
     args = [x]
-    for sym in self._numpified.args[1:]:  # skip var
+    for sym in self._numpified.args[1:]:  # skip var (args[0])
         args.append(params[sym].value)
     return self._numpified(*args)
 ```
 
-**Recommendation:** Use Option B for the hot path (render loop), and expose
-Option A via the `numeric_expression` property for external consumers.
+The render hot path uses the manual loop (zero overhead).  The
+`numeric_expression` property provides the ergonomic `PlotView` for external
+consumers.
 
 ### Property migration
 
@@ -501,23 +561,83 @@ def parameters(self) -> tuple[Symbol, ...]:
     return self._numpified.args[1:]  # args[0] is var
 
 @property
-def numeric_expression(self) -> LiveNumericExpression:
-    bound = self._numpified.bind(self._smart_figure)
-    return LiveNumericExpression(bound=bound)
+def numpified(self) -> NumpifiedFunction:
+    """The compiled NumpifiedFunction for this plot."""
+    return self._numpified
+
+@property
+def numeric_expression(self) -> PlotView:
+    """Live view for external consumers."""
+    return PlotView(
+        _numpified=self._numpified,
+        _provider=self._smart_figure,
+    )
 ```
 
-The separate `_parameters` field is removed; it is derived from
+The separate `_parameters` field is **removed**; it is derived from
 `_numpified.args`.
 
 ---
 
-## 7. Public API / `__init__.py`
+## 7. Changes to `ParameterSnapshot`
+
+### Rename `values_only()` -> `values()`
+
+```python
+# ParameterSnapshot.py
+
+class ParameterSnapshot(Mapping[Symbol, Mapping[str, Any]]):
+
+    def values(self) -> Dict[Symbol, Any]:          # was values_only()
+        """Return an ordered Symbol -> value projection."""
+        return {symbol: entry["value"] for symbol, entry in self._entries.items()}
+```
+
+**Note:** `Mapping` already defines `.values()` returning dict values.  Since
+`ParameterSnapshot` inherits from `Mapping[Symbol, Mapping[str, Any]]`, the
+inherited `.values()` returns the metadata dicts, not scalars.  We are
+**overriding** that inherited method with a different return type — this is
+intentional and desirable because the scalar projection is what users want
+99% of the time.
+
+If this override causes confusion, an alternative name like `.param_values()`
+could be used, but `.values()` is the most natural and concise choice.
+
+### Update callers
+
+All places that call `.values_only()` switch to `.values()`:
+- `NumericExpression.py` `_coerce_bound_values()` — deleted entirely
+- Tests: `test_parameter_snapshot_numeric_expression.py`
+
+### Usage pattern for binding
+
+```python
+# Old:
+bound_expr = expr.bind(snapshot)                   # snapshot coerced internally
+
+# New:
+bound_fn = numpified.bind(snapshot.values())       # explicit dict
+```
+
+---
+
+## 8. Public API / `__init__.py`
 
 ### New exports
 
 ```python
-from .numpify import NumpifiedFunction, BoundNumpifiedFunction
+from .numpify import NumpifiedFunction, BoundNumpifiedFunction, ParameterProvider
 from .SmartFigure import current_figure
+from .NumericExpression import PlotView
+```
+
+### Removed exports (after transition)
+
+```python
+# These are replaced:
+# LiveNumericExpression  -> PlotView
+# DeadBoundNumericExpression  -> BoundNumpifiedFunction
+# DeadUnboundNumericExpression  -> NumpifiedFunction
 ```
 
 ### Unchanged exports
@@ -526,7 +646,7 @@ All existing `plot`, `params`, `parameter`, `render`, etc. remain.
 
 ---
 
-## 8. Architectural Critique
+## 9. Architectural Critique
 
 ### Strengths of this design
 
@@ -538,49 +658,58 @@ All existing `plot`, `params`, `parameter`, `render`, etc. remain.
    context (batch evaluation, testing, serialization) because it carries its
    own metadata.
 
-3. **Smooth migration** — `NumpifiedFunction.__call__` is drop-in compatible
-   with the current bare callable, so callers can be updated incrementally.
+3. **Clean decoupling via protocol** — `ParameterProvider` is a duck-typed
+   protocol.  `SmartFigure` satisfies it, but so could any mock or alternative
+   parameter source.  `numpify.py` never imports `SmartFigure` except lazily
+   for the `bind(None)` context-stack path.
+
+4. **Explicit data flow** — `bind()` accepts only `dict[Symbol, value]` for
+   dead binding.  No hidden coercion of `ParameterSnapshot`.  The caller writes
+   `snapshot.values()` — one explicit step.
+
+5. **Immediate fusion** — no transitional period with two parallel binding
+   hierarchies.  `NumericExpression` classes are replaced in one pass.
 
 ### Weaknesses / risks
 
 1. **Implicit context (`bind(None)`)** — global mutable state via
-   `_FIGURE_STACK` is a known footgun.  In async or multi-threaded scenarios
-   it will break.  The toolkit is currently single-threaded Jupyter, but this
-   should be flagged with a "not thread-safe" note.
+   `_FIGURE_STACK` is not thread-safe.  This is acceptable: the toolkit targets
+   single-threaded Jupyter notebooks, and implicit context is essential for
+   exploratory math to feel natural.  Document the thread-safety limitation.
 
-2. **Live binding holds a strong reference** to the `SmartFigure`.  If a
-   `BoundNumpifiedFunction` outlives the figure (stored in a variable after the
-   figure is closed), it silently reads stale widget values or crashes.
-   Consider a `weakref` to the figure with a clear error on access-after-close.
+2. **Live binding holds a strong reference** to the provider.  If a
+   `BoundNumpifiedFunction` outlives the figure, it silently reads stale widget
+   values or crashes.  Consider a `weakref` to the provider with a clear error
+   on access-after-close — but only if this becomes a real problem.  For now
+   the Jupyter lifecycle makes this unlikely.
 
-3. **Cache wrapping overhead** — `numpify_cached` LRU cache will now store
-   `NumpifiedFunction` objects.  Since the wrapper is lightweight (`__slots__`,
-   no copies), overhead is negligible.  But if the same expression is compiled
-   with different `f_numpy` bindings, the cache stores separate
-   `NumpifiedFunction` instances that share no state — same as today.
+3. **`Mapping.values()` override** in `ParameterSnapshot` — overriding
+   inherited `.values()` with a different return type may confuse type checkers
+   and users who expect `Mapping` semantics.  If this is problematic, use
+   `.param_values()` instead.  But `.values()` is the most intuitive name for
+   the 99% use case.
 
-4. **`isinstance` breakage** — any code doing
-   `isinstance(fn, types.FunctionType)` will fail.  The fix is to check
-   `callable(fn)` instead.  Audit `SmartPlot`, tests, and notebooks.
-
-5. **Partial binding ambiguity** — `BoundNumpifiedFunction` supports partial
+4. **Partial binding ambiguity** — `BoundNumpifiedFunction` supports partial
    binding (some args bound, some free).  The caller must know which positional
-   slots are free.  This is fine for the `[var, *params]` convention but could
-   confuse users who bind an arbitrary subset.  Document the convention:
-   *leading args are free, trailing args are bound*.
+   slots are free.  Document the convention: *leading args are free (independent
+   variable), trailing args are bound (parameters)*.
 
-6. **Two binding APIs** — users can now bind via
-   `numpified.bind(snapshot)` *or* via the `NumericExpression` wrappers.
-   During migration both paths exist.  Clear deprecation warnings on the old
-   path will prevent confusion.
+5. **`PlotView` vs `BoundNumpifiedFunction`** — there are now two "live
+   callable" types.  `BoundNumpifiedFunction` is the general-purpose one;
+   `PlotView` is the plot-specific wrapper that exposes `.expr` and `.args` for
+   convenience.  The distinction is meaningful (plot view = specific curve,
+   bound function = any binding), but users may wonder why both exist.
+   `PlotView` should be documented as "what `SmartPlot.numeric_expression`
+   returns" rather than a standalone public concept.
 
 ### Recommended implementation order
 
-1. Add `NumpifiedFunction` and `BoundNumpifiedFunction` to `numpify.py`.
-2. Change `numpify()` return to `NumpifiedFunction`.
-3. Add `current_figure()` public helper to `SmartFigure.py`.
-4. Update `SmartPlot.set_func()` and `_eval_numeric_live()`.
-5. Migrate `NumericExpression.py` to delegate to new classes.
-6. Update `__init__.py` exports.
-7. Update tests.
-8. Audit notebooks for `_generated_source` / `isinstance` usage.
+1. Rename `ParameterSnapshot.values_only()` -> `.values()`.  Update tests.
+2. Add `ParameterProvider` protocol, `NumpifiedFunction`, and
+   `BoundNumpifiedFunction` to `numpify.py`.
+3. Change `numpify()` return to `NumpifiedFunction`.
+4. Add `current_figure()` public helper to `SmartFigure.py`.
+5. Update `SmartPlot`: replace `_core`/`_parameters`/`_func` with `_numpified`.
+6. Rewrite `NumericExpression.py`: delete old classes, add `PlotView`.
+7. Update `__init__.py` exports.
+8. Update tests.
