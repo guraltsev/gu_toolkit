@@ -1,3 +1,9 @@
+"""Parameter-reference protocol and default widget-backed implementation.
+
+This module defines the discoverable contract used by SmartFigure parameter APIs
+and a proxy implementation that wraps concrete controls.
+"""
+
 from __future__ import annotations
 
 from typing import Any, Callable, Protocol, Sequence, runtime_checkable

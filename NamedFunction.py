@@ -125,9 +125,11 @@ class _NamedFunctionSpec(Protocol):
     """
 
     def symbolic(self, *args: sp.Basic) -> _SymbolicReturn:
+        """Return the symbolic expansion/definition for the function call."""
         ...
 
     def numeric(self, *args: object) -> object:
+        """Return a numeric implementation used by ``numpify`` bindings."""
         ...
 
 
@@ -143,6 +145,7 @@ class _SignedFunctionMeta(type(sp.Function)):
 
     @property
     def __signature__(cls) -> Optional[inspect.Signature]:  # noqa: D401
+        """Expose generated call signatures for ``inspect.signature``."""
         # Invariant: we only set `_custom_signature` on classes created by this module.
         return cast(Optional[inspect.Signature], getattr(cls, "_custom_signature", None))
 

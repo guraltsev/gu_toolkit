@@ -673,6 +673,7 @@ class PlotlyPane:
         min_delta_px: int = 2,
         debug_js: bool = False,
     ):
+        """Initialize a pane that keeps Plotly sized to its widget container."""
         # Anywidget driver: performs the actual DOM sizing + Plotly resize calls.
         self.driver = PlotlyResizeDriver(
             autorange_mode=autorange_mode,

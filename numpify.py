@@ -465,13 +465,16 @@ class _FrozenFNumPy:
     __slots__ = ("mapping", "_key")
 
     def __init__(self, mapping: Optional[Mapping[_BindingKey, Any]]):
+        """Copy and normalize ``f_numpy`` mapping for cache-key construction."""
         self.mapping: dict[_BindingKey, Any] = {} if mapping is None else dict(mapping)
         self._key = _freeze_f_numpy_key(self.mapping)
 
     def __hash__(self) -> int:  # pragma: no cover
+        """Return hash of the frozen normalized mapping key."""
         return hash(self._key)
 
     def __eq__(self, other: object) -> bool:  # pragma: no cover
+        """Compare two frozen wrappers by their normalized binding keys."""
         return isinstance(other, _FrozenFNumPy) and self._key == other._key
 
 
@@ -483,6 +486,7 @@ def _numpify_cached_impl(
     vectorize: bool,
     expand_definition: bool,
 ) -> Callable[..., Any]:
+    """Compile an expression on cache misses for :func:`numpify_cached`."""
     # NOTE: This function body only runs on cache *misses*.
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
