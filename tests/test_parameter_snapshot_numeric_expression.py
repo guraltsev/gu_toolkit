@@ -43,6 +43,10 @@ def test_snapshot_entry_immutability() -> None:
     entry["value"] = 99
     assert snap[a]["value"] != 99
 
+    capabilities = snap[a]["capabilities"]
+    capabilities.append("mutated")
+    assert "mutated" not in snap[a]["capabilities"]
+
 
 def test_bind_missing_keys_and_extra_keys() -> None:
     x, a, b, extra = sp.symbols("x a b extra")

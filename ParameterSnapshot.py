@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
+from copy import deepcopy
 from types import MappingProxyType
 from typing import Any, Dict
 
@@ -13,12 +14,12 @@ class ParameterSnapshot(Mapping[Symbol, Mapping[str, Any]]):
     def __init__(self, entries: Mapping[Symbol, Mapping[str, Any]]) -> None:
         # Preserve insertion order from source mapping while copying content.
         self._entries: Dict[Symbol, Dict[str, Any]] = {
-            symbol: dict(entry) for symbol, entry in entries.items()
+            symbol: deepcopy(dict(entry)) for symbol, entry in entries.items()
         }
 
     def __getitem__(self, key: Symbol) -> Mapping[str, Any]:
         # Return a read-only mapping so callers cannot mutate snapshot state.
-        return MappingProxyType(dict(self._entries[key]))
+        return MappingProxyType(deepcopy(self._entries[key]))
 
     def __iter__(self) -> Iterator[Symbol]:
         return iter(self._entries)

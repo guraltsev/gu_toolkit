@@ -452,6 +452,7 @@ class ProxyParamRef:
             "value",
             "observe",
             "reset",
+            "capabilities",
         }
         optional = []
         for name in ("default_value", "min", "max", "step"):
