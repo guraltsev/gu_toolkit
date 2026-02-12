@@ -102,6 +102,7 @@ Notes:
 
 import re
 import time
+import threading
 import warnings
 import logging
 from contextlib import ExitStack, contextmanager
@@ -2123,6 +2124,7 @@ class SmartFigure:
         "_layout", "_params", "_info", "_figure", "_pane", "plots",
         "_x_range", "_y_range", "_sampling_points", "_debug",
         "_last_relayout", "_render_info_last_log_t", "_render_debug_last_log_t",
+        "_relayout_pending", "_relayout_timer", "_relayout_lock",
         "_has_been_displayed", "_print_capture"
     ]
 
@@ -2247,9 +2249,12 @@ class SmartFigure:
         self.y_range = y_range
         
         # 5. Bind Events
-        self._last_relayout = time.monotonic()
+        self._last_relayout = time.monotonic() - 0.5
         self._render_info_last_log_t = 0.0
         self._render_debug_last_log_t = 0.0
+        self._relayout_pending = False
+        self._relayout_timer = None
+        self._relayout_lock = threading.Lock()
         self._figure.layout.on_change(self._throttled_relayout, "xaxis.range", "yaxis.range")
 
     # --- Properties ---
@@ -2951,7 +2956,12 @@ class SmartFigure:
     # --- Internal / Plumbing ---
 
     def _throttled_relayout(self, *args: Any) -> None:
-        """Handle plot relayout events with throttling.
+        """Handle relayout events with leading+trailing throttling.
+
+        The first event outside the throttle window renders immediately
+        (leading edge). Events that arrive inside the 0.5s window are
+        coalesced and schedule at most one deferred render at the end of
+        that window (trailing edge).
 
         Parameters
         ----------
@@ -2963,9 +2973,42 @@ class SmartFigure:
         None
         """
         now = time.monotonic()
-        if now - self._last_relayout > 0.5:
-            self._last_relayout = now
+        should_render_now = False
+
+        with self._relayout_lock:
+            elapsed = now - self._last_relayout
+            if elapsed > 0.5:
+                self._last_relayout = now
+                self._relayout_pending = False
+
+                if self._relayout_timer is not None:
+                    self._relayout_timer.cancel()
+                    self._relayout_timer = None
+
+                should_render_now = True
+            else:
+                self._relayout_pending = True
+                if self._relayout_timer is None:
+                    remaining = max(0.0, 0.5 - elapsed)
+                    timer = threading.Timer(remaining, self._trailing_relayout)
+                    timer.daemon = True
+                    self._relayout_timer = timer
+                    timer.start()
+
+        if should_render_now:
             self.render(reason="relayout")
+
+    def _trailing_relayout(self) -> None:
+        """Run one deferred relayout render when burst activity occurred."""
+        with self._relayout_lock:
+            self._relayout_timer = None
+            if not self._relayout_pending:
+                return
+
+            self._relayout_pending = False
+            self._last_relayout = time.monotonic()
+
+        self.render(reason="relayout")
 
     def _log_render(self, reason: str, trigger: Any) -> None:
         """Log render information with rate-limiting.

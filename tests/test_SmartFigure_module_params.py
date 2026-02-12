@@ -17,6 +17,33 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT.parent))
 
 from gu_toolkit import SmartFigure, params, parameter, plot_style_options  # noqa: E402
+import gu_toolkit.SmartFigure as smartfigure_module  # noqa: E402
+
+
+class _FakeClock:
+    def __init__(self, start: float = 0.0) -> None:
+        self.t = start
+
+    def monotonic(self) -> float:
+        return self.t
+
+
+class _FakeTimer:
+    created: list["_FakeTimer"] = []
+
+    def __init__(self, delay: float, callback):
+        self.delay = delay
+        self.callback = callback
+        self.started = False
+        self.canceled = False
+        self.daemon = False
+        _FakeTimer.created.append(self)
+
+    def start(self) -> None:
+        self.started = True
+
+    def cancel(self) -> None:
+        self.canceled = True
 
 
 def _assert_raises(exc_type, fn, *args, **kwargs):
@@ -90,6 +117,77 @@ def test_plot_style_options_are_discoverable() -> None:
     assert fig_options == options
 
 
+def test_relayout_throttle_first_event_renders_immediately() -> None:
+    clock = _FakeClock(start=100.0)
+    original_monotonic = smartfigure_module.time.monotonic
+    original_timer = smartfigure_module.threading.Timer
+    original_render = SmartFigure.render
+    calls = []
+
+    def _render_spy(self, reason="manual", trigger=None):
+        calls.append(reason)
+
+    try:
+        smartfigure_module.time.monotonic = clock.monotonic
+        _FakeTimer.created.clear()
+        smartfigure_module.threading.Timer = _FakeTimer
+        SmartFigure.render = _render_spy
+
+        fig = SmartFigure()
+        fig._throttled_relayout()
+
+        assert calls == ["relayout"]
+        assert len(_FakeTimer.created) == 0
+    finally:
+        smartfigure_module.time.monotonic = original_monotonic
+        smartfigure_module.threading.Timer = original_timer
+        SmartFigure.render = original_render
+
+
+def test_relayout_throttle_burst_coalesces_and_trails_once() -> None:
+    clock = _FakeClock(start=200.0)
+    original_monotonic = smartfigure_module.time.monotonic
+    original_timer = smartfigure_module.threading.Timer
+    original_render = SmartFigure.render
+    calls = []
+
+    def _render_spy(self, reason="manual", trigger=None):
+        calls.append(reason)
+
+    try:
+        smartfigure_module.time.monotonic = clock.monotonic
+        _FakeTimer.created.clear()
+        smartfigure_module.threading.Timer = _FakeTimer
+        SmartFigure.render = _render_spy
+
+        fig = SmartFigure()
+        fig._throttled_relayout()  # leading render
+        assert calls == ["relayout"]
+
+        clock.t += 0.1
+        fig._throttled_relayout()  # burst starts -> schedule trailing
+        clock.t += 0.1
+        fig._throttled_relayout()  # still in burst -> no extra timer
+        clock.t += 0.1
+        fig._throttled_relayout()  # still in burst -> no extra timer
+
+        assert calls == ["relayout"]
+        assert len(_FakeTimer.created) == 1
+        assert _FakeTimer.created[0].started
+
+        # Simulate timer firing at the trailing edge.
+        clock.t += _FakeTimer.created[0].delay
+        _FakeTimer.created[0].callback()
+
+        assert calls == ["relayout", "relayout"]
+        assert not fig._relayout_pending
+        assert fig._relayout_timer is None
+    finally:
+        smartfigure_module.time.monotonic = original_monotonic
+        smartfigure_module.threading.Timer = original_timer
+        SmartFigure.render = original_render
+
+
 def main() -> None:
     tests = [
         test_params_proxy_context_access,
@@ -99,6 +197,8 @@ def main() -> None:
         test_params_setitem_sugar,
         test_plot_opacity_shortcut_and_validation,
         test_plot_style_options_are_discoverable,
+        test_relayout_throttle_first_event_renders_immediately,
+        test_relayout_throttle_burst_coalesces_and_trails_once,
     ]
     for test in tests:
         test()
