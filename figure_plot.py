@@ -12,7 +12,7 @@ import sympy as sp
 from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
-from .NumericExpression import PlotView
+from .NumericExpression import LivePlotNumericExpression, LivePlotSymbolicExpression
 from .InputConvert import InputConvert
 from .figure_context import FIGURE_DEFAULT, _is_figure_default
 from .numpify import NumpifiedFunction, numpify_cached
@@ -161,9 +161,9 @@ class Plot:
         self._func = func
 
     @property
-    def symbolic_expression(self) -> Expr:
-        """Return the symbolic expression used by this plot."""
-        return self._func
+    def symbolic_expression(self) -> LivePlotSymbolicExpression:
+        """Return a live symbolic-expression view for this plot."""
+        return LivePlotSymbolicExpression(_plot_manager=self)
 
     @property
     def parameters(self) -> tuple[Symbol, ...]:
@@ -176,9 +176,9 @@ class Plot:
         return self._numpified
 
     @property
-    def numeric_expression(self) -> PlotView:
-        """Return a live numeric evaluator proxy for this plot."""
-        return PlotView(_numpified=self._numpified, _provider=self._smart_figure)
+    def numeric_expression(self) -> LivePlotNumericExpression:
+        """Return a live numeric-expression view for this plot."""
+        return LivePlotNumericExpression(_plot_manager=self)
 
     @property
     def label(self) -> str:

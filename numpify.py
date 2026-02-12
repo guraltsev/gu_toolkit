@@ -105,7 +105,6 @@ __all__ = [
     "UNFREEZE",
     "ParameterContext",
     "NumpifiedFunction",
-    "BoundNumpifiedFunction",
 ]
 
 
@@ -152,9 +151,20 @@ def _get_parameter_mapping(ctx: Any) -> Mapping[sp.Symbol, Any] | None:
 
 
 class NumpifiedFunction:
-    """Compiled SymPy->NumPy callable with expression metadata."""
+    """Compiled SymPy->NumPy callable with optional frozen/dynamic bindings."""
 
-    __slots__ = ("_fn", "symbolic", "expr", "call_signature", "source", "name_for_symbol", "symbol_for_name")
+    __slots__ = (
+        "_fn",
+        "symbolic",
+        "expr",
+        "call_signature",
+        "source",
+        "name_for_symbol",
+        "symbol_for_name",
+        "_parameter_context",
+        "_frozen",
+        "_dynamic",
+    )
 
     def __init__(
         self,
@@ -162,6 +172,10 @@ class NumpifiedFunction:
         symbolic: sp.Basic,
         call_signature: tuple[tuple[sp.Symbol, str], ...],
         source: str,
+        *,
+        parameter_context: ParameterContext | None = None,
+        frozen: Mapping[sp.Symbol, Any] | None = None,
+        dynamic: Iterable[sp.Symbol] | None = None,
     ) -> None:
         self._fn = fn
         self.symbolic = symbolic
@@ -170,66 +184,16 @@ class NumpifiedFunction:
         self.source = source
         self.name_for_symbol = {sym: name for sym, name in call_signature}
         self.symbol_for_name = {name: sym for sym, name in call_signature}
-
-    def __call__(self, *positional_args: Any) -> Any:
-        """Evaluate using positional arguments in compilation order."""
-        return self._fn(*positional_args)
-
-    @property
-    def arg_names(self) -> tuple[str, ...]:
-        """Backward-compatible alias for ``parameter_names``."""
-        return self.parameter_names
-
-    @property
-    def parameters(self) -> tuple[sp.Symbol, ...]:
-        return tuple(sym for sym, _ in self.call_signature)
-
-    @property
-    def args(self) -> tuple[sp.Symbol, ...]:
-        return self.parameters
-
-    @property
-    def parameter_names(self) -> tuple[str, ...]:
-        return tuple(name for _, name in self.call_signature)
-
-    def freeze(self, bindings: Mapping[sp.Symbol | str, Any] | Iterable[tuple[sp.Symbol | str, Any]] | None = None, /, **kwargs: Any) -> "BoundNumpifiedFunction":
-        return BoundNumpifiedFunction(parent=self).freeze(bindings, **kwargs)
-
-    def unfreeze(self, *keys: sp.Symbol | str) -> "BoundNumpifiedFunction":
-        return BoundNumpifiedFunction(parent=self).unfreeze(*keys)
-
-    def set_parameter_context(self, ctx: ParameterContext) -> "BoundNumpifiedFunction":
-        return BoundNumpifiedFunction(parent=self, parameter_context=ctx)
-
-    def remove_parameter_context(self) -> "BoundNumpifiedFunction":
-        return BoundNumpifiedFunction(parent=self, parameter_context=None)
-
-    def __repr__(self) -> str:
-        args_str = ", ".join(name for _, name in self.call_signature)
-        return f"NumpifiedFunction({self.symbolic!r}, args=({args_str}))"
-
-
-class BoundNumpifiedFunction:
-    """A ``NumpifiedFunction`` with explicit frozen/dynamic bindings."""
-
-    __slots__ = ("parent", "_parameter_context", "_frozen", "_dynamic")
-
-    def __init__(
-        self,
-        parent: NumpifiedFunction,
-        *,
-        parameter_context: ParameterContext | None = None,
-        frozen: Mapping[sp.Symbol, Any] | None = None,
-        dynamic: Iterable[sp.Symbol] | None = None,
-    ) -> None:
-        self.parent = parent
         self._parameter_context = parameter_context
         self._frozen: dict[sp.Symbol, Any] = dict(frozen or {})
         self._dynamic: set[sp.Symbol] = set(dynamic or ())
 
-    def _clone(self) -> "BoundNumpifiedFunction":
-        return BoundNumpifiedFunction(
-            parent=self.parent,
+    def _clone(self) -> "NumpifiedFunction":
+        return NumpifiedFunction(
+            fn=self._fn,
+            symbolic=self.symbolic,
+            call_signature=self.call_signature,
+            source=self.source,
             parameter_context=self._parameter_context,
             frozen=self._frozen,
             dynamic=self._dynamic,
@@ -237,13 +201,13 @@ class BoundNumpifiedFunction:
 
     def _resolve_key(self, key: sp.Symbol | str) -> sp.Symbol:
         if isinstance(key, sp.Symbol):
-            if key not in self.parent.name_for_symbol:
+            if key not in self.name_for_symbol:
                 raise KeyError(f"Unknown symbol key: {key!r}")
             return key
         if isinstance(key, str):
-            if key not in self.parent.symbol_for_name:
+            if key not in self.symbol_for_name:
                 raise KeyError(f"Unknown parameter name: {key!r}")
-            return self.parent.symbol_for_name[key]
+            return self.symbol_for_name[key]
         raise TypeError(f"Parameter key must be Symbol or str, got {type(key).__name__}")
 
     def _normalize_bindings(
@@ -264,51 +228,21 @@ class BoundNumpifiedFunction:
         for key, value in items:
             sym = self._resolve_key(key)
             if sym in resolved:
-                param_name = self.parent.name_for_symbol[sym]
+                param_name = self.name_for_symbol[sym]
                 raise ValueError(f"Duplicate binding for symbol {sym!r} (parameter '{param_name}')")
             resolved[sym] = value
         return resolved
 
-    def freeze(
-        self,
-        bindings: Mapping[sp.Symbol | str, Any] | Iterable[tuple[sp.Symbol | str, Any]] | None = None,
-        /,
-        **kwargs: Any,
-    ) -> "BoundNumpifiedFunction":
-        updates = self._normalize_bindings(bindings, kwargs)
-        out = self._clone()
-        for sym, value in updates.items():
-            if value is DYNAMIC_PARAMETER:
-                out._dynamic.add(sym)
-                out._frozen.pop(sym, None)
-            elif value is UNFREEZE:
-                out._dynamic.discard(sym)
-                out._frozen.pop(sym, None)
-            else:
-                out._frozen[sym] = value
-                out._dynamic.discard(sym)
-        return out
+    def __call__(self, *positional_args: Any) -> Any:
+        if not self._frozen and not self._dynamic:
+            return self._fn(*positional_args)
 
-    def unfreeze(self, *keys: sp.Symbol | str) -> "BoundNumpifiedFunction":
-        return self.freeze({k: UNFREEZE for k in keys})
-
-    def set_parameter_context(self, ctx: ParameterContext) -> "BoundNumpifiedFunction":
-        out = self._clone()
-        out._parameter_context = ctx
-        return out
-
-    def remove_parameter_context(self) -> "BoundNumpifiedFunction":
-        out = self._clone()
-        out._parameter_context = None
-        return out
-
-    def __call__(self, *free_args: Any) -> Any:
         full_values: list[Any] = []
         free_idx = 0
         missing: list[str] = []
 
-        for sym in self.parent.parameters:
-            param_name = self.parent.name_for_symbol[sym]
+        for sym in self.parameters:
+            param_name = self.name_for_symbol[sym]
             if sym in self._frozen:
                 full_values.append(self._frozen[sym])
                 continue
@@ -326,76 +260,88 @@ class BoundNumpifiedFunction:
                 full_values.append(container[sym].value)
                 continue
 
-            if free_idx >= len(free_args):
+            if free_idx >= len(positional_args):
                 missing.append(f"{sym!r} ('{param_name}')")
             else:
-                full_values.append(free_args[free_idx])
+                full_values.append(positional_args[free_idx])
                 free_idx += 1
 
         if missing:
             raise TypeError("Missing positional argument(s): " + ", ".join(missing))
-        if free_idx != len(free_args):
+        if free_idx != len(positional_args):
             raise TypeError(
-                f"Too many positional arguments: expected {free_idx}, got {len(free_args)}"
+                f"Too many positional arguments: expected {free_idx}, got {len(positional_args)}"
             )
 
-        return self.parent._fn(*full_values)
-
-    def unbind(self) -> NumpifiedFunction:
-        return self.parent
+        return self._fn(*full_values)
 
     @property
-    def free_parameters(self) -> tuple[sp.Symbol, ...]:
-        return tuple(
-            sym
-            for sym in self.parent.parameters
-            if sym not in self._frozen and sym not in self._dynamic
+    def arg_names(self) -> tuple[str, ...]:
+        return self.parameter_names
+
+    @property
+    def parameters(self) -> tuple[sp.Symbol, ...]:
+        return tuple(sym for sym, _ in self.call_signature)
+
+    @property
+    def args(self) -> tuple[sp.Symbol, ...]:
+        return self.parameters
+
+    @property
+    def parameter_names(self) -> tuple[str, ...]:
+        return tuple(name for _, name in self.call_signature)
+
+    def freeze(self, bindings: Mapping[sp.Symbol | str, Any] | Iterable[tuple[sp.Symbol | str, Any]] | None = None, /, **kwargs: Any) -> "NumpifiedFunction":
+        updates = self._normalize_bindings(bindings, kwargs)
+        out = self._clone()
+        for sym, value in updates.items():
+            if value is DYNAMIC_PARAMETER:
+                out._dynamic.add(sym)
+                out._frozen.pop(sym, None)
+            elif value is UNFREEZE:
+                out._dynamic.discard(sym)
+                out._frozen.pop(sym, None)
+            else:
+                out._frozen[sym] = value
+                out._dynamic.discard(sym)
+        return out
+
+    def unfreeze(self, *keys: sp.Symbol | str) -> "NumpifiedFunction":
+        return self.freeze({k: UNFREEZE for k in keys})
+
+    def set_parameter_context(self, ctx: ParameterContext) -> "NumpifiedFunction":
+        out = self._clone()
+        out._parameter_context = ctx
+        return out
+
+    def remove_parameter_context(self) -> "NumpifiedFunction":
+        out = self._clone()
+        out._parameter_context = None
+        return out
+
+    def unbind(self) -> "NumpifiedFunction":
+        return NumpifiedFunction(
+            fn=self._fn,
+            symbolic=self.symbolic,
+            call_signature=self.call_signature,
+            source=self.source,
         )
 
     @property
+    def free_parameters(self) -> tuple[sp.Symbol, ...]:
+        return tuple(sym for sym in self.parameters if sym not in self._frozen and sym not in self._dynamic)
+
+    @property
     def free_call_signature(self) -> tuple[tuple[sp.Symbol, str], ...]:
-        return tuple((sym, self.parent.name_for_symbol[sym]) for sym in self.free_parameters)
+        return tuple((sym, self.name_for_symbol[sym]) for sym in self.free_parameters)
 
     @property
     def is_live(self) -> bool:
         return self._parameter_context is not None
 
     def __repr__(self) -> str:
-        mode = "live" if self.is_live else "dead"
-        return f"BoundNumpifiedFunction({self.parent!r}, mode={mode})"
-
-
-def numpify(
-    expr: Any,
-    *,
-    args: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]] = None,
-    f_numpy: Optional[Mapping[_BindingKey, Any]] = None,
-    vectorize: bool = True,
-    expand_definition: bool = True,
-    cache: bool = True,
-) -> NumpifiedFunction:
-    """Compile a SymPy expression into a NumPy-evaluable function.
-
-    By default this uses the same LRU-backed cache as :func:`numpify_cached`.
-    Pass ``cache=False`` to force a fresh compile.
-    """
-    if cache:
-        return numpify_cached(
-            expr,
-            args=args,
-            f_numpy=f_numpy,
-            vectorize=vectorize,
-            expand_definition=expand_definition,
-        )
-    return _numpify_uncached(
-        expr,
-        args=args,
-        f_numpy=f_numpy,
-        vectorize=vectorize,
-        expand_definition=expand_definition,
-    )
-
-
+        args_str = ", ".join(name for _, name in self.call_signature)
+        return f"NumpifiedFunction({self.symbolic!r}, args=({args_str}))"
 
 
 def _is_valid_parameter_name(name: str) -> bool:

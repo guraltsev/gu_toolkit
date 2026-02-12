@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT.parent))
 
 from gu_toolkit import Figure  # noqa: E402
-from gu_toolkit.NumericExpression import PlotView  # noqa: E402
+from gu_toolkit.NumericExpression import LivePlotNumericExpression, LivePlotSymbolicExpression  # noqa: E402
 
 
 def _assert_raises(exc_type, fn, *args, **kwargs):
@@ -51,7 +51,7 @@ def test_freeze_partial_and_key_validation() -> None:
     x, a, b, extra = sp.symbols("x a b extra")
     fig = Figure()
     plot = fig.plot(x, a * x + b, parameters=[a, b], id="line")
-    assert isinstance(plot.numeric_expression, PlotView)
+    assert isinstance(plot.numeric_expression, LivePlotNumericExpression)
 
     bound_partial = plot.numeric_expression.freeze({a: 2.0})
     y_partial = np.asarray(bound_partial(np.array([1.0, 2.0]), 3.0))
@@ -65,13 +65,14 @@ def test_freeze_partial_and_key_validation() -> None:
     assert np.allclose(y_named, np.array([5.0, 7.0]))
 
 
-def test_unbind_requires_bind_before_call() -> None:
+def test_snapshot_numeric_expression() -> None:
     x, a = sp.symbols("x a")
     fig = Figure()
     plot = fig.plot(x, a * x, parameters=[a], id="ax")
 
-    unbound = plot.numeric_expression.unbind()
-    y = np.asarray(unbound(np.array([0.0, 1.0]), 2.0))
+    fig.parameters[a].value = 2.0
+    snap = plot.numeric_expression.snapshot()
+    y = np.asarray(snap(np.array([0.0, 1.0])))
     assert np.allclose(y, np.array([0.0, 2.0]))
 
 
@@ -95,12 +96,22 @@ def test_live_vs_snapshot_bound() -> None:
     assert np.allclose(y_live_2, np.array([4.0, 8.0, 12.0]))
 
 
+def test_snapshot_symbolic_expression() -> None:
+    x, a = sp.symbols("x a")
+    fig = Figure()
+    plot = fig.plot(x, a * x, parameters=[a], id="sx")
+    live_sym = plot.symbolic_expression
+    assert isinstance(live_sym, LivePlotSymbolicExpression)
+    assert live_sym.snapshot() == a * x
+
+
 def main() -> None:
     tests = [
         test_snapshot_order_and_values,
         test_snapshot_entry_immutability,
         test_freeze_partial_and_key_validation,
-        test_unbind_requires_bind_before_call,
+        test_snapshot_numeric_expression,
+        test_snapshot_symbolic_expression,
         test_live_vs_snapshot_bound,
     ]
     for test in tests:

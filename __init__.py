@@ -13,7 +13,6 @@ for advanced integrations.
 from .prelude import *
 from .NamedFunction import NamedFunction as NamedFunction
 from .numpify import (
-    BoundNumpifiedFunction,
     DYNAMIC_PARAMETER,
     NumpifiedFunction,
     ParameterContext,
@@ -48,4 +47,4 @@ from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 
 from .ParameterSnapshot import ParameterSnapshot
-from .NumericExpression import PlotView
+from .NumericExpression import LivePlotNumericExpression, LivePlotSymbolicExpression

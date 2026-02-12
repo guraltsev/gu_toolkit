@@ -283,7 +283,6 @@ def _load_numeric_bindings():
     try:
         from .numpify import (
             DYNAMIC_PARAMETER,
-            BoundNumpifiedFunction as _BoundNumpifiedFunction,
             NumpifiedFunction as _NumpifiedFunction,
             numpify_cached as _numpify_cached,
         )
@@ -291,13 +290,12 @@ def _load_numeric_bindings():
     except ImportError:
         from numpify import (
             DYNAMIC_PARAMETER,
-            BoundNumpifiedFunction as _BoundNumpifiedFunction,
             NumpifiedFunction as _NumpifiedFunction,
             numpify_cached as _numpify_cached,
         )
         from Figure import current_figure as _current_figure
 
-    return DYNAMIC_PARAMETER, _NumpifiedFunction, _BoundNumpifiedFunction, _numpify_cached, _current_figure
+    return DYNAMIC_PARAMETER, _NumpifiedFunction, _numpify_cached, _current_figure
 
 
 def _load_numpify_cached():
@@ -309,15 +307,14 @@ def _load_numpify_cached():
     return _numpify_cached
 
 
-def _resolve_numeric_callable(expr, x, binding, DYNAMIC_PARAMETER, _NumpifiedFunction, _BoundNumpifiedFunction, _numpify_cached, _current_figure):
+def _resolve_numeric_callable(expr, x, binding, DYNAMIC_PARAMETER, _NumpifiedFunction, _numpify_cached, _current_figure):
     """Build a numeric callable of one variable from supported symbolic/numeric inputs."""
-    if isinstance(expr, _BoundNumpifiedFunction):
-        return expr
-
     if isinstance(expr, _NumpifiedFunction):
         if not expr.args:
             raise TypeError("NIntegrate requires an x argument for numpified functions")
         if len(expr.args) == 1:
+            return expr
+        if len(expr.free_parameters) < len(expr.parameters):
             return expr
         if binding is None:
             return expr.set_parameter_context(_current_figure(required=True)).freeze({
@@ -389,8 +386,7 @@ def NIntegrate(expr, var_and_limits, binding=None):
 
         - a SymPy expression,
         - a :class:`numpify.NumpifiedFunction`,
-        - a :class:`numpify.BoundNumpifiedFunction`,
-        - or a plain numeric callable ``f(x)``.
+                - or a plain numeric callable ``f(x)``.
     var_and_limits:
         Tuple ``(x, a, b)`` where ``a``/``b`` are scalar bounds (including
         ``sympy.oo``/``-sympy.oo``). For plain numeric callables, ``x`` is
@@ -412,7 +408,7 @@ def NIntegrate(expr, var_and_limits, binding=None):
     except Exception as exc:  # pragma: no cover - defensive shape validation
         raise TypeError("NIntegrate expects limits as a tuple: (x, a, b)") from exc
 
-    DYNAMIC_PARAMETER, _NumpifiedFunction, _BoundNumpifiedFunction, _numpify_cached, _current_figure = _load_numeric_bindings()
+    DYNAMIC_PARAMETER, _NumpifiedFunction, _numpify_cached, _current_figure = _load_numeric_bindings()
 
     from scipy.integrate import quad
 
@@ -422,7 +418,6 @@ def NIntegrate(expr, var_and_limits, binding=None):
         binding,
         DYNAMIC_PARAMETER,
         _NumpifiedFunction,
-        _BoundNumpifiedFunction,
         _numpify_cached,
         _current_figure,
     )
@@ -468,7 +463,7 @@ def NReal_Fourier_Series(expr, var_and_limits, samples=4000, binding=None):
         raise ValueError("samples must be >= 2")
     sample_count = int(samples)
 
-    DYNAMIC_PARAMETER, _NumpifiedFunction, _BoundNumpifiedFunction, _numpify_cached, _current_figure = _load_numeric_bindings()
+    DYNAMIC_PARAMETER, _NumpifiedFunction, _numpify_cached, _current_figure = _load_numeric_bindings()
 
     from scipy.fft import rfft
 
@@ -484,7 +479,6 @@ def NReal_Fourier_Series(expr, var_and_limits, samples=4000, binding=None):
         binding,
         DYNAMIC_PARAMETER,
         _NumpifiedFunction,
-        _BoundNumpifiedFunction,
         _numpify_cached,
         _current_figure,
     )

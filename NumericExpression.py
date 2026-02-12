@@ -1,46 +1,51 @@
-"""Numeric-expression views built on top of numpified callables."""
+"""Live symbolic/numeric expression views backed by a Plot manager."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 import sympy as sp
-from sympy.core.symbol import Symbol
 
-from .numpify import DYNAMIC_PARAMETER, BoundNumpifiedFunction, NumpifiedFunction, ParameterContext
+from .numpify import DYNAMIC_PARAMETER, NumpifiedFunction
 
 if TYPE_CHECKING:
     import numpy as np
+    from .figure_plot import Plot
 
 
 @dataclass(frozen=True)
-class PlotView:
-    """Live view of a plot's numeric evaluation based on parameter context."""
+class LivePlotSymbolicExpression:
+    """Live symbolic expression view for a plot."""
 
-    _numpified: NumpifiedFunction
-    _provider: ParameterContext
+    _plot_manager: "Plot"
+
+    def __call__(self) -> sp.Basic:
+        return self._plot_manager._func
+
+    def snapshot(self) -> sp.Basic:
+        """Return dead symbolic snapshot."""
+        return self._plot_manager._func
+
+
+@dataclass(frozen=True)
+class LivePlotNumericExpression:
+    """Live numeric expression view for a plot."""
+
+    _plot_manager: "Plot"
 
     def __call__(self, x: "np.ndarray") -> "np.ndarray":
-        """Evaluate using current provider-backed parameter values."""
-        return self._numpified.set_parameter_context(self._provider).freeze({
-            sym: DYNAMIC_PARAMETER for sym in self._numpified.parameters[1:]
-        })(x)
+        compiled = self.snapshot()
+        return compiled(x)
 
-    def freeze(self, values: dict[Symbol, Any]) -> BoundNumpifiedFunction:
-        """Create a snapshot-frozen expression from explicit values."""
-        return self._numpified.freeze(values)
+    def snapshot(self) -> NumpifiedFunction:
+        """Return dead numeric snapshot as a frozen numpified function."""
+        numpified = self._plot_manager.numpified
+        ctx = self._plot_manager._smart_figure
+        return numpified.set_parameter_context(ctx).freeze(
+            {sym: DYNAMIC_PARAMETER for sym in numpified.parameters[1:]}
+        )
 
-    def unbind(self) -> NumpifiedFunction:
-        """Return the underlying unbound numpified function."""
-        return self._numpified
-
-    @property
-    def expr(self) -> sp.Basic:
-        """Return underlying symbolic expression."""
-        return self._numpified.expr
-
-    @property
-    def args(self) -> tuple[Symbol, ...]:
-        """Return ordered function argument symbols."""
-        return self._numpified.args
+    def freeze(self, values: dict[sp.Symbol | str, object]) -> NumpifiedFunction:
+        """Create a dead numeric expression with explicit frozen values."""
+        return self._plot_manager.numpified.freeze(values)

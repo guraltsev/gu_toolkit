@@ -124,7 +124,7 @@ from .Slider import FloatSlider
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .ParameterSnapshot import ParameterSnapshot
-from .NumericExpression import PlotView
+from .NumericExpression import LivePlotNumericExpression, LivePlotSymbolicExpression
 from .debouncing import QueuedDebouncer
 
 
