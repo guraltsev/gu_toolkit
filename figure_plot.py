@@ -154,7 +154,7 @@ class Plot:
         """
         parameters = list(parameters) 
         # Compile
-        self._numpified = numpify_cached(func, args=[var] + parameters)
+        self._numpified = numpify_cached(func, parameters=[var] + parameters)
         # Store
         self._var = var
         self._func = func

@@ -324,18 +324,18 @@ def _resolve_numeric_callable(expr, x, binding, DYNAMIC_PARAMETER, _NumpifiedFun
         extra_symbols = variables[1:]
         if extra_symbols:
             value_map = _resolve_parameter_values(extra_symbols, binding, _current_figure)
-            compiled = _numpify_cached(expr.expr, args=variables)
+            compiled = _numpify_cached(expr.expr, parameters=variables)
             return compiled.freeze(value_map)
-        return _numpify_cached(expr.expr, args=lead_symbol)
+        return _numpify_cached(expr.expr, parameters=lead_symbol)
 
     if isinstance(expr, sp.Basic):
         if not isinstance(x, sp.Symbol):
             raise TypeError(f"NIntegrate expects x to be a sympy Symbol for symbolic expressions, got {type(x)}")
         required_symbols = tuple(sorted((sp.sympify(expr).free_symbols - {x}), key=lambda s: s.name))
         if not required_symbols:
-            return _numpify_cached(expr, args=x)
+            return _numpify_cached(expr, parameters=x)
         value_map = _resolve_parameter_values(required_symbols, binding, _current_figure)
-        compiled = _numpify_cached(expr, args=(x, *required_symbols))
+        compiled = _numpify_cached(expr, parameters=(x, *required_symbols))
         return compiled.freeze(value_map)
 
     if callable(expr):
@@ -542,7 +542,7 @@ def play(expr, var_and_limits, loop=True):
     sample_count = max(2, int(np.ceil(duration * sample_rate)))
     t = np.linspace(start, stop, sample_count, endpoint=False, dtype=float)
 
-    fn = _numpify_cached(expr, args=x)
+    fn = _numpify_cached(expr, parameters=x)
     y = np.asarray(fn(t), dtype=float)
     if y.ndim == 0:
         y = np.full_like(t, float(y))

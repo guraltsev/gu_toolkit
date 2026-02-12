@@ -33,7 +33,7 @@ def test_identifier_mangling_and_collision() -> None:
     c1 = sp.Symbol("x", real=True)
     c2 = sp.Symbol("x", integer=True)
 
-    f = mod.numpify(a + b + c1 + c2, args=(a, b, c1, c2), cache=False)
+    f = mod.numpify(a + b + c1 + c2, parameters=(a, b, c1, c2), cache=False)
     assert f.parameter_names[0].startswith("lambda")
     assert all(name.isidentifier() for name in f.parameter_names)
     assert len(set(f.parameter_names)) == len(f.parameter_names)
@@ -44,7 +44,7 @@ def test_dynamic_parameter_context_and_unfreeze() -> None:
     mod = _import_module_from_path("numpify", Path("numpify.py"))
 
     x, a = sp.symbols("x a")
-    f = mod.numpify(a * x, args=(x, a), cache=False)
+    f = mod.numpify(a * x, parameters=(x, a), cache=False)
     ctx = _Ctx({a: 2.0})
     bound = f.set_parameter_context(ctx).freeze({a: mod.DYNAMIC_PARAMETER})
 
@@ -60,7 +60,7 @@ def test_dynamic_missing_context_errors() -> None:
     mod = _import_module_from_path("numpify", Path("numpify.py"))
 
     x, a = sp.symbols("x a")
-    f = mod.numpify(a * x, args=(x, a), cache=False).freeze({a: mod.DYNAMIC_PARAMETER})
+    f = mod.numpify(a * x, parameters=(x, a), cache=False).freeze({a: mod.DYNAMIC_PARAMETER})
 
     try:
         f(1.0)
