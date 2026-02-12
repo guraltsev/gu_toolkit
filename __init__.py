@@ -20,9 +20,7 @@ from .numpify import (
     numpify_cached,
 )
 from .Figure import Figure, FigureLayout, Plot
-from .SmartFigure import SmartFigure, SmartFigureLayout, SmartPlot
 from .Slider import FloatSlider
-from .SmartSlider import SmartFloatSlider
 from .Figure import (
     add_info_component,
     current_figure,

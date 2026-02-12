@@ -1,7 +1,6 @@
 """Canonical figure API names.
 
-This module exposes the non-"Smart" names for the interactive plotting stack
-while preserving full compatibility with the legacy ``SmartFigure`` module.
+This module exposes non-legacy names for the interactive plotting stack.
 """
 
 from .SmartFigure import (
@@ -10,10 +9,8 @@ from .SmartFigure import (
     OneShotOutput,
     ParameterManager,
     SmartFigure as Figure,
-    SmartFigure,
     SmartFigureLayout as FigureLayout,
     SmartPlot as Plot,
-    SmartPlot,
     add_info_component,
     current_figure,
     get_info_output,
@@ -42,8 +39,6 @@ __all__ = [
     "InfoPanelManager",
     "Plot",
     "Figure",
-    "SmartFigure",
-    "SmartPlot",
     "current_figure",
     "set_title",
     "get_title",

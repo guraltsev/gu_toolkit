@@ -1,7 +1,5 @@
 """Plot model exports."""
 
-from ..SmartFigure import SmartPlot
+from ..SmartFigure import SmartPlot as Plot
 
-Plot = SmartPlot
-
-__all__ = ["Plot", "SmartPlot"]
+__all__ = ["Plot"]

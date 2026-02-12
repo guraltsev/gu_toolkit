@@ -1,7 +1,5 @@
 """Layout-related exports for figure views."""
 
-from ..SmartFigure import SmartFigureLayout
+from ..SmartFigure import SmartFigureLayout as FigureLayout
 
-FigureLayout = SmartFigureLayout
-
-__all__ = ["FigureLayout", "SmartFigureLayout"]
+__all__ = ["FigureLayout"]

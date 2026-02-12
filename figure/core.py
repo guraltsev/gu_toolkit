@@ -1,7 +1,5 @@
 """Core Figure facade exports."""
 
-from ..SmartFigure import SmartFigure
+from ..SmartFigure import SmartFigure as Figure
 
-Figure = SmartFigure
-
-__all__ = ["Figure", "SmartFigure"]
+__all__ = ["Figure"]

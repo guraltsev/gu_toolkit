@@ -1,15 +1,14 @@
 """Figure subsystem public surface.
 
-Phase 2 structural split: this package provides focused module entry points for
-figure context, plotting, parameters, layout, and compatibility helpers while
-preserving the existing SmartFigure API.
+Phase 2 structural split: focused entry points for context, plotting,
+parameters, layout, and module-level helpers.
 """
 
 from .context import current_figure
-from .core import Figure, SmartFigure
-from .layout import FigureLayout, SmartFigureLayout
+from .core import Figure
+from .layout import FigureLayout
 from .parameters import ParameterManager
-from .plots import Plot, SmartPlot
+from .plots import Plot
 from .compat import (
     add_info_component,
     get_info_output,
@@ -32,11 +31,8 @@ from .compat import (
 
 __all__ = [
     "Figure",
-    "SmartFigure",
     "Plot",
-    "SmartPlot",
     "FigureLayout",
-    "SmartFigureLayout",
     "ParameterManager",
     "current_figure",
     "set_title",
