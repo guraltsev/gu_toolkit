@@ -1638,14 +1638,6 @@ class SmartPlot:
         """Return a live numeric evaluator proxy for this plot."""
         return PlotView(_numpified=self._numpified, _provider=self._smart_figure)
 
-    def _eval_numeric_live(self, x: np.ndarray) -> np.ndarray:
-        """Evaluate the numeric core against current figure parameter values."""
-        fig = self._smart_figure
-        args = [x]
-        for symbol in self._numpified.args[1:]:
-            args.append(fig.parameters[symbol].value)
-        return self._numpified(*args)
-
     @property
     def label(self) -> str:
         """Return the legend label for this plot.
