@@ -276,6 +276,37 @@ def _resolve_parameter_values(required_symbols, binding, current_figure_getter):
     return {sym: provider[sym].value for sym in required_symbols}
 
 
+
+
+def _load_numeric_bindings():
+    """Load numpify/current-figure helpers for package and standalone usage."""
+    try:
+        from .numpify import (
+            BoundNumpifiedFunction as _BoundNumpifiedFunction,
+            NumpifiedFunction as _NumpifiedFunction,
+            numpify_cached as _numpify_cached,
+        )
+        from .SmartFigure import current_figure as _current_figure
+    except ImportError:
+        from numpify import (
+            BoundNumpifiedFunction as _BoundNumpifiedFunction,
+            NumpifiedFunction as _NumpifiedFunction,
+            numpify_cached as _numpify_cached,
+        )
+        from SmartFigure import current_figure as _current_figure
+
+    return _NumpifiedFunction, _BoundNumpifiedFunction, _numpify_cached, _current_figure
+
+
+def _load_numpify_cached():
+    """Load ``numpify_cached`` for package and standalone usage."""
+    try:
+        from .numpify import numpify_cached as _numpify_cached
+    except ImportError:
+        from numpify import numpify_cached as _numpify_cached
+    return _numpify_cached
+
+
 def _resolve_numeric_callable(expr, x, binding, _NumpifiedFunction, _BoundNumpifiedFunction, _numpify_cached, _current_figure):
     """Build a numeric callable of one variable from supported symbolic/numeric inputs."""
     if isinstance(expr, _BoundNumpifiedFunction):
@@ -373,20 +404,7 @@ def NIntegrate(expr, var_and_limits, binding=None):
     except Exception as exc:  # pragma: no cover - defensive shape validation
         raise TypeError("NIntegrate expects limits as a tuple: (x, a, b)") from exc
 
-    try:
-        from .numpify import (
-            BoundNumpifiedFunction as _BoundNumpifiedFunction,
-            NumpifiedFunction as _NumpifiedFunction,
-            numpify_cached as _numpify_cached,
-        )
-        from .SmartFigure import current_figure as _current_figure
-    except ImportError:
-        from numpify import (
-            BoundNumpifiedFunction as _BoundNumpifiedFunction,
-            NumpifiedFunction as _NumpifiedFunction,
-            numpify_cached as _numpify_cached,
-        )
-        from SmartFigure import current_figure as _current_figure
+    _NumpifiedFunction, _BoundNumpifiedFunction, _numpify_cached, _current_figure = _load_numeric_bindings()
 
     from scipy.integrate import quad
 
@@ -441,20 +459,7 @@ def NReal_Fourier_Series(expr, var_and_limits, samples=4000, binding=None):
         raise ValueError("samples must be >= 2")
     sample_count = int(samples)
 
-    try:
-        from .numpify import (
-            BoundNumpifiedFunction as _BoundNumpifiedFunction,
-            NumpifiedFunction as _NumpifiedFunction,
-            numpify_cached as _numpify_cached,
-        )
-        from .SmartFigure import current_figure as _current_figure
-    except ImportError:
-        from numpify import (
-            BoundNumpifiedFunction as _BoundNumpifiedFunction,
-            NumpifiedFunction as _NumpifiedFunction,
-            numpify_cached as _numpify_cached,
-        )
-        from SmartFigure import current_figure as _current_figure
+    _NumpifiedFunction, _BoundNumpifiedFunction, _numpify_cached, _current_figure = _load_numeric_bindings()
 
     from scipy.fft import rfft
 
@@ -528,10 +533,7 @@ def play(expr, var_and_limits, loop=True):
     if not isinstance(x, sp.Symbol):
         raise TypeError(f"play expects x to be a sympy Symbol, got {type(x)}")
 
-    try:
-        from .numpify import numpify_cached as _numpify_cached
-    except ImportError:
-        from numpify import numpify_cached as _numpify_cached
+    _numpify_cached = _load_numpify_cached()
 
     import base64
     import io
