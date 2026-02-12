@@ -417,7 +417,6 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
         let clip = findClipAncestor(host);
 
         let last = { w: 0, h: 0 };
-        let timer = null;
         let follow1 = null;
         let follow2 = null;
 
@@ -483,25 +482,66 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
           return true;
         }
 
-        function clearTimers() {
-          if (timer) clearTimeout(timer);
+        function createQueuedDebouncer(callback, getExecuteEveryMs, dropOverflow) {
+          let queue = [];
+          let timer = null;
+
+          function runTick() {
+            timer = null;
+            if (!queue.length) return;
+
+            if (dropOverflow && queue.length > 1) {
+              queue = [queue[queue.length - 1]];
+            }
+
+            const next = queue.shift();
+            callback(next);
+
+            if (queue.length) {
+              timer = setTimeout(runTick, getExecuteEveryMs());
+            }
+          }
+
+          const enqueue = (eventPayload) => {
+            queue.push(eventPayload);
+            if (!timer) {
+              timer = setTimeout(runTick, getExecuteEveryMs());
+            }
+          };
+
+          enqueue.cancel = () => {
+            if (timer) clearTimeout(timer);
+            timer = null;
+            queue = [];
+          };
+
+          return enqueue;
+        }
+
+        function clearFollowups() {
           if (follow1) clearTimeout(follow1);
           if (follow2) clearTimeout(follow2);
-          timer = follow1 = follow2 = null;
+          follow1 = follow2 = null;
         }
 
         function schedule(reason) {
-          clearTimers();
+          clearFollowups();
           const wait = clampInt(model.get("debounce_ms"), 60);
           const t1 = clampInt(model.get("followup_ms_1"), 80);
           const t2 = clampInt(model.get("followup_ms_2"), 250);
 
-          timer = setTimeout(() => { doResize(reason); }, wait);
+          debouncedResize(reason);
 
           // Per-instance follow-ups: helps with JupyterLab sidebar transitions/animations.
-          follow1 = setTimeout(() => { doResize(reason + ":follow1"); }, wait + t1);
-          follow2 = setTimeout(() => { doResize(reason + ":follow2"); }, wait + t2);
+          follow1 = setTimeout(() => { debouncedResize(reason + ":follow1"); }, wait + t1);
+          follow2 = setTimeout(() => { debouncedResize(reason + ":follow2"); }, wait + t2);
         }
+
+        const debouncedResize = createQueuedDebouncer(
+          (reason) => { doResize(reason); },
+          () => clampInt(model.get("debounce_ms"), 60),
+          true,
+        );
 
         // Observe host size changes.
         roHost = new ResizeObserver(() => schedule("ResizeObserver:host"));
@@ -539,7 +579,8 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
 
         // Cleanup when widget is disposed.
         return () => {
-          try { clearTimers(); } catch (e) {}
+          try { clearFollowups(); } catch (e) {}
+          try { debouncedResize.cancel(); } catch (e) {}
           try { if (roHost) roHost.disconnect(); } catch (e) {}
           try { if (roClip) roClip.disconnect(); } catch (e) {}
           try { if (mo) mo.disconnect(); } catch (e) {}
