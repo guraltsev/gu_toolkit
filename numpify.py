@@ -152,7 +152,7 @@ class NumpifiedFunction:
     ) -> "BoundNumpifiedFunction":
         """Bind values from a dict, provider, or current figure context."""
         if source is None:
-            from .SmartFigure import current_figure
+            from .Figure import current_figure
 
             return BoundNumpifiedFunction(parent=self, provider=current_figure(required=True))
 
@@ -163,7 +163,7 @@ class NumpifiedFunction:
             return BoundNumpifiedFunction(parent=self, provider=cast(ParameterProvider, source))
 
         raise TypeError(
-            f"bind() expects a ParameterProvider (e.g. SmartFigure), "
+            f"bind() expects a ParameterProvider (e.g. Figure), "
             f"dict[Symbol, value], or None; got {type(source).__name__}"
         )
 

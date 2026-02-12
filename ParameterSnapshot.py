@@ -1,4 +1,4 @@
-"""Immutable snapshots of SmartFigure parameter state.
+"""Immutable snapshots of Figure parameter state.
 
 A snapshot captures a deep-copied mapping of ``Symbol -> metadata`` so code can
 perform deterministic calculations without depending on mutable widget state.

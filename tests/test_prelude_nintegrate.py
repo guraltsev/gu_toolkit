@@ -5,7 +5,7 @@ import math
 import numpy as np
 import sympy as sp
 
-from gu_toolkit import SmartFigure
+from gu_toolkit import Figure
 from prelude import NIntegrate
 from prelude import NReal_Fourier_Series
 
@@ -41,7 +41,7 @@ def test_nintegrate_symbolic_expr_binding_missing_raises() -> None:
 
 def test_nintegrate_symbolic_expr_uses_current_figure_when_binding_absent() -> None:
     x, a, b = sp.symbols("x a b")
-    fig = SmartFigure()
+    fig = Figure()
     fig.parameter([a, b], value=0)
     fig.parameters[a].value = 2.0
     fig.parameters[b].value = 3.0
@@ -54,7 +54,7 @@ def test_nintegrate_symbolic_expr_uses_current_figure_when_binding_absent() -> N
 
 def test_nintegrate_symbolic_expr_with_smartfigure_binding() -> None:
     x, a, b = sp.symbols("x a b")
-    fig = SmartFigure()
+    fig = Figure()
     fig.parameter([a, b], value=0)
     fig.parameters[a].value = 2.0
     fig.parameters[b].value = 3.0
@@ -99,7 +99,7 @@ def test_nintegrate_unbound_callable_with_smartfigure_binding() -> None:
         return a * x + b
 
     a, b = sp.symbols("a b")
-    fig = SmartFigure()
+    fig = Figure()
     fig.parameter([a, b], value=0)
     fig.parameters[a].value = 2.0
     fig.parameters[b].value = 3.0
@@ -130,7 +130,7 @@ def test_nintegrate_sympy_lambda_with_dict_binding() -> None:
 def test_nintegrate_sympy_lambda_uses_current_figure_when_binding_absent() -> None:
     x, a, b = sp.symbols("x a b")
     lam = sp.Lambda((x, a, b), a * x + b)
-    fig = SmartFigure()
+    fig = Figure()
     fig.parameter([a, b], value=0)
     fig.parameters[a].value = 2.0
     fig.parameters[b].value = 3.0

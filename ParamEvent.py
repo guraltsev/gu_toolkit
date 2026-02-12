@@ -1,7 +1,7 @@
 """Standardized parameter-change event payloads.
 
 This module defines ``ParamEvent``, the immutable structure emitted by
-``ParamRef.observe`` and consumed by SmartFigure parameter hooks.
+``ParamRef.observe`` and consumed by Figure parameter hooks.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ class ParamEvent:
     Notes
     -----
     This structure is produced by :meth:`ParamRef.observe` and passed through
-    :class:`SmartFigure` hooks. Consumers should prefer ``parameter`` and
+    :class:`Figure` hooks. Consumers should prefer ``parameter`` and
     ``new`` for stable semantics, and use ``raw`` only for debugging.
 
     Examples
