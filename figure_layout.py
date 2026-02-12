@@ -1,0 +1,490 @@
+"""Figure layout primitives."""
+
+from __future__ import annotations
+
+from typing import Optional
+
+import ipywidgets as widgets
+from IPython.display import display
+
+# SECTION: OneShotOutput [id: OneShotOutput]
+# =============================================================================
+
+class OneShotOutput(widgets.Output):
+    """
+    A specialized Output widget that can only be displayed once.
+
+    Why this exists
+    ---------------
+    In Jupyter, widgets are *live objects* connected to the frontend by a comm channel.
+    If you display the same widget instance multiple times, it is easy to end up with
+    confusing UI behavior (e.g., “Which copy should update?”, “Why did output appear
+    in two places?”, etc.).
+
+    ``OneShotOutput`` prevents accidental duplication by raising an error on the
+    second display attempt.
+
+    What counts as “display”?
+    -------------------------
+    Any of the following will count as displaying the widget:
+    - having it be the last expression in a cell,
+    - calling ``display(output)``,
+    - placing it inside another widget/layout that is displayed.
+   
+     Attributes
+    ----------
+    _displayed : bool
+        Internal flag tracking whether the widget has been displayed.
+    
+      Examples
+    --------
+    Basic output usage:
+
+    >>> out = OneShotOutput()
+    >>> with out:
+    ...     print("Hello from inside the Output widget!")
+    >>> out  # first display works
+
+    Attempting to display again raises:
+
+    >>> out  # doctest: +SKIP
+    RuntimeError: OneShotOutput has already been displayed...
+
+    Use case: preventing accidental double-display:
+
+    >>> out = OneShotOutput()
+    >>> with out:
+    ...     print("I only want this shown once.")
+    >>> display(out)  # ok
+    >>> display(out)  # raises RuntimeError
+
+    If you *really* need to display it again (advanced / use with caution),
+    you can reset:
+
+    >>> out.reset_display_state()
+    >>> display(out)  # now allowed again
+
+    (See ``reset_display_state`` for warnings.)
+    """
+
+    __slots__ = ("_displayed",)
+
+    def __init__(self) -> None:
+        """Initialize a new OneShotOutput widget.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> out = OneShotOutput()  # doctest: +SKIP
+        >>> out.has_been_displayed
+        False
+
+        Notes
+        -----
+        Use :meth:`reset_display_state` only if you intentionally want to reuse
+        the same widget instance across multiple displays.
+        """
+        super().__init__()
+        self._displayed = False
+
+    def _repr_mimebundle_(self, include: Any = None, exclude: Any = None, **kwargs: Any) -> Any:
+        """
+        IPython rich display hook used by ipywidgets.
+
+        This is what gets called when the widget is displayed (including via
+        `display(self)` or by being the last expression in a cell).
+
+        Parameters
+        ----------
+        include : Any, optional
+            MIME types to include, forwarded to the base widget.
+        exclude : Any, optional
+            MIME types to exclude, forwarded to the base widget.
+        **kwargs : Any
+            Additional arguments passed to ``ipywidgets.Output``.
+
+        Returns
+        -------
+        Any
+            The rich display representation.
+
+        Notes
+        -----
+        This method is invoked automatically by IPython during display; users
+        should not call it directly. See :meth:`reset_display_state` if you need
+        to re-display the widget intentionally.
+        """
+        if self._displayed:
+            raise RuntimeError(
+                "OneShotOutput has already been displayed. "
+                "This widget supports only one-time display."
+            )
+        self._displayed = True
+        return super()._repr_mimebundle_(include=include, exclude=exclude, **kwargs)
+
+    @property
+    def has_been_displayed(self) -> bool:
+        """
+        Check if the widget has been displayed.
+
+        Returns
+        -------
+        bool
+            True if the widget has been displayed, False otherwise.
+
+        Examples
+        --------
+        >>> out = OneShotOutput()  # doctest: +SKIP
+        >>> out.has_been_displayed
+        False
+
+        Notes
+        -----
+        This is a read-only convenience property; use
+        :meth:`reset_display_state` to clear the flag.
+        """
+        return self._displayed
+
+    def reset_display_state(self) -> None:
+        """
+        Reset the display state to allow re-display.
+
+        Warning
+        -------
+        This method should be used with caution as it bypasses the
+        one-time display protection.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> out = OneShotOutput()  # doctest: +SKIP
+        >>> out.reset_display_state()
+
+        See Also
+        --------
+        has_been_displayed : Check whether the widget has already been displayed.
+        """
+        self._displayed = False
+
+
+# =============================================================================
+# SECTION: FigureLayout (The View) [id: FigureLayout]
+# =============================================================================
+
+class FigureLayout:
+    """
+    Manages the visual structure and widget hierarchy of a Figure.
+    
+    This class isolates all the "messy" UI code (CSS strings, JavaScript injection,
+    VBox/HBox nesting) from the mathematical logic.
+
+    Responsibilities:
+    - Building the HBox/VBox structure.
+    - Providing the plot container and layout toggles.
+    - Exposing containers for Plots, Parameters, and Info.
+    - Handling layout toggles (e.g. full width, sidebar visibility).
+    """
+
+    def __init__(self, title: str = "") -> None:
+        """Initialize the layout manager and build the widget tree.
+
+        Parameters
+        ----------
+        title : str, optional
+            Initial title text (rendered as HTML/LaTeX in the header).
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> layout = FigureLayout(title="My Plot")  # doctest: +SKIP
+        >>> layout.get_title()  # doctest: +SKIP
+        'My Plot'
+
+        Notes
+        -----
+        This class focuses on widget composition; :class:`Figure` handles
+        plotting logic and parameter updates.
+        """
+        self._reflow_callback: Optional[Callable[[], None]] = None
+
+        # 1. Title Bar
+        #    We use HTMLMath for proper LaTeX title rendering.
+        self.title_html = widgets.HTMLMath(value=title, layout=widgets.Layout(margin="0px"))
+        self.full_width_checkbox = widgets.Checkbox(
+            value=False,
+            description="Full width plot",
+            indent=False,
+            layout=widgets.Layout(width="160px", margin="0px"),
+        )
+        self._titlebar = widgets.HBox(
+            [self.title_html, self.full_width_checkbox],
+            layout=widgets.Layout(
+                width="100%", align_items="center", justify_content="space-between", margin="0 0 6px 0"
+            ),
+        )
+
+        # 2. Plot Area (The "Left" Panel)
+        #    Ensure a real pixel height for Plotly sizing.
+        self.plot_container = widgets.Box(
+            children=(),
+            layout=widgets.Layout(
+                width="100%",
+                height="60vh",
+                min_width="320px",
+                min_height="260px",
+                margin="0px",
+                padding="0px",
+                flex="1 1 560px",
+            ),
+        )
+
+        # 3. Controls Sidebar (The "Right" Panel)
+        #    Initially hidden (display="none") until parameters or info widgets are added.
+        self.params_header = widgets.HTML("<b>Parameters</b>", layout=widgets.Layout(display="none", margin="0"))
+        self.params_box = widgets.VBox(
+            layout=widgets.Layout(
+                width="100%",
+                display="none",
+                padding="8px",
+                border="1px solid rgba(15,23,42,0.08)",
+                border_radius="10px",
+            )
+        )
+
+        self.info_header = widgets.HTML("<b>Info</b>", layout=widgets.Layout(display="none", margin="10px 0 0 0"))
+        self.info_box = widgets.VBox(
+            layout=widgets.Layout(
+                width="100%",
+                display="none",
+                padding="8px",
+                border="1px solid rgba(15,23,42,0.08)",
+                border_radius="10px",
+            )
+        )
+
+        self.sidebar_container = widgets.VBox(
+            [self.params_header, self.params_box, self.info_header, self.info_box],
+            layout=widgets.Layout(
+                margin="0px", padding="0px 0px 0px 10px", flex="0 1 380px",
+                min_width="300px", max_width="400px", display="none"
+            ),
+        )
+
+        # 4. Main Content Wrapper (Flex)
+        #    Uses flex-wrap so the sidebar drops below the plot on narrow screens.
+        self.content_wrapper = widgets.Box(
+            [self.plot_container, self.sidebar_container],
+            layout=widgets.Layout(
+                display="flex", flex_flow="row wrap", align_items="flex-start",
+                width="100%", gap="8px"
+            ),
+        )
+
+        # 4.5. Default print/output area (below the entire figure content)
+        self.print_header = widgets.HTML("<b>Output</b>", layout=widgets.Layout(margin="8px 0 4px 0"))
+        self.print_output = widgets.Output(
+            layout=widgets.Layout(
+                width="100%",
+                min_height="48px",
+                padding="8px",
+                border="1px solid rgba(15,23,42,0.08)",
+                border_radius="10px",
+                overflow="auto",
+            )
+        )
+        self.print_area = widgets.VBox(
+            [self.print_header, self.print_output],
+            layout=widgets.Layout(width="100%", margin="6px 0 0 0"),
+        )
+
+        # 5. Root Widget
+        self.root_widget = widgets.VBox(
+            [self._titlebar, self.content_wrapper, self.print_area],
+            layout=widgets.Layout(width="100%", position="relative")
+        )
+
+        # Wire up internal logic
+        self.full_width_checkbox.observe(self._on_full_width_change, names="value")
+
+    @property
+    def output_widget(self) -> OneShotOutput:
+        """Return a OneShotOutput wrapping the layout, ready for display.
+
+        Returns
+        -------
+        OneShotOutput
+            A display-ready output widget containing the layout.
+
+        Examples
+        --------
+        >>> layout = FigureLayout()  # doctest: +SKIP
+        >>> out = layout.output_widget  # doctest: +SKIP
+
+        See Also
+        --------
+        OneShotOutput : Prevents accidental multiple display of the same widget.
+        """
+        out = OneShotOutput()
+        with out:
+            display(self.root_widget)
+        return out
+
+    def set_title(self, text: str) -> None:
+        """Set the title text shown above the plot.
+
+        Parameters
+        ----------
+        text : str
+            Title text (HTML/LaTeX supported).
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> layout = FigureLayout()  # doctest: +SKIP
+        >>> layout.set_title("Demo")  # doctest: +SKIP
+
+        See Also
+        --------
+        get_title : Retrieve the current title.
+        """
+        self.title_html.value = text
+
+    def get_title(self) -> str:
+        """Get the current title text.
+
+        Returns
+        -------
+        str
+            The current title string.
+
+        Examples
+        --------
+        >>> layout = FigureLayout(title="Demo")  # doctest: +SKIP
+        >>> layout.get_title()  # doctest: +SKIP
+        'Demo'
+
+        See Also
+        --------
+        set_title : Update the title text.
+        """
+        return self.title_html.value
+
+    def update_sidebar_visibility(self, has_params: bool, has_info: bool) -> None:
+        """
+        Updates visibility of headers and the sidebar itself based on content.
+        
+        This prevents empty "Parameters" or "Info" headers from cluttering the UI.
+
+        Parameters
+        ----------
+        has_params : bool
+            Whether parameter sliders exist.
+        has_info : bool
+            Whether info outputs exist.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> layout = FigureLayout()  # doctest: +SKIP
+        >>> layout.update_sidebar_visibility(has_params=True, has_info=False)  # doctest: +SKIP
+
+        Notes
+        -----
+        Call this after adding or removing parameters/info outputs to ensure the
+        UI reflects the current state.
+        """
+        self.params_header.layout.display = "block" if has_params else "none"
+        self.params_box.layout.display = "flex" if has_params else "none"
+        
+        self.info_header.layout.display = "block" if has_info else "none"
+        self.info_box.layout.display = "flex" if has_info else "none"
+
+        show_sidebar = has_params or has_info
+        self.sidebar_container.layout.display = "flex" if show_sidebar else "none"
+
+    def set_plot_widget(
+        self,
+        widget: widgets.Widget,
+        *,
+        reflow_callback: Optional[Callable[[], None]] = None,
+    ) -> None:
+        """Attach the plot widget to the layout and store a reflow callback.
+
+        Parameters
+        ----------
+        widget : ipywidgets.Widget
+            The plot widget to display.
+        reflow_callback : callable, optional
+            Callback to trigger when layout changes (e.g., full-width toggle).
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> layout = FigureLayout()  # doctest: +SKIP
+        >>> dummy = widgets.Box()  # doctest: +SKIP
+        >>> layout.set_plot_widget(dummy)  # doctest: +SKIP
+
+        Notes
+        -----
+        The ``reflow_callback`` is typically used to notify Plotly of size
+        changes when the sidebar toggles.
+        """
+        self.plot_container.children = (widget,)
+        self._reflow_callback = reflow_callback
+
+    def _on_full_width_change(self, change: Dict[str, Any]) -> None:
+        """Toggle CSS flex properties for full-width mode.
+
+        Parameters
+        ----------
+        change : dict
+            Traitlets change dictionary from the checkbox.
+
+        Returns
+        -------
+        None
+        """
+        is_full = change["new"]
+        layout = self.content_wrapper.layout
+        plot_layout = self.plot_container.layout
+        sidebar_layout = self.sidebar_container.layout
+
+        if is_full:
+            # Stack vertically, full width
+            layout.flex_flow = "column"
+            plot_layout.flex = "0 0 auto"
+            sidebar_layout.flex = "0 0 auto"
+            sidebar_layout.max_width = ""
+            sidebar_layout.width = "100%"
+            sidebar_layout.padding = "0px"
+        else:
+            # Side-by-side (wrapping), restricted width for sidebar
+            layout.flex_flow = "row wrap"
+            plot_layout.flex = "1 1 560px"
+            sidebar_layout.flex = "0 1 380px"
+            sidebar_layout.max_width = "400px"
+            sidebar_layout.width = "auto"
+            sidebar_layout.padding = "0px 0px 0px 10px"
+        if self._reflow_callback is not None:
+            self._reflow_callback()
+
+
+# =============================================================================
