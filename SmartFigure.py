@@ -102,6 +102,7 @@ Notes:
 
 import re
 import time
+import asyncio
 import threading
 import warnings
 import logging
@@ -2124,7 +2125,7 @@ class SmartFigure:
         "_layout", "_params", "_info", "_figure", "_pane", "plots",
         "_x_range", "_y_range", "_sampling_points", "_debug",
         "_last_relayout", "_render_info_last_log_t", "_render_debug_last_log_t",
-        "_relayout_pending", "_relayout_timer", "_relayout_lock",
+        "_relayout_pending", "_relayout_timer", "_relayout_lock", "_relayout_deadline",
         "_has_been_displayed", "_print_capture"
     ]
 
@@ -2254,8 +2255,13 @@ class SmartFigure:
         self._render_debug_last_log_t = 0.0
         self._relayout_pending = False
         self._relayout_timer = None
+        self._relayout_deadline = 0.0
         self._relayout_lock = threading.Lock()
-        self._figure.layout.on_change(self._throttled_relayout, "xaxis.range", "yaxis.range")
+        self._figure.layout.on_change(
+            self._throttled_relayout,
+            "xaxis.range", "xaxis.range[0]", "xaxis.range[1]",
+            "yaxis.range", "yaxis.range[0]", "yaxis.range[1]",
+        )
 
     # --- Properties ---
 
@@ -2985,23 +2991,36 @@ class SmartFigure:
                     self._relayout_timer.cancel()
                     self._relayout_timer = None
 
+                self._relayout_deadline = 0.0
                 should_render_now = True
             else:
                 self._relayout_pending = True
                 if self._relayout_timer is None:
                     remaining = max(0.0, 0.5 - elapsed)
-                    timer = threading.Timer(remaining, self._trailing_relayout)
-                    timer.daemon = True
-                    self._relayout_timer = timer
-                    timer.start()
+                    self._relayout_deadline = now + remaining
+                    self._schedule_trailing_relayout(remaining)
 
         if should_render_now:
             self.render(reason="relayout")
+
+    def _schedule_trailing_relayout(self, delay_s: float) -> None:
+        """Schedule one trailing relayout callback on the active event loop."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            timer = threading.Timer(delay_s, self._trailing_relayout)
+            timer.daemon = True
+            self._relayout_timer = timer
+            timer.start()
+            return
+
+        self._relayout_timer = loop.call_later(delay_s, self._trailing_relayout)
 
     def _trailing_relayout(self) -> None:
         """Run one deferred relayout render when burst activity occurred."""
         with self._relayout_lock:
             self._relayout_timer = None
+            self._relayout_deadline = 0.0
             if not self._relayout_pending:
                 return
 
