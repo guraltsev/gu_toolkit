@@ -13,6 +13,7 @@ from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
 from .NumericExpression import PlotView
+from .InputConvert import InputConvert
 from .figure_context import FIGURE_DEFAULT, _is_figure_default
 from .numpify import NumpifiedFunction, numpify_cached
 
