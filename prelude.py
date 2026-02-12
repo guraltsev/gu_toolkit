@@ -258,28 +258,13 @@ def _resolve_parameter_values(required_symbols, binding, current_figure_getter):
             for sym in required_symbols
         }
 
-    provider = None
-    if hasattr(binding, "parameter_context"):
-        provider = binding.parameter_context
-    elif hasattr(binding, "parameters") and hasattr(binding.parameters, "parameter_context"):
-        provider = binding.parameters.parameter_context
-    elif hasattr(binding, "parameters"):
-        provider = binding.parameters
-    elif hasattr(binding, "params"):
-        provider = binding.params
-
-    if provider is None:
-        raise TypeError(
-            "binding must be dict[Symbol|name, value], Figure-like provider, or None"
-        )
+    provider = _resolve_parameter_context(binding)
 
     missing = [sym for sym in required_symbols if sym not in provider]
     if missing:
         names = ", ".join(sym.name for sym in missing)
         raise ValueError(f"binding provider is missing values for: {names}")
-    out = {sym: provider[sym] for sym in required_symbols}
-    # Backward compatibility for contexts that still expose ParamRef-like objects.
-    return {sym: (val.value if hasattr(val, "value") else val) for sym, val in out.items()}
+    return {sym: provider[sym] for sym in required_symbols}
 
 
 

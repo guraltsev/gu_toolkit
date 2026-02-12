@@ -147,10 +147,6 @@ def _get_parameter_mapping(ctx: Any) -> Mapping[sp.Symbol, Any] | None:
         return cast(Mapping[sp.Symbol, Any], ctx)
     if hasattr(ctx, "parameter_context"):
         return cast(Mapping[sp.Symbol, Any], getattr(ctx, "parameter_context"))
-    if hasattr(ctx, "parameters"):
-        return cast(Mapping[sp.Symbol, Any], getattr(ctx, "parameters"))
-    if hasattr(ctx, "params"):
-        return cast(Mapping[sp.Symbol, Any], getattr(ctx, "params"))
     return None
 
 
