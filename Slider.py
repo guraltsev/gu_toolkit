@@ -1,4 +1,4 @@
-"""Custom slider widget used by SmartFigure parameters.
+"""Custom slider widget used by Figure parameters.
 
 Provides a synchronized slider/text control with advanced settings (min/max/
 step/default) and helper APIs for parameter-reference integration.
@@ -10,7 +10,7 @@ import traitlets
 from .InputConvert import InputConvert
 
 
-class SmartFloatSlider(widgets.VBox):
+class FloatSlider(widgets.VBox):
     """
     A FloatSlider with:
       - a *single editable numeric field* (Text) that accepts expressions via InputConvert,
@@ -28,11 +28,11 @@ class SmartFloatSlider(widgets.VBox):
     -----
     The slider exposes ``default_value``, ``min``, ``max``, and ``step`` so it
     can be wrapped by :class:`ParamRef` implementations and used with
-    :class:`SmartFigure` parameter management.
+    :class:`Figure` parameter management.
 
     Examples
     --------
-    >>> slider = SmartFloatSlider(value=1.0, min=-2.0, max=2.0, step=0.1)  # doctest: +SKIP
+    >>> slider = FloatSlider(value=1.0, min=-2.0, max=2.0, step=0.1)  # doctest: +SKIP
     >>> slider.value  # doctest: +SKIP
     1.0
     """
@@ -74,14 +74,14 @@ class SmartFloatSlider(widgets.VBox):
         --------
         Create a slider and read its value::
 
-            >>> slider = SmartFloatSlider(value=0.25, min=0.0, max=1.0, step=0.05)
+            >>> slider = FloatSlider(value=0.25, min=0.0, max=1.0, step=0.05)
             >>> float(slider.value)
             0.25
 
         Notes
         -----
         Use :meth:`make_refs` to bind the slider to a SymPy symbol when working
-        with :class:`SmartFigure` or :class:`ParameterManager`.
+        with :class:`Figure` or :class:`ParameterManager`.
         """
         # Remember defaults for reset
         self._defaults = {"value": value, "min": min, "max": max, "step": step}
@@ -493,7 +493,7 @@ class SmartFloatSlider(widgets.VBox):
         --------
         Update the value by simulating a commit::
 
-            >>> slider = SmartFloatSlider(value=0.0, min=0.0, max=1.0)
+            >>> slider = FloatSlider(value=0.0, min=0.0, max=1.0)
             >>> slider.number.value = "0.5"
             >>> float(slider.value)
             0.5
@@ -579,7 +579,7 @@ class SmartFloatSlider(widgets.VBox):
 
         Examples
         --------
-        >>> slider = SmartFloatSlider(min=-1.0, max=1.0)  # doctest: +SKIP
+        >>> slider = FloatSlider(min=-1.0, max=1.0)  # doctest: +SKIP
         >>> slider.min  # doctest: +SKIP
         -1.0
 
@@ -624,7 +624,7 @@ class SmartFloatSlider(widgets.VBox):
 
         Examples
         --------
-        >>> slider = SmartFloatSlider(min=-1.0, max=1.0)  # doctest: +SKIP
+        >>> slider = FloatSlider(min=-1.0, max=1.0)  # doctest: +SKIP
         >>> slider.max  # doctest: +SKIP
         1.0
 
@@ -669,7 +669,7 @@ class SmartFloatSlider(widgets.VBox):
 
         Examples
         --------
-        >>> slider = SmartFloatSlider(step=0.25)  # doctest: +SKIP
+        >>> slider = FloatSlider(step=0.25)  # doctest: +SKIP
         >>> slider.step  # doctest: +SKIP
         0.25
 
@@ -707,7 +707,7 @@ class SmartFloatSlider(widgets.VBox):
 
         Examples
         --------
-        >>> slider = SmartFloatSlider(value=2.0)  # doctest: +SKIP
+        >>> slider = FloatSlider(value=2.0)  # doctest: +SKIP
         >>> slider.reset()  # doctest: +SKIP
 
         Notes
@@ -736,7 +736,7 @@ class SmartFloatSlider(widgets.VBox):
 
         Examples
         --------
-        >>> slider = SmartFloatSlider()  # doctest: +SKIP
+        >>> slider = FloatSlider()  # doctest: +SKIP
         >>> import sympy as sp  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
         >>> slider.make_refs([a])  # doctest: +SKIP
@@ -744,10 +744,10 @@ class SmartFloatSlider(widgets.VBox):
         Notes
         -----
         This method exists to integrate with :class:`ParameterManager` and
-        :class:`SmartFigure` parameter creation.
+        :class:`Figure` parameter creation.
         """
         if len(symbols) != 1:
-            raise ValueError("SmartFloatSlider only supports a single symbol.")
+            raise ValueError("FloatSlider only supports a single symbol.")
         from .ParamRef import ProxyParamRef
         symbol = symbols[0]
         return {symbol: ProxyParamRef(symbol, self)}
@@ -814,6 +814,4 @@ class SmartFloatSlider(widgets.VBox):
         self.settings_modal.layout.display = "none" if is_open else "flex"
         self.settings_panel.layout.display = "none" if is_open else "flex"
 
-# Canonical non-legacy alias
-FloatSlider = SmartFloatSlider
 

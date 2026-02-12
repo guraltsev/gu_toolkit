@@ -41,7 +41,7 @@ from .Figure import (
     set_x_range,
     set_y_range,
 )
-from .SmartParseLaTeX import parse_latex
+from .ParseLaTeX import parse_latex
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 

@@ -1,4 +1,4 @@
-"""Core SmartFigure plotting system for interactive symbolic exploration.
+"""Core Figure plotting system for interactive symbolic exploration.
 
 The module hosts the coordinator class, plot abstraction, layout/parameter/info
 managers, and notebook helper functions used to build responsive, parameterized
@@ -7,7 +7,7 @@ Plotly visualizations from SymPy expressions.
 
 from __future__ import annotations
 
-# NOTE: This file is SmartFigure.py with the Info Components API implemented.
+# NOTE: This file is Figure.py with the Info Components API implemented.
 #       It is intended as a drop-in replacement.
 
 """Widgets and interactive plotting helpers for math exploration in Jupyter.
@@ -19,18 +19,18 @@ This file defines two main ideas:
    This prevents a common notebook confusion: accidentally displaying the *same* widget
    in multiple places and then wondering which one is “live”.
 
-2) SmartFigure (+ SmartPlot)
+2) Figure (+ Plot)
    A thin, student-friendly wrapper around ``plotly.graph_objects.FigureWidget`` that:
    - plots SymPy expressions by compiling them to NumPy via ``numpify_cached``,
-   - supports interactive parameter sliders (via ``SmartFloatSlider``),
+   - supports interactive parameter sliders (via ``FloatSlider``),
    - optionally provides an *Info* area (a stack of ``ipywidgets.Output`` widgets),
    - re-renders automatically when you pan/zoom (throttled) or move a slider.
 
 The intended workflow is:
 
 - define symbols with SymPy (e.g. ``x, a = sp.symbols("x a")``),
-- create a ``SmartFigure``,
-- add one or more plots with ``SmartFigure.plot(...)``,
+- create a ``Figure``,
+- add one or more plots with ``Figure.plot(...)``,
 - optionally add parameters (sliders) explicitly by passing ``parameters=[a, ...]``.
 - otherwise, parameters are autodetected from the expression (all free symbols that are not the plot variable) and added automatically.
 
@@ -39,16 +39,16 @@ Quick start (in a Jupyter notebook)
 ---------------------------------------------------------------------------
 
 >>> import sympy as sp
->>> from Figure import SmartFigure  # wherever this file lives
+>>> from Figure import Figure  # wherever this file lives
 >>>
 >>> x, a = sp.symbols("x a")
->>> fig = SmartFigure(x_range=(-6, 6), y_range=(-3, 3))
+>>> fig = Figure(x_range=(-6, 6), y_range=(-3, 3))
 >>> fig.plot(x, sp.sin(x), id="sin")
 >>> fig.plot(x, a*sp.cos(x), id="a_cos")  # adds a slider for a
 >>> fig.title = "Sine and a·Cosine"
 >>> fig  # display in the output cell (or use display(fig))
 
-Tip: if you omit ``parameters`` when calling ``plot``, SmartFigure will infer them
+Tip: if you omit ``parameters`` when calling ``plot``, Figure will infer them
 from the expression and create sliders automatically. Pass ``[]`` to disable that.
 
 Info panel
@@ -57,7 +57,7 @@ The sidebar has two sections:
 
 - **Parameters**: auto-created sliders for SymPy symbols.
 - **Info**: a container that holds *Output widgets* created by
-  :meth:`SmartFigure.get_info_output`. This design is deliberate: printing directly
+  :meth:`Figure.get_info_output`. This design is deliberate: printing directly
   into a container widget is ambiguous in Jupyter, but printing into an
   ``Output`` widget is well-defined.
   Info outputs are keyed by id, so you can retrieve them via
@@ -73,11 +73,11 @@ Notes for students
 Architecture Note (For Developers)
 ----------------------------------
 To avoid a "God Object," responsibilities are split via composition:
-- SmartFigure: The main coordinator/facade.
-- SmartFigureLayout: Handles all UI/Widget construction, CSS/JS injection, and layout logic.
+- Figure: The main coordinator/facade.
+- FigureLayout: Handles all UI/Widget construction, CSS/JS injection, and layout logic.
 - ParameterManager: Handles slider creation, storage, and change hooks. Acts as a dict proxy.
 - InfoPanelManager: Handles the info sidebar and component registry.
-- SmartPlot: Handles the specific math-to-trace rendering logic.
+- Plot: Handles the specific math-to-trace rendering logic.
 
 
 Logging / debugging
@@ -122,7 +122,7 @@ from sympy.core.symbol import Symbol
 from .InputConvert import InputConvert
 from .numpify import NumpifiedFunction, numpify_cached
 from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
-from .Slider import SmartFloatSlider
+from .Slider import FloatSlider
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .ParameterSnapshot import ParameterSnapshot
@@ -136,7 +136,7 @@ logger = logging.getLogger(__name__)
 if not logger.handlers:
     logger.addHandler(logging.NullHandler())
 
-_FIGURE_STACK: List["SmartFigure"] = []
+_FIGURE_STACK: List["Figure"] = []
 
 
 
@@ -157,12 +157,12 @@ def _is_figure_default(value: Any) -> bool:
     """Return True when *value* requests figure-default behavior."""
     return value is FIGURE_DEFAULT or (isinstance(value, str) and value.lower() == "figure_default")
 
-def _current_figure() -> Optional["SmartFigure"]:
-    """Return the most recently pushed SmartFigure, if any.
+def _current_figure() -> Optional["Figure"]:
+    """Return the most recently pushed Figure, if any.
 
     Returns
     -------
-    SmartFigure or None
+    Figure or None
         The current figure on the stack, or ``None`` if no figure is active.
     """
     if not _FIGURE_STACK:
@@ -170,27 +170,27 @@ def _current_figure() -> Optional["SmartFigure"]:
     return _FIGURE_STACK[-1]
 
 
-def _require_current_figure() -> "SmartFigure":
-    """Return the current SmartFigure, or raise if none is active.
+def _require_current_figure() -> "Figure":
+    """Return the current Figure, or raise if none is active.
 
     Returns
     -------
-    SmartFigure
-        The active SmartFigure on the stack.
+    Figure
+        The active Figure on the stack.
 
     Raises
     ------
     RuntimeError
-        If no SmartFigure is active.
+        If no Figure is active.
     """
     fig = _current_figure()
     if fig is None:
-        raise RuntimeError("No current SmartFigure. Use `with fig:` first.")
+        raise RuntimeError("No current Figure. Use `with fig:` first.")
     return fig
 
 
-def current_figure(*, required: bool = True) -> Optional["SmartFigure"]:
-    """Return the active SmartFigure from the context stack.
+def current_figure(*, required: bool = True) -> Optional["Figure"]:
+    """Return the active Figure from the context stack.
 
     Parameters
     ----------
@@ -199,24 +199,24 @@ def current_figure(*, required: bool = True) -> Optional["SmartFigure"]:
 
     Returns
     -------
-    SmartFigure or None
+    Figure or None
         Active figure, or None when ``required=False`` and no context is active.
     """
     fig = _current_figure()
     if fig is None and required:
         raise RuntimeError(
-            "No active SmartFigure. Use `with fig:` to set one, "
+            "No active Figure. Use `with fig:` to set one, "
             "or pass an explicit figure to .bind()."
         )
     return fig
 
 
-def _push_current_figure(fig: "SmartFigure") -> None:
-    """Push a SmartFigure onto the global stack.
+def _push_current_figure(fig: "Figure") -> None:
+    """Push a Figure onto the global stack.
 
     Parameters
     ----------
-    fig : SmartFigure
+    fig : Figure
         The figure to mark as current.
 
     Returns
@@ -226,12 +226,12 @@ def _push_current_figure(fig: "SmartFigure") -> None:
     _FIGURE_STACK.append(fig)
 
 
-def _pop_current_figure(fig: "SmartFigure") -> None:
-    """Remove a specific SmartFigure from the global stack if present.
+def _pop_current_figure(fig: "Figure") -> None:
+    """Remove a specific Figure from the global stack if present.
 
     Parameters
     ----------
-    fig : SmartFigure
+    fig : Figure
         The figure to remove.
 
     Returns
@@ -250,17 +250,17 @@ def _pop_current_figure(fig: "SmartFigure") -> None:
 
 
 @contextmanager
-def _use_figure(fig: "SmartFigure") -> Iterator["SmartFigure"]:
-    """Context manager that temporarily sets a SmartFigure as current.
+def _use_figure(fig: "Figure") -> Iterator["Figure"]:
+    """Context manager that temporarily sets a Figure as current.
 
     Parameters
     ----------
-    fig : SmartFigure
+    fig : Figure
         The figure to make current within the context.
 
     Yields
     ------
-    SmartFigure
+    Figure
         The same figure passed in.
     """
     _push_current_figure(fig)
@@ -456,12 +456,12 @@ class OneShotOutput(widgets.Output):
 
 
 # =============================================================================
-# SECTION: SmartFigureLayout (The View) [id: SmartFigureLayout]
+# SECTION: FigureLayout (The View) [id: FigureLayout]
 # =============================================================================
 
-class SmartFigureLayout:
+class FigureLayout:
     """
-    Manages the visual structure and widget hierarchy of a SmartFigure.
+    Manages the visual structure and widget hierarchy of a Figure.
     
     This class isolates all the "messy" UI code (CSS strings, JavaScript injection,
     VBox/HBox nesting) from the mathematical logic.
@@ -487,13 +487,13 @@ class SmartFigureLayout:
 
         Examples
         --------
-        >>> layout = SmartFigureLayout(title="My Plot")  # doctest: +SKIP
+        >>> layout = FigureLayout(title="My Plot")  # doctest: +SKIP
         >>> layout.get_title()  # doctest: +SKIP
         'My Plot'
 
         Notes
         -----
-        This class focuses on widget composition; :class:`SmartFigure` handles
+        This class focuses on widget composition; :class:`Figure` handles
         plotting logic and parameter updates.
         """
         self._reflow_callback: Optional[Callable[[], None]] = None
@@ -608,7 +608,7 @@ class SmartFigureLayout:
 
         Examples
         --------
-        >>> layout = SmartFigureLayout()  # doctest: +SKIP
+        >>> layout = FigureLayout()  # doctest: +SKIP
         >>> out = layout.output_widget  # doctest: +SKIP
 
         See Also
@@ -634,7 +634,7 @@ class SmartFigureLayout:
 
         Examples
         --------
-        >>> layout = SmartFigureLayout()  # doctest: +SKIP
+        >>> layout = FigureLayout()  # doctest: +SKIP
         >>> layout.set_title("Demo")  # doctest: +SKIP
 
         See Also
@@ -653,7 +653,7 @@ class SmartFigureLayout:
 
         Examples
         --------
-        >>> layout = SmartFigureLayout(title="Demo")  # doctest: +SKIP
+        >>> layout = FigureLayout(title="Demo")  # doctest: +SKIP
         >>> layout.get_title()  # doctest: +SKIP
         'Demo'
 
@@ -682,7 +682,7 @@ class SmartFigureLayout:
 
         Examples
         --------
-        >>> layout = SmartFigureLayout()  # doctest: +SKIP
+        >>> layout = FigureLayout()  # doctest: +SKIP
         >>> layout.update_sidebar_visibility(has_params=True, has_info=False)  # doctest: +SKIP
 
         Notes
@@ -720,7 +720,7 @@ class SmartFigureLayout:
 
         Examples
         --------
-        >>> layout = SmartFigureLayout()  # doctest: +SKIP
+        >>> layout = FigureLayout()  # doctest: +SKIP
         >>> dummy = widgets.Box()  # doctest: +SKIP
         >>> layout.set_plot_widget(dummy)  # doctest: +SKIP
 
@@ -880,7 +880,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         if control is None:
             for symbol in missing:
                 config = {**defaults, **control_kwargs}
-                new_control = SmartFloatSlider(
+                new_control = FloatSlider(
                     description=f"${sp.latex(symbol)}$",
                     value=float(config['value']),
                     min=float(config['min']),
@@ -1006,7 +1006,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
 
         Notes
         -----
-        Hooks are called after :class:`SmartFigure` re-renders on parameter
+        Hooks are called after :class:`Figure` re-renders on parameter
         updates.
         """
         if hook_id is None:
@@ -1475,14 +1475,14 @@ class InfoPanelManager:
 
 
 # =============================================================================
-# SECTION: SmartPlot (The specific logic for one curve) [id: SmartPlot]
+# SECTION: Plot (The specific logic for one curve) [id: Plot]
 # =============================================================================
 
-class SmartPlot:
+class Plot:
     """
-    A single plotted curve managed by a :class:`SmartFigure`.
+    A single plotted curve managed by a :class:`Figure`.
 
-    Conceptually, a ``SmartPlot`` is “one function on one set of axes”.
+    Conceptually, a ``Plot`` is “one function on one set of axes”.
     It owns a single Plotly trace (a line plot) and knows how to:
 
     - compile the SymPy expression to a fast NumPy function (via ``numpify_cached``),
@@ -1495,7 +1495,7 @@ class SmartPlot:
         self,
         var: Symbol,
         func: Expr,
-        smart_figure: "SmartFigure",
+        smart_figure: "Figure",
         parameters: Sequence[Symbol] = [],
         x_domain: Optional[RangeLike] = None,
         sampling_points: Optional[int,str] = None,
@@ -1509,7 +1509,7 @@ class SmartPlot:
         trace: Optional[Mapping[str, Any]] = None,
     ) -> None:
         """
-        Create a new SmartPlot instance. (Usually called by SmartFigure.plot)
+        Create a new Plot instance. (Usually called by Figure.plot)
 
         Parameters
         ----------
@@ -1517,7 +1517,7 @@ class SmartPlot:
             Independent variable for the function.
         func : sympy.Expr
             Symbolic expression to plot.
-        smart_figure : SmartFigure
+        smart_figure : Figure
             Owning figure.
         parameters : sequence[sympy.Symbol], optional
             Parameter symbols used in the expression.
@@ -1552,13 +1552,13 @@ class SmartPlot:
         Examples
         --------
         >>> x = sp.symbols("x")  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
 
         Notes
         -----
-        End users typically call :meth:`SmartFigure.plot` instead of instantiating
-        ``SmartPlot`` directly.
+        End users typically call :meth:`Figure.plot` instead of instantiating
+        ``Plot`` directly.
         """
         self._smart_figure = smart_figure
         
@@ -1603,8 +1603,8 @@ class SmartPlot:
         Examples
         --------
         >>> x, a = sp.symbols("x a")  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.set_func(x, a * sp.cos(x), parameters=[a])  # doctest: +SKIP
 
         See Also
@@ -1650,8 +1650,8 @@ class SmartPlot:
         Examples
         --------
         >>> x = sp.symbols("x")  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> plot = SmartPlot(x, sp.sin(x), fig, label="sin")  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> plot = Plot(x, sp.sin(x), fig, label="sin")  # doctest: +SKIP
         >>> plot.label  # doctest: +SKIP
         'sin'
 
@@ -1677,8 +1677,8 @@ class SmartPlot:
         Examples
         --------
         >>> x = sp.symbols("x")  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.label = "sin(x)"  # doctest: +SKIP
 
         See Also
@@ -1739,25 +1739,25 @@ class SmartPlot:
             raise ValueError("opacity must be between 0.0 and 1.0")
         self._plot_handle.opacity = opacity
 
-    def figure(self) -> "SmartFigure":
-        """Return the SmartFigure that owns this plot.
+    def figure(self) -> "Figure":
+        """Return the Figure that owns this plot.
 
         Returns
         -------
-        SmartFigure
+        Figure
             Owning figure instance.
 
         Examples
         --------
         >>> x = sp.symbols("x")  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.figure() is fig  # doctest: +SKIP
         True
 
         See Also
         --------
-        SmartFigure.plot : Create or update plots on a figure.
+        Figure.plot : Create or update plots on a figure.
         """
         return self._smart_figure
 
@@ -1773,8 +1773,8 @@ class SmartPlot:
         Examples
         --------
         >>> x = sp.symbols("x")  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> plot = SmartPlot(x, sp.sin(x), fig, x_domain=(-2, 2))  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> plot = Plot(x, sp.sin(x), fig, x_domain=(-2, 2))  # doctest: +SKIP
         >>> plot.x_domain  # doctest: +SKIP
         (-2.0, 2.0)
 
@@ -1802,13 +1802,13 @@ class SmartPlot:
         Examples
         --------
         >>> x = sp.symbols("x")  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.x_domain = (-1, 1)  # doctest: +SKIP
 
         See Also
         --------
-        SmartFigure.x_range : Update the figure-wide x-axis range.
+        Figure.x_range : Update the figure-wide x-axis range.
         """
         
         if value is None:
@@ -1834,14 +1834,14 @@ class SmartPlot:
         Examples
         --------
         >>> x = sp.symbols("x")  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> plot = SmartPlot(x, sp.sin(x), fig, sampling_points=200)  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> plot = Plot(x, sp.sin(x), fig, sampling_points=200)  # doctest: +SKIP
         >>> plot.sampling_points  # doctest: +SKIP
         200
 
         See Also
         --------
-        SmartFigure.sampling_points : Figure-level default sampling.
+        Figure.sampling_points : Figure-level default sampling.
         """
         return self._sampling_points
 
@@ -1862,8 +1862,8 @@ class SmartPlot:
         Examples
         --------
         >>> x = sp.symbols("x")  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.sampling_points = 400  # doctest: +SKIP
 
         See Also
@@ -1885,8 +1885,8 @@ class SmartPlot:
         Examples
         --------
         >>> x = sp.symbols("x")  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.visible  # doctest: +SKIP
         True
 
@@ -1912,8 +1912,8 @@ class SmartPlot:
         Examples
         --------
         >>> x = sp.symbols("x")  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.visible = "legendonly"  # doctest: +SKIP
 
         See Also
@@ -1936,8 +1936,8 @@ class SmartPlot:
         Examples
         --------
         >>> x = sp.symbols("x")  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.render()  # doctest: +SKIP
 
         Notes
@@ -2024,13 +2024,13 @@ class SmartPlot:
         Examples
         --------
         >>> x, a = sp.symbols("x a")  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
-        >>> plot = SmartPlot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.update(label="sin", func=a * sp.sin(x), parameters=[a])  # doctest: +SKIP
 
         Notes
         -----
-        This method is used internally by :meth:`SmartFigure.plot` when
+        This method is used internally by :meth:`Figure.plot` when
         updating an existing plot.
         """
         if 'label' in kwargs: 
@@ -2079,10 +2079,10 @@ class SmartPlot:
 
 
 # =============================================================================
-# SECTION: SmartFigure (The Coordinator) [id: SmartFigure]
+# SECTION: Figure (The Coordinator) [id: Figure]
 # =============================================================================
 
-class SmartFigure:
+class Figure:
     """
     An interactive Plotly figure for plotting SymPy functions with slider parameters.
 
@@ -2093,7 +2093,7 @@ class SmartFigure:
     - *see* it immediately (Plotly),
     - and then explore “What happens if I change a parameter?”
 
-    ``SmartFigure`` provides a simple API that encourages experimentation.
+    ``Figure`` provides a simple API that encourages experimentation.
 
     Key features
     ------------
@@ -2108,7 +2108,7 @@ class SmartFigure:
     --------
     >>> import sympy as sp
     >>> x, a = sp.symbols("x a")
-    >>> fig = SmartFigure()
+    >>> fig = Figure()
     >>> fig.plot(x, a*sp.sin(x), parameters=[a], id="a_sin")
     >>> fig
     """
@@ -2128,7 +2128,7 @@ class SmartFigure:
         y_range: RangeLike = (-3, 3),
         debug: bool = False,
     ) -> None:
-        """Initialize a SmartFigure instance with default ranges and sampling.
+        """Initialize a Figure instance with default ranges and sampling.
 
         Parameters
         ----------
@@ -2147,7 +2147,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure(x_range=(-6, 6), y_range=(-2, 2))  # doctest: +SKIP
+        >>> fig = Figure(x_range=(-6, 6), y_range=(-2, 2))  # doctest: +SKIP
         >>> fig.sampling_points  # doctest: +SKIP
         500
 
@@ -2158,12 +2158,12 @@ class SmartFigure:
         """
         self._debug = debug
         self._sampling_points = sampling_points
-        self.plots: Dict[str, SmartPlot] = {}
+        self.plots: Dict[str, Plot] = {}
         self._has_been_displayed = False
         self._print_capture: Optional[ExitStack] = None
 
         # 1. Initialize Layout (View)
-        self._layout = SmartFigureLayout()
+        self._layout = FigureLayout()
         
         # 2. Initialize Managers
         # Note: we pass a callback for rendering so params can trigger updates
@@ -2268,14 +2268,14 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> fig.title = "Demo"  # doctest: +SKIP
         >>> fig.title  # doctest: +SKIP
         'Demo'
 
         See Also
         --------
-        SmartFigureLayout.set_title : Underlying layout helper.
+        FigureLayout.set_title : Underlying layout helper.
         """
         return self._layout.get_title()
 
@@ -2294,7 +2294,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> fig.title = r"$y=\\sin(x)$"  # doctest: +SKIP
 
         See Also
@@ -2314,14 +2314,14 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> isinstance(fig.figure_widget, go.FigureWidget)  # doctest: +SKIP
         True
 
         Notes
         -----
         Directly mutating the widget is supported, but changes may bypass
-        SmartFigure's helper methods.
+        Figure's helper methods.
         """
         return self._figure
     
@@ -2346,7 +2346,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> isinstance(fig.info_output, dict)  # doctest: +SKIP
         True
 
@@ -2367,7 +2367,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure(x_range=(-2, 2))  # doctest: +SKIP
+        >>> fig = Figure(x_range=(-2, 2))  # doctest: +SKIP
         >>> fig.x_range  # doctest: +SKIP
         (-2.0, 2.0)
 
@@ -2392,7 +2392,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> fig.x_range = (-5, 5)  # doctest: +SKIP
 
         Notes
@@ -2413,7 +2413,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure(y_range=(-1, 1))  # doctest: +SKIP
+        >>> fig = Figure(y_range=(-1, 1))  # doctest: +SKIP
         >>> fig.y_range  # doctest: +SKIP
         (-1.0, 1.0)
 
@@ -2438,7 +2438,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> fig.y_range = (-2, 2)  # doctest: +SKIP
 
         Notes
@@ -2459,7 +2459,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> fig.current_x_range  # doctest: +SKIP
 
         Notes
@@ -2479,7 +2479,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> fig.current_y_range  # doctest: +SKIP
 
         Notes
@@ -2499,13 +2499,13 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure(sampling_points=300)  # doctest: +SKIP
+        >>> fig = Figure(sampling_points=300)  # doctest: +SKIP
         >>> fig.sampling_points  # doctest: +SKIP
         300
 
         See Also
         --------
-        SmartPlot.sampling_points : Per-plot overrides.
+        Plot.sampling_points : Per-plot overrides.
         """
         return self._sampling_points
 
@@ -2525,7 +2525,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> fig.sampling_points = 200  # doctest: +SKIP
 
         Notes
@@ -2568,7 +2568,7 @@ class SmartFigure:
         line: Optional[Mapping[str, Any]] = None,
         opacity: Optional[Union[int, float]] = None,
         trace: Optional[Mapping[str, Any]] = None,
-    ) -> SmartPlot:
+    ) -> Plot:
         """
         Plot a SymPy expression on the figure (and keep it “live”).
 
@@ -2610,13 +2610,13 @@ class SmartFigure:
 
         Returns
         -------
-        SmartPlot
+        Plot
             The created or updated plot instance.
 
         Examples
         --------
         >>> x, a = sp.symbols("x a")  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> fig.plot(x, a * sp.sin(x), parameters=[a], id="a_sin")  # doctest: +SKIP
 
         Notes
@@ -2625,7 +2625,7 @@ class SmartFigure:
         the expression has free symbols other than ``var``.
 
         All supported style options for this method are discoverable via
-        :meth:`SmartFigure.plot_style_options`.
+        :meth:`Figure.plot_style_options`.
 
         See Also
         --------
@@ -2674,7 +2674,7 @@ class SmartFigure:
             )
             plot = self.plots[id]    
         else: 
-            plot = SmartPlot(
+            plot = Plot(
                 var=var, func=func, smart_figure=self, parameters=parameters,
                 x_domain=x_domain, sampling_points=sampling_points, label=id,
                 color=color, thickness=thickness, dash=dash, line=line, opacity=opacity, trace=trace
@@ -2703,7 +2703,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
         >>> fig.parameter(a, min=-2, max=2)  # doctest: +SKIP
 
@@ -2736,7 +2736,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> fig.render()  # doctest: +SKIP
 
         Notes
@@ -2778,7 +2778,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> a = sp.symbols("a")  # doctest: +SKIP
         >>> fig.add_param(a, min=-2, max=2)  # doctest: +SKIP
 
@@ -2806,7 +2806,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> out = fig.get_info_output("summary")  # doctest: +SKIP
 
         Notes
@@ -2851,7 +2851,7 @@ class SmartFigure:
         ...         self.out = out  # doctest: +SKIP
         ...     def update(self, event, fig, out):  # doctest: +SKIP
         ...         pass  # doctest: +SKIP
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> fig.add_info_component("example", ExampleComponent)  # doctest: +SKIP
 
         Notes
@@ -2893,7 +2893,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> fig.add_hook(lambda *_: None)  # doctest: +SKIP
 
         See Also
@@ -2929,7 +2929,7 @@ class SmartFigure:
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> fig.add_param_change_hook(lambda *_: None, run_now=False)  # doctest: +SKIP
 
         Notes
@@ -3062,17 +3062,17 @@ class SmartFigure:
         self._has_been_displayed = True
         display(self._layout.output_widget)
 
-    def __enter__(self) -> "SmartFigure":
+    def __enter__(self) -> "Figure":
         """Enter a context where this figure is the current target.
 
         Returns
         -------
-        SmartFigure
+        Figure
             The same instance, for use with ``with`` blocks.
 
         Examples
         --------
-        >>> fig = SmartFigure()  # doctest: +SKIP
+        >>> fig = Figure()  # doctest: +SKIP
         >>> with fig:  # doctest: +SKIP
         ...     pass
 
@@ -3122,15 +3122,15 @@ class _CurrentParametersProxy(Mapping):
     Examples
     --------
     >>> x, a = sp.symbols("x a")  # doctest: +SKIP
-    >>> fig = SmartFigure()  # doctest: +SKIP
+    >>> fig = Figure()  # doctest: +SKIP
     >>> with fig:  # doctest: +SKIP
     ...     fig.plot(x, a * sp.sin(x), parameters=[a])  # doctest: +SKIP
     ...     params[a].value = 5  # doctest: +SKIP
     ...     parameter(a, min=-10, max=10)  # doctest: +SKIP
     """
 
-    def _fig(self) -> "SmartFigure":
-        """Return the current SmartFigure from the module stack."""
+    def _fig(self) -> "Figure":
+        """Return the current Figure from the module stack."""
         return _require_current_figure()
 
     def _mgr(self) -> "ParameterManager":
@@ -3186,10 +3186,10 @@ class _CurrentParametersProxy(Mapping):
 class _CurrentPlotsProxy(Mapping):
     """Module-level proxy to the current figure's plots mapping."""
 
-    def _fig(self) -> "SmartFigure":
+    def _fig(self) -> "Figure":
         return _require_current_figure()
 
-    def __getitem__(self, key: Hashable) -> SmartPlot:
+    def __getitem__(self, key: Hashable) -> Plot:
         return self._fig().plots[key]
 
     def __iter__(self) -> Iterator[Hashable]:
@@ -3224,7 +3224,7 @@ def render(reason: str = "manual", trigger: Optional[ParamEvent] = None) -> None
     reason : str, optional
         Render reason string for logging/debugging.
     trigger : ParamEvent or None, optional
-        Optional event payload forwarded to :meth:`SmartFigure.render`.
+        Optional event payload forwarded to :meth:`Figure.render`.
     """
     _require_current_figure().render(reason=reason, trigger=trigger)
 
@@ -3280,7 +3280,7 @@ def get_sampling_points() -> Optional[int]:
 
 
 def plot_style_options() -> Dict[str, str]:
-    """Return discoverable SmartFigure plot-style options.
+    """Return discoverable Figure plot-style options.
 
     Returns
     -------
@@ -3292,7 +3292,7 @@ def plot_style_options() -> Dict[str, str]:
     Current supported shortcut keys are: ``color``, ``thickness``, ``dash``,
     ``opacity``, ``line``, and ``trace``.
     """
-    return SmartFigure.plot_style_options()
+    return Figure.plot_style_options()
 
 
 
@@ -3322,17 +3322,17 @@ def parameter(
     --------
     >>> import sympy as sp  # doctest: +SKIP
     >>> x, a = sp.symbols("x a")  # doctest: +SKIP
-    >>> fig = SmartFigure()  # doctest: +SKIP
+    >>> fig = Figure()  # doctest: +SKIP
     >>> with fig:  # doctest: +SKIP
     ...     parameter(a, min=-1, max=1)  # doctest: +SKIP
 
     Notes
     -----
-    This helper requires an active figure context (see :meth:`SmartFigure.__enter__`).
+    This helper requires an active figure context (see :meth:`Figure.__enter__`).
 
     See Also
     --------
-    SmartFigure.parameter : Instance method for parameter creation.
+    Figure.parameter : Instance method for parameter creation.
     """
     fig = _require_current_figure()
     return fig.parameters.parameter(symbols, control=control, **kwargs)
@@ -3351,7 +3351,7 @@ def plot(
     opacity: Optional[Union[int, float]] = None,
     line: Optional[Mapping[str, Any]] = None,
     trace: Optional[Mapping[str, Any]] = None,
-) -> SmartPlot:
+) -> Plot:
     """
     Plot a SymPy expression on the current figure, or create a new figure per call.
 
@@ -3387,7 +3387,7 @@ def plot(
 
     Returns
     -------
-    SmartPlot
+    Plot
         The created or updated plot instance.
 
     Examples
@@ -3398,20 +3398,20 @@ def plot(
     Notes
     -----
     If no current figure is active, this function creates and displays a new
-    :class:`SmartFigure`.
+    :class:`Figure`.
 
     All supported style options for this helper are discoverable via
     :func:`plot_style_options`.
 
     See Also
     --------
-    SmartFigure.plot : Instance method with the same signature.
+    Figure.plot : Instance method with the same signature.
     plot_style_options : List supported style kwargs and meanings
         (`color`, `thickness`, `dash`, `opacity`, `line`, `trace`).
     """
     fig = _current_figure()
     if fig is None:
-        fig = SmartFigure()
+        fig = Figure()
         display(fig)
     return fig.plot(
         var,
@@ -3428,7 +3428,3 @@ def plot(
         trace=trace,
     )
 
-# Canonical non-legacy aliases
-FigureLayout = SmartFigureLayout
-Plot = SmartPlot
-Figure = SmartFigure

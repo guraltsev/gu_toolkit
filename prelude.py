@@ -266,7 +266,7 @@ def _resolve_parameter_values(required_symbols, binding, current_figure_getter):
 
     if provider is None:
         raise TypeError(
-            "binding must be dict[Symbol|name, value], SmartFigure-like provider, or None"
+            "binding must be dict[Symbol|name, value], Figure-like provider, or None"
         )
 
     missing = [sym for sym in required_symbols if sym not in provider]
@@ -391,7 +391,7 @@ def NIntegrate(expr, var_and_limits, binding=None):
         Optional parameter source when ``expr`` needs extra arguments:
 
         - ``dict[Symbol, value]`` for explicit bindings,
-        - ``SmartFigure`` for live figure-backed bindings,
+        - ``Figure`` for live figure-backed bindings,
         - ``None`` to use the current figure context when needed.
 
     Returns

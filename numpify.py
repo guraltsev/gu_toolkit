@@ -163,7 +163,7 @@ class NumpifiedFunction:
             return BoundNumpifiedFunction(parent=self, provider=cast(ParameterProvider, source))
 
         raise TypeError(
-            f"bind() expects a ParameterProvider (e.g. SmartFigure), "
+            f"bind() expects a ParameterProvider (e.g. Figure), "
             f"dict[Symbol, value], or None; got {type(source).__name__}"
         )
 
