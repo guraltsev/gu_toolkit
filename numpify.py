@@ -264,8 +264,39 @@ def numpify(
     f_numpy: Optional[Mapping[_BindingKey, Any]] = None,
     vectorize: bool = True,
     expand_definition: bool = True,
+    cache: bool = True,
 ) -> NumpifiedFunction:
-    """Compile a SymPy expression into a NumPy-evaluable Python function.
+    """Compile a SymPy expression into a NumPy-evaluable function.
+
+    By default this uses the same LRU-backed cache as :func:`numpify_cached`.
+    Pass ``cache=False`` to force a fresh compile.
+    """
+    if cache:
+        return numpify_cached(
+            expr,
+            args=args,
+            f_numpy=f_numpy,
+            vectorize=vectorize,
+            expand_definition=expand_definition,
+        )
+    return _numpify_uncached(
+        expr,
+        args=args,
+        f_numpy=f_numpy,
+        vectorize=vectorize,
+        expand_definition=expand_definition,
+    )
+
+
+def _numpify_uncached(
+    expr: Any,
+    *,
+    args: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]] = None,
+    f_numpy: Optional[Mapping[_BindingKey, Any]] = None,
+    vectorize: bool = True,
+    expand_definition: bool = True,
+) -> NumpifiedFunction:
+    """Compile a SymPy expression into a NumPy-evaluable Python function (uncached).
 
     Parameters
     ----------
@@ -637,8 +668,8 @@ def _numpify_cached_impl(
             vectorize,
             expand_definition,
         )
-    # Delegate to numpify() for actual compilation.
-    return numpify(
+    # Delegate to the uncached compiler for actual compilation.
+    return _numpify_uncached(
         expr,
         args=args_tuple,
         f_numpy=frozen.mapping,
@@ -684,7 +715,7 @@ def numpify_cached(
     - If you mutate objects referenced by ``f_numpy`` (e.g. change entries of a
       NumPy array), cached callables will see the mutated object because the
       compiled function captures the object by reference.
-    - If you need a fresh compile, call :func:`numpify` directly or clear the
+    - If you need a fresh compile, call :func:`numpify` with ``cache=False`` or clear the
       cache via ``numpify_cached.cache_clear()``.
     """
     # Normalize to SymPy and args tuple exactly as numpify() does.
