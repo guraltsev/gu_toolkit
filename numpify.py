@@ -135,16 +135,18 @@ UNFREEZE = _Sentinel("UNFREEZE")
 
 @runtime_checkable
 class ParameterContext(Protocol):
-    """Protocol for objects exposing live parameters via ``.parameters``."""
+    """Protocol for objects exposing live parameter_context mappings."""
 
     @property
-    def parameters(self) -> Mapping[sp.Symbol, Any]:
-        """Mapping keyed by SymPy symbols whose values expose ``.value``."""
+    def parameter_context(self) -> Mapping[sp.Symbol, Any]:
+        """Mapping keyed by SymPy symbols to raw numeric values."""
 
 
 def _get_parameter_mapping(ctx: Any) -> Mapping[sp.Symbol, Any] | None:
     if isinstance(ctx, Mapping):
         return cast(Mapping[sp.Symbol, Any], ctx)
+    if hasattr(ctx, "parameter_context"):
+        return cast(Mapping[sp.Symbol, Any], getattr(ctx, "parameter_context"))
     if hasattr(ctx, "parameters"):
         return cast(Mapping[sp.Symbol, Any], getattr(ctx, "parameters"))
     if hasattr(ctx, "params"):
@@ -259,7 +261,7 @@ class NumpifiedFunction:
                     raise KeyError(
                         f"parameter_context is missing symbol {sym!r} ('{param_name}') in .parameters"
                     )
-                full_values.append(container[sym].value)
+                full_values.append(container[sym])
                 continue
 
             if free_idx >= len(positional_args):

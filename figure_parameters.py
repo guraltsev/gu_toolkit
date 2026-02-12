@@ -14,6 +14,22 @@ from .ParamRef import ParamRef
 from .ParameterSnapshot import ParameterSnapshot
 from .Slider import FloatSlider
 
+
+class _ParameterContextView(Mapping[Symbol, Any]):
+    """Live Mapping[Symbol, value] view over ParameterManager refs."""
+
+    def __init__(self, refs: Dict[Symbol, ParamRef]) -> None:
+        self._refs = refs
+
+    def __getitem__(self, key: Symbol) -> Any:
+        return self._refs[key].value
+
+    def __iter__(self) -> Iterator[Symbol]:
+        return iter(self._refs)
+
+    def __len__(self) -> int:
+        return len(self._refs)
+
 # SECTION: ParameterManager (The Model for Parameters) [id: ParameterManager]
 # =============================================================================
 
@@ -204,6 +220,12 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         if full:
             return snapshot
         return snapshot.value_map()
+
+
+    @property
+    def parameter_context(self) -> Mapping[Symbol, Any]:
+        """Live Mapping[Symbol, value] view for numeric evaluation contexts."""
+        return _ParameterContextView(self._refs)
 
     @property
     def has_params(self) -> bool:

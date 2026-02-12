@@ -177,7 +177,7 @@ class Plot:
     @property
     def numeric_expression(self) -> NumpifiedFunction:
         """Return numeric expression with parameters dynamically resolved from figure parameters."""
-        return self._numpified.set_parameter_context(self._smart_figure.parameters).freeze({
+        return self._numpified.set_parameter_context(self._smart_figure.parameters.parameter_context).freeze({
             sym: DYNAMIC_PARAMETER for sym in self._numpified.parameters[1:]
         })
 

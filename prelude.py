@@ -246,7 +246,7 @@ def _resolve_parameter_values(required_symbols, binding, current_figure_getter):
 
     if binding is None:
         fig = current_figure_getter(required=True)
-        return {sym: fig.parameters[sym].value for sym in required_symbols}
+        return {sym: fig.parameters.parameter_context[sym] for sym in required_symbols}
 
     if isinstance(binding, dict):
         missing = [sym for sym in required_symbols if sym not in binding and sym.name not in binding]
@@ -259,10 +259,14 @@ def _resolve_parameter_values(required_symbols, binding, current_figure_getter):
         }
 
     provider = None
-    if hasattr(binding, "params"):
-        provider = binding.params
+    if hasattr(binding, "parameter_context"):
+        provider = binding.parameter_context
+    elif hasattr(binding, "parameters") and hasattr(binding.parameters, "parameter_context"):
+        provider = binding.parameters.parameter_context
     elif hasattr(binding, "parameters"):
         provider = binding.parameters
+    elif hasattr(binding, "params"):
+        provider = binding.params
 
     if provider is None:
         raise TypeError(
@@ -273,7 +277,9 @@ def _resolve_parameter_values(required_symbols, binding, current_figure_getter):
     if missing:
         names = ", ".join(sym.name for sym in missing)
         raise ValueError(f"binding provider is missing values for: {names}")
-    return {sym: provider[sym].value for sym in required_symbols}
+    out = {sym: provider[sym] for sym in required_symbols}
+    # Backward compatibility for contexts that still expose ParamRef-like objects.
+    return {sym: (val.value if hasattr(val, "value") else val) for sym, val in out.items()}
 
 
 
@@ -317,12 +323,12 @@ def _resolve_numeric_callable(expr, x, binding, DYNAMIC_PARAMETER, _NumpifiedFun
         if len(expr.free_parameters) < len(expr.parameters):
             return expr
         if binding is None:
-            return expr.set_parameter_context(_current_figure(required=True)).freeze({
+            return expr.set_parameter_context(_current_figure(required=True).parameters.parameter_context).freeze({
                 sym: DYNAMIC_PARAMETER for sym in expr.parameters[1:]
             })
         if isinstance(binding, dict):
             return expr.freeze(binding)
-        return expr.set_parameter_context(binding).freeze({
+        return expr.set_parameter_context(_resolve_parameter_context(binding)).freeze({
             sym: DYNAMIC_PARAMETER for sym in expr.parameters[1:]
         })
 
