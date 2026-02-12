@@ -813,3 +813,7 @@ class SmartFloatSlider(widgets.VBox):
         is_open = self.settings_modal.layout.display == "flex"
         self.settings_modal.layout.display = "none" if is_open else "flex"
         self.settings_panel.layout.display = "none" if is_open else "flex"
+
+# Canonical non-legacy alias
+FloatSlider = SmartFloatSlider
+

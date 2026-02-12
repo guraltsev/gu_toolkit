@@ -286,14 +286,14 @@ def _load_numeric_bindings():
             NumpifiedFunction as _NumpifiedFunction,
             numpify_cached as _numpify_cached,
         )
-        from .SmartFigure import current_figure as _current_figure
+        from .Figure import current_figure as _current_figure
     except ImportError:
         from numpify import (
             BoundNumpifiedFunction as _BoundNumpifiedFunction,
             NumpifiedFunction as _NumpifiedFunction,
             numpify_cached as _numpify_cached,
         )
-        from SmartFigure import current_figure as _current_figure
+        from Figure import current_figure as _current_figure
 
     return _NumpifiedFunction, _BoundNumpifiedFunction, _numpify_cached, _current_figure
 

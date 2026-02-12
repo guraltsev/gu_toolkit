@@ -9,7 +9,7 @@ import sympy as sp
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT.parent))
 
-from gu_toolkit import SmartFigure  # noqa: E402
+from gu_toolkit import Figure  # noqa: E402
 from gu_toolkit.NumericExpression import PlotView  # noqa: E402
 
 
@@ -25,7 +25,7 @@ def _assert_raises(exc_type, fn, *args, **kwargs):
 
 def test_snapshot_order_and_values() -> None:
     a, b, c = sp.symbols("a b c")
-    fig = SmartFigure()
+    fig = Figure()
     fig.parameter([a, b, c], value=1)
 
     snap = fig.parameters.snapshot()
@@ -34,7 +34,7 @@ def test_snapshot_order_and_values() -> None:
 
 def test_snapshot_entry_immutability() -> None:
     a = sp.symbols("a")
-    fig = SmartFigure()
+    fig = Figure()
     fig.parameter(a, min=-2, max=2, step=0.5, value=0)
 
     snap = fig.parameters.snapshot(full=True)
@@ -49,7 +49,7 @@ def test_snapshot_entry_immutability() -> None:
 
 def test_bind_partial_and_key_validation() -> None:
     x, a, b, extra = sp.symbols("x a b extra")
-    fig = SmartFigure()
+    fig = Figure()
     plot = fig.plot(x, a * x + b, parameters=[a, b], id="line")
     assert isinstance(plot.numeric_expression, PlotView)
 
@@ -66,7 +66,7 @@ def test_bind_partial_and_key_validation() -> None:
 
 def test_unbind_requires_bind_before_call() -> None:
     x, a = sp.symbols("x a")
-    fig = SmartFigure()
+    fig = Figure()
     plot = fig.plot(x, a * x, parameters=[a], id="ax")
 
     unbound = plot.numeric_expression.unbind()
@@ -76,7 +76,7 @@ def test_unbind_requires_bind_before_call() -> None:
 
 def test_live_vs_snapshot_bound() -> None:
     x, a = sp.symbols("x a")
-    fig = SmartFigure()
+    fig = Figure()
     plot = fig.plot(x, a * x, parameters=[a], id="ax")
 
     fig.parameters[a].value = 2.0

@@ -3,7 +3,7 @@ Minimal verification script for module-level params/parameter helpers.
 
 Run (from the repo root):
 
-    python tests/test_SmartFigure_module_params.py
+    python tests/test_Figure_module_params.py
 """
 
 from __future__ import annotations
@@ -16,8 +16,8 @@ import sympy as sp
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT.parent))
 
-from gu_toolkit import SmartFigure, params, parameter, plot_style_options  # noqa: E402
-import gu_toolkit.SmartFigure as smartfigure_module  # noqa: E402
+from gu_toolkit import Figure, params, parameter, plot_style_options  # noqa: E402
+import gu_toolkit.Figure as figure_module  # noqa: E402
 
 
 class _FakeClock:
@@ -58,7 +58,7 @@ def _assert_raises(exc_type, fn, *args, **kwargs):
 
 def test_params_proxy_context_access() -> None:
     x, a = sp.symbols("x a")
-    fig = SmartFigure()
+    fig = Figure()
     with fig:
         param_ref = fig.params.parameter(a)
         assert params[a] is param_ref
@@ -66,7 +66,7 @@ def test_params_proxy_context_access() -> None:
 
 def test_params_strict_lookup() -> None:
     a = sp.symbols("a")
-    fig = SmartFigure()
+    fig = Figure()
     with fig:
         assert a not in params
         _assert_raises(KeyError, lambda: params[a])
@@ -74,7 +74,7 @@ def test_params_strict_lookup() -> None:
 
 def test_parameter_creation_path() -> None:
     a = sp.symbols("a")
-    fig = SmartFigure()
+    fig = Figure()
     with fig:
         param_ref = parameter(a)
         assert params[a] is param_ref
@@ -88,7 +88,7 @@ def test_no_context_behavior() -> None:
 
 def test_params_setitem_sugar() -> None:
     a = sp.symbols("a")
-    fig = SmartFigure()
+    fig = Figure()
     with fig:
         fig.params.parameter(a, value=1)
         params[a] = 7
@@ -98,7 +98,7 @@ def test_params_setitem_sugar() -> None:
 
 def test_plot_opacity_shortcut_and_validation() -> None:
     x = sp.symbols("x")
-    fig = SmartFigure()
+    fig = Figure()
     plot = fig.plot(x, sp.sin(x), id="sin", opacity=0.4)
     assert plot.opacity == 0.4
 
@@ -113,54 +113,54 @@ def test_plot_style_options_are_discoverable() -> None:
     for key in ("color", "thickness", "dash", "opacity", "line", "trace"):
         assert key in options
 
-    fig_options = SmartFigure.plot_style_options()
+    fig_options = Figure.plot_style_options()
     assert fig_options == options
 
 
 def test_relayout_throttle_first_event_renders_immediately() -> None:
     clock = _FakeClock(start=100.0)
-    original_monotonic = smartfigure_module.time.monotonic
-    original_timer = smartfigure_module.threading.Timer
-    original_render = SmartFigure.render
+    original_monotonic = figure_module.time.monotonic
+    original_timer = figure_module.threading.Timer
+    original_render = Figure.render
     calls = []
 
     def _render_spy(self, reason="manual", trigger=None):
         calls.append(reason)
 
     try:
-        smartfigure_module.time.monotonic = clock.monotonic
+        figure_module.time.monotonic = clock.monotonic
         _FakeTimer.created.clear()
-        smartfigure_module.threading.Timer = _FakeTimer
-        SmartFigure.render = _render_spy
+        figure_module.threading.Timer = _FakeTimer
+        Figure.render = _render_spy
 
-        fig = SmartFigure()
+        fig = Figure()
         fig._throttled_relayout()
 
         assert calls == ["relayout"]
         assert len(_FakeTimer.created) == 0
     finally:
-        smartfigure_module.time.monotonic = original_monotonic
-        smartfigure_module.threading.Timer = original_timer
-        SmartFigure.render = original_render
+        figure_module.time.monotonic = original_monotonic
+        figure_module.threading.Timer = original_timer
+        Figure.render = original_render
 
 
 def test_relayout_throttle_burst_coalesces_and_trails_once() -> None:
     clock = _FakeClock(start=200.0)
-    original_monotonic = smartfigure_module.time.monotonic
-    original_timer = smartfigure_module.threading.Timer
-    original_render = SmartFigure.render
+    original_monotonic = figure_module.time.monotonic
+    original_timer = figure_module.threading.Timer
+    original_render = Figure.render
     calls = []
 
     def _render_spy(self, reason="manual", trigger=None):
         calls.append(reason)
 
     try:
-        smartfigure_module.time.monotonic = clock.monotonic
+        figure_module.time.monotonic = clock.monotonic
         _FakeTimer.created.clear()
-        smartfigure_module.threading.Timer = _FakeTimer
-        SmartFigure.render = _render_spy
+        figure_module.threading.Timer = _FakeTimer
+        Figure.render = _render_spy
 
-        fig = SmartFigure()
+        fig = Figure()
         fig._throttled_relayout()  # leading render
         assert calls == ["relayout"]
 
@@ -183,9 +183,9 @@ def test_relayout_throttle_burst_coalesces_and_trails_once() -> None:
         assert not fig._relayout_pending
         assert fig._relayout_timer is None
     finally:
-        smartfigure_module.time.monotonic = original_monotonic
-        smartfigure_module.threading.Timer = original_timer
-        SmartFigure.render = original_render
+        figure_module.time.monotonic = original_monotonic
+        figure_module.threading.Timer = original_timer
+        Figure.render = original_render
 
 
 def main() -> None:

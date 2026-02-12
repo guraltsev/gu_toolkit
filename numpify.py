@@ -152,7 +152,7 @@ class NumpifiedFunction:
     ) -> "BoundNumpifiedFunction":
         """Bind values from a dict, provider, or current figure context."""
         if source is None:
-            from .SmartFigure import current_figure
+            from .Figure import current_figure
 
             return BoundNumpifiedFunction(parent=self, provider=current_figure(required=True))
 

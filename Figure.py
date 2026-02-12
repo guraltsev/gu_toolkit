@@ -39,7 +39,7 @@ Quick start (in a Jupyter notebook)
 ---------------------------------------------------------------------------
 
 >>> import sympy as sp
->>> from SmartFigure import SmartFigure  # wherever this file lives
+>>> from Figure import SmartFigure  # wherever this file lives
 >>>
 >>> x, a = sp.symbols("x a")
 >>> fig = SmartFigure(x_range=(-6, 6), y_range=(-3, 3))
@@ -122,7 +122,7 @@ from sympy.core.symbol import Symbol
 from .InputConvert import InputConvert
 from .numpify import NumpifiedFunction, numpify_cached
 from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
-from .SmartSlider import SmartFloatSlider
+from .Slider import SmartFloatSlider
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .ParameterSnapshot import ParameterSnapshot
@@ -3427,3 +3427,8 @@ def plot(
         opacity=opacity,
         trace=trace,
     )
+
+# Canonical non-legacy aliases
+FigureLayout = SmartFigureLayout
+Plot = SmartPlot
+Figure = SmartFigure
