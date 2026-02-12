@@ -40,12 +40,12 @@ class LivePlotNumericExpression:
 
     def snapshot(self) -> NumpifiedFunction:
         """Return dead numeric snapshot as a frozen numpified function."""
-        numpified = self._plot_manager.numpified
-        ctx = self._plot_manager._smart_figure
+        numpified = self._plot_manager._numpified
+        ctx = self._plot_manager._smart_figure.parameters.parameter_context
         return numpified.set_parameter_context(ctx).freeze(
             {sym: DYNAMIC_PARAMETER for sym in numpified.parameters[1:]}
         )
 
     def freeze(self, values: dict[sp.Symbol | str, object]) -> NumpifiedFunction:
         """Create a dead numeric expression with explicit frozen values."""
-        return self._plot_manager.numpified.freeze(values)
+        return self._plot_manager._numpified.freeze(values)

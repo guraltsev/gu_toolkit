@@ -169,10 +169,6 @@ class Plot:
         """Return parameter symbols in deterministic numeric-argument order."""
         return self._numpified.args[1:]
 
-    @property
-    def numpified(self) -> NumpifiedFunction:
-        """Return compiled numpified callable for this plot."""
-        return self._numpified
 
     @property
     def numeric_expression(self) -> NumpifiedFunction:
