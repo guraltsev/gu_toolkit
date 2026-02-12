@@ -143,6 +143,8 @@ class ParameterContext(Protocol):
 
 
 def _get_parameter_mapping(ctx: Any) -> Mapping[sp.Symbol, Any] | None:
+    if isinstance(ctx, Mapping):
+        return cast(Mapping[sp.Symbol, Any], ctx)
     if hasattr(ctx, "parameters"):
         return cast(Mapping[sp.Symbol, Any], getattr(ctx, "parameters"))
     if hasattr(ctx, "params"):

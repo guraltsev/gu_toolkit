@@ -12,10 +12,9 @@ import sympy as sp
 from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
-from .NumericExpression import LivePlotNumericExpression, LivePlotSymbolicExpression
 from .InputConvert import InputConvert
 from .figure_context import FIGURE_DEFAULT, _is_figure_default
-from .numpify import NumpifiedFunction, numpify_cached
+from .numpify import DYNAMIC_PARAMETER, NumpifiedFunction, numpify_cached
 
 # SECTION: Plot (The specific logic for one curve) [id: Plot]
 # =============================================================================
@@ -161,9 +160,9 @@ class Plot:
         self._func = func
 
     @property
-    def symbolic_expression(self) -> LivePlotSymbolicExpression:
-        """Return a live symbolic-expression view for this plot."""
-        return LivePlotSymbolicExpression(_plot_manager=self)
+    def symbolic_expression(self) -> Expr:
+        """Return the current symbolic expression used by this plot."""
+        return self._func
 
     @property
     def parameters(self) -> tuple[Symbol, ...]:
@@ -176,9 +175,11 @@ class Plot:
         return self._numpified
 
     @property
-    def numeric_expression(self) -> LivePlotNumericExpression:
-        """Return a live numeric-expression view for this plot."""
-        return LivePlotNumericExpression(_plot_manager=self)
+    def numeric_expression(self) -> NumpifiedFunction:
+        """Return numeric expression with parameters dynamically resolved from figure parameters."""
+        return self._numpified.set_parameter_context(self._smart_figure.parameters).freeze({
+            sym: DYNAMIC_PARAMETER for sym in self._numpified.parameters[1:]
+        })
 
     @property
     def label(self) -> str:
