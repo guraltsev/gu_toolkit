@@ -344,6 +344,37 @@ class NumpifiedFunction:
         return f"NumpifiedFunction({self.symbolic!r}, args=({args_str}))"
 
 
+def numpify(
+    expr: Any,
+    *,
+    args: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]] = None,
+    f_numpy: Optional[Mapping[_BindingKey, Any]] = None,
+    vectorize: bool = True,
+    expand_definition: bool = True,
+    cache: bool = True,
+) -> NumpifiedFunction:
+    """Compile a SymPy expression into a NumPy-evaluable function.
+
+    By default this uses the same LRU-backed cache as :func:`numpify_cached`.
+    Pass ``cache=False`` to force a fresh compile.
+    """
+    if cache:
+        return numpify_cached(
+            expr,
+            args=args,
+            f_numpy=f_numpy,
+            vectorize=vectorize,
+            expand_definition=expand_definition,
+        )
+    return _numpify_uncached(
+        expr,
+        args=args,
+        f_numpy=f_numpy,
+        vectorize=vectorize,
+        expand_definition=expand_definition,
+    )
+
+
 def _is_valid_parameter_name(name: str) -> bool:
     return bool(name) and name.isidentifier() and not keyword.iskeyword(name)
 
