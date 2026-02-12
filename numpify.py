@@ -55,7 +55,7 @@ Examples
 >>> x = sp.Symbol("x")
 
 Constant compiled with broadcasting:
->>> f = numpify(5, parameters=x)
+>>> f = numpify(5, vars=x)
 >>> float(f(0))
 5.0
 >>> f(np.array([1, 2, 3]))
@@ -63,7 +63,7 @@ array([5., 5., 5.])
 
 Symbol binding (treat `a` as an injected constant):
 >>> a = sp.Symbol("a")
->>> g = numpify(a * x, parameters=x, f_numpy={a: 2.0})
+>>> g = numpify(a * x, vars=x, f_numpy={a: 2.0})
 >>> g(np.array([1, 2, 3]))
 array([2., 4., 6.])
 
@@ -190,7 +190,7 @@ class NumpifiedFunction:
             return key
         if isinstance(key, str):
             if key not in self.symbol_for_name:
-                raise KeyError(f"Unknown parameter name: {key!r}")
+                raise KeyError(f"Unknown var name: {key!r}")
             return self.symbol_for_name[key]
         raise TypeError(f"Parameter key must be Symbol or str, got {type(key).__name__}")
 
@@ -212,8 +212,8 @@ class NumpifiedFunction:
         for key, value in items:
             sym = self._resolve_key(key)
             if sym in resolved:
-                param_name = self.name_for_symbol[sym]
-                raise ValueError(f"Duplicate binding for symbol {sym!r} (parameter '{param_name}')")
+                var_name = self.name_for_symbol[sym]
+                raise ValueError(f"Duplicate binding for symbol {sym!r} (var '{var_name}')")
             resolved[sym] = value
         return resolved
 
@@ -225,8 +225,8 @@ class NumpifiedFunction:
         free_idx = 0
         missing: list[str] = []
 
-        for sym in self.parameters:
-            param_name = self.name_for_symbol[sym]
+        for sym in self.vars:
+            var_name = self.name_for_symbol[sym]
             if sym in self._frozen:
                 full_values.append(self._frozen[sym])
                 continue
@@ -234,17 +234,17 @@ class NumpifiedFunction:
             if sym in self._dynamic:
                 if self._parameter_context is None:
                     raise ValueError(
-                        f"Dynamic parameter {sym!r} ('{param_name}') requires parameter_context at call time"
+                        f"Dynamic var {sym!r} ('{var_name}') requires parameter_context at call time"
                     )
                 if sym not in self._parameter_context:
                     raise KeyError(
-                        f"parameter_context is missing symbol {sym!r} ('{param_name}')"
+                        f"parameter_context is missing symbol {sym!r} ('{var_name}')"
                     )
                 full_values.append(self._parameter_context[sym])
                 continue
 
             if free_idx >= len(positional_args):
-                missing.append(f"{sym!r} ('{param_name}')")
+                missing.append(f"{sym!r} ('{var_name}')")
             else:
                 full_values.append(positional_args[free_idx])
                 free_idx += 1
@@ -259,11 +259,11 @@ class NumpifiedFunction:
         return self._fn(*full_values)
 
     @property
-    def parameters(self) -> tuple[sp.Symbol, ...]:
+    def vars(self) -> tuple[sp.Symbol, ...]:
         return tuple(sym for sym, _ in self.call_signature)
 
     @property
-    def parameter_names(self) -> tuple[str, ...]:
+    def var_names(self) -> tuple[str, ...]:
         return tuple(name for _, name in self.call_signature)
 
     def freeze(self, bindings: Mapping[sp.Symbol | str, Any] | Iterable[tuple[sp.Symbol | str, Any]] | None = None, /, **kwargs: Any) -> "NumpifiedFunction":
@@ -295,26 +295,26 @@ class NumpifiedFunction:
         return out
 
     @property
-    def free_parameters(self) -> tuple[sp.Symbol, ...]:
-        return tuple(sym for sym in self.parameters if sym not in self._frozen and sym not in self._dynamic)
+    def free_vars(self) -> tuple[sp.Symbol, ...]:
+        return tuple(sym for sym in self.vars if sym not in self._frozen and sym not in self._dynamic)
 
     @property
-    def free_call_signature(self) -> tuple[tuple[sp.Symbol, str], ...]:
-        return tuple((sym, self.name_for_symbol[sym]) for sym in self.free_parameters)
+    def free_var_signature(self) -> tuple[tuple[sp.Symbol, str], ...]:
+        return tuple((sym, self.name_for_symbol[sym]) for sym in self.free_vars)
 
     @property
     def is_live(self) -> bool:
         return self._parameter_context is not None
 
     def __repr__(self) -> str:
-        parameters_str = ", ".join(name for _, name in self.call_signature)
-        return f"NumpifiedFunction({self.symbolic!r}, parameters=({parameters_str}))"
+        vars_str = ", ".join(name for _, name in self.call_signature)
+        return f"NumpifiedFunction({self.symbolic!r}, vars=({vars_str}))"
 
 
 def numpify(
     expr: Any,
     *,
-    parameters: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]] = None,
+    vars: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]] = None,
     f_numpy: Optional[Mapping[_BindingKey, Any]] = None,
     vectorize: bool = True,
     expand_definition: bool = True,
@@ -328,14 +328,14 @@ def numpify(
     if cache:
         return numpify_cached(
             expr,
-            parameters=parameters,
+            vars=vars,
             f_numpy=f_numpy,
             vectorize=vectorize,
             expand_definition=expand_definition,
         )
     return _numpify_uncached(
         expr,
-        parameters=parameters,
+        vars=vars,
         f_numpy=f_numpy,
         vectorize=vectorize,
         expand_definition=expand_definition,
@@ -355,10 +355,10 @@ def _mangle_base_name(name: str) -> str:
     return cleaned
 
 
-def _build_call_signature(parameters_tuple: tuple[sp.Symbol, ...], reserved_names: set[str]) -> tuple[tuple[sp.Symbol, str], ...]:
+def _build_call_signature(vars_tuple: tuple[sp.Symbol, ...], reserved_names: set[str]) -> tuple[tuple[sp.Symbol, str], ...]:
     used = set(reserved_names)
     out: list[tuple[sp.Symbol, str]] = []
-    for idx, sym in enumerate(parameters_tuple):
+    for idx, sym in enumerate(vars_tuple):
         base = sym.name if _is_valid_parameter_name(sym.name) else _mangle_base_name(sym.name)
         candidate = base
         suffix = 0
@@ -373,7 +373,7 @@ def _build_call_signature(parameters_tuple: tuple[sp.Symbol, ...], reserved_name
 def _numpify_uncached(
     expr: Any,
     *,
-    parameters: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]] = None,
+    vars: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]] = None,
     f_numpy: Optional[Mapping[_BindingKey, Any]] = None,
     vectorize: bool = True,
     expand_definition: bool = True,
@@ -384,7 +384,7 @@ def _numpify_uncached(
     ----------
     expr:
         A SymPy expression or anything convertible via :func:`sympy.sympify`.
-    parameters:
+    vars:
         Symbols treated as *positional arguments* of the compiled function.
 
         - If None (default), uses all free symbols of ``expr`` sorted by ``sympy.default_sort_key``.
@@ -421,7 +421,7 @@ def _numpify_uncached(
     Raises
     ------
     TypeError
-        If ``parameters`` is not a Symbol or an iterable of Symbols.
+        If ``vars`` is not a Symbol or an iterable of Symbols.
         If a function binding is provided but the value is not callable.
     ValueError
         If ``expr`` contains unbound symbols or unbound unknown functions.
@@ -441,13 +441,13 @@ def _numpify_uncached(
         raise TypeError(f"numpify expects a SymPy expression, got {type(expr_sym)}")
     expr = cast(sp.Basic, expr_sym)
 
-    # 2) Normalize parameters.
-    parameters_tuple = _normalize_parameters(expr, parameters)
+    # 2) Normalize vars.
+    vars_tuple = _normalize_vars(expr, vars)
 
     log_debug = logger.isEnabledFor(logging.DEBUG)
     t_total0: float | None = time.perf_counter() if log_debug else None
     if log_debug:
-        logger.debug("numpify: detected parameters=%s", [a.name for a in parameters_tuple])
+        logger.debug("numpify: detected vars=%s", [a.name for a in vars_tuple])
 
     # 3) Optionally expand custom definitions.
     if expand_definition:
@@ -457,23 +457,23 @@ def _numpify_uncached(
     # 4) Parse bindings.
     sym_bindings, func_bindings = _parse_bindings(expr, f_numpy)
 
-    # 5) Validate free symbols are accounted for (either parameters or symbol bindings).
+    # 5) Validate free symbols are accounted for (either vars or symbol bindings).
     free_names = {s.name for s in expr.free_symbols}
-    parameter_names_set = {a.name for a in parameters_tuple}
-    missing_names = free_names - parameter_names_set - set(sym_bindings.keys())
+    var_names_set = {a.name for a in vars_tuple}
+    missing_names = free_names - var_names_set - set(sym_bindings.keys())
     if missing_names:
         missing_str = ", ".join(sorted(missing_names))
-        parameters_str = ", ".join(a.name for a in parameters_tuple)
+        vars_str = ", ".join(a.name for a in vars_tuple)
         raise ValueError(
             "Expression contains unbound symbols: "
-            f"{missing_str}. Provide them in parameters=({parameters_str}) or bind via f_numpy={{symbol: value}}."
+            f"{missing_str}. Provide them in vars=({vars_str}) or bind via f_numpy={{symbol: value}}."
         )
 
-    # 6) Prevent accidental overwrites: symbol bindings cannot overlap with parameters.
-    overlap = set(a.name for a in parameters_tuple) & set(sym_bindings.keys())
+    # 6) Prevent accidental overwrites: symbol bindings cannot overlap with vars.
+    overlap = set(a.name for a in vars_tuple) & set(sym_bindings.keys())
     if overlap:
         raise ValueError(
-            "Symbol bindings overlap with parameters (would overwrite argument values): "
+            "Symbol bindings overlap with vars (would overwrite argument values): "
             + ", ".join(sorted(overlap))
         )
 
@@ -486,7 +486,7 @@ def _numpify_uncached(
     # 9) Build call signature and generate expression code/source.
     reserved_names = set(keyword.kwlist) | set(dir(builtins)) | {"numpy", "np", "_sym_bindings"}
     reserved_names |= set(sym_bindings.keys()) | set(func_bindings.keys())
-    call_signature = _build_call_signature(parameters_tuple, reserved_names)
+    call_signature = _build_call_signature(vars_tuple, reserved_names)
     arg_names = [name for _, name in call_signature]
     replacement = {sym: sp.Symbol(name) for sym, name in call_signature}
     expr_codegen = expr.xreplace(replacement)
@@ -537,7 +537,7 @@ def _numpify_uncached(
         Auto-generated NumPy function from SymPy expression.
 
         expr: {repr(expr)}
-        parameters: {arg_names}
+        vars: {arg_names}
 
         Source:
         {src}
@@ -557,25 +557,25 @@ def _numpify_uncached(
     return NumpifiedFunction(fn=fn, symbolic=expr, call_signature=call_signature, source=src)
 
 
-def _normalize_parameters(expr: sp.Basic, parameters: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]]) -> Tuple[sp.Symbol, ...]:
-    """Normalize parameters into a tuple of SymPy Symbols."""
-    if parameters is None:
-        parameters_tuple: Tuple[sp.Symbol, ...] = tuple(sorted(expr.free_symbols, key=sp.default_sort_key))
-        return parameters_tuple
+def _normalize_vars(expr: sp.Basic, vars: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]]) -> Tuple[sp.Symbol, ...]:
+    """Normalize vars into a tuple of SymPy Symbols."""
+    if vars is None:
+        vars_tuple: Tuple[sp.Symbol, ...] = tuple(sorted(expr.free_symbols, key=sp.default_sort_key))
+        return vars_tuple
 
-    if isinstance(parameters, sp.Symbol):
-        return (parameters,)
+    if isinstance(vars, sp.Symbol):
+        return (vars,)
 
     try:
-        parameters_tuple = tuple(parameters)
+        vars_tuple = tuple(vars)
     except TypeError as e:
-        raise TypeError("parameters must be a SymPy Symbol or an iterable of SymPy Symbols") from e
+        raise TypeError("vars must be a SymPy Symbol or an iterable of SymPy Symbols") from e
 
-    for a in parameters_tuple:
+    for a in vars_tuple:
         arg_expr = sp.sympify(a)
         if not isinstance(arg_expr, sp.Symbol):
-            raise TypeError(f"parameters must contain only SymPy Symbols, got {type(arg_expr)}")
-    return cast(Tuple[sp.Symbol, ...], parameters_tuple)
+            raise TypeError(f"vars must contain only SymPy Symbols, got {type(arg_expr)}")
+    return cast(Tuple[sp.Symbol, ...], vars_tuple)
 
 
 def _rewrite_expand_definition(expr: sp.Basic, *, max_passes: int = 10) -> sp.Basic:
@@ -741,7 +741,7 @@ class _FrozenFNumPy:
 @lru_cache(maxsize=_NUMPIFY_CACHE_MAXSIZE)
 def _numpify_cached_impl(
     expr: sp.Basic,
-    parameters_tuple: Tuple[sp.Symbol, ...],
+    vars_tuple: Tuple[sp.Symbol, ...],
     frozen: _FrozenFNumPy,
     vectorize: bool,
     expand_definition: bool,
@@ -750,15 +750,15 @@ def _numpify_cached_impl(
     # NOTE: This function body only runs on cache *misses*.
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
-            "numpify_cached: cache MISS (parameters=%s, vectorize=%s, expand_definition=%s)",
-            [a.name for a in parameters_tuple],
+            "numpify_cached: cache MISS (vars=%s, vectorize=%s, expand_definition=%s)",
+            [a.name for a in vars_tuple],
             vectorize,
             expand_definition,
         )
     # Delegate to the uncached compiler for actual compilation.
     return _numpify_uncached(
         expr,
-        parameters=parameters_tuple,
+        vars=vars_tuple,
         f_numpy=frozen.mapping,
         vectorize=vectorize,
         expand_definition=expand_definition,
@@ -768,7 +768,7 @@ def _numpify_cached_impl(
 def numpify_cached(
     expr: Any,
     *,
-    parameters: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]] = None,
+    vars: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]] = None,
     f_numpy: Optional[Mapping[_BindingKey, Any]] = None,
     vectorize: bool = True,
     expand_definition: bool = True,
@@ -783,13 +783,13 @@ def numpify_cached(
     The cache key includes:
 
     - the SymPy expression (after :func:`sympy.sympify`),
-    - the normalized parameters tuple ``parameters``,
+    - the normalized vars tuple ``vars``,
     - a normalized, hashable view of ``f_numpy``,
     - and the options ``vectorize`` / ``expand_definition``.
 
     Parameters
     ----------
-    expr, parameters, f_numpy, vectorize, expand_definition:
+    expr, vars, f_numpy, vectorize, expand_definition:
         Same meaning as in :func:`numpify`.
 
     Returns
@@ -805,15 +805,15 @@ def numpify_cached(
     - If you need a fresh compile, call :func:`numpify` with ``cache=False`` or clear the
       cache via ``numpify_cached.cache_clear()``.
     """
-    # Normalize to SymPy and parameters tuple exactly as numpify() does.
+    # Normalize to SymPy and vars tuple exactly as numpify() does.
     expr_sym = cast(sp.Basic, sp.sympify(expr))
     if not isinstance(expr_sym, sp.Basic):
         raise TypeError(f"numpify_cached expects a SymPy expression, got {type(expr_sym)}")
 
-    parameters_tuple = _normalize_parameters(expr_sym, parameters)
+    vars_tuple = _normalize_vars(expr_sym, vars)
     frozen = _FrozenFNumPy(f_numpy)
 
-    return _numpify_cached_impl(expr_sym, parameters_tuple, frozen, vectorize, expand_definition)
+    return _numpify_cached_impl(expr_sym, vars_tuple, frozen, vectorize, expand_definition)
 
 
 # Expose cache controls on the public wrapper.

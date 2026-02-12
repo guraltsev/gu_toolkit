@@ -297,22 +297,22 @@ def _load_numpify_cached():
 def _resolve_numeric_callable(expr, x, binding, DYNAMIC_PARAMETER, _NumpifiedFunction, _numpify_cached, _current_figure):
     """Build a numeric callable of one variable from supported symbolic/numeric inputs."""
     if isinstance(expr, _NumpifiedFunction):
-        if not expr.parameters:
+        if not expr.vars:
             raise TypeError("NIntegrate requires an x argument for numpified functions")
-        if len(expr.parameters) == 1:
+        if len(expr.vars) == 1:
             return expr
-        if len(expr.free_parameters) < len(expr.parameters):
+        if len(expr.free_vars) < len(expr.vars):
             return expr
         if binding is None:
             return expr.set_parameter_context(_current_figure(required=True).parameters.parameter_context).freeze({
-                sym: DYNAMIC_PARAMETER for sym in expr.parameters[1:]
+                sym: DYNAMIC_PARAMETER for sym in expr.vars[1:]
             })
         if isinstance(binding, dict):
             return expr.freeze(binding)
         if not isinstance(binding, Mapping):
             raise TypeError("binding must be a dict or mapping for dynamic numeric expressions")
         return expr.set_parameter_context(binding).freeze({
-            sym: DYNAMIC_PARAMETER for sym in expr.parameters[1:]
+            sym: DYNAMIC_PARAMETER for sym in expr.vars[1:]
         })
 
     if isinstance(expr, sp.Lambda):
@@ -324,18 +324,18 @@ def _resolve_numeric_callable(expr, x, binding, DYNAMIC_PARAMETER, _NumpifiedFun
         extra_symbols = variables[1:]
         if extra_symbols:
             value_map = _resolve_parameter_values(extra_symbols, binding, _current_figure)
-            compiled = _numpify_cached(expr.expr, parameters=variables)
+            compiled = _numpify_cached(expr.expr, vars=variables)
             return compiled.freeze(value_map)
-        return _numpify_cached(expr.expr, parameters=lead_symbol)
+        return _numpify_cached(expr.expr, vars=lead_symbol)
 
     if isinstance(expr, sp.Basic):
         if not isinstance(x, sp.Symbol):
             raise TypeError(f"NIntegrate expects x to be a sympy Symbol for symbolic expressions, got {type(x)}")
         required_symbols = tuple(sorted((sp.sympify(expr).free_symbols - {x}), key=lambda s: s.name))
         if not required_symbols:
-            return _numpify_cached(expr, parameters=x)
+            return _numpify_cached(expr, vars=x)
         value_map = _resolve_parameter_values(required_symbols, binding, _current_figure)
-        compiled = _numpify_cached(expr, parameters=(x, *required_symbols))
+        compiled = _numpify_cached(expr, vars=(x, *required_symbols))
         return compiled.freeze(value_map)
 
     if callable(expr):
@@ -542,7 +542,7 @@ def play(expr, var_and_limits, loop=True):
     sample_count = max(2, int(np.ceil(duration * sample_rate)))
     t = np.linspace(start, stop, sample_count, endpoint=False, dtype=float)
 
-    fn = _numpify_cached(expr, parameters=x)
+    fn = _numpify_cached(expr, vars=x)
     y = np.asarray(fn(t), dtype=float)
     if y.ndim == 0:
         y = np.full_like(t, float(y))

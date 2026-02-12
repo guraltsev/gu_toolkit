@@ -77,7 +77,7 @@ def test_nintegrate_numpified_bound_and_unbound_functions() -> None:
     except ImportError:
         from numpify import numpify_cached
 
-    unbound = numpify_cached(expr, parameters=[x, a, b])
+    unbound = numpify_cached(expr, vars=[x, a, b])
     unbound_result = NIntegrate(unbound, (x, 0, 1), binding={a: 2.0, b: 3.0})
     assert math.isclose(unbound_result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
 

@@ -154,7 +154,7 @@ class Plot:
         """
         parameters = list(parameters) 
         # Compile
-        self._numpified = numpify_cached(func, parameters=[var] + parameters)
+        self._numpified = numpify_cached(func, vars=[var] + parameters)
         # Store
         self._var = var
         self._func = func
@@ -167,14 +167,14 @@ class Plot:
     @property
     def parameters(self) -> tuple[Symbol, ...]:
         """Return parameter symbols in deterministic numeric-argument order."""
-        return self._numpified.parameters[1:]
+        return self._numpified.vars[1:]
 
 
     @property
     def numeric_expression(self) -> NumpifiedFunction:
         """Return numeric expression with parameters dynamically resolved from figure parameters."""
         return self._numpified.set_parameter_context(self._smart_figure.parameters.parameter_context).freeze({
-            sym: DYNAMIC_PARAMETER for sym in self._numpified.parameters[1:]
+            sym: DYNAMIC_PARAMETER for sym in self._numpified.vars[1:]
         })
 
     @property

@@ -21,8 +21,8 @@ def test_numpify_uses_cache_by_default() -> None:
     x = sp.Symbol("x")
     mod.numpify_cached.cache_clear()
 
-    f1 = mod.numpify(x + 1, parameters=x)
-    f2 = mod.numpify(x + 1, parameters=x)
+    f1 = mod.numpify(x + 1, vars=x)
+    f2 = mod.numpify(x + 1, vars=x)
 
     assert f1 is f2
 
@@ -33,7 +33,7 @@ def test_numpify_cache_false_forces_recompile() -> None:
     x = sp.Symbol("x")
     mod.numpify_cached.cache_clear()
 
-    f1 = mod.numpify(x + 1, parameters=x, cache=False)
-    f2 = mod.numpify(x + 1, parameters=x, cache=False)
+    f1 = mod.numpify(x + 1, vars=x, cache=False)
+    f2 = mod.numpify(x + 1, vars=x, cache=False)
 
     assert f1 is not f2
