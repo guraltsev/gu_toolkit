@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Any, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 _FIGURE_STACK: List["Figure"] = []
 
