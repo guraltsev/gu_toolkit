@@ -6,6 +6,8 @@ and infix relation operators tuned for discoverable notebook use.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 __all__=[]
 # --- The deliberate classroom prelude ---
 import sympy as sp
@@ -258,13 +260,7 @@ def _resolve_parameter_values(required_symbols, binding, current_figure_getter):
             for sym in required_symbols
         }
 
-    provider = _resolve_parameter_context(binding)
-
-    missing = [sym for sym in required_symbols if sym not in provider]
-    if missing:
-        names = ", ".join(sym.name for sym in missing)
-        raise ValueError(f"binding provider is missing values for: {names}")
-    return {sym: provider[sym] for sym in required_symbols}
+    raise TypeError("binding must be a dict keyed by Symbol or symbol name")
 
 
 
@@ -313,7 +309,9 @@ def _resolve_numeric_callable(expr, x, binding, DYNAMIC_PARAMETER, _NumpifiedFun
             })
         if isinstance(binding, dict):
             return expr.freeze(binding)
-        return expr.set_parameter_context(_resolve_parameter_context(binding)).freeze({
+        if not isinstance(binding, Mapping):
+            raise TypeError("binding must be a dict or mapping for dynamic numeric expressions")
+        return expr.set_parameter_context(binding).freeze({
             sym: DYNAMIC_PARAMETER for sym in expr.parameters[1:]
         })
 

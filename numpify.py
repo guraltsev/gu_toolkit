@@ -90,7 +90,7 @@ import keyword
 import logging
 import time
 import textwrap
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Protocol, Tuple, Union, cast, runtime_checkable
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple, TypeAlias, Union
 
 import numpy as np
 import sympy as sp
@@ -133,21 +133,7 @@ DYNAMIC_PARAMETER = _Sentinel("DYNAMIC_PARAMETER")
 UNFREEZE = _Sentinel("UNFREEZE")
 
 
-@runtime_checkable
-class ParameterContext(Protocol):
-    """Protocol for objects exposing live parameter_context mappings."""
-
-    @property
-    def parameter_context(self) -> Mapping[sp.Symbol, Any]:
-        """Mapping keyed by SymPy symbols to raw numeric values."""
-
-
-def _get_parameter_mapping(ctx: Any) -> Mapping[sp.Symbol, Any] | None:
-    if isinstance(ctx, Mapping):
-        return cast(Mapping[sp.Symbol, Any], ctx)
-    if hasattr(ctx, "parameter_context"):
-        return cast(Mapping[sp.Symbol, Any], getattr(ctx, "parameter_context"))
-    return None
+ParameterContext: TypeAlias = Mapping[sp.Symbol, Any]
 
 
 class NumpifiedFunction:
@@ -252,12 +238,11 @@ class NumpifiedFunction:
                     raise ValueError(
                         f"Dynamic parameter {sym!r} ('{param_name}') requires parameter_context at call time"
                     )
-                container = _get_parameter_mapping(self._parameter_context)
-                if container is None or sym not in container:
+                if sym not in self._parameter_context:
                     raise KeyError(
-                        f"parameter_context is missing symbol {sym!r} ('{param_name}') in .parameters"
+                        f"parameter_context is missing symbol {sym!r} ('{param_name}')"
                     )
-                full_values.append(container[sym])
+                full_values.append(self._parameter_context[sym])
                 continue
 
             if free_idx >= len(positional_args):
