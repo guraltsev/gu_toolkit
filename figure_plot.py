@@ -167,7 +167,7 @@ class Plot:
     @property
     def parameters(self) -> tuple[Symbol, ...]:
         """Return parameter symbols in deterministic numeric-argument order."""
-        return self._numpified.args[1:]
+        return self._numpified.parameters[1:]
 
 
     @property

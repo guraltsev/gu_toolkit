@@ -297,9 +297,9 @@ def _load_numpify_cached():
 def _resolve_numeric_callable(expr, x, binding, DYNAMIC_PARAMETER, _NumpifiedFunction, _numpify_cached, _current_figure):
     """Build a numeric callable of one variable from supported symbolic/numeric inputs."""
     if isinstance(expr, _NumpifiedFunction):
-        if not expr.args:
+        if not expr.parameters:
             raise TypeError("NIntegrate requires an x argument for numpified functions")
-        if len(expr.args) == 1:
+        if len(expr.parameters) == 1:
             return expr
         if len(expr.free_parameters) < len(expr.parameters):
             return expr

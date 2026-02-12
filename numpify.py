@@ -142,7 +142,6 @@ class NumpifiedFunction:
     __slots__ = (
         "_fn",
         "symbolic",
-        "expr",
         "call_signature",
         "source",
         "name_for_symbol",
@@ -165,7 +164,6 @@ class NumpifiedFunction:
     ) -> None:
         self._fn = fn
         self.symbolic = symbolic
-        self.expr = symbolic
         self.call_signature = call_signature
         self.source = source
         self.name_for_symbol = {sym: name for sym, name in call_signature}
@@ -261,16 +259,8 @@ class NumpifiedFunction:
         return self._fn(*full_values)
 
     @property
-    def arg_names(self) -> tuple[str, ...]:
-        return self.parameter_names
-
-    @property
     def parameters(self) -> tuple[sp.Symbol, ...]:
         return tuple(sym for sym, _ in self.call_signature)
-
-    @property
-    def args(self) -> tuple[sp.Symbol, ...]:
-        return self.parameters
 
     @property
     def parameter_names(self) -> tuple[str, ...]:
@@ -303,14 +293,6 @@ class NumpifiedFunction:
         out = self._clone()
         out._parameter_context = None
         return out
-
-    def unbind(self) -> "NumpifiedFunction":
-        return NumpifiedFunction(
-            fn=self._fn,
-            symbolic=self.symbolic,
-            call_signature=self.call_signature,
-            source=self.source,
-        )
 
     @property
     def free_parameters(self) -> tuple[sp.Symbol, ...]:
