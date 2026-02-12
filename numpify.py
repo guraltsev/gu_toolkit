@@ -90,7 +90,7 @@ import keyword
 import logging
 import time
 import textwrap
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple, TypeAlias, Union
+from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Tuple, TypeAlias, Union, cast
 
 import numpy as np
 import sympy as sp
