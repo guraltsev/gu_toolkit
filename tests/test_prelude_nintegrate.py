@@ -81,7 +81,7 @@ def test_nintegrate_numpified_bound_and_unbound_functions() -> None:
     unbound_result = NIntegrate(unbound, (x, 0, 1), binding={a: 2.0, b: 3.0})
     assert math.isclose(unbound_result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
 
-    bound = unbound.bind({a: 2.0, b: 3.0})
+    bound = unbound.freeze({a: 2.0, b: 3.0})
     bound_result = NIntegrate(bound, (x, 0, 1))
     assert math.isclose(bound_result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
 

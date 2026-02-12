@@ -47,21 +47,22 @@ def test_snapshot_entry_immutability() -> None:
     assert "mutated" not in snap[a]["capabilities"]
 
 
-def test_bind_partial_and_key_validation() -> None:
+def test_freeze_partial_and_key_validation() -> None:
     x, a, b, extra = sp.symbols("x a b extra")
     fig = Figure()
     plot = fig.plot(x, a * x + b, parameters=[a, b], id="line")
     assert isinstance(plot.numeric_expression, PlotView)
 
-    bound_partial = plot.numeric_expression.bind({a: 2.0})
+    bound_partial = plot.numeric_expression.freeze({a: 2.0})
     y_partial = np.asarray(bound_partial(np.array([1.0, 2.0]), 3.0))
     assert np.allclose(y_partial, np.array([5.0, 7.0]))
 
-    bound = plot.numeric_expression.bind({a: 2.0, b: 3.0, extra: 5.0})
+    bound = plot.numeric_expression.freeze({a: 2.0, b: 3.0, extra: 5.0})
     assert bound.unbind() is plot.numpified
 
-    err = _assert_raises(TypeError, plot.numeric_expression.bind, {"a": 2.0})
-    assert "Symbol keys" in str(err)
+    bound_by_name = plot.numeric_expression.freeze({"a": 2.0, "b": 3.0})
+    y_named = np.asarray(bound_by_name(np.array([1.0, 2.0])))
+    assert np.allclose(y_named, np.array([5.0, 7.0]))
 
 
 def test_unbind_requires_bind_before_call() -> None:
@@ -85,7 +86,7 @@ def test_live_vs_snapshot_bound() -> None:
     assert np.allclose(y_live, np.array([2.0, 4.0, 6.0]))
 
     snap = fig.parameters.snapshot()
-    bound = plot.numeric_expression.bind(snap)
+    bound = plot.numeric_expression.freeze(snap)
     fig.parameters[a].value = 4.0
 
     y_bound = np.asarray(bound(x_values))
@@ -98,7 +99,7 @@ def main() -> None:
     tests = [
         test_snapshot_order_and_values,
         test_snapshot_entry_immutability,
-        test_bind_partial_and_key_validation,
+        test_freeze_partial_and_key_validation,
         test_unbind_requires_bind_before_call,
         test_live_vs_snapshot_bound,
     ]

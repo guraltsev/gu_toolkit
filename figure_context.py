@@ -73,7 +73,7 @@ def current_figure(*, required: bool = True) -> Optional["Figure"]:
     if fig is None and required:
         raise RuntimeError(
             "No active Figure. Use `with fig:` to set one, "
-            "or pass an explicit figure to .bind()."
+            "or pass an explicit figure as parameter_context."
         )
     return fig
 

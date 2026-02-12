@@ -14,8 +14,10 @@ from .prelude import *
 from .NamedFunction import NamedFunction as NamedFunction
 from .numpify import (
     BoundNumpifiedFunction,
+    DYNAMIC_PARAMETER,
     NumpifiedFunction,
-    ParameterProvider,
+    ParameterContext,
+    UNFREEZE,
     numpify as numpify,
     numpify_cached,
 )
