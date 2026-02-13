@@ -102,6 +102,8 @@ class Plot:
         ``Plot`` directly.
         """
         self._smart_figure = smart_figure
+        self._x_data: Optional[np.ndarray] = None
+        self._y_data: Optional[np.ndarray] = None
         
         # Add trace to figure
         self._smart_figure.figure_widget.add_scatter(x=[], y=[], mode="lines", name=label, visible=visible)
@@ -176,6 +178,42 @@ class Plot:
         return self._numpified.set_parameter_context(self._smart_figure.parameters.parameter_context).freeze({
             sym: DYNAMIC_PARAMETER for sym in self._numpified.vars[1:]
         })
+
+    @property
+    def x_data(self) -> Optional[np.ndarray]:
+        """
+        Return the last rendered x samples.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            A read-only NumPy array of sampled x-values from the most recent
+            successful :meth:`render` call. Returns ``None`` if this plot has
+            not rendered yet.
+        """
+        if self._x_data is None:
+            return None
+        x_values = self._x_data.copy()
+        x_values.flags.writeable = False
+        return x_values
+
+    @property
+    def y_data(self) -> Optional[np.ndarray]:
+        """
+        Return the last rendered y samples.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            A read-only NumPy array of sampled y-values from the most recent
+            successful :meth:`render` call. Returns ``None`` if this plot has
+            not rendered yet.
+        """
+        if self._y_data is None:
+            return None
+        y_values = self._y_data.copy()
+        y_values.flags.writeable = False
+        return y_values
 
     @property
     def label(self) -> str:
@@ -503,6 +541,8 @@ class Plot:
         # 3. Compute
         x_values = np.linspace(x_min, x_max, num=int(num))
         y_values = np.asarray(self.numeric_expression(x_values))
+        self._x_data = x_values.copy()
+        self._y_data = y_values.copy()
         
         # 4. Update Trace
         with fig.figure_widget.batch_update():

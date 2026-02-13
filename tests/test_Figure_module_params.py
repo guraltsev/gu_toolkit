@@ -100,6 +100,56 @@ def test_plot_opacity_shortcut_and_validation() -> None:
     _assert_raises(ValueError, setattr, plot, "opacity", 1.2)
 
 
+
+
+
+
+def test_plot_cached_samples_none_before_first_render() -> None:
+    x = sp.symbols("x")
+    fig = Figure()
+    plot = fig.plot(x, sp.sin(x), id="sin_hidden", visible=False)
+
+    assert plot.x_data is None
+    assert plot.y_data is None
+
+def test_plot_render_caches_read_only_samples() -> None:
+    x = sp.symbols("x")
+    fig = Figure()
+    plot = fig.plot(x, sp.sin(x), id="sin")
+
+    x_data = plot.x_data
+    y_data = plot.y_data
+    assert x_data is not None
+    assert y_data is not None
+
+    assert not x_data.flags.writeable
+    assert not y_data.flags.writeable
+
+    _assert_raises(ValueError, x_data.__setitem__, 0, 999.0)
+    _assert_raises(ValueError, y_data.__setitem__, 0, 999.0)
+
+
+def test_plot_render_replaces_cached_samples() -> None:
+    x = sp.symbols("x")
+    fig = Figure()
+    plot = fig.plot(x, sp.sin(x), id="sin")
+
+    first_x = plot.x_data
+    first_y = plot.y_data
+    assert first_x is not None
+    assert first_y is not None
+
+    plot.sampling_points = 25
+
+    second_x = plot.x_data
+    second_y = plot.y_data
+    assert second_x is not None
+    assert second_y is not None
+
+    assert len(second_x) == 25
+    assert len(second_y) == 25
+    assert len(first_x) != len(second_x)
+
 def test_plot_style_options_are_discoverable() -> None:
     options = plot_style_options()
     for key in ("color", "thickness", "dash", "opacity", "line", "trace"):
@@ -175,6 +225,9 @@ def main() -> None:
         test_no_context_behavior,
         test_params_setitem_sugar,
         test_plot_opacity_shortcut_and_validation,
+        test_plot_cached_samples_none_before_first_render,
+        test_plot_render_caches_read_only_samples,
+        test_plot_render_replaces_cached_samples,
         test_plot_style_options_are_discoverable,
         test_relayout_debounce_delays_first_event_until_timer,
         test_relayout_debounce_drop_overflow_keeps_final_event,
