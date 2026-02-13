@@ -282,6 +282,8 @@ class NumpifiedFunction:
         return out
 
     def unfreeze(self, *keys: sp.Symbol | str) -> "NumpifiedFunction":
+        if not keys:
+            keys = tuple(sym for sym in self.vars if sym in self._frozen or sym in self._dynamic)
         return self.freeze({k: UNFREEZE for k in keys})
 
     def set_parameter_context(self, ctx: ParameterContext) -> "NumpifiedFunction":

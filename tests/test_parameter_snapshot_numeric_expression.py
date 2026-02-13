@@ -11,7 +11,6 @@ sys.path.insert(0, str(REPO_ROOT.parent))
 
 from gu_toolkit import Figure  # noqa: E402
 
-
 def test_snapshot_order_and_values() -> None:
     a, b, c = sp.symbols("a b c")
     fig = Figure()
@@ -19,7 +18,6 @@ def test_snapshot_order_and_values() -> None:
 
     snap = fig.parameters.snapshot()
     assert list(snap.keys()) == [a, b, c]
-
 
 def test_snapshot_entry_immutability() -> None:
     a = sp.symbols("a")
@@ -35,7 +33,6 @@ def test_snapshot_entry_immutability() -> None:
     capabilities.append("mutated")
     assert "mutated" not in snap[a]["capabilities"]
 
-
 def test_numeric_expression_live_provider_binding() -> None:
     x, a = sp.symbols("x a")
     fig = Figure()
@@ -50,7 +47,6 @@ def test_numeric_expression_live_provider_binding() -> None:
     y_live_2 = np.asarray(plot.numeric_expression(x_values))
     assert np.allclose(y_live_2, np.array([4.0, 8.0, 12.0]))
 
-
 def test_numeric_expression_can_be_frozen_manually() -> None:
     x, a, b = sp.symbols("x a b")
     fig = Figure()
@@ -60,6 +56,14 @@ def test_numeric_expression_can_be_frozen_manually() -> None:
     y = np.asarray(frozen(np.array([1.0, 2.0])))
     assert np.allclose(y, np.array([5.0, 7.0]))
 
+def test_numeric_expression_unfreeze_without_keys_accepts_full_positional_input() -> None:
+    x, a, b = sp.symbols("x a b")
+    fig = Figure()
+    plot = fig.plot(x, a * x + b, parameters=[a, b], id="line-live")
+
+    unfrozen = plot.numeric_expression.unfreeze()
+    y = np.asarray(unfrozen(np.array([1.0, 2.0]), 4.0, 5.0))
+    assert np.allclose(y, np.array([9.0, 13.0]))
 
 def test_symbolic_expression_returns_sympy_expr() -> None:
     x, a = sp.symbols("x a")
@@ -67,19 +71,18 @@ def test_symbolic_expression_returns_sympy_expr() -> None:
     plot = fig.plot(x, a * x, parameters=[a], id="sx")
     assert plot.symbolic_expression == a * x
 
-
 def main() -> None:
     tests = [
         test_snapshot_order_and_values,
         test_snapshot_entry_immutability,
         test_numeric_expression_live_provider_binding,
         test_numeric_expression_can_be_frozen_manually,
+        test_numeric_expression_unfreeze_without_keys_accepts_full_positional_input,
         test_symbolic_expression_returns_sympy_expr,
     ]
     for test in tests:
         test()
     print(f"OK: {len(tests)} tests passed")
-
 
 if __name__ == "__main__":
     main()
