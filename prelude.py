@@ -6,6 +6,8 @@ and infix relation operators tuned for discoverable notebook use.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 __all__=[]
 # --- The deliberate classroom prelude ---
 import sympy as sp
@@ -246,7 +248,7 @@ def _resolve_parameter_values(required_symbols, binding, current_figure_getter):
 
     if binding is None:
         fig = current_figure_getter(required=True)
-        return {sym: fig.parameters[sym].value for sym in required_symbols}
+        return {sym: fig.parameters.parameter_context[sym] for sym in required_symbols}
 
     if isinstance(binding, dict):
         missing = [sym for sym in required_symbols if sym not in binding and sym.name not in binding]
@@ -258,22 +260,7 @@ def _resolve_parameter_values(required_symbols, binding, current_figure_getter):
             for sym in required_symbols
         }
 
-    provider = None
-    if hasattr(binding, "params"):
-        provider = binding.params
-    elif hasattr(binding, "parameters"):
-        provider = binding.parameters
-
-    if provider is None:
-        raise TypeError(
-            "binding must be dict[Symbol|name, value], Figure-like provider, or None"
-        )
-
-    missing = [sym for sym in required_symbols if sym not in provider]
-    if missing:
-        names = ", ".join(sym.name for sym in missing)
-        raise ValueError(f"binding provider is missing values for: {names}")
-    return {sym: provider[sym].value for sym in required_symbols}
+    raise TypeError("binding must be a dict keyed by Symbol or symbol name")
 
 
 
@@ -282,20 +269,20 @@ def _load_numeric_bindings():
     """Load numpify/current-figure helpers for package and standalone usage."""
     try:
         from .numpify import (
-            BoundNumpifiedFunction as _BoundNumpifiedFunction,
+            DYNAMIC_PARAMETER,
             NumpifiedFunction as _NumpifiedFunction,
             numpify_cached as _numpify_cached,
         )
         from .Figure import current_figure as _current_figure
     except ImportError:
         from numpify import (
-            BoundNumpifiedFunction as _BoundNumpifiedFunction,
+            DYNAMIC_PARAMETER,
             NumpifiedFunction as _NumpifiedFunction,
             numpify_cached as _numpify_cached,
         )
         from Figure import current_figure as _current_figure
 
-    return _NumpifiedFunction, _BoundNumpifiedFunction, _numpify_cached, _current_figure
+    return DYNAMIC_PARAMETER, _NumpifiedFunction, _numpify_cached, _current_figure
 
 
 def _load_numpify_cached():
@@ -307,19 +294,26 @@ def _load_numpify_cached():
     return _numpify_cached
 
 
-def _resolve_numeric_callable(expr, x, binding, _NumpifiedFunction, _BoundNumpifiedFunction, _numpify_cached, _current_figure):
+def _resolve_numeric_callable(expr, x, binding, DYNAMIC_PARAMETER, _NumpifiedFunction, _numpify_cached, _current_figure):
     """Build a numeric callable of one variable from supported symbolic/numeric inputs."""
-    if isinstance(expr, _BoundNumpifiedFunction):
-        return expr
-
     if isinstance(expr, _NumpifiedFunction):
-        if not expr.args:
+        if not expr.vars:
             raise TypeError("NIntegrate requires an x argument for numpified functions")
-        if len(expr.args) == 1:
+        if len(expr.vars) == 1:
+            return expr
+        if len(expr.free_vars) < len(expr.vars):
             return expr
         if binding is None:
-            return expr.bind(_current_figure(required=True))
-        return expr.bind(binding)
+            return expr.set_parameter_context(_current_figure(required=True).parameters.parameter_context).freeze({
+                sym: DYNAMIC_PARAMETER for sym in expr.vars[1:]
+            })
+        if isinstance(binding, dict):
+            return expr.freeze(binding)
+        if not isinstance(binding, Mapping):
+            raise TypeError("binding must be a dict or mapping for dynamic numeric expressions")
+        return expr.set_parameter_context(binding).freeze({
+            sym: DYNAMIC_PARAMETER for sym in expr.vars[1:]
+        })
 
     if isinstance(expr, sp.Lambda):
         variables = tuple(expr.variables)
@@ -330,19 +324,19 @@ def _resolve_numeric_callable(expr, x, binding, _NumpifiedFunction, _BoundNumpif
         extra_symbols = variables[1:]
         if extra_symbols:
             value_map = _resolve_parameter_values(extra_symbols, binding, _current_figure)
-            compiled = _numpify_cached(expr.expr, args=variables)
-            return compiled.bind(value_map)
-        return _numpify_cached(expr.expr, args=lead_symbol)
+            compiled = _numpify_cached(expr.expr, vars=variables)
+            return compiled.freeze(value_map)
+        return _numpify_cached(expr.expr, vars=lead_symbol)
 
     if isinstance(expr, sp.Basic):
         if not isinstance(x, sp.Symbol):
             raise TypeError(f"NIntegrate expects x to be a sympy Symbol for symbolic expressions, got {type(x)}")
         required_symbols = tuple(sorted((sp.sympify(expr).free_symbols - {x}), key=lambda s: s.name))
         if not required_symbols:
-            return _numpify_cached(expr, args=x)
+            return _numpify_cached(expr, vars=x)
         value_map = _resolve_parameter_values(required_symbols, binding, _current_figure)
-        compiled = _numpify_cached(expr, args=(x, *required_symbols))
-        return compiled.bind(value_map)
+        compiled = _numpify_cached(expr, vars=(x, *required_symbols))
+        return compiled.freeze(value_map)
 
     if callable(expr):
         import inspect
@@ -381,8 +375,7 @@ def NIntegrate(expr, var_and_limits, binding=None):
 
         - a SymPy expression,
         - a :class:`numpify.NumpifiedFunction`,
-        - a :class:`numpify.BoundNumpifiedFunction`,
-        - or a plain numeric callable ``f(x)``.
+                - or a plain numeric callable ``f(x)``.
     var_and_limits:
         Tuple ``(x, a, b)`` where ``a``/``b`` are scalar bounds (including
         ``sympy.oo``/``-sympy.oo``). For plain numeric callables, ``x`` is
@@ -404,7 +397,7 @@ def NIntegrate(expr, var_and_limits, binding=None):
     except Exception as exc:  # pragma: no cover - defensive shape validation
         raise TypeError("NIntegrate expects limits as a tuple: (x, a, b)") from exc
 
-    _NumpifiedFunction, _BoundNumpifiedFunction, _numpify_cached, _current_figure = _load_numeric_bindings()
+    DYNAMIC_PARAMETER, _NumpifiedFunction, _numpify_cached, _current_figure = _load_numeric_bindings()
 
     from scipy.integrate import quad
 
@@ -412,8 +405,8 @@ def NIntegrate(expr, var_and_limits, binding=None):
         expr,
         x,
         binding,
+        DYNAMIC_PARAMETER,
         _NumpifiedFunction,
-        _BoundNumpifiedFunction,
         _numpify_cached,
         _current_figure,
     )
@@ -459,7 +452,7 @@ def NReal_Fourier_Series(expr, var_and_limits, samples=4000, binding=None):
         raise ValueError("samples must be >= 2")
     sample_count = int(samples)
 
-    _NumpifiedFunction, _BoundNumpifiedFunction, _numpify_cached, _current_figure = _load_numeric_bindings()
+    DYNAMIC_PARAMETER, _NumpifiedFunction, _numpify_cached, _current_figure = _load_numeric_bindings()
 
     from scipy.fft import rfft
 
@@ -473,8 +466,8 @@ def NReal_Fourier_Series(expr, var_and_limits, samples=4000, binding=None):
         expr,
         x,
         binding,
+        DYNAMIC_PARAMETER,
         _NumpifiedFunction,
-        _BoundNumpifiedFunction,
         _numpify_cached,
         _current_figure,
     )
@@ -549,7 +542,7 @@ def play(expr, var_and_limits, loop=True):
     sample_count = max(2, int(np.ceil(duration * sample_rate)))
     t = np.linspace(start, stop, sample_count, endpoint=False, dtype=float)
 
-    fn = _numpify_cached(expr, args=x)
+    fn = _numpify_cached(expr, vars=x)
     y = np.asarray(fn(t), dtype=float)
     if y.ndim == 0:
         y = np.full_like(t, float(y))

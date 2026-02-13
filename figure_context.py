@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Any, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 _FIGURE_STACK: List["Figure"] = []
 
@@ -73,7 +73,7 @@ def current_figure(*, required: bool = True) -> Optional["Figure"]:
     if fig is None and required:
         raise RuntimeError(
             "No active Figure. Use `with fig:` to set one, "
-            "or pass an explicit figure to .bind()."
+            "or pass an explicit figure as parameter_context."
         )
     return fig
 

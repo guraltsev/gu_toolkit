@@ -12,9 +12,9 @@ import sympy as sp
 from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
-from .NumericExpression import PlotView
+from .InputConvert import InputConvert
 from .figure_context import FIGURE_DEFAULT, _is_figure_default
-from .numpify import NumpifiedFunction, numpify_cached
+from .numpify import DYNAMIC_PARAMETER, NumpifiedFunction, numpify_cached
 
 # SECTION: Plot (The specific logic for one curve) [id: Plot]
 # =============================================================================
@@ -154,30 +154,28 @@ class Plot:
         """
         parameters = list(parameters) 
         # Compile
-        self._numpified = numpify_cached(func, args=[var] + parameters)
+        self._numpified = numpify_cached(func, vars=[var] + parameters)
         # Store
         self._var = var
         self._func = func
 
     @property
     def symbolic_expression(self) -> Expr:
-        """Return the symbolic expression used by this plot."""
+        """Return the current symbolic expression used by this plot."""
         return self._func
 
     @property
     def parameters(self) -> tuple[Symbol, ...]:
         """Return parameter symbols in deterministic numeric-argument order."""
-        return self._numpified.args[1:]
+        return self._numpified.vars[1:]
+
 
     @property
-    def numpified(self) -> NumpifiedFunction:
-        """Return compiled numpified callable for this plot."""
-        return self._numpified
-
-    @property
-    def numeric_expression(self) -> PlotView:
-        """Return a live numeric evaluator proxy for this plot."""
-        return PlotView(_numpified=self._numpified, _provider=self._smart_figure)
+    def numeric_expression(self) -> NumpifiedFunction:
+        """Return numeric expression with parameters dynamically resolved from figure parameters."""
+        return self._numpified.set_parameter_context(self._smart_figure.parameters.parameter_context).freeze({
+            sym: DYNAMIC_PARAMETER for sym in self._numpified.vars[1:]
+        })
 
     @property
     def label(self) -> str:
