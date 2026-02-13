@@ -31,3 +31,16 @@ Notebook reports that `play(...)` starts playback immediately without explicit d
    - Returned HTML does not contain `autoplay` by default.
    - Contains `autoplay` when requested.
    - No implicit display call when `display_now=False` (mock display in test).
+
+
+## Implemented solution
+- Updated `play` signature to `play(expr, var_and_limits, loop=True, autoplay=False)`.
+- Removed unconditional `display(widget)` side effect so the function now returns a widget only.
+- Added conditional HTML attribute emission so `autoplay` appears only when requested.
+- Added unit tests to verify:
+  - no `autoplay` attribute by default,
+  - `autoplay` appears when explicitly enabled.
+- Updated `Toolkit_overview.ipynb` play section to demonstrate explicit `display(...)` and optional `autoplay=True`.
+
+## Change summary
+This bug is fixed by decoupling rendering from playback policy: `play` now behaves as a pure-return API and only autoplays when explicitly configured.
