@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 from pathlib import Path
 
 import sympy as sp
@@ -68,3 +69,18 @@ def test_dynamic_missing_context_errors() -> None:
         assert "requires parameter_context" in str(exc)
     else:  # pragma: no cover
         raise AssertionError("Expected dynamic-parameter error")
+
+
+def test_signature_tracks_freeze_and_unfreeze() -> None:
+    mod = _import_module_from_path("numpify", Path("numpify.py"))
+
+    x, a, b = sp.symbols("x a b")
+    f = mod.numpify(a * x + b, vars=(x, a, b), cache=False)
+    assert str(inspect.signature(f)) == "(x, a, b, /)"
+
+    dynamic = f.freeze({a: mod.DYNAMIC_PARAMETER, b: mod.DYNAMIC_PARAMETER})
+    assert str(inspect.signature(dynamic)) == "(x, /)"
+
+    unbound = dynamic.unfreeze()
+    assert str(inspect.signature(unbound)) == "(x, a, b, /)"
+    assert unbound(2.0, 3.0, 4.0) == 10.0
