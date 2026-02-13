@@ -150,6 +150,19 @@ def test_plot_render_replaces_cached_samples() -> None:
     assert len(second_y) == 25
     assert len(first_x) != len(second_x)
 
+
+
+def test_plot_figure_property_exposes_owner_and_context_manager() -> None:
+    x, a = sp.symbols("x a")
+    fig = Figure()
+    plot = fig.plot(x, sp.sin(x), id="sin")
+
+    assert plot.figure is fig
+
+    with plot.figure:
+        param_ref = parameter(a)
+        assert params[a] is param_ref
+
 def test_plot_style_options_are_discoverable() -> None:
     options = plot_style_options()
     for key in ("color", "thickness", "dash", "opacity", "line", "trace"):
@@ -228,6 +241,7 @@ def main() -> None:
         test_plot_cached_samples_none_before_first_render,
         test_plot_render_caches_read_only_samples,
         test_plot_render_replaces_cached_samples,
+        test_plot_figure_property_exposes_owner_and_context_manager,
         test_plot_style_options_are_discoverable,
         test_relayout_debounce_delays_first_event_until_timer,
         test_relayout_debounce_drop_overflow_keeps_final_event,
