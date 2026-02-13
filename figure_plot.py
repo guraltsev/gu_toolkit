@@ -316,6 +316,7 @@ class Plot:
             raise ValueError("opacity must be between 0.0 and 1.0")
         self._plot_handle.opacity = opacity
 
+    @property
     def figure(self) -> "Figure":
         """Return the Figure that owns this plot.
 
@@ -329,7 +330,7 @@ class Plot:
         >>> x = sp.symbols("x")  # doctest: +SKIP
         >>> fig = Figure()  # doctest: +SKIP
         >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
-        >>> plot.figure() is fig  # doctest: +SKIP
+        >>> plot.figure is fig  # doctest: +SKIP
         True
 
         See Also
