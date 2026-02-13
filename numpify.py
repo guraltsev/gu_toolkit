@@ -85,6 +85,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 import builtins
+import inspect
 import keyword
 
 import logging
@@ -283,7 +284,8 @@ class NumpifiedFunction:
 
     def unfreeze(self, *keys: sp.Symbol | str) -> "NumpifiedFunction":
         if not keys:
-            keys = tuple(sym for sym in self.vars if sym in self._frozen or sym in self._dynamic)
+            bound_symbols = tuple(sym for sym in self.vars if sym in self._frozen or sym in self._dynamic)
+            return self.freeze({sym: UNFREEZE for sym in bound_symbols})
         return self.freeze({k: UNFREEZE for k in keys})
 
     def set_parameter_context(self, ctx: ParameterContext) -> "NumpifiedFunction":
@@ -307,6 +309,15 @@ class NumpifiedFunction:
     @property
     def is_live(self) -> bool:
         return self._parameter_context is not None
+
+    @property
+    def __signature__(self) -> inspect.Signature:
+        """Return a meaningful call signature for currently-free positional vars."""
+        params = [
+            inspect.Parameter(name, inspect.Parameter.POSITIONAL_ONLY)
+            for _, name in self.free_var_signature
+        ]
+        return inspect.Signature(parameters=params)
 
     def __repr__(self) -> str:
         vars_str = ", ".join(name for _, name in self.call_signature)
