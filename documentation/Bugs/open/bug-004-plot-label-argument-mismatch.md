@@ -4,24 +4,28 @@
 The notebook example passes `label="..."` to module-level `plot(...)` calls. Current `Figure.plot` API does not accept `label`, causing an argument error.
 
 ## Analysis
-- `Figure.plot` signature includes styling options (`color`, `thickness`, `dash`, `line`, `opacity`, `trace`) but no `label` parameter.
-- The notebook uses `label` in "Common examples", so users copy-pasting it will fail.
-- This is an API/documentation mismatch:
-  - either API intended to support trace naming but omitted,
-  - or notebook is stale and should use currently supported path (e.g., trace dict/name field, or post-creation plot object label assignment).
+- `Figure.plot` signature included styling options (`color`, `thickness`, `dash`, `line`, `opacity`, `trace`) but no `label` parameter.
+- The notebook used `label` in "Common examples", so users copy-pasting it failed.
+- This is an API/documentation mismatch where the notebook demonstrated a natural legend naming pattern that the API should support.
 
-## Summary of fix
-**Preferred UX fix:** add optional `label` support to `Figure.plot` and thread it into trace creation/update.
+## Implemented solution
+Implemented the UX/API fix by adding first-class `label` support to both plotting entry points:
 
+1. Added `label: Optional[str] = None` to `Figure.plot(...)`.
+2. Added `label: Optional[str] = None` to module-level `plot(...)` and forwarded it.
+3. Creation behavior:
+   - If `label` is provided, the new trace legend name uses `label`.
+   - If `label` is omitted, behavior remains unchanged (legend defaults to `id`).
+4. Update behavior:
+   - If updating an existing `id` and `label` is provided, the plot label is updated.
+   - If `label` is omitted on update, existing label is preserved.
+5. Added tests covering label support on both create and update paths.
+6. Updated `Toolkit_overview.ipynb` by removing the stale inline bug note in the example cell that now works with `label`.
 
-## Detailed plan / blueprint
-Add `label: Optional[str] = None` in `Figure.plot` and module-level `plot` wrapper.
-2. Wire through implementation:
-   - On new trace creation, use label as trace name.
-   - On updates, apply name update when label is provided.
-3. Add tests:
-   - Creating with `label` sets plot label/name.
-   - Updating same `id` with new label updates legend entry.
-   - if id is not specified, but label is make id the label (mangled to be unique)
-   - allow getting plots by label `plots.by_label['label']`. Return array (possibly of lenght 0, 1 or more) of plots. 
-4. Update notebook examples to match finalized API.
+## Summary of changes
+- `Figure.plot(...)` now accepts `label` and applies it correctly during create/update.
+- Module-level `plot(...)` now accepts and forwards `label`.
+- Added regression tests:
+  - create with `label` sets legend name,
+  - update with same `id` and new `label` updates legend name.
+- Notebook example remains the same API usage (`label=...`) and is now valid; removed obsolete "BUG" comment.

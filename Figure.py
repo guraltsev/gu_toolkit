@@ -651,6 +651,7 @@ class Figure:
         func: Expr,
         parameters: Optional[Sequence[Symbol]] = None,
         id: Optional[str] = None,
+        label: Optional[str] = None,
         x_domain: Optional[RangeLike] = None,
         sampling_points: Optional[Union[int, str]] = None,
         color: Optional[str] = None,
@@ -679,6 +680,9 @@ class Figure:
             If None, it is the same as "figure_default" for new plots while no change for existing plots.
         id : str, optional
             Unique identifier. If exists, the existing plot is updated in-place.
+        label : str, optional
+            Legend label for the trace. If omitted, new plots default to ``id``;
+            existing plots keep their current label.
 
         sampling_points : int or str, optional
             Number of sampling points for this plot. Use ``"figure_default"``
@@ -750,7 +754,7 @@ class Figure:
             update_dont_create = False
 
         if update_dont_create:
-            self.plots[id].update(
+            update_kwargs: Dict[str, Any] = dict(
                 var=var,
                 func=func,
                 parameters=parameters,
@@ -763,11 +767,14 @@ class Figure:
                 opacity=opacity,
                 trace=trace,
             )
+            if label is not None:
+                update_kwargs["label"] = label
+            self.plots[id].update(**update_kwargs)
             plot = self.plots[id]    
         else: 
             plot = Plot(
                 var=var, func=func, smart_figure=self, parameters=parameters,
-                x_domain=x_domain, sampling_points=sampling_points, label=id,
+                x_domain=x_domain, sampling_points=sampling_points, label=(id if label is None else label),
                 color=color, thickness=thickness, dash=dash, line=line, opacity=opacity, trace=trace
             )
             self.plots[id] = plot
@@ -1374,6 +1381,7 @@ def plot(
     func: Expr,
     parameters: Optional[Sequence[Symbol]] = None,
     id: Optional[str] = None,
+    label: Optional[str] = None,
     x_domain: Optional[RangeLike] = None,
     sampling_points: Optional[Union[int, str]] = None,
     color: Optional[str] = None,
@@ -1396,6 +1404,9 @@ def plot(
         Parameter symbols used in the expression. If ``None``, they are inferred.
     id : str, optional
         Plot identifier for update or creation.
+    label : str, optional
+        Legend label for the trace. If omitted, new plots default to ``id``;
+        existing plots keep their current label.
     x_domain : RangeLike or None, optional
         Explicit x-domain override.
     sampling_points : int or str, optional
@@ -1449,6 +1460,7 @@ def plot(
         func,
         parameters=parameters,
         id=id,
+        label=label,
         x_domain=x_domain,
         sampling_points=sampling_points,
         color=color,
@@ -1458,4 +1470,3 @@ def plot(
         opacity=opacity,
         trace=trace,
     )
-

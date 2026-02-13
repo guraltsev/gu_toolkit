@@ -172,6 +172,25 @@ def test_plot_style_options_are_discoverable() -> None:
     assert fig_options == options
 
 
+def test_plot_accepts_label_kwarg_on_create() -> None:
+    x = sp.symbols("x")
+    fig = Figure()
+    plot = fig.plot(x, sp.sin(x), id="sin", label="Sine")
+
+    assert plot.label == "Sine"
+    assert fig.figure_widget.data[0].name == "Sine"
+
+
+def test_plot_accepts_label_kwarg_on_update() -> None:
+    x = sp.symbols("x")
+    fig = Figure()
+    fig.plot(x, sp.sin(x), id="sin", label="Sine")
+    updated = fig.plot(x, sp.cos(x), id="sin", label="Cosine")
+
+    assert updated.label == "Cosine"
+    assert fig.figure_widget.data[0].name == "Cosine"
+
+
 def test_relayout_debounce_delays_first_event_until_timer() -> None:
     original_timer = debouncing_module.threading.Timer
     original_render = Figure.render
@@ -243,6 +262,8 @@ def main() -> None:
         test_plot_render_replaces_cached_samples,
         test_plot_figure_property_exposes_owner_and_context_manager,
         test_plot_style_options_are_discoverable,
+        test_plot_accepts_label_kwarg_on_create,
+        test_plot_accepts_label_kwarg_on_update,
         test_relayout_debounce_delays_first_event_until_timer,
         test_relayout_debounce_drop_overflow_keeps_final_event,
     ]
