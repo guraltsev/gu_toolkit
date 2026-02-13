@@ -498,7 +498,7 @@ def NReal_Fourier_Series(expr, var_and_limits, samples=4000, binding=None):
 __all__ += ["NReal_Fourier_Series"]
 
 
-def play(expr, var_and_limits, loop=True):
+def play(expr, var_and_limits, loop=True, autoplay=False):
     """Play a 1D SymPy expression as audio over a time interval.
 
     Parameters
@@ -510,11 +510,14 @@ def play(expr, var_and_limits, loop=True):
         are start/end times in seconds.
     loop:
         If ``True`` (default), playback restarts automatically when finished.
+    autoplay:
+        If ``True``, start playback immediately when rendered. Defaults to
+        ``False`` so callers control when audio starts.
 
     Returns
     -------
     IPython.display.HTML
-        Display object for an autoplaying audio element.
+        Display object for an audio element.
     """
     try:
         x, a, b = var_and_limits
@@ -567,11 +570,11 @@ def play(expr, var_and_limits, loop=True):
         encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
 
     loop_attr = " loop" if loop else ""
+    autoplay_attr = " autoplay" if autoplay else ""
     widget = HTML(
-        f'<audio controls autoplay{loop_attr} '
+        f'<audio controls{autoplay_attr}{loop_attr} '
         f'src="data:audio/wav;base64,{encoded}"></audio>'
     )
-    display(widget)
     return widget
 
 

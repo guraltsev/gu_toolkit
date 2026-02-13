@@ -8,6 +8,7 @@ import sympy as sp
 from gu_toolkit import Figure
 from prelude import NIntegrate
 from prelude import NReal_Fourier_Series
+from prelude import play
 
 
 def test_nintegrate_finite_interval() -> None:
@@ -160,3 +161,17 @@ def test_nreal_fourier_series_single_mode_matches_expected_component() -> None:
     near_zero = np.abs(sin_coeffs[:10])
     near_zero[3] = 0.0
     assert np.all(near_zero < 1e-2)
+
+
+def test_play_returns_non_autoplay_audio_by_default() -> None:
+    x = sp.Symbol("x")
+    widget = play(sp.sin(2 * sp.pi * 220 * x), (x, 0, 0.01), loop=False)
+    data = widget.data
+    assert '<audio controls ' in data
+    assert 'autoplay' not in data
+
+
+def test_play_can_enable_autoplay_explicitly() -> None:
+    x = sp.Symbol("x")
+    widget = play(sp.sin(2 * sp.pi * 220 * x), (x, 0, 0.01), loop=False, autoplay=True)
+    assert 'autoplay' in widget.data
