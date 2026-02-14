@@ -17,7 +17,7 @@ from .numpify import (
     NumpifiedFunction,
     ParameterContext,
     UNFREEZE,
-    numpify as numpify,
+    numpify as numpify_expr,
     numpify_cached,
 )
 from .Figure import Figure, FigureLayout, Plot
