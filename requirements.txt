@@ -1,0 +1,9 @@
+# Runtime dependencies (mirrors [project].dependencies in pyproject.toml)
+sympy
+numpy
+scipy
+ipython
+ipywidgets
+plotly
+anywidget
+traitlets

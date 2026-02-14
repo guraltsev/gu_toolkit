@@ -594,7 +594,7 @@ class Plot:
         ----------
         **kwargs : Any
             Supported keys include ``label``, ``x_domain``, ``sampling_points``,
-            ``var``, ``func``, ``parameters``, ``color``, ``thickness``, ``dash``,
+            ``visible``, ``var``, ``func``, ``parameters``, ``color``, ``thickness``, ``dash``,
             ``opacity``, ``line``, and ``trace``.
 
         Returns
@@ -615,6 +615,9 @@ class Plot:
         """
         if 'label' in kwargs: 
             self.label = kwargs['label']
+
+        if 'visible' in kwargs:
+            self.visible = kwargs['visible']
         
         if 'x_domain' in kwargs: 
             val = kwargs['x_domain']

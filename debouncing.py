@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Deque, Optional, Tuple
 import asyncio
 import threading
+import warnings
 
 
 @dataclass
@@ -81,4 +82,7 @@ class QueuedDebouncer:
             if self._queue:
                 self._schedule_next_locked()
 
-        self._callback(*call.args, **call.kwargs)
+        try:
+            self._callback(*call.args, **call.kwargs)
+        except Exception as exc:  # pragma: no cover - defensive callback boundary
+            warnings.warn(f"QueuedDebouncer callback failed: {exc}")
