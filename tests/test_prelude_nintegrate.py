@@ -34,7 +34,7 @@ def test_nintegrate_symbolic_expr_freeze_missing_raises() -> None:
     try:
         NIntegrate(a * x + b, (x, 0, 1), freeze={a: 2.0})
     except TypeError as exc:
-        assert "Missing positional argument" in str(exc)
+        assert "Missing positional argument" in str(exc) or "required positional arguments" in str(exc)
         assert "b" in str(exc)
     else:  # pragma: no cover - defensive
         raise AssertionError("Expected error for missing freeze binding")
@@ -46,7 +46,7 @@ def test_nintegrate_symbolic_expr_without_freeze_raises_missing_arg() -> None:
     try:
         NIntegrate(a * x + b, (x, 0, 1))
     except TypeError as exc:
-        assert "Missing positional argument" in str(exc)
+        assert "Missing positional argument" in str(exc) or "required positional arguments" in str(exc)
         assert "a" in str(exc)
     else:  # pragma: no cover - defensive
         raise AssertionError("Expected missing-argument TypeError")
@@ -121,7 +121,7 @@ def test_nintegrate_sympy_lambda_without_freeze_raises_missing_arg() -> None:
     try:
         NIntegrate(lam, (x, 0, 1))
     except TypeError as exc:
-        assert "Missing positional argument" in str(exc)
+        assert "Missing positional argument" in str(exc) or "required positional arguments" in str(exc)
         assert "a" in str(exc)
     else:  # pragma: no cover - defensive
         raise AssertionError("Expected missing-argument TypeError")

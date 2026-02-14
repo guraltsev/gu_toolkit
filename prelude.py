@@ -279,11 +279,12 @@ def _resolve_numeric_callable(expr, x, freeze, freeze_kwargs, _NumpifiedFunction
             const_val = float(sp.N(expr.expr))
             return lambda t: np.full_like(np.asarray(t, dtype=float), const_val, dtype=float)
         compiled = _numpify_cached(expr.expr, vars=variables)
-    elif isinstance(expr, sp.Basic):
+    elif isinstance(expr, sp.Basic) or isinstance(expr, (int, float, complex, np.number)):
+        symbolic_expr = sp.sympify(expr)
         if not isinstance(x, sp.Symbol):
             raise TypeError(f"NIntegrate expects x to be a sympy Symbol for symbolic expressions, got {type(x)}")
-        required_symbols = tuple(sorted((sp.sympify(expr).free_symbols - {x}), key=lambda s: s.name))
-        compiled = _numpify_cached(expr, vars=(x, *required_symbols))
+        required_symbols = tuple(sorted((symbolic_expr.free_symbols - {x}), key=lambda s: s.name))
+        compiled = _numpify_cached(symbolic_expr, vars=(x, *required_symbols))
     elif callable(expr):
         import inspect
 
@@ -317,7 +318,7 @@ def _resolve_numeric_callable(expr, x, freeze, freeze_kwargs, _NumpifiedFunction
     return compiled
 
 
-def NIntegrate(expr, var_and_limits, freeze=None, /, **freeze_kwargs):
+def NIntegrate(expr, var_and_limits, freeze=None, **freeze_kwargs):
     """Numerically integrate a symbolic or numeric 1D function.
 
     Parameters
@@ -383,7 +384,7 @@ def NIntegrate(expr, var_and_limits, freeze=None, /, **freeze_kwargs):
 __all__ += ["NIntegrate"]
 
 
-def NReal_Fourier_Series(expr, var_and_limits, samples=4000, freeze=None, /, **freeze_kwargs):
+def NReal_Fourier_Series(expr, var_and_limits, samples=4000, freeze=None, **freeze_kwargs):
     """Return L2-normalized real Fourier coefficients on a finite interval.
 
     Parameters
