@@ -2,7 +2,7 @@
 
 This module is intentionally focused on setting up an exploratory namespace
 (NumPy/SymPy shortcuts, symbol/function families, and convenience operators).
-Higher-level numeric helpers are implemented in ``prelude_extensions`` and
+Higher-level numeric helpers are implemented in ``prelude_support`` and
 re-exported here for notebook ergonomics.
 """
 
@@ -28,7 +28,7 @@ else:
 
 # --- prelude extensions (moved out for maintainability) ---
 try:
-    from .prelude_extensions import (
+    from .prelude_support import (
         FunctionFamily,
         Infix,
         NIntegrate,
@@ -42,7 +42,7 @@ try:
         play,
     )
 except ImportError:  # pragma: no cover
-    from prelude_extensions import (
+    from prelude_support import (
         FunctionFamily,
         Infix,
         NIntegrate,

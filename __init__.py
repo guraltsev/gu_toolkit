@@ -18,13 +18,10 @@ from .numpify import (
     NumpifiedFunction,
     ParameterContext,
     UNFREEZE,
-    numpify as numpify_expr,
+    numpify,
     numpify_cached,
 )
 
-# Educational/nb ergonomics: make callable `numpify` available from
-# `from gu_toolkit import *`.
-numpify = numpify_expr
 from .Figure import Figure, FigureLayout, Plot
 from .Slider import FloatSlider
 from .Figure import (
@@ -53,3 +50,6 @@ from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 
 from .ParameterSnapshot import ParameterSnapshot
+
+# Optional explicit module handle to avoid callable/module name ambiguity.
+from . import numpify as numpify_module
