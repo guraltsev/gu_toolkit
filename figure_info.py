@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import html
 import re
-from typing import Any, Dict, Hashable, Optional
+import time
+import traceback
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, Hashable, Optional, Sequence, Union
 
 import ipywidgets as widgets
+from IPython.display import display
 
+from .debouncing import QueuedDebouncer
 from .figure_layout import OneShotOutput
 
 # SECTION: InfoPanelManager (The Model for Info) [id: InfoPanelManager]
@@ -21,6 +27,36 @@ class InfoPanelManager:
     """
     
     _ID_REGEX = re.compile(r"^info:(\d+)$")
+    _SIMPLE_ID_REGEX = re.compile(r"^info(\d+)$")
+
+    @dataclass(frozen=True)
+    class InfoChangeContext:
+        """Update metadata for dynamic info segment evaluations."""
+
+        reason: str
+        trigger: Any = None
+        t: float = 0.0
+        seq: int = 0
+
+    @dataclass
+    class _StaticSegment:
+        text: str
+        widget: widgets.HTMLMath
+
+    @dataclass
+    class _DynamicSegment:
+        fn: Callable[[Any, "InfoPanelManager.InfoChangeContext"], str]
+        widget: widgets.HTMLMath
+        last_text: Optional[str] = None
+
+    @dataclass
+    class _SimpleInfoCard:
+        id: Hashable
+        output: widgets.Output
+        container: widgets.VBox
+        segments: list[Union["InfoPanelManager._StaticSegment", "InfoPanelManager._DynamicSegment"]]
+        debouncer: QueuedDebouncer
+        pending_ctx: Optional["InfoPanelManager.InfoChangeContext"] = None
 
     def __init__(self, layout_box: widgets.Box) -> None:
         """Initialize the info panel manager.
@@ -46,6 +82,9 @@ class InfoPanelManager:
         self._components: Dict[Hashable, Any] = {}
         self._layout_box = layout_box
         self._counter = 0
+        self._simple_cards: Dict[Hashable, InfoPanelManager._SimpleInfoCard] = {}
+        self._simple_counter = 0
+        self._update_seq = 0
 
     def get_output(self, id: Optional[Hashable] = None, **layout_kwargs: Any) -> widgets.Output:
         """
@@ -165,6 +204,132 @@ class InfoPanelManager:
         get_output : Create an output widget in the info panel.
         """
         return len(self._outputs) > 0
+
+    def set_simple_card(self, spec: Union[str, Callable, Sequence[Union[str, Callable]]], id: Optional[Hashable] = None) -> Hashable:
+        """Create or replace a simple rich-text info card."""
+        if id is None:
+            id = self._next_simple_id()
+        elif isinstance(id, str):
+            m = self._SIMPLE_ID_REGEX.match(id)
+            if m:
+                self._simple_counter = max(self._simple_counter, int(m.group(1)) + 1)
+
+        out = self.get_output(id=id)
+
+        normalized = self._normalize_spec(spec)
+        card = self._simple_cards.get(id)
+        if card is None:
+            container = widgets.VBox(layout=widgets.Layout(gap="6px"))
+            card = self._SimpleInfoCard(
+                id=id,
+                output=out,
+                container=container,
+                segments=[],
+                debouncer=QueuedDebouncer(
+                    lambda card_id=id: self._run_card_update(card_id),
+                    execute_every_ms=33,
+                    drop_overflow=True,
+                ),
+            )
+            self._simple_cards[id] = card
+
+        self._rebuild_simple_card(card, normalized)
+        return id
+
+
+    def _next_simple_id(self) -> str:
+        while True:
+            id = f"info{self._simple_counter}"
+            self._simple_counter += 1
+            if id not in self._outputs:
+                return id
+
+    def schedule_info_update(self, reason: str, trigger: Any = None) -> None:
+        """Queue updates for all simple cards with a shared reason payload."""
+        if not self._simple_cards:
+            return
+
+        self._update_seq += 1
+        ctx = self.InfoChangeContext(reason=reason, trigger=trigger, t=time.time(), seq=self._update_seq)
+        for card in self._simple_cards.values():
+            card.pending_ctx = ctx
+            card.debouncer()
+
+    def _normalize_spec(self, spec: Union[str, Callable, Sequence[Union[str, Callable]]]) -> list[Union[str, Callable]]:
+        if isinstance(spec, str) or callable(spec):
+            return [spec]
+        if isinstance(spec, Sequence) and not isinstance(spec, (str, bytes)):
+            values = list(spec)
+            for idx, value in enumerate(values):
+                if not isinstance(value, str) and not callable(value):
+                    raise TypeError(f"Info spec element at index {idx} must be a str or callable; got {type(value).__name__}")
+            return values
+        raise TypeError(f"Info spec must be a str, callable, or sequence of these; got {type(spec).__name__}")
+
+    def _rebuild_simple_card(self, card: _SimpleInfoCard, normalized: list[Union[str, Callable]]) -> None:
+        segment_widgets: list[widgets.HTMLMath] = []
+        segments: list[Union[InfoPanelManager._StaticSegment, InfoPanelManager._DynamicSegment]] = []
+        for part in normalized:
+            if isinstance(part, str):
+                widget = widgets.HTMLMath(value=part, layout=widgets.Layout(margin="0px"))
+                segments.append(self._StaticSegment(text=part, widget=widget))
+            else:
+                widget = widgets.HTMLMath(value="", layout=widgets.Layout(margin="0px"))
+                segments.append(self._DynamicSegment(fn=part, widget=widget, last_text=None))
+            segment_widgets.append(widget)
+
+        card.segments = segments
+        card.pending_ctx = self.InfoChangeContext(reason="manual", trigger=None, t=time.time(), seq=self._update_seq)
+        card.container.children = tuple(segment_widgets)
+
+        with card.output:
+            card.output.clear_output(wait=True)
+            display(card.container)
+
+        card.debouncer()
+
+    def _run_card_update(self, card_id: Hashable) -> None:
+        card = self._simple_cards.get(card_id)
+        if card is None:
+            return
+
+        ctx = card.pending_ctx or self.InfoChangeContext(reason="manual", trigger=None, t=time.time(), seq=self._update_seq)
+        for seg in card.segments:
+            if isinstance(seg, self._StaticSegment):
+                continue
+            try:
+                text = seg.fn(self._figure_owner, ctx)
+                if text is None:
+                    text = ""
+                elif not isinstance(text, str):
+                    text = str(text)
+            except Exception as exc:
+                text = self._format_segment_error(exc)
+            if text != seg.last_text:
+                seg.widget.value = text
+                seg.last_text = text
+
+    def _format_segment_error(self, exc: Exception) -> str:
+        lines = traceback.format_exception(type(exc), exc, exc.__traceback__)
+        payload = "".join(lines)
+        capped = "\n".join(payload.splitlines()[:20])
+        safe = html.escape(capped)
+        return (
+            '<pre style="max-height: 12em; overflow:auto; white-space: pre-wrap; margin:0;">'
+            f"{safe}"
+            "</pre>"
+        )
+
+    @property
+    def _figure_owner(self) -> Any:
+        owner = getattr(self, "__figure_owner", None)
+        if owner is None:
+            raise RuntimeError("InfoPanelManager owner figure not set")
+        return owner
+
+    def bind_figure(self, fig: Any) -> None:
+        """Bind the owning Figure instance for dynamic callable execution."""
+        setattr(self, "__figure_owner", fig)
 
 
 # =============================================================================

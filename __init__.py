@@ -26,6 +26,7 @@ from .Figure import (
     add_info_component,
     current_figure,
     get_info_output,
+    info,
     get_sampling_points,
     get_title,
     get_x_range,

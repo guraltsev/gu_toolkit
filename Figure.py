@@ -264,6 +264,7 @@ class Figure:
             modal_host=self._layout.root_widget,
         )
         self._info = InfoPanelManager(self._layout.info_box)
+        self._info.bind_figure(self)
 
         # 3. Initialize Plotly Figure
         self._figure = go.FigureWidget()
@@ -858,6 +859,8 @@ class Figure:
                 except Exception as e:
                     warnings.warn(f"Hook {h_id} failed: {e}")
 
+        self._info.schedule_info_update(reason=reason, trigger=trigger)
+
     def add_param(self, symbol: Symbol, **kwargs: Any) -> ParamRef:
         """
         Add a parameter manually.
@@ -917,6 +920,11 @@ class Figure:
 
     # Alias for backward compatibility
     new_info_output = get_info_output
+
+    def info(self, spec: Union[str, Callable[["Figure", Any], str], Sequence[Union[str, Callable[["Figure", Any], str]]]], id: Optional[Hashable] = None) -> None:
+        """Create or replace a simple info card in the Info sidebar."""
+        self._info.set_simple_card(spec=spec, id=id)
+        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
 
     def add_info_component(self, id: Hashable, component_factory: Callable, hook_id: Optional[Hashable] = None, **kwargs: Any) -> Any:
         """
@@ -1270,6 +1278,11 @@ def render(reason: str = "manual", trigger: Optional[ParamEvent] = None) -> None
 def get_info_output(id: Optional[Hashable] = None, **kwargs: Any) -> widgets.Output:
     """Return or create an output widget in the current figure's info panel."""
     return _require_current_figure().get_info_output(id=id, **kwargs)
+
+
+def info(spec: Union[str, Callable[[Figure, Any], str], Sequence[Union[str, Callable[[Figure, Any], str]]]], id: Optional[Hashable] = None) -> None:
+    """Create or replace a simplified info card on the current figure."""
+    _require_current_figure().info(spec=spec, id=id)
 
 
 def add_info_component(
