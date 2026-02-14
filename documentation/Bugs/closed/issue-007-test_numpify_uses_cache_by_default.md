@@ -19,3 +19,7 @@
 
 ## Disposition
 **Fixed in package namespace exports by avoiding submodule-name shadowing.**
+
+
+## Closure note (2026-02-14)
+Closed because the namespace-shadowing regression is no longer present: `tests/test_numpify_cache_behavior.py::test_numpify_uses_cache_by_default` passed in the provided run.

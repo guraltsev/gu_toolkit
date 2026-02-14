@@ -1,7 +1,7 @@
 # Issue 003: Cache-control test blocked by `numpify` module shadowing
 
 ## Summary
-`tests/test_numpify_cache_behavior.py::test_numpify_cache_false_forces_recompile` fails with the same module-shadowing error as Issue 007.
+`tests/test_numpify_cache_behavior.py::test_numpify_cache_false_forces_recompile` fails with the same module-shadowing error as Issue 002.
 
 ## Analysis
 - Error: `AttributeError: 'function' object has no attribute 'numpify_cached'`.
@@ -9,8 +9,12 @@
 - The functional behavior under test (`cache=False` forcing recompilation) is not being exercised due to import failure.
 
 ## Proposed solution
-- Fix package namespace collision described in Issue 007.
+- Fix package namespace collision described in Issue 002.
 - Keep this test after fix; it validates important cache semantics.
 
 ## Disposition
-**Duplicate root cause of Issue 007 (real bug).**
+**Duplicate root cause of Issue 002 (real bug).**
+
+
+## Closure note (2026-02-14)
+Closed because cache-control behavior is now validated by passing test output (`tests/test_numpify_cache_behavior.py::test_numpify_cache_false_forces_recompile` passed).
