@@ -3,9 +3,19 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import threading
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
-_FIGURE_STACK: List["Figure"] = []
+_FIGURE_STACK_LOCAL = threading.local()
+
+
+def _figure_stack() -> List["Figure"]:
+    """Return a thread-local figure stack."""
+    stack = getattr(_FIGURE_STACK_LOCAL, "stack", None)
+    if stack is None:
+        stack = []
+        _FIGURE_STACK_LOCAL.stack = stack
+    return stack
 
 class _FigureDefaultSentinel:
     """Sentinel value meaning "inherit from figure defaults"."""
@@ -32,9 +42,10 @@ def _current_figure() -> Optional["Figure"]:
     Figure or None
         The current figure on the stack, or ``None`` if no figure is active.
     """
-    if not _FIGURE_STACK:
+    stack = _figure_stack()
+    if not stack:
         return None
-    return _FIGURE_STACK[-1]
+    return stack[-1]
 
 
 def _require_current_figure() -> "Figure":
@@ -90,7 +101,7 @@ def _push_current_figure(fig: "Figure") -> None:
     -------
     None
     """
-    _FIGURE_STACK.append(fig)
+    _figure_stack().append(fig)
 
 
 def _pop_current_figure(fig: "Figure") -> None:
@@ -105,14 +116,15 @@ def _pop_current_figure(fig: "Figure") -> None:
     -------
     None
     """
-    if not _FIGURE_STACK:
+    stack = _figure_stack()
+    if not stack:
         return
-    if _FIGURE_STACK[-1] is fig:
-        _FIGURE_STACK.pop()
+    if stack[-1] is fig:
+        stack.pop()
         return
-    for i in range(len(_FIGURE_STACK) - 1, -1, -1):
-        if _FIGURE_STACK[i] is fig:
-            del _FIGURE_STACK[i]
+    for i in range(len(stack) - 1, -1, -1):
+        if stack[i] is fig:
+            del stack[i]
             break
 
 
@@ -153,4 +165,3 @@ PLOT_STYLE_OPTIONS: Dict[str, str] = {
     "line": "Extra line-style fields as a mapping (for advanced per-line styling).",
     "trace": "Extra trace fields as a mapping (for advanced full-trace styling).",
 }
-

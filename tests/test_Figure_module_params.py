@@ -8,16 +8,11 @@ Run (from the repo root):
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import sympy as sp
+import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT.parent))
-
-from gu_toolkit import Figure, params, parameter, plot_style_options  # noqa: E402
-import gu_toolkit.debouncing as debouncing_module  # noqa: E402
+from gu_toolkit import Figure, params, parameter, plot_style_options
+import gu_toolkit.debouncing as debouncing_module
 
 
 class _FakeTimer:
@@ -38,15 +33,6 @@ class _FakeTimer:
         self.canceled = True
 
 
-def _assert_raises(exc_type, fn, *args, **kwargs):
-    try:
-        fn(*args, **kwargs)
-    except exc_type:
-        return
-    except Exception as exc:  # pragma: no cover - defensive
-        raise AssertionError(f"Expected {exc_type}, got {type(exc)}") from exc
-    raise AssertionError(f"Expected {exc_type} to be raised.")
-
 
 def test_params_proxy_context_access() -> None:
     x, a = sp.symbols("x a")
@@ -61,7 +47,8 @@ def test_params_strict_lookup() -> None:
     fig = Figure()
     with fig:
         assert a not in params
-        _assert_raises(KeyError, lambda: params[a])
+        with pytest.raises(KeyError):
+            _ = params[a]
 
 
 def test_parameter_creation_path() -> None:
@@ -74,8 +61,10 @@ def test_parameter_creation_path() -> None:
 
 def test_no_context_behavior() -> None:
     a = sp.symbols("a")
-    _assert_raises(RuntimeError, lambda: params[a])
-    _assert_raises(RuntimeError, parameter, a)
+    with pytest.raises(RuntimeError):
+        _ = params[a]
+    with pytest.raises(RuntimeError):
+        parameter(a)
 
 
 def test_params_setitem_sugar() -> None:
@@ -97,7 +86,8 @@ def test_plot_opacity_shortcut_and_validation() -> None:
     plot.update(opacity=0.7)
     assert plot.opacity == 0.7
 
-    _assert_raises(ValueError, setattr, plot, "opacity", 1.2)
+    with pytest.raises(ValueError):
+        setattr(plot, "opacity", 1.2)
 
 
 
@@ -125,8 +115,10 @@ def test_plot_render_caches_read_only_samples() -> None:
     assert not x_data.flags.writeable
     assert not y_data.flags.writeable
 
-    _assert_raises(ValueError, x_data.__setitem__, 0, 999.0)
-    _assert_raises(ValueError, y_data.__setitem__, 0, 999.0)
+    with pytest.raises(ValueError):
+        x_data[0] = 999.0
+    with pytest.raises(ValueError):
+        y_data[0] = 999.0
 
 
 def test_plot_render_replaces_cached_samples() -> None:
@@ -248,29 +240,3 @@ def test_relayout_debounce_drop_overflow_keeps_final_event() -> None:
         debouncing_module.threading.Timer = original_timer
         Figure.render = original_render
 
-
-def main() -> None:
-    tests = [
-        test_params_proxy_context_access,
-        test_params_strict_lookup,
-        test_parameter_creation_path,
-        test_no_context_behavior,
-        test_params_setitem_sugar,
-        test_plot_opacity_shortcut_and_validation,
-        test_plot_cached_samples_none_before_first_render,
-        test_plot_render_caches_read_only_samples,
-        test_plot_render_replaces_cached_samples,
-        test_plot_figure_property_exposes_owner_and_context_manager,
-        test_plot_style_options_are_discoverable,
-        test_plot_accepts_label_kwarg_on_create,
-        test_plot_accepts_label_kwarg_on_update,
-        test_relayout_debounce_delays_first_event_until_timer,
-        test_relayout_debounce_drop_overflow_keeps_final_event,
-    ]
-    for test in tests:
-        test()
-    print(f"OK: {len(tests)} tests passed")
-
-
-if __name__ == "__main__":
-    main()
