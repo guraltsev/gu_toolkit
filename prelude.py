@@ -248,20 +248,16 @@ def _load_numeric_bindings():
     """Load numpify/current-figure helpers for package and standalone usage."""
     try:
         from .numpify import (
-            DYNAMIC_PARAMETER,
             NumpifiedFunction as _NumpifiedFunction,
             numpify_cached as _numpify_cached,
         )
-        from .Figure import current_figure as _current_figure
     except ImportError:
         from numpify import (
-            DYNAMIC_PARAMETER,
             NumpifiedFunction as _NumpifiedFunction,
             numpify_cached as _numpify_cached,
         )
-        from Figure import current_figure as _current_figure
 
-    return DYNAMIC_PARAMETER, _NumpifiedFunction, _numpify_cached, _current_figure
+    return _NumpifiedFunction, _numpify_cached
 
 
 def _load_numpify_cached():
@@ -273,7 +269,7 @@ def _load_numpify_cached():
     return _numpify_cached
 
 
-def _resolve_numeric_callable(expr, x, freeze, freeze_kwargs, DYNAMIC_PARAMETER, _NumpifiedFunction, _numpify_cached, _current_figure):
+def _resolve_numeric_callable(expr, x, freeze, freeze_kwargs, _NumpifiedFunction, _numpify_cached):
     """Build a numeric unary callable centered on ``NumpifiedFunction`` semantics."""
     if isinstance(expr, _NumpifiedFunction):
         compiled = expr
@@ -318,9 +314,7 @@ def _resolve_numeric_callable(expr, x, freeze, freeze_kwargs, DYNAMIC_PARAMETER,
     if freeze is not None or freeze_kwargs:
         return compiled.freeze(freeze, **freeze_kwargs)
 
-    return compiled.set_parameter_context(
-        _current_figure(required=True).parameters.parameter_context
-    ).freeze({sym: DYNAMIC_PARAMETER for sym in compiled.vars[1:]})
+    return compiled
 
 
 def NIntegrate(expr, var_and_limits, freeze=None, /, **freeze_kwargs):
@@ -352,9 +346,9 @@ def NIntegrate(expr, var_and_limits, freeze=None, /, **freeze_kwargs):
     - Plain callables are treated as unary ``f(x)`` only.
       Generic callables with extra required parameters are not supported yet.
 
-    If ``freeze``/``freeze_kwargs`` are omitted and the compiled function has
-    extra variables beyond the integration variable, those variables are bound
-    dynamically from the current figure parameter context.
+    If ``freeze``/``freeze_kwargs`` are omitted and extra variables remain,
+    the underlying ``NumpifiedFunction`` is evaluated as-is and will raise its
+    normal missing-argument/context errors at call time.
 
     Returns
     -------
@@ -366,7 +360,7 @@ def NIntegrate(expr, var_and_limits, freeze=None, /, **freeze_kwargs):
     except Exception as exc:  # pragma: no cover - defensive shape validation
         raise TypeError("NIntegrate expects limits as a tuple: (x, a, b)") from exc
 
-    DYNAMIC_PARAMETER, _NumpifiedFunction, _numpify_cached, _current_figure = _load_numeric_bindings()
+    _NumpifiedFunction, _numpify_cached = _load_numeric_bindings()
 
     from scipy.integrate import quad
 
@@ -375,10 +369,8 @@ def NIntegrate(expr, var_and_limits, freeze=None, /, **freeze_kwargs):
         x,
         freeze,
         freeze_kwargs,
-        DYNAMIC_PARAMETER,
         _NumpifiedFunction,
         _numpify_cached,
-        _current_figure,
     )
 
     def _integrand(t):
@@ -425,7 +417,7 @@ def NReal_Fourier_Series(expr, var_and_limits, samples=4000, freeze=None, /, **f
         raise ValueError("samples must be >= 2")
     sample_count = int(samples)
 
-    DYNAMIC_PARAMETER, _NumpifiedFunction, _numpify_cached, _current_figure = _load_numeric_bindings()
+    _NumpifiedFunction, _numpify_cached = _load_numeric_bindings()
 
     from scipy.fft import rfft
 
@@ -440,10 +432,8 @@ def NReal_Fourier_Series(expr, var_and_limits, samples=4000, freeze=None, /, **f
         x,
         freeze,
         freeze_kwargs,
-        DYNAMIC_PARAMETER,
         _NumpifiedFunction,
         _numpify_cached,
-        _current_figure,
     )
 
     grid = start + length * np.arange(sample_count, dtype=float) / sample_count

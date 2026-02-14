@@ -40,17 +40,16 @@ def test_nintegrate_symbolic_expr_freeze_missing_raises() -> None:
         raise AssertionError("Expected error for missing freeze binding")
 
 
-def test_nintegrate_symbolic_expr_uses_current_figure_when_binding_absent() -> None:
+def test_nintegrate_symbolic_expr_without_freeze_raises_missing_arg() -> None:
     x, a, b = sp.symbols("x a b")
-    fig = Figure()
-    fig.parameter([a, b], value=0)
-    fig.parameters[a].value = 2.0
-    fig.parameters[b].value = 3.0
 
-    with fig:
-        result = NIntegrate(a * x + b, (x, 0, 1))
-
-    assert math.isclose(result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
+    try:
+        NIntegrate(a * x + b, (x, 0, 1))
+    except TypeError as exc:
+        assert "Missing positional argument" in str(exc)
+        assert "a" in str(exc)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("Expected missing-argument TypeError")
 
 
 def test_nintegrate_symbolic_expr_with_smartfigure_binding() -> None:
@@ -115,18 +114,17 @@ def test_nintegrate_sympy_lambda_with_dict_binding() -> None:
     assert math.isclose(result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
 
 
-def test_nintegrate_sympy_lambda_uses_current_figure_when_binding_absent() -> None:
+def test_nintegrate_sympy_lambda_without_freeze_raises_missing_arg() -> None:
     x, a, b = sp.symbols("x a b")
     lam = sp.Lambda((x, a, b), a * x + b)
-    fig = Figure()
-    fig.parameter([a, b], value=0)
-    fig.parameters[a].value = 2.0
-    fig.parameters[b].value = 3.0
 
-    with fig:
-        result = NIntegrate(lam, (x, 0, 1))
-
-    assert math.isclose(result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
+    try:
+        NIntegrate(lam, (x, 0, 1))
+    except TypeError as exc:
+        assert "Missing positional argument" in str(exc)
+        assert "a" in str(exc)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("Expected missing-argument TypeError")
 
 
 def test_nreal_fourier_series_constant_l2_normalized() -> None:
