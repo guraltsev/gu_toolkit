@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import sympy as sp
-import gu_toolkit.numpify as numpify_module
+from importlib import import_module
+
+numpify_module = import_module("gu_toolkit.numpify")
 
 
 def test_numpify_returns_numeric_function_with_symbolic() -> None:

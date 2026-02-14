@@ -21,6 +21,10 @@ from .numpify import (
     numpify as numpify_expr,
     numpify_cached,
 )
+
+# Educational/nb ergonomics: make callable `numpify` available from
+# `from gu_toolkit import *`.
+numpify = numpify_expr
 from .Figure import Figure, FigureLayout, Plot
 from .Slider import FloatSlider
 from .Figure import (
