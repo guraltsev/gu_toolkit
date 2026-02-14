@@ -1,15 +1,8 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import sympy as sp
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT.parent))
-
-from gu_toolkit import Figure, info  # noqa: E402
-import gu_toolkit.figure_info as figure_info_module  # noqa: E402
+from gu_toolkit import Figure, info
+import gu_toolkit.figure_info as figure_info_module
 
 
 class _ImmediateDebouncer:
