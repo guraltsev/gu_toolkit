@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Iterator, Mapping
 
 import sympy as sp
 import gu_toolkit.numpify as numpify_module
@@ -11,10 +12,20 @@ class _Cell:
         self.value = value
 
 
-class _Ctx:
+class _Ctx(Mapping[sp.Symbol, float]):
+    """Simple live parameter provider used by NumpifiedFunction tests."""
+
     def __init__(self, mapping):
         self.parameters = {k: _Cell(v) for k, v in mapping.items()}
 
+    def __getitem__(self, key: sp.Symbol) -> float:
+        return self.parameters[key].value
+
+    def __iter__(self) -> Iterator[sp.Symbol]:
+        return iter(self.parameters)
+
+    def __len__(self) -> int:
+        return len(self.parameters)
 
 def test_identifier_mangling_and_collision() -> None:
     a = sp.Symbol("lambda")
