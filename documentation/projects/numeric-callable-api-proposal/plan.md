@@ -1,105 +1,60 @@
-# Plan: Numeric Callable API Proposal (Design Only)
+# Plan: Numeric Callable API Proposal
 
 ## Goal
 
-Produce a design-level proposal that unifies numeric callable behavior (freeze semantics, signature mapping, dynamic context) across:
-
-- plain Python callables,
-- numpified symbolic expressions,
-- optionally `NamedFunction`-based constructs.
-
-> Scope for this project artifact is design and documentation only (no implementation).
+Adopt `NumericFunction` as the canonical numeric callable abstraction while preserving migration safety for legacy `NumpifiedFunction` usage.
 
 ---
 
-## Phase 1 — Requirements and invariants
+## Phase 1 — API contract finalization
 
-1. Define the invariant semantics that must hold regardless of callable origin:
-   - immutable-style updates for `freeze`/`unfreeze`,
-   - deterministic binding precedence,
-   - explicit missing-parameter errors,
-   - stable and inspectable argument ordering.
-2. Document unsupported or explicitly deferred cases (e.g., varargs, keyword-only policies).
-3. Define context lookup contract for dynamic parameters using mapping semantics.
+1. Finalize constructor and factory contract:
+   - `NumericFunction(f, vars=...)`
+   - `numpify(...) -> NumericFunction(symbolic=<set>)`
+   - compatibility `NumpifiedFunction(..., symbolic=None by default)`
+2. Finalize accepted `vars` forms:
+   - tuple positional,
+   - tuple positional + trailing mapping,
+   - pure mapping,
+   - mapping with integer keys (`0..n-1`) for positional slots and non-integer keys for keyed slots.
+3. Define normalization and validation rules:
+   - integer key contiguity,
+   - collision handling,
+   - deterministic ordering.
 
-**Deliverable:** requirements section in proposal RFC.
-
----
-
-## Phase 2 — API surface design
-
-1. Specify constructor patterns:
-   - `NumericFunction(f)`
-   - `NumericFunction(f, vars=(...))`
-   - `NumericFunction.from_sympy(...)`, etc.
-2. Specify binding methods and return types:
-   - `freeze`, `unfreeze`, context setters.
-3. Specify introspection surface:
-   - `vars`, `var_names`, possibly `signature` and metadata flags.
-4. Specify helper consumption protocol used by `NIntegrate` and `NReal_Fourier_Series`.
-
-**Deliverable:** concrete API section with examples and edge-case behavior table.
+**Deliverable:** locked API spec and behavior table.
 
 ---
 
-## Phase 3 — Compatibility and migration strategy
+## Phase 2 — Implementation and testing
 
-1. Define relation between `NumpifiedFunction` and `NumericFunction`:
-   - subclass, wrapper, or shared mixin/base protocol.
-2. Define backward-compatibility commitments for fields currently used in code (`symbolic`, `source`, etc.).
-3. Define deprecation strategy, if any:
-   - staged warnings,
-   - timeline tied to helper migration.
+1. Implement `NumericFunction` runtime behavior for binding, freeze/unfreeze, context, and `vars()` round-trip.
+2. Implement compatibility constructor `NumpifiedFunction` with default `symbolic=None` delegating to the new core behavior.
+3. Update `numpify(...)` to return `NumericFunction` with `symbolic` set.
+4. Add tests covering:
+   - all `vars` input modes,
+   - constructor defaults,
+   - `numpify` return type and symbolic payload,
+   - freeze/unfreeze parity across direct and compatibility construction.
 
-**Deliverable:** migration matrix from old entrypoints to new equivalents.
-
----
-
-## Phase 4 — Integration design with `NamedFunction`
-
-1. Decide whether `NamedFunction` should expose a direct numeric adapter.
-2. Define clear boundary:
-   - symbolic expansion concerns remain in `NamedFunction`,
-   - parameter freeze semantics remain in numeric wrapper.
-3. Provide recommended usage patterns for common workflows.
-
-**Deliverable:** integration note and “when to use what” decision guide.
+**Deliverable:** merged implementation and passing test suite.
 
 ---
 
-## Phase 5 — Validation and test design (no code yet)
+## Phase 3 — Complete replacement of `NumpifiedFunction`
 
-Define a future test plan to validate the design once implemented:
+1. Migrate internal helper consumers and dependent modules to target `NumericFunction` directly.
+2. Remove or hard-deprecate direct `NumpifiedFunction` usage paths once compatibility window closes.
+3. Update documentation and examples so `NumericFunction` is the only primary public narrative.
 
-1. Conformance tests for protocol-level behavior across callable origins.
-2. Regression tests for freeze/dynamic semantics currently expected from `NumpifiedFunction`.
-3. Helper-level tests ensuring `NIntegrate`/Fourier behavior parity.
-4. Error ergonomics tests (early validation mode vs deferred runtime mode, if adopted).
-
-**Deliverable:** checklist of required tests and acceptance criteria.
+**Deliverable:** full replacement completed, with migration notes.
 
 ---
 
-## Suggested acceptance criteria for design sign-off
+## Phase 4 — Post-migration cleanup
 
-- A reviewer can map any supported callable origin to a single binding model.
-- Freeze/unfreeze and dynamic context behavior are specified unambiguously.
-- Numeric helper APIs can be specified against a stable protocol instead of concrete classes.
-- Backward compatibility impact is explicitly documented with migration recommendations.
+1. Remove transitional shims that are no longer required.
+2. Audit docs for legacy terminology drift.
+3. Verify downstream integrations remain stable after cleanup.
 
----
-
-## Open decisions to resolve before implementation
-
-1. Should `NumericFunction` accept names, symbols, or both as first-class keys?
-2. How strict should callable signature validation be for generic callables?
-3. Should unresolved parameters fail early by default or only at evaluation time?
-4. Should `NamedFunction` become a producer of `NumericFunction` directly, or stay loosely coupled?
-
----
-
-## Non-goals
-
-- Implementing runtime behavior in this phase.
-- Refactoring helper internals in this phase.
-- Changing existing behavior without explicit migration plan.
+**Deliverable:** stable post-migration baseline.
