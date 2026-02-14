@@ -6,9 +6,9 @@ import numpy as np
 import sympy as sp
 
 from gu_toolkit import Figure
-from gu_toolkit.prelude import NIntegrate
-from gu_toolkit.prelude import NReal_Fourier_Series
-from gu_toolkit.prelude import play
+from gu_toolkit.numeric_operations import NIntegrate
+from gu_toolkit.numeric_operations import NReal_Fourier_Series
+from gu_toolkit.numeric_operations import play
 
 
 def test_nintegrate_finite_interval() -> None:

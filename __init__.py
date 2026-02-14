@@ -10,9 +10,9 @@ building blocks (parameter events/references and numeric-expression wrappers)
 for advanced integrations.
 """
 
-from .prelude import *
+from .notebook_namespace import *
 from .NamedFunction import NamedFunction as NamedFunction
-from .numpify import (
+from .numeric_callable import (
     DYNAMIC_PARAMETER,
     NumericFunction,
     NumpifiedFunction,

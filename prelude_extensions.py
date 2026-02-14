@@ -1,6 +1,6 @@
-"""Backward-compatible shim for deprecated module name.
+"""Backward-compatible module alias.
 
-Use :mod:`gu_toolkit.prelude_support` instead.
+Use :mod:`gu_toolkit.notebook_namespace`.
 """
 
-from .prelude_support import *  # noqa: F401,F403
+from .notebook_namespace import *  # noqa: F401,F403
