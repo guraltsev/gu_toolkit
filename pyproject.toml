@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gu_toolkit"
+version = "0.0.0"
+description = "Interactive mathematics toolkit for Jupyter notebooks"
+requires-python = ">=3.10"
+dependencies = [
+  "sympy",
+  "numpy",
+  "scipy",
+  "ipython",
+  "ipywidgets",
+  "plotly",
+  "anywidget",
+  "traitlets",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "pytest-cov>=5",
+]
+pandas = [
+  "pandas",
+]
+
+[tool.setuptools]
+packages = ["gu_toolkit"]
+
+[tool.setuptools.package-dir]
+gu_toolkit = "."
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["gu_toolkit"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 50

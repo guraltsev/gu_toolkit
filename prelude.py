@@ -20,8 +20,12 @@ __all__+=["np"]
 
 
 
-import pandas as pd
-__all__+=["pd"]
+try:
+    import pandas as pd
+except ModuleNotFoundError:  # Optional dependency in lean environments.
+    pd = None
+else:
+    __all__ += ["pd"]
 
 # print("__all__ (from prelude):",__all__)
 import sympy as sp
