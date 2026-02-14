@@ -250,21 +250,39 @@ def _resolve_parameter_values(required_symbols, binding, current_figure_getter):
     if not required_symbols:
         return {}
 
+    def _coerce_binding_source(source):
+        if isinstance(source, Mapping):
+            return source
+
+        parameters = getattr(source, "parameters", None)
+        context = getattr(parameters, "parameter_context", None)
+        if isinstance(context, Mapping):
+            return context
+
+        context = getattr(source, "parameter_context", None)
+        if isinstance(context, Mapping):
+            return context
+
+        return None
+
     if binding is None:
         fig = current_figure_getter(required=True)
         return {sym: fig.parameters.parameter_context[sym] for sym in required_symbols}
 
-    if isinstance(binding, dict):
-        missing = [sym for sym in required_symbols if sym not in binding and sym.name not in binding]
+    resolved_binding = _coerce_binding_source(binding)
+    if resolved_binding is not None:
+        missing = [sym for sym in required_symbols if sym not in resolved_binding and sym.name not in resolved_binding]
         if missing:
             names = ", ".join(sym.name for sym in missing)
             raise ValueError(f"binding is missing values for: {names}")
         return {
-            sym: (binding[sym] if sym in binding else binding[sym.name])
+            sym: (resolved_binding[sym] if sym in resolved_binding else resolved_binding[sym.name])
             for sym in required_symbols
         }
 
-    raise TypeError("binding must be a dict keyed by Symbol or symbol name")
+    raise TypeError(
+        "binding must be a mapping keyed by Symbol/symbol name or a figure-like object with parameter_context"
+    )
 
 
 
