@@ -653,6 +653,7 @@ class Figure:
         parameters: Optional[Sequence[Symbol]] = None,
         id: Optional[str] = None,
         label: Optional[str] = None,
+        visible: VisibleSpec = True,
         x_domain: Optional[RangeLike] = None,
         sampling_points: Optional[Union[int, str]] = None,
         color: Optional[str] = None,
@@ -684,6 +685,9 @@ class Figure:
         label : str, optional
             Legend label for the trace. If omitted, new plots default to ``id``;
             existing plots keep their current label.
+        visible : bool or "legendonly", optional
+            Plotly visibility state for the trace. Hidden traces skip sampling
+            until shown.
 
         sampling_points : int or str, optional
             Number of sampling points for this plot. Use ``"figure_default"``
@@ -759,6 +763,7 @@ class Figure:
                 var=var,
                 func=func,
                 parameters=parameters,
+                visible=visible,
                 x_domain=x_domain,
                 sampling_points=sampling_points,
                 color=color,
@@ -775,7 +780,8 @@ class Figure:
         else: 
             plot = Plot(
                 var=var, func=func, smart_figure=self, parameters=parameters,
-                x_domain=x_domain, sampling_points=sampling_points, label=(id if label is None else label),
+                x_domain=x_domain, sampling_points=sampling_points,
+                label=(id if label is None else label), visible=visible,
                 color=color, thickness=thickness, dash=dash, line=line, opacity=opacity, trace=trace
             )
             self.plots[id] = plot
@@ -1395,6 +1401,7 @@ def plot(
     parameters: Optional[Sequence[Symbol]] = None,
     id: Optional[str] = None,
     label: Optional[str] = None,
+    visible: VisibleSpec = True,
     x_domain: Optional[RangeLike] = None,
     sampling_points: Optional[Union[int, str]] = None,
     color: Optional[str] = None,
@@ -1420,6 +1427,9 @@ def plot(
     label : str, optional
         Legend label for the trace. If omitted, new plots default to ``id``;
         existing plots keep their current label.
+    visible : bool or "legendonly", optional
+        Plotly visibility state for the trace. Hidden traces skip sampling
+        until shown.
     x_domain : RangeLike or None, optional
         Explicit x-domain override.
     sampling_points : int or str, optional
@@ -1474,6 +1484,7 @@ def plot(
         parameters=parameters,
         id=id,
         label=label,
+        visible=visible,
         x_domain=x_domain,
         sampling_points=sampling_points,
         color=color,
