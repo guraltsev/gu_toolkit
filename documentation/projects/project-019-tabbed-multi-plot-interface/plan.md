@@ -34,9 +34,13 @@
 
 - Split range data into:
   - `_default_x_range`, `_default_y_range`
-  - `_viewport_x_range`, `_viewport_y_range` (nullable)
-- `current_*_range` returns viewport when present, otherwise default.
-- Setting default range resets viewport to `None` for that axis.
+  - `_viewport_x_range`, `_viewport_y_range` implemented as controls (not passive cached fields)
+- Reading `_viewport_*_range` queries the live widget viewport (`FigureWidget.layout.*axis.range`).
+- Setting `_viewport_*_range` updates only the current visible viewport window.
+- Setting default range (`_default_*_range`) updates the axis defaults used by Plotly home/reset.
+- Viewport writes must preserve home/reset behavior: clicking Plotly's home/reset returns to defaults, not the last viewport assignment.
+- `current_*_range` remains the read API for current viewport state.
+- Current implementation mapping: in today's single-view `Figure`, defaults are `x_range`/`y_range`, and viewport controls are `_viewport_x_range`/`_viewport_y_range`.
 
 ### 0.2 Plot identity as first-class attribute
 
@@ -62,8 +66,8 @@ Suggested fields:
 - `y_label: str | None`
 - `default_x_range: tuple[float, float]`
 - `default_y_range: tuple[float, float] | None`  *(None = autoscale y)*
-- `viewport_x_range: tuple[float, float] | None`
-- `viewport_y_range: tuple[float, float] | None`
+- `viewport_x_range: tuple[float, float] | None` *(control-backed; reads from widget, writes move viewport only)*
+- `viewport_y_range: tuple[float, float] | None` *(control-backed; reads from widget, writes move viewport only)*
 - `is_active: bool`
 - `is_stale: bool`
 - Own `FigureWidget` + pane object

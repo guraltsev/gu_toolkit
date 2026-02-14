@@ -56,6 +56,21 @@ This prevents a first-class workflow for one shared parameter workspace with mul
 
 ---
 
+
+## Implemented Clarification: Viewport Controls in Current `Figure`
+
+The current single-view `Figure` now treats viewport ranges as **controls** instead of passive cached fields:
+
+- `_viewport_x_range` / `_viewport_y_range` are control-backed properties.
+- **Read** behavior queries the live Plotly widget range (`layout.xaxis.range` / `layout.yaxis.range`).
+- **Write** behavior moves only the current viewport window and does **not** mutate defaults (`x_range`, `y_range`).
+- Writing `None` re-applies the default axis range for that axis.
+- Plotly home/reset behavior remains anchored to default ranges.
+
+This is the concrete bridge between today’s single-view implementation and Project 019’s per-view range model.
+
+---
+
 ## Out of Scope / Deferred
 
 - Per-view parameter dependency subsets (optimization): deferred.
