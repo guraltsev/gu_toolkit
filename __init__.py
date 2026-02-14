@@ -10,16 +10,18 @@ building blocks (parameter events/references and numeric-expression wrappers)
 for advanced integrations.
 """
 
-from .prelude import *
+from .notebook_namespace import *
 from .NamedFunction import NamedFunction as NamedFunction
-from .numpify import (
+from .numeric_callable import (
     DYNAMIC_PARAMETER,
+    NumericFunction,
     NumpifiedFunction,
     ParameterContext,
     UNFREEZE,
-    numpify as numpify_expr,
+    numpify,
     numpify_cached,
 )
+
 from .Figure import Figure, FigureLayout, Plot
 from .Slider import FloatSlider
 from .Figure import (
@@ -48,3 +50,6 @@ from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 
 from .ParameterSnapshot import ParameterSnapshot
+
+# Optional explicit module handle to avoid callable/module name ambiguity.
+from . import numpify as numpify_module

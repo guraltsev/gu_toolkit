@@ -4,7 +4,9 @@ import inspect
 from collections.abc import Iterator, Mapping
 
 import sympy as sp
-import gu_toolkit.numpify as numpify_module
+from importlib import import_module
+
+numpify_module = import_module("gu_toolkit.numpify")
 
 
 class _Cell:
