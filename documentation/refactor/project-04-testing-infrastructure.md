@@ -65,7 +65,25 @@ numpify = mod.numpify
 from gu_toolkit.numpify import numpify
 ```
 
-This requires Project 01 (packaging) to be done first so `pip install -e .` works.
+To be compatible with no packaging use the following custom load code:
+
+```python
+import sys
+from pathlib import Path
+
+try:
+    _start = Path(__file__).resolve().parent
+except NameError:
+    _start = Path.cwd().resolve()
+
+_pkg_root = _start
+while _pkg_root != _pkg_root.parent and not (_pkg_root / "__init__.py").exists():
+    _pkg_root = _pkg_root.parent
+sys.path.insert(0, str(_pkg_root.parent))
+
+
+from gu_toolkit import ...
+```
 
 ### 3. Add pytest Configuration
 
