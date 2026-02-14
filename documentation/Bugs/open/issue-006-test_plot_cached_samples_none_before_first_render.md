@@ -1,18 +1,26 @@
-# Issue 001: `Figure.plot(..., visible=False)` raises unexpected keyword error
+# Issue 006: `Figure.plot(..., visible=False)` raises unexpected keyword error
 
 ## Summary
-`tests/test_Figure_module_params.py::test_plot_cached_samples_none_before_first_render` fails because `Figure.plot()` does not accept a `visible` keyword, even though `Plot` supports visibility and render-skipping for hidden traces.
+`tests/test_Figure_module_params.py::test_plot_cached_samples_none_before_first_render` failed because `Figure.plot()` did not accept a `visible` keyword, even though `Plot` already supports visibility and intentionally skips rendering while hidden.
 
-## Analysis
-- Failure: `TypeError: Figure.plot() got an unexpected keyword argument 'visible'`.
-- `Figure.plot` signature does not include `visible` and does not forward it to `Plot`.
-- `Plot.__init__` *does* include `visible` and `Plot.render()` explicitly skips rendering when `visible is not True`, which aligns with the test's intent.
-- This looks like an API inconsistency between the public facade (`Figure.plot`) and the underlying plot model (`Plot`).
+## Root cause
+- `Plot.__init__` accepts `visible` and applies it to the underlying trace.
+- `Plot.render()` exits early when `visible is not True`, which is exactly what this test expects.
+- The public API (`Figure.plot` and module-level `plot`) did not expose/forward `visible`, producing a `TypeError` before a plot could be created.
 
-## Proposed solution
-- **Recommended (bug fix):** Add `visible: bool | str = True` to `Figure.plot` and forward it in both create and update paths (`Plot(...)` and `plot.update(...)`).
-- Also add `visible` support in `Plot.update` for symmetry.
-- If maintainers intentionally removed public `visible`, then this test is outdated and should be rewritten to set `plot.visible = False` immediately after creation.
+## Implemented fix
+- Added `visible: VisibleSpec = True` to:
+  - `Figure.plot(...)`
+  - module-level `plot(...)`
+- Forwarded `visible` in both create and update paths:
+  - create path passes `visible` to `Plot(...)`
+  - update path passes `visible` to `Plot.update(...)`
+- Extended `Plot.update(...)` to handle `visible` updates directly (`self.visible = ...`).
+- Added regression coverage for updating an existing plot with `visible=False`.
+
+## Verification
+- The regression test for hidden plots now matches the exposed API.
+- Additional test confirms update path accepts `visible` without error.
 
 ## Disposition
-**Likely bug (API mismatch), unless removal of `visible` from `Figure.plot` was intentional.**
+**Fixed.** This was an API mismatch between `Figure.plot`/`plot` and `Plot`.
