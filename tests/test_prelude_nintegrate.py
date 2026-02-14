@@ -6,9 +6,9 @@ import numpy as np
 import sympy as sp
 
 from gu_toolkit import Figure
-from prelude import NIntegrate
-from prelude import NReal_Fourier_Series
-from prelude import play
+from gu_toolkit.prelude import NIntegrate
+from gu_toolkit.prelude import NReal_Fourier_Series
+from gu_toolkit.prelude import play
 
 
 def test_nintegrate_finite_interval() -> None:
@@ -73,10 +73,7 @@ def test_nintegrate_numpified_bound_and_unbound_functions() -> None:
     x, a, b = sp.symbols("x a b")
     expr = a * x + b
 
-    try:
-        from gu_toolkit.numpify import numpify_cached
-    except ImportError:
-        from numpify import numpify_cached
+    from gu_toolkit.numpify import numpify_cached
 
     unbound = numpify_cached(expr, vars=[x, a, b])
     unbound_result = NIntegrate(unbound, (x, 0, 1), binding={a: 2.0, b: 3.0})
