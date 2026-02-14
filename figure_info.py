@@ -14,6 +14,7 @@ from IPython.display import display
 
 from .debouncing import QueuedDebouncer
 from .figure_layout import OneShotOutput
+from .FigureSnapshot import InfoCardSnapshot
 
 # SECTION: InfoPanelManager (The Model for Info) [id: InfoPanelManager]
 # =============================================================================
@@ -330,6 +331,27 @@ class InfoPanelManager:
     def bind_figure(self, fig: Any) -> None:
         """Bind the owning Figure instance for dynamic callable execution."""
         setattr(self, "__figure_owner", fig)
+
+    def snapshot(self) -> tuple[InfoCardSnapshot, ...]:
+        """Return immutable snapshots of all simple info cards.
+
+        Static text segments are captured verbatim.  Dynamic (callable)
+        segments are stored as the placeholder string ``"<dynamic>"``.
+
+        Returns
+        -------
+        tuple[InfoCardSnapshot, ...]
+        """
+        results: list[InfoCardSnapshot] = []
+        for card in self._simple_cards.values():
+            segs: list[str] = []
+            for seg in card.segments:
+                if isinstance(seg, self._StaticSegment):
+                    segs.append(seg.text)
+                else:
+                    segs.append("<dynamic>")
+            results.append(InfoCardSnapshot(id=card.id, segments=tuple(segs)))
+        return tuple(results)
 
 
 # =============================================================================

@@ -124,6 +124,7 @@ from .Slider import FloatSlider
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .ParameterSnapshot import ParameterSnapshot
+from .FigureSnapshot import FigureSnapshot
 from .debouncing import QueuedDebouncer
 
 
@@ -934,6 +935,58 @@ class Figure:
         parameter : Preferred API for parameter creation.
         """
         return self.parameter(symbol, **kwargs)
+
+    def snapshot(self) -> FigureSnapshot:
+        """Return an immutable snapshot of the entire figure state.
+
+        The snapshot captures figure-level settings, full parameter metadata,
+        plot symbolic expressions with styling, and static info card content.
+
+        Returns
+        -------
+        FigureSnapshot
+
+        Examples
+        --------
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> snap = fig.snapshot()  # doctest: +SKIP
+        >>> snap.x_range  # doctest: +SKIP
+        (-4.0, 4.0)
+
+        See Also
+        --------
+        to_code : Generate a Python script from the snapshot.
+        """
+        return FigureSnapshot(
+            x_range=self.x_range,
+            y_range=self.y_range,
+            sampling_points=self.sampling_points or 500,
+            title=self.title or "",
+            parameters=self._params.snapshot(full=True),
+            plots={pid: p.snapshot(id=pid) for pid, p in self.plots.items()},
+            info_cards=self._info.snapshot(),
+        )
+
+    def to_code(self) -> str:
+        """Generate a self-contained Python script that recreates this figure.
+
+        Returns
+        -------
+        str
+            Complete Python source code.
+
+        Examples
+        --------
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> print(fig.to_code())  # doctest: +SKIP
+
+        See Also
+        --------
+        snapshot : Capture the underlying state object.
+        """
+        from .codegen import figure_to_code
+
+        return figure_to_code(self.snapshot())
 
     def get_info_output(self, id: Optional[Hashable] = None, **kwargs: Any) -> widgets.Output:
         """

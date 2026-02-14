@@ -48,3 +48,6 @@ from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 
 from .ParameterSnapshot import ParameterSnapshot
+from .PlotSnapshot import PlotSnapshot
+from .FigureSnapshot import FigureSnapshot, InfoCardSnapshot
+from .codegen import sympy_to_code, figure_to_code
