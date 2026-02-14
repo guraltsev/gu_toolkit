@@ -4,12 +4,12 @@
 `tests/test_numpify_refactor.py::test_dynamic_parameter_context_and_unfreeze` fails before execution with `AttributeError: 'function' object has no attribute 'numpify'`.
 
 ## Analysis
-- Same namespace/import collision as Issue 002.
+- Same namespace/import collision as Issue 007.
 - Test scenario itself appears valid for `NumpifiedFunction` dynamic binding and unfreeze workflow.
 
 ## Proposed solution
-- Apply Issue 002 fix.
+- Apply Issue 007 fix.
 - Re-run this and related refactor tests to verify runtime behavior.
 
 ## Disposition
-**Duplicate root cause of Issue 002 (real bug).**
+**Duplicate root cause of Issue 007 (real bug).**

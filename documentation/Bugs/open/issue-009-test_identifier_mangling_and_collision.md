@@ -12,4 +12,4 @@
 - Re-run this test unchanged to validate numpify refactor expectations.
 
 ## Disposition
-**Duplicate root cause of Issue 002 (real bug).**
+**Duplicate root cause of Issue 007 (real bug).**
