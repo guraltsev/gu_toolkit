@@ -23,21 +23,21 @@ def test_nintegrate_infinite_interval() -> None:
     assert math.isclose(result, 1.0, rel_tol=1e-9, abs_tol=1e-11)
 
 
-def test_nintegrate_symbolic_expr_with_dict_binding() -> None:
+def test_nintegrate_symbolic_expr_with_freeze_bindings() -> None:
     x, a, b = sp.symbols("x a b")
-    result = NIntegrate(a * x + b, (x, 0, 1), binding={a: 2.0, b: 3.0})
+    result = NIntegrate(a * x + b, (x, 0, 1), freeze={a: 2.0, b: 3.0})
     assert math.isclose(result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
 
 
-def test_nintegrate_symbolic_expr_binding_missing_raises() -> None:
+def test_nintegrate_symbolic_expr_freeze_missing_raises() -> None:
     x, a, b = sp.symbols("x a b")
     try:
-        NIntegrate(a * x + b, (x, 0, 1), binding={a: 2.0})
-    except ValueError as exc:
-        assert "binding is missing values" in str(exc)
+        NIntegrate(a * x + b, (x, 0, 1), freeze={a: 2.0})
+    except TypeError as exc:
+        assert "Missing positional argument" in str(exc)
         assert "b" in str(exc)
     else:  # pragma: no cover - defensive
-        raise AssertionError("Expected ValueError for missing binding")
+        raise AssertionError("Expected error for missing freeze binding")
 
 
 def test_nintegrate_symbolic_expr_uses_current_figure_when_binding_absent() -> None:
@@ -60,7 +60,7 @@ def test_nintegrate_symbolic_expr_with_smartfigure_binding() -> None:
     fig.parameters[a].value = 2.0
     fig.parameters[b].value = 3.0
 
-    result = NIntegrate(a * x + b, (x, 0, 1), binding=fig)
+    result = NIntegrate(a * x + b, (x, 0, 1), freeze={a: fig.parameters[a].value, b: fig.parameters[b].value})
     assert math.isclose(result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
 
 
@@ -76,7 +76,7 @@ def test_nintegrate_numpified_bound_and_unbound_functions() -> None:
     from gu_toolkit.numpify import numpify_cached
 
     unbound = numpify_cached(expr, vars=[x, a, b])
-    unbound_result = NIntegrate(unbound, (x, 0, 1), binding={a: 2.0, b: 3.0})
+    unbound_result = NIntegrate(unbound, (x, 0, 1), freeze={a: 2.0, b: 3.0})
     assert math.isclose(unbound_result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
 
     bound = unbound.freeze({a: 2.0, b: 3.0})
@@ -84,44 +84,34 @@ def test_nintegrate_numpified_bound_and_unbound_functions() -> None:
     assert math.isclose(bound_result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
 
 
-def test_nintegrate_unbound_callable_with_dict_binding() -> None:
-    def linear(x, a, b):
-        return a * x + b
-
-    result = NIntegrate(linear, ("ignored", 0, 1), binding={"a": 2.0, "b": 3.0})
-    assert math.isclose(result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
-
-
-def test_nintegrate_unbound_callable_with_smartfigure_binding() -> None:
-    def linear(x, a, b):
-        return a * x + b
-
-    a, b = sp.symbols("a b")
-    fig = Figure()
-    fig.parameter([a, b], value=0)
-    fig.parameters[a].value = 2.0
-    fig.parameters[b].value = 3.0
-
-    result = NIntegrate(linear, ("ignored", 0, 1), binding=fig)
-    assert math.isclose(result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
-
-
-def test_nintegrate_unbound_callable_missing_binding_raises() -> None:
+def test_nintegrate_callable_with_parameters_not_supported_yet() -> None:
     def linear(x, a, b):
         return a * x + b
 
     try:
-        NIntegrate(linear, ("ignored", 0, 1), binding={"a": 2.0})
-    except ValueError as exc:
-        assert "missing values" in str(exc) or "missing callable parameters" in str(exc)
+        NIntegrate(linear, ("ignored", 0, 1))
+    except TypeError as exc:
+        assert "not supported yet" in str(exc)
     else:  # pragma: no cover - defensive
-        raise AssertionError("Expected ValueError for missing callable binding")
+        raise AssertionError("Expected TypeError for parameterized callable")
+
+
+def test_nintegrate_callable_freeze_not_supported() -> None:
+    def unary(x):
+        return x**2
+
+    try:
+        NIntegrate(unary, ("ignored", 0, 1), {"a": 2.0})
+    except TypeError as exc:
+        assert "freeze=" in str(exc)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("Expected TypeError for freeze with plain callable")
 
 
 def test_nintegrate_sympy_lambda_with_dict_binding() -> None:
     x, a, b = sp.symbols("x a b")
     lam = sp.Lambda((x, a, b), a * x + b)
-    result = NIntegrate(lam, (x, 0, 1), binding={a: 2.0, b: 3.0})
+    result = NIntegrate(lam, (x, 0, 1), freeze={a: 2.0, b: 3.0})
     assert math.isclose(result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
 
 
