@@ -21,6 +21,23 @@ def test_legacy_numpified_function_defaults_symbolic_none() -> None:
     assert legacy(3) == 5
 
 
+def test_numeric_function_can_wrap_pure_python_callable_without_symbolic() -> None:
+    x, a, b = sp.symbols("x a b")
+
+    def pure_python_callable(xparam, yparam, zparam):
+        return xparam + yparam * zparam
+
+    nf = numpify_module.NumericFunction(
+        pure_python_callable,
+        vars=(x, {"yparam": a, "zparam": b}),
+    )
+
+    assert nf.symbolic is None
+    assert nf.vars() == (x, {"yparam": a, "zparam": b})
+    assert tuple(nf.vars) == (x,)
+    assert nf(2, yparam=3, zparam=4) == 14
+
+
 def test_vars_roundtrip_and_mixed_calling_modes() -> None:
     x, y, s = sp.symbols("x y s")
     fn = numpify_module.numpify(x + y * s, vars=(x, {"y": y, "scale": s}), cache=False)
@@ -38,6 +55,23 @@ def test_mapping_with_integer_slots_roundtrip_and_call() -> None:
     assert fn.vars() == spec
     assert tuple(fn.vars) == (x, y)
     assert fn(2, 3, scale=4) == 14
+
+
+def test_vars_named_parameter_semantics_for_numeric_function_constructor() -> None:
+    x, a, b = sp.symbols("x a b")
+
+    def f(xparam, yparam, zparam):
+        return 10 * xparam + yparam - zparam
+
+    nf = numpify_module.NumericFunction(
+        f,
+        vars=(x, {"yparam": a, "zparam": b}),
+    )
+
+    assert nf.name_for_symbol[x] == "x"
+    assert nf.name_for_symbol[a] == "a"
+    assert nf.name_for_symbol[b] == "b"
+    assert nf(5, yparam=9, zparam=4) == 55
 
 
 def test_integer_mapping_keys_must_be_contiguous() -> None:
