@@ -23,3 +23,7 @@ Updated `prelude._resolve_parameter_values` to normalize multiple binding source
 
 ## Disposition
 **Fixed (implementation now matches documented API for Figure binding).**
+
+
+## Closure note (2026-02-14)
+Closed because Figure binding for symbolic expressions is now passing (`tests/test_prelude_nintegrate.py::test_nintegrate_symbolic_expr_with_smartfigure_binding` did not fail).

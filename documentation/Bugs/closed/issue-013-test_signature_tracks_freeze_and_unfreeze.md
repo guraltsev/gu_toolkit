@@ -13,3 +13,7 @@
 
 ## Disposition
 **Duplicate root cause of Issue 002 (real bug).**
+
+
+## Closure note (2026-02-14)
+Closed because signature tracking behavior now passes (`tests/test_numpify_refactor.py::test_signature_tracks_freeze_and_unfreeze` did not fail).

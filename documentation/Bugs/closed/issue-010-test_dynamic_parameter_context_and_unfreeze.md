@@ -13,3 +13,7 @@
 
 ## Disposition
 **Duplicate root cause of Issue 002 (real bug).**
+
+
+## Closure note (2026-02-14)
+Closed because the original module-shadowing failure mode is fixed; the same test now fails for a different reason (dynamic parameter-context membership check), which is tracked as a new issue.

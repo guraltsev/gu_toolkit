@@ -13,3 +13,7 @@
 
 ## Disposition
 **Duplicate root cause of Issue 002 (real bug).**
+
+
+## Closure note (2026-02-14)
+Closed because identifier mangling/collision coverage now passes (`tests/test_numpify_refactor.py::test_identifier_mangling_and_collision` did not fail).

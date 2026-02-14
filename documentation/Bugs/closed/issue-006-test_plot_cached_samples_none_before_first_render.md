@@ -24,3 +24,7 @@
 
 ## Disposition
 **Fixed.** This was an API mismatch between `Figure.plot`/`plot` and `Plot`.
+
+
+## Closure note (2026-02-14)
+Closed after re-running the provided test-suite output: `tests/test_Figure_module_params.py::test_plot_cached_samples_none_before_first_render` is passing (the current run reports no failure for that test).

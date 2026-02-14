@@ -14,3 +14,7 @@
 
 ## Disposition
 **Duplicate root cause of Issue 009 (real bug).**
+
+
+## Closure note (2026-02-14)
+Closed because unbound callable integration with Figure binding now passes (`tests/test_prelude_nintegrate.py::test_nintegrate_unbound_callable_with_smartfigure_binding` did not fail).

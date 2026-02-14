@@ -14,3 +14,7 @@
 
 ## Disposition
 **Duplicate root cause of Issue 002 (real bug).**
+
+
+## Closure note (2026-02-14)
+Closed because cache-control behavior is now validated by passing test output (`tests/test_numpify_cache_behavior.py::test_numpify_cache_false_forces_recompile` passed).
