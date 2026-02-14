@@ -57,11 +57,11 @@ The sidebar has two sections:
 
 - **Parameters**: auto-created sliders for SymPy symbols.
 - **Info**: a container that holds *Output widgets* created by
-  :meth:`Figure.get_info_output`. This design is deliberate: printing directly
+  :attr:`Figure.info_output`. This design is deliberate: printing directly
   into a container widget is ambiguous in Jupyter, but printing into an
   ``Output`` widget is well-defined.
-  Info outputs are keyed by id, so you can retrieve them via
-  ``fig.info_output[id]`` or create/reuse them via ``fig.get_info_output(id)``.
+  Info outputs are keyed by id and can be retrieved via
+  ``fig.info_output[id]`` for advanced output-widget usage.
 
 Notes for students
 ------------------
@@ -442,9 +442,6 @@ class Figure:
         >>> isinstance(fig.info_output, dict)  # doctest: +SKIP
         True
 
-        See Also
-        --------
-        get_info_output : Create or fetch an info output widget.
         """
         return self._info._outputs # Direct access for backward compat or advanced use
 
@@ -935,98 +932,10 @@ class Figure:
         """
         return self.parameter(symbol, **kwargs)
 
-    def get_info_output(self, id: Optional[Hashable] = None, **kwargs: Any) -> widgets.Output:
-        """
-        Create (or retrieve) an Output widget in the Info sidebar.
-
-        Parameters
-        ----------
-        id : hashable, optional
-            Unique identifier for the output. If omitted, a new ID is generated.
-        **kwargs : Any
-            Layout keyword arguments for ``ipywidgets.Layout``.
-
-        Returns
-        -------
-        ipywidgets.Output
-            Output widget for the info panel.
-
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> out = fig.get_info_output("summary")  # doctest: +SKIP
-
-        Notes
-        -----
-        Output widgets are added to the sidebar in the order they are created.
-        """
-        out = self._info.get_output(id, **kwargs)
-        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
-        return out
-
-    # Alias for backward compatibility
-    new_info_output = get_info_output
-
     def info(self, spec: Union[str, Callable[["Figure", Any], str], Sequence[Union[str, Callable[["Figure", Any], str]]]], id: Optional[Hashable] = None) -> None:
         """Create or replace a simple info card in the Info sidebar."""
         self._info.set_simple_card(spec=spec, id=id)
         self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
-
-    def add_info_component(self, id: Hashable, component_factory: Callable, hook_id: Optional[Hashable] = None, **kwargs: Any) -> Any:
-        """
-        Register (or replace) a stateful *info component*.
-
-        An info component is a class/function that:
-        1. Draws into an Info Output widget.
-        2. Implements an `update(event, fig, out)` method.
-
-        Parameters
-        ----------
-        id : hashable
-            Unique identifier for the component.
-        component_factory : callable
-            Callable that accepts ``(out, fig)`` and returns a component instance.
-        hook_id : hashable, optional
-            Hook identifier for updates; defaults to ``("info_component", id)``.
-        **kwargs : Any
-            Layout keyword arguments forwarded to the output widget.
-
-        Returns
-        -------
-        Any
-            The created component instance.
-
-        Examples
-        --------
-        >>> class ExampleComponent:  # doctest: +SKIP
-        ...     def __init__(self, out, fig):  # doctest: +SKIP
-        ...         self.out = out  # doctest: +SKIP
-        ...     def update(self, event, fig, out):  # doctest: +SKIP
-        ...         pass  # doctest: +SKIP
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.add_info_component("example", ExampleComponent)  # doctest: +SKIP
-
-        Notes
-        -----
-        Components are updated via hooks registered in
-        :meth:`add_param_change_hook`.
-        """
-        out = self.get_info_output(id, **kwargs)
-        inst = component_factory(out, self)
-        
-        if not hasattr(inst, 'update'):
-            raise TypeError(f"Component {id} must have an 'update' method")
-        
-        self._info.add_component(id, inst)
-        
-        # Register hook to update component on param change
-        if hook_id is None: hook_id = ("info_component", id)
-        
-        def _hook(event: Optional[ParamEvent]) -> None:
-            inst.update(event, self, out)
-            
-        self.add_param_change_hook(_hook, hook_id=hook_id)
-        return inst
 
     def add_hook(self, callback: Callable[[Optional[ParamEvent]], Any], *, run_now: bool = True) -> Hashable:
         """Alias for :meth:`add_param_change_hook`.
@@ -1321,29 +1230,9 @@ def render(reason: str = "manual", trigger: Optional[ParamEvent] = None) -> None
     _require_current_figure().render(reason=reason, trigger=trigger)
 
 
-def get_info_output(id: Optional[Hashable] = None, **kwargs: Any) -> widgets.Output:
-    """Return or create an output widget in the current figure's info panel."""
-    return _require_current_figure().get_info_output(id=id, **kwargs)
-
-
 def info(spec: Union[str, Callable[[Figure, Any], str], Sequence[Union[str, Callable[[Figure, Any], str]]]], id: Optional[Hashable] = None) -> None:
     """Create or replace a simplified info card on the current figure."""
     _require_current_figure().info(spec=spec, id=id)
-
-
-def add_info_component(
-    id: Hashable,
-    component_factory: Callable,
-    hook_id: Optional[Hashable] = None,
-    **kwargs: Any,
-) -> Any:
-    """Register an info component on the current figure and return it."""
-    return _require_current_figure().add_info_component(
-        id,
-        component_factory,
-        hook_id=hook_id,
-        **kwargs,
-    )
 
 
 def set_x_range(value: RangeLike) -> None:

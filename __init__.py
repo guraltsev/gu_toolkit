@@ -23,9 +23,7 @@ from .numpify import (
 from .Figure import Figure, FigureLayout, Plot
 from .Slider import FloatSlider
 from .Figure import (
-    add_info_component,
     current_figure,
-    get_info_output,
     info,
     get_sampling_points,
     get_title,
