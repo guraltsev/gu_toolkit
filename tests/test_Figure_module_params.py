@@ -102,6 +102,17 @@ def test_plot_cached_samples_none_before_first_render() -> None:
     assert plot.x_data is None
     assert plot.y_data is None
 
+def test_plot_update_accepts_visible_kwarg() -> None:
+    x = sp.symbols("x")
+    fig = Figure()
+    fig.plot(x, sp.sin(x), id="sin")
+
+    updated = fig.plot(x, sp.sin(x), id="sin", visible=False)
+
+    assert updated.visible is False
+    assert updated.x_data is not None
+
+
 def test_plot_render_caches_read_only_samples() -> None:
     x = sp.symbols("x")
     fig = Figure()
