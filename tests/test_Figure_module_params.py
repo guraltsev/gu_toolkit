@@ -251,3 +251,40 @@ def test_relayout_debounce_drop_overflow_keeps_final_event() -> None:
         debouncing_module.threading.Timer = original_timer
         Figure.render = original_render
 
+
+
+def test_viewport_range_controls_read_widget_state() -> None:
+    fig = Figure(x_range=(-4, 4), y_range=(-3, 3))
+
+    fig.figure_widget.update_xaxes(range=(-2, 2))
+    fig.figure_widget.update_yaxes(range=(-1, 1))
+
+    assert fig._viewport_x_range == (-2.0, 2.0)
+    assert fig._viewport_y_range == (-1.0, 1.0)
+    assert fig.current_x_range == (-2.0, 2.0)
+    assert fig.current_y_range == (-1.0, 1.0)
+
+
+def test_viewport_range_controls_move_view_without_changing_defaults() -> None:
+    fig = Figure(x_range=(-6, 6), y_range=(-5, 5))
+
+    fig._viewport_x_range = (-3, 1)
+    fig._viewport_y_range = (-2, 2)
+
+    assert fig.x_range == (-6.0, 6.0)
+    assert fig.y_range == (-5.0, 5.0)
+    assert fig.current_x_range == (-3.0, 1.0)
+    assert fig.current_y_range == (-2.0, 2.0)
+
+
+def test_viewport_range_controls_support_reset_to_defaults() -> None:
+    fig = Figure(x_range=(-7, 7), y_range=(-4, 4))
+
+    fig._viewport_x_range = (-2, 2)
+    fig._viewport_y_range = (-1, 1)
+
+    fig._viewport_x_range = None
+    fig._viewport_y_range = None
+
+    assert fig.current_x_range == (-7.0, 7.0)
+    assert fig.current_y_range == (-4.0, 4.0)

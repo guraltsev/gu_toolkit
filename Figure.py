@@ -489,7 +489,7 @@ class Figure:
 
         Notes
         -----
-        This updates the Plotly axis range immediately.
+        This updates the default Plotly axis range and the visible viewport immediately.
         """
         self._x_range = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
         self._figure.update_xaxes(range=self._x_range)
@@ -535,14 +535,54 @@ class Figure:
 
         Notes
         -----
-        This updates the Plotly axis range immediately.
+        This updates the default Plotly axis range and the visible viewport immediately.
         """
         self._y_range = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
         self._figure.update_yaxes(range=self._y_range)
 
     @property
+    def _viewport_x_range(self) -> Optional[Tuple[float, float]]:
+        """Control for the current viewport x-range.
+
+        Reading this property queries the live Plotly widget viewport.
+        Setting it pans/zooms the visible x-range without changing ``x_range``.
+        """
+        rng = self._figure.layout.xaxis.range
+        if rng is None:
+            return None
+        return (float(rng[0]), float(rng[1]))
+
+    @_viewport_x_range.setter
+    def _viewport_x_range(self, value: Optional[RangeLike]) -> None:
+        if value is None:
+            self._figure.update_xaxes(range=self._x_range)
+            return
+        rng = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        self._figure.update_xaxes(range=rng)
+
+    @property
+    def _viewport_y_range(self) -> Optional[Tuple[float, float]]:
+        """Control for the current viewport y-range.
+
+        Reading this property queries the live Plotly widget viewport.
+        Setting it pans/zooms the visible y-range without changing ``y_range``.
+        """
+        rng = self._figure.layout.yaxis.range
+        if rng is None:
+            return None
+        return (float(rng[0]), float(rng[1]))
+
+    @_viewport_y_range.setter
+    def _viewport_y_range(self, value: Optional[RangeLike]) -> None:
+        if value is None:
+            self._figure.update_yaxes(range=self._y_range)
+            return
+        rng = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        self._figure.update_yaxes(range=rng)
+
+    @property
     def current_x_range(self) -> Optional[Tuple[float, float]]:
-        """Return the current viewport x-range (read-only).
+        """Return the current viewport x-range.
 
         Returns
         -------
@@ -558,7 +598,7 @@ class Figure:
         -----
         This reflects the Plotly widget state after panning or zooming.
         """
-        return self._figure.layout.xaxis.range
+        return self._viewport_x_range
 
     @property
     def current_y_range(self) -> Optional[Tuple[float, float]]:
@@ -578,7 +618,7 @@ class Figure:
         -----
         This reflects the Plotly widget state after panning or zooming.
         """
-        return self._figure.layout.yaxis.range
+        return self._viewport_y_range
     
     @property
     def sampling_points(self) -> Optional[int]:
