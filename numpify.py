@@ -105,6 +105,7 @@ __all__ = [
     "DYNAMIC_PARAMETER",
     "UNFREEZE",
     "ParameterContext",
+    "NumericFunction",
     "NumpifiedFunction",
 ]
 
@@ -137,7 +138,46 @@ UNFREEZE = _Sentinel("UNFREEZE")
 ParameterContext: TypeAlias = Mapping[sp.Symbol, Any]
 
 
-class NumpifiedFunction:
+_VarsInput = Union[
+    sp.Symbol,
+    Iterable[sp.Symbol | Mapping[str, sp.Symbol]],
+    Mapping[Union[int, str], sp.Symbol],
+]
+
+
+class _VarsView:
+    """Backwards-compatible vars accessor.
+
+    - Iterable/sequence view yields positional symbols (legacy behavior).
+    - Callable view (`obj.vars()`) returns the round-trip vars specification.
+    """
+
+    __slots__ = ("_positional", "_roundtrip")
+
+    def __init__(self, positional: tuple[sp.Symbol, ...], roundtrip: Any):
+        self._positional = positional
+        self._roundtrip = roundtrip
+
+    def __iter__(self):
+        return iter(self._positional)
+
+    def __len__(self) -> int:
+        return len(self._positional)
+
+    def __getitem__(self, idx: Any) -> Any:
+        return self._positional[idx]
+
+    def __bool__(self) -> bool:
+        return bool(self._positional)
+
+    def __call__(self) -> Any:
+        return self._roundtrip
+
+    def __repr__(self) -> str:
+        return repr(self._positional)
+
+
+class NumericFunction:
     """Compiled SymPy->NumPy callable with optional frozen/dynamic bindings."""
 
     __slots__ = (
@@ -145,6 +185,11 @@ class NumpifiedFunction:
         "symbolic",
         "call_signature",
         "source",
+        "_vars_spec",
+        "_keyed_symbols",
+        "_key_for_symbol",
+        "_symbol_for_key",
+        "_vars_view",
         "name_for_symbol",
         "symbol_for_name",
         "_parameter_context",
@@ -155,30 +200,51 @@ class NumpifiedFunction:
     def __init__(
         self,
         fn: Callable[..., Any],
-        symbolic: sp.Basic,
-        call_signature: tuple[tuple[sp.Symbol, str], ...],
-        source: str,
+        vars: _VarsInput | None = None,
+        symbolic: sp.Basic | None = None,
+        call_signature: tuple[tuple[sp.Symbol, str], ...] | None = None,
+        source: str = "",
         *,
+        keyed_symbols: tuple[tuple[str, sp.Symbol], ...] | None = None,
+        vars_spec: Any = None,
         parameter_context: ParameterContext | None = None,
         frozen: Mapping[sp.Symbol, Any] | None = None,
         dynamic: Iterable[sp.Symbol] | None = None,
     ) -> None:
+        if call_signature is None:
+            normalized = _normalize_vars(symbolic if isinstance(symbolic, sp.Basic) else sp.Integer(0), vars)
+            reserved = set(dir(builtins)) | {"numpy", "_sym_bindings"}
+            call_signature = _build_call_signature(normalized["all"], reserved)
+            keyed_symbols = normalized["keyed"]
+            vars_spec = normalized["spec"]
+        if keyed_symbols is None:
+            keyed_symbols = tuple()
+        if vars_spec is None:
+            vars_spec = tuple(sym for sym, _ in call_signature)
+
         self._fn = fn
         self.symbolic = symbolic
         self.call_signature = call_signature
         self.source = source
+        self._vars_spec = vars_spec
+        self._keyed_symbols = keyed_symbols
+        self._key_for_symbol = {sym: key for key, sym in keyed_symbols}
+        self._symbol_for_key = {key: sym for key, sym in keyed_symbols}
+        self._vars_view = _VarsView(tuple(sym for sym, _ in call_signature if sym not in self._key_for_symbol), self._vars_spec)
         self.name_for_symbol = {sym: name for sym, name in call_signature}
         self.symbol_for_name = {name: sym for sym, name in call_signature}
         self._parameter_context = parameter_context
         self._frozen: dict[sp.Symbol, Any] = dict(frozen or {})
         self._dynamic: set[sp.Symbol] = set(dynamic or ())
 
-    def _clone(self) -> "NumpifiedFunction":
-        return NumpifiedFunction(
+    def _clone(self) -> "NumericFunction":
+        return NumericFunction(
             fn=self._fn,
             symbolic=self.symbolic,
             call_signature=self.call_signature,
             source=self.source,
+            keyed_symbols=self._keyed_symbols,
+            vars_spec=self._vars_spec,
             parameter_context=self._parameter_context,
             frozen=self._frozen,
             dynamic=self._dynamic,
@@ -190,6 +256,8 @@ class NumpifiedFunction:
                 raise KeyError(f"Unknown symbol key: {key!r}")
             return key
         if isinstance(key, str):
+            if key in self._symbol_for_key:
+                return self._symbol_for_key[key]
             if key not in self.symbol_for_name:
                 raise KeyError(f"Unknown var name: {key!r}")
             return self.symbol_for_name[key]
@@ -218,15 +286,25 @@ class NumpifiedFunction:
             resolved[sym] = value
         return resolved
 
-    def __call__(self, *positional_args: Any) -> Any:
+    def __call__(self, *positional_args: Any, **keyed_args: Any) -> Any:
         if not self._frozen and not self._dynamic:
+            if keyed_args:
+                full_args = list(positional_args)
+                for key, _sym in self._keyed_symbols:
+                    if key not in keyed_args:
+                        raise TypeError(f"Missing keyed argument: {key!r}")
+                    full_args.append(keyed_args[key])
+                extra = set(keyed_args) - {k for k, _ in self._keyed_symbols}
+                if extra:
+                    raise TypeError(f"Unknown keyed argument(s): {', '.join(sorted(extra))}")
+                return self._fn(*full_args)
             return self._fn(*positional_args)
 
         full_values: list[Any] = []
         free_idx = 0
         missing: list[str] = []
 
-        for sym in self.vars:
+        for sym, _ in self.call_signature:
             var_name = self.name_for_symbol[sym]
             if sym in self._frozen:
                 full_values.append(self._frozen[sym])
@@ -244,6 +322,14 @@ class NumpifiedFunction:
                 full_values.append(self._parameter_context[sym])
                 continue
 
+            if sym in self._symbol_for_key:
+                key_name = self._key_for_symbol[sym]
+                if key_name not in keyed_args:
+                    missing.append(f"{sym!r} ('{key_name}')")
+                else:
+                    full_values.append(keyed_args[key_name])
+                continue
+
             if free_idx >= len(positional_args):
                 missing.append(f"{sym!r} ('{var_name}')")
             else:
@@ -256,18 +342,25 @@ class NumpifiedFunction:
             raise TypeError(
                 f"Too many positional arguments: expected {free_idx}, got {len(positional_args)}"
             )
+        extra = set(keyed_args) - set(self._symbol_for_key)
+        if extra:
+            raise TypeError(f"Unknown keyed argument(s): {', '.join(sorted(extra))}")
 
         return self._fn(*full_values)
 
     @property
-    def vars(self) -> tuple[sp.Symbol, ...]:
+    def vars(self) -> _VarsView:
+        return self._vars_view
+
+    @property
+    def all_vars(self) -> tuple[sp.Symbol, ...]:
         return tuple(sym for sym, _ in self.call_signature)
 
     @property
     def var_names(self) -> tuple[str, ...]:
         return tuple(name for _, name in self.call_signature)
 
-    def freeze(self, bindings: Mapping[sp.Symbol | str, Any] | Iterable[tuple[sp.Symbol | str, Any]] | None = None, /, **kwargs: Any) -> "NumpifiedFunction":
+    def freeze(self, bindings: Mapping[sp.Symbol | str, Any] | Iterable[tuple[sp.Symbol | str, Any]] | None = None, /, **kwargs: Any) -> "NumericFunction":
         updates = self._normalize_bindings(bindings, kwargs)
         out = self._clone()
         for sym, value in updates.items():
@@ -282,25 +375,25 @@ class NumpifiedFunction:
                 out._dynamic.discard(sym)
         return out
 
-    def unfreeze(self, *keys: sp.Symbol | str) -> "NumpifiedFunction":
+    def unfreeze(self, *keys: sp.Symbol | str) -> "NumericFunction":
         if not keys:
-            bound_symbols = tuple(sym for sym in self.vars if sym in self._frozen or sym in self._dynamic)
+            bound_symbols = tuple(sym for sym in self.all_vars if sym in self._frozen or sym in self._dynamic)
             return self.freeze({sym: UNFREEZE for sym in bound_symbols})
         return self.freeze({k: UNFREEZE for k in keys})
 
-    def set_parameter_context(self, ctx: ParameterContext) -> "NumpifiedFunction":
+    def set_parameter_context(self, ctx: ParameterContext) -> "NumericFunction":
         out = self._clone()
         out._parameter_context = ctx
         return out
 
-    def remove_parameter_context(self) -> "NumpifiedFunction":
+    def remove_parameter_context(self) -> "NumericFunction":
         out = self._clone()
         out._parameter_context = None
         return out
 
     @property
     def free_vars(self) -> tuple[sp.Symbol, ...]:
-        return tuple(sym for sym in self.vars if sym not in self._frozen and sym not in self._dynamic)
+        return tuple(sym for sym in self.all_vars if sym not in self._frozen and sym not in self._dynamic)
 
     @property
     def free_var_signature(self) -> tuple[tuple[sp.Symbol, str], ...]:
@@ -321,18 +414,25 @@ class NumpifiedFunction:
 
     def __repr__(self) -> str:
         vars_str = ", ".join(name for _, name in self.call_signature)
-        return f"NumpifiedFunction({self.symbolic!r}, vars=({vars_str}))"
+        return f"NumericFunction({self.symbolic!r}, vars=({vars_str}))"
+
+
+class NumpifiedFunction(NumericFunction):
+    """Compatibility constructor for :class:`NumericFunction`."""
+
+    def __init__(self, fn: Callable[..., Any], vars: _VarsInput | None = None, symbolic: sp.Basic | None = None, call_signature: tuple[tuple[sp.Symbol, str], ...] | None = None, source: str = "", **kwargs: Any) -> None:
+        super().__init__(fn=fn, vars=vars, symbolic=symbolic, call_signature=call_signature, source=source, **kwargs)
 
 
 def numpify(
     expr: Any,
     *,
-    vars: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]] = None,
+    vars: _VarsInput | None = None,
     f_numpy: Optional[Mapping[_BindingKey, Any]] = None,
     vectorize: bool = True,
     expand_definition: bool = True,
     cache: bool = True,
-) -> NumpifiedFunction:
+) -> NumericFunction:
     """Compile a SymPy expression into a NumPy-evaluable function.
 
     By default this uses the same LRU-backed cache as :func:`numpify_cached`.
@@ -386,11 +486,11 @@ def _build_call_signature(vars_tuple: tuple[sp.Symbol, ...], reserved_names: set
 def _numpify_uncached(
     expr: Any,
     *,
-    vars: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]] = None,
+    vars: _VarsInput | None = None,
     f_numpy: Optional[Mapping[_BindingKey, Any]] = None,
     vectorize: bool = True,
     expand_definition: bool = True,
-) -> NumpifiedFunction:
+) -> NumericFunction:
     """Compile a SymPy expression into a NumPy-evaluable Python function (uncached).
 
     Parameters
@@ -455,7 +555,10 @@ def _numpify_uncached(
     expr = cast(sp.Basic, expr_sym)
 
     # 2) Normalize vars.
-    vars_tuple = _normalize_vars(expr, vars)
+    normalized_vars = _normalize_vars(expr, vars)
+    vars_tuple = normalized_vars["all"]
+    keyed_symbols = normalized_vars["keyed"]
+    vars_spec = normalized_vars["spec"]
 
     log_debug = logger.isEnabledFor(logging.DEBUG)
     t_total0: float | None = time.perf_counter() if log_debug else None
@@ -567,28 +670,102 @@ def _numpify_uncached(
             1000.0 * (t_total_s or 0.0),
         )
 
-    return NumpifiedFunction(fn=fn, symbolic=expr, call_signature=call_signature, source=src)
+    return NumericFunction(fn=fn, symbolic=expr, call_signature=call_signature, source=src, keyed_symbols=keyed_symbols, vars_spec=vars_spec)
 
 
-def _normalize_vars(expr: sp.Basic, vars: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]]) -> Tuple[sp.Symbol, ...]:
-    """Normalize vars into a tuple of SymPy Symbols."""
+def _freeze_vars_spec(spec: Any) -> Any:
+    if isinstance(spec, tuple):
+        return ("T", tuple(_freeze_vars_spec(x) for x in spec))
+    if isinstance(spec, dict):
+        items = sorted(((k, _freeze_vars_spec(v)) for k, v in spec.items()), key=lambda item: (type(item[0]).__name__, repr(item[0])))
+        return ("D", tuple(items))
+    return ("V", spec)
+
+
+def _thaw_vars_spec(spec_key: Any) -> Any:
+    tag, payload = spec_key
+    if tag == "T":
+        return tuple(_thaw_vars_spec(x) for x in payload)
+    if tag == "D":
+        return {k: _thaw_vars_spec(v) for k, v in payload}
+    if tag == "V":
+        return payload
+    raise ValueError(f"Unknown vars spec key tag: {tag!r}")
+
+
+def _normalize_vars(expr: sp.Basic, vars: _VarsInput | None) -> dict[str, Any]:
+    """Normalize vars into positional/keyed symbols and a round-trip spec."""
     if vars is None:
         vars_tuple: Tuple[sp.Symbol, ...] = tuple(sorted(expr.free_symbols, key=sp.default_sort_key))
-        return vars_tuple
+        return {"all": vars_tuple, "keyed": tuple(), "spec": vars_tuple, "spec_key": _freeze_vars_spec(vars_tuple)}
 
     if isinstance(vars, sp.Symbol):
-        return (vars,)
+        spec = (vars,)
+        return {"all": (vars,), "keyed": tuple(), "spec": spec, "spec_key": _freeze_vars_spec(spec)}
+
+    positional: list[sp.Symbol] = []
+    keyed: list[tuple[str, sp.Symbol]] = []
+
+    def _as_symbol(value: Any) -> sp.Symbol:
+        sym = sp.sympify(value)
+        if not isinstance(sym, sp.Symbol):
+            raise TypeError(f"vars must contain only SymPy Symbols, got {type(sym)}")
+        return sym
+
+    if isinstance(vars, Mapping):
+        int_entries = [(k, v) for k, v in vars.items() if isinstance(k, int)]
+        non_int_entries = [(k, v) for k, v in vars.items() if not isinstance(k, int)]
+        if int_entries:
+            ordered_int_keys = sorted(k for k, _ in int_entries)
+            expected = list(range(len(ordered_int_keys)))
+            if ordered_int_keys != expected:
+                raise ValueError("Integer vars keys must be contiguous and start at 0")
+            by_key = {k: _as_symbol(v) for k, v in int_entries}
+            positional.extend(by_key[i] for i in expected)
+        for k, v in non_int_entries:
+            if not isinstance(k, str):
+                raise TypeError("Non-integer vars mapping keys must be strings")
+            keyed.append((k, _as_symbol(v)))
+        all_symbols = tuple(positional + [sym for _, sym in keyed])
+        seen = set()
+        for sym in all_symbols:
+            if sym in seen:
+                raise ValueError(f"Duplicate symbol in vars: {sym!r}")
+            seen.add(sym)
+        spec = dict(vars)
+        return {"all": all_symbols, "keyed": tuple(keyed), "spec": spec, "spec_key": _freeze_vars_spec(spec)}
 
     try:
-        vars_tuple = tuple(vars)
+        items = tuple(vars)
     except TypeError as e:
-        raise TypeError("vars must be a SymPy Symbol or an iterable of SymPy Symbols") from e
+        raise TypeError("vars must be a SymPy Symbol, mapping, or iterable") from e
 
-    for a in vars_tuple:
-        arg_expr = sp.sympify(a)
-        if not isinstance(arg_expr, sp.Symbol):
-            raise TypeError(f"vars must contain only SymPy Symbols, got {type(arg_expr)}")
-    return cast(Tuple[sp.Symbol, ...], vars_tuple)
+    tail_mapping: Mapping[Any, Any] | None = None
+    if items and isinstance(items[-1], Mapping):
+        tail_mapping = cast(Mapping[Any, Any], items[-1])
+        items = items[:-1]
+
+    for item in items:
+        positional.append(_as_symbol(item))
+
+    if tail_mapping is not None:
+        for k, v in tail_mapping.items():
+            if isinstance(k, int):
+                raise ValueError("Integer keys are not allowed in tuple+mapping vars form")
+            if not isinstance(k, str):
+                raise TypeError("Keyed vars names must be strings")
+            keyed.append((k, _as_symbol(v)))
+        spec = tuple((*items, dict(tail_mapping)))
+    else:
+        spec = tuple(items)
+
+    all_symbols = tuple(positional + [sym for _, sym in keyed])
+    seen = set()
+    for sym in all_symbols:
+        if sym in seen:
+            raise ValueError(f"Duplicate symbol in vars: {sym!r}")
+        seen.add(sym)
+    return {"all": all_symbols, "keyed": tuple(keyed), "spec": spec, "spec_key": _freeze_vars_spec(spec)}
 
 
 def _rewrite_expand_definition(expr: sp.Basic, *, max_passes: int = 10) -> sp.Basic:
@@ -755,10 +932,11 @@ class _FrozenFNumPy:
 def _numpify_cached_impl(
     expr: sp.Basic,
     vars_tuple: Tuple[sp.Symbol, ...],
+    vars_spec_key: Any,
     frozen: _FrozenFNumPy,
     vectorize: bool,
     expand_definition: bool,
-) -> NumpifiedFunction:
+) -> NumericFunction:
     """Compile an expression on cache misses for :func:`numpify_cached`."""
     # NOTE: This function body only runs on cache *misses*.
     if logger.isEnabledFor(logging.DEBUG):
@@ -771,7 +949,7 @@ def _numpify_cached_impl(
     # Delegate to the uncached compiler for actual compilation.
     return _numpify_uncached(
         expr,
-        vars=vars_tuple,
+        vars=_thaw_vars_spec(vars_spec_key),
         f_numpy=frozen.mapping,
         vectorize=vectorize,
         expand_definition=expand_definition,
@@ -781,11 +959,11 @@ def _numpify_cached_impl(
 def numpify_cached(
     expr: Any,
     *,
-    vars: Optional[Union[sp.Symbol, Iterable[sp.Symbol]]] = None,
+    vars: _VarsInput | None = None,
     f_numpy: Optional[Mapping[_BindingKey, Any]] = None,
     vectorize: bool = True,
     expand_definition: bool = True,
-) -> NumpifiedFunction:
+) -> NumericFunction:
     """Cached version of :func:`numpify`.
 
     This is a convenience wrapper for interactive sessions where the same SymPy
@@ -823,10 +1001,19 @@ def numpify_cached(
     if not isinstance(expr_sym, sp.Basic):
         raise TypeError(f"numpify_cached expects a SymPy expression, got {type(expr_sym)}")
 
-    vars_tuple = _normalize_vars(expr_sym, vars)
+    normalized_vars = _normalize_vars(expr_sym, vars)
+    vars_tuple = normalized_vars["all"]
+    vars_spec_key = normalized_vars["spec_key"]
     frozen = _FrozenFNumPy(f_numpy)
 
-    return _numpify_cached_impl(expr_sym, vars_tuple, frozen, vectorize, expand_definition)
+    return _numpify_cached_impl(
+        expr_sym,
+        vars_tuple,
+        vars_spec_key,
+        frozen,
+        vectorize,
+        expand_definition,
+    )
 
 
 # Expose cache controls on the public wrapper.

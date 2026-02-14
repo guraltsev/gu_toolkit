@@ -248,16 +248,18 @@ def _load_numeric_bindings():
     """Load numpify/current-figure helpers for package and standalone usage."""
     try:
         from .numpify import (
+            NumericFunction as _NumericFunction,
             NumpifiedFunction as _NumpifiedFunction,
             numpify_cached as _numpify_cached,
         )
     except ImportError:
         from numpify import (
+            NumericFunction as _NumericFunction,
             NumpifiedFunction as _NumpifiedFunction,
             numpify_cached as _numpify_cached,
         )
 
-    return _NumpifiedFunction, _numpify_cached
+    return (_NumericFunction, _NumpifiedFunction), _numpify_cached
 
 
 def _load_numpify_cached():
@@ -269,9 +271,9 @@ def _load_numpify_cached():
     return _numpify_cached
 
 
-def _resolve_numeric_callable(expr, x, freeze, freeze_kwargs, _NumpifiedFunction, _numpify_cached):
+def _resolve_numeric_callable(expr, x, freeze, freeze_kwargs, _numeric_types, _numpify_cached):
     """Build a numeric unary callable centered on ``NumpifiedFunction`` semantics."""
-    if isinstance(expr, _NumpifiedFunction):
+    if isinstance(expr, _numeric_types):
         compiled = expr
     elif isinstance(expr, sp.Lambda):
         variables = tuple(expr.variables)
@@ -361,7 +363,7 @@ def NIntegrate(expr, var_and_limits, freeze=None, **freeze_kwargs):
     except Exception as exc:  # pragma: no cover - defensive shape validation
         raise TypeError("NIntegrate expects limits as a tuple: (x, a, b)") from exc
 
-    _NumpifiedFunction, _numpify_cached = _load_numeric_bindings()
+    _numeric_types, _numpify_cached = _load_numeric_bindings()
 
     from scipy.integrate import quad
 
@@ -370,7 +372,7 @@ def NIntegrate(expr, var_and_limits, freeze=None, **freeze_kwargs):
         x,
         freeze,
         freeze_kwargs,
-        _NumpifiedFunction,
+        _numeric_types,
         _numpify_cached,
     )
 
@@ -418,7 +420,7 @@ def NReal_Fourier_Series(expr, var_and_limits, samples=4000, freeze=None, **free
         raise ValueError("samples must be >= 2")
     sample_count = int(samples)
 
-    _NumpifiedFunction, _numpify_cached = _load_numeric_bindings()
+    _numeric_types, _numpify_cached = _load_numeric_bindings()
 
     from scipy.fft import rfft
 
@@ -433,7 +435,7 @@ def NReal_Fourier_Series(expr, var_and_limits, samples=4000, freeze=None, **free
         x,
         freeze,
         freeze_kwargs,
-        _NumpifiedFunction,
+        _numeric_types,
         _numpify_cached,
     )
 

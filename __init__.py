@@ -14,6 +14,7 @@ from .prelude import *
 from .NamedFunction import NamedFunction as NamedFunction
 from .numpify import (
     DYNAMIC_PARAMETER,
+    NumericFunction,
     NumpifiedFunction,
     ParameterContext,
     UNFREEZE,

@@ -1,57 +1,48 @@
-# Proposal: Unified API for Numeric Callables
+# Project 020: Numeric Callable API (Implemented)
 
-## Context
+## What shipped
 
-The current direction is to make `NumericFunction` the primary callable wrapper for numeric workflows, including freeze/unfreeze behavior and dynamic parameter-context lookup. A compatibility constructor `NumpifiedFunction` may remain temporarily, but it should delegate to the same core behavior.
+This project is now implemented with `NumericFunction` as the canonical numeric callable API and a compatibility `NumpifiedFunction` constructor.
 
-## Requested direction (applied)
+### Core behavior
 
-1. Replace `NumpifiedFunction` as the primary concept with `NumericFunction`.
-2. Keep compatibility behavior where legacy `NumpifiedFunction` defaults to `symbolic=None`.
-3. Ensure `numpify(...)` returns a `NumericFunction` instance with `symbolic` populated.
-4. Define one `vars` contract for constructor input and `NumericFunction.vars()` output/round-trip behavior.
-5. Avoid legacy label terminology in the API.
+1. `numpify(...)` now returns `NumericFunction`.
+2. `NumpifiedFunction` remains available as a compatibility subclass/constructor.
+3. Legacy construction defaults `symbolic=None` when omitted.
+4. Freeze/unfreeze, dynamic parameter context, and call-signature behavior are shared through the same runtime class.
 
 ## Unified `vars` contract
 
-`vars` supports positional identifiers, keyed identifiers, or mixed mode:
+`vars` now supports the proposal forms:
 
 1. **Pure positional**
-   - `vars=(symbol_a, symbol_b, ...)`
-2. **Positional followed by keyed entries**
-   - `vars=(symbol_a, symbol_b, {"key_z": symbol_z})`
-3. **Pure keyed**
-   - `vars=({"key_a": symbol_a, "key_b": symbol_b})`
-   - `vars={"key_a": symbol_a, "key_b": symbol_b}`
-4. **Indexed positional via mapping keys**
-   - numeric keys starting at `0` define positional order,
-   - non-numeric keys define keyed arguments.
-   - Example: `vars={0: symbol_a, 1: symbol_b, "scale": symbol_s}`.
+   - `vars=(x, y)`
+2. **Positional + keyed tail mapping**
+   - `vars=(x, {"y": y, "scale": s})`
+3. **Pure keyed mapping**
+   - `vars={"x": x, "scale": s}`
+4. **Indexed positional mapping + keyed mapping**
+   - `vars={0: x, 1: y, "scale": s}`
 
-`NumericFunction.vars()` should emit the same structure class that was supplied at creation (tuple/mapping shape preserved where feasible) so reconstruction is straightforward.
+Validation rules implemented:
 
-## Compatibility stance
+- Integer keys must be contiguous from `0` with no gaps.
+- Non-integer mapping keys must be strings.
+- Duplicate symbols in the normalized contract are rejected.
 
-- `NumericFunction` is the canonical type for new code.
-- `NumpifiedFunction` remains as a compatibility constructor/alias during migration.
-- Legacy construction should behave as:
-  - `NumpifiedFunction(..., symbolic=<omitted>)` ⇒ `symbolic=None`.
-- `numpify(expr, vars=...)` should produce `NumericFunction(..., symbolic=expr)`.
+## Round-trip behavior
 
-## Issues and shortcomings in the requested instructions
+`NumericFunction.vars` is now a compatibility accessor with two modes:
 
-1. **Tension between replacement and continued constructor definition**
-   - The request asks to replace `NumpifiedFunction` with `NumericFunction`, but also specifies fresh constructor behavior for `NumpifiedFunction`. This implies a transitional period rather than immediate full removal.
-2. **Round-trip fidelity for `vars()` can be ambiguous**
-   - If users pass semantically equivalent but structurally different forms (for example tuple+mapping tail vs flat mapping with integer keys), exact shape preservation may require storing original input verbatim.
-3. **Indexed mapping edge cases need strict rules**
-   - The instruction says numeric keys start at `0`, but does not define behavior for gaps (`{0: a, 2: b}`), duplicates via mixed tuple+mapping input, or non-integer numeric-like keys.
-4. **Pure keyed mode examples should avoid empty mapping unless explicitly intentional**
-   - `vars=({})` / `vars={}` is valid syntax but not useful unless the callable truly has no declared parameters. This should be documented as a special-case form.
+- Iteration/indexing (`tuple(fn.vars)`) exposes positional symbols for legacy compatibility.
+- Calling (`fn.vars()`) returns the original normalized vars specification for round-trip reconstruction.
 
-## Recommendation
+## Test coverage added
 
-Proceed with a two-step migration:
+`tests/test_numeric_callable_api.py` covers:
 
-1. implement and validate `NumericFunction` + compatibility constructor behavior,
-2. then complete the symbolic/legacy replacement once helper integrations and downstream usage are updated.
+- `numpify` return type and `symbolic` payload.
+- legacy compatibility construction defaults.
+- mixed positional+keyed calling.
+- integer-key mapping behavior and contiguity validation.
+- freeze/unfreeze parity across canonical and compatibility construction.
