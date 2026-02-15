@@ -1,231 +1,264 @@
-# Project 019: Tabbed Multi-Plot Interface — Implementation Plan
+# Project 019: Tabbed Multi-Plot Interface (Refined Implementation Plan)
 
 **Companion document:** `summary.md`
 
 ---
 
-## 1) Terminology
+## 1) Objective and success criteria
 
-- **Workspace**: top-level coordinator (current `Figure`) holding parameters, views, and layout.
-- **View**: one independent plot surface (one tab), with its own default ranges and viewport state.
-- **Plot**: one mathematical expression/rendering definition.
-- **PlotHandle**: one concrete trace of a plot on one view.
-- **Default range**: user-defined initial x/y range for a view.
-- **Viewport range**: current pan/zoom range for that view.
+### Objective
+Implement a multi-view plotting workspace where one `Figure` owns shared parameters and info-sidebar infrastructure, while each view owns independent plot surface and range state.
 
-> Naming decision: use **View** in user-facing API; internal class may still be named `Canvas` during transition.
-
----
-
-## 2) Design Principles
-
-1. **Independent view state**: each view owns default range and viewport range.
-2. **Shared parameter model**: one parameter manager per workspace.
-3. **Visibility-aware render**: only active view computes; inactive views are marked stale.
-4. **Explicit identity**: every plot and every view has stable IDs.
-5. **Simple default API**: single-view usage remains straightforward.
-6. **Resolve decided items now**: no open-question placeholders for already decided behavior.
+### Success criteria
+- Users can create multiple named views in tabs.
+- Plots can belong to one or multiple views with stable IDs.
+- Parameter changes render only active view(s); inactive views are marked stale and refresh once on activation.
+- Info cards can be shared or view-scoped.
+- Existing single-view usage remains simple and intuitive.
+- Snapshot/codegen reflect the new view model.
 
 ---
 
-## 3) Phase 0 — Prerequisite Refactors
+## 2) Baseline constraints from current code
 
-### 0.1 Range semantics cleanup in `Figure`
+1. `Figure` currently builds one `FigureWidget` and one `PlotlyPane`; no notion of view collection.
+2. `Plot` owns one `_plot_handle`; no membership graph.
+3. `FigureLayout` currently has one plot container and one shared sidebar.
+4. `InfoPanelManager` assumes one global info stream (card IDs only).
+5. `FigureSnapshot` and code generation currently serialize a single-view shape.
 
-- Split range data into:
-  - `_default_x_range`, `_default_y_range`
-  - `_viewport_x_range`, `_viewport_y_range` implemented as controls (not passive cached fields)
-- Reading `_viewport_*_range` queries the live widget viewport (`FigureWidget.layout.*axis.range`).
-- Setting `_viewport_*_range` updates only the current visible viewport window.
-- Setting default range (`_default_*_range`) updates the axis defaults used by Plotly home/reset.
-- Viewport writes must preserve home/reset behavior: clicking Plotly's home/reset returns to defaults, not the last viewport assignment.
-- `current_*_range` remains the read API for current viewport state.
-- Current implementation mapping: in today's single-view `Figure`, defaults are `x_range`/`y_range`, and viewport controls are `_viewport_x_range`/`_viewport_y_range`.
-
-### 0.2 Plot identity as first-class attribute
-
-- Add required `Plot.id`.
-- Ensure `Figure.plot(...)` assigns deterministic IDs when omitted.
-- Include `id` in plot repr/debug output.
-
-### 0.3 Explicit plot-to-view membership model
-
-- Replace implicit single private handle ownership with explicit membership map (`plot_id -> handles by view_id`).
+These constraints define where refactors must happen.
 
 ---
 
-## 4) Phase 1 — View Model
+## 3) Workstream A — Data model and state ownership
 
-### 1.1 Introduce `View` abstraction
+### A1. Introduce `View` model
 
-Suggested fields:
+Create a dedicated view model (class/dataclass) with:
+- identity: `id`, `title`, `x_label`, `y_label`
+- range state:
+  - `default_x_range`
+  - `default_y_range | None`
+  - `viewport_x_range` (control-backed)
+  - `viewport_y_range` (control-backed)
+- render flags: `is_active`, `is_stale`
+- UI handles: per-view `FigureWidget`, `PlotlyPane`, wrapper pane widgets
 
-- `id: str`
-- `title: str`
-- `x_label: str | None`
-- `y_label: str | None`
-- `default_x_range: tuple[float, float]`
-- `default_y_range: tuple[float, float] | None`  *(None = autoscale y)*
-- `viewport_x_range: tuple[float, float] | None` *(control-backed; reads from widget, writes move viewport only)*
-- `viewport_y_range: tuple[float, float] | None` *(control-backed; reads from widget, writes move viewport only)*
-- `is_active: bool`
-- `is_stale: bool`
-- Own `FigureWidget` + pane object
+**Acceptance:** `Figure` can hold multiple views with independent axis states.
 
-### 1.2 Autoscaling policy (decided)
+### A2. Workspace-level registry in `Figure`
 
-- If view has explicit `default_y_range`, keep autorange disabled.
-- If view has `default_y_range is None`, enable y autorange for that view.
-- Keep x-range explicit unless future requirement changes.
+Add view registry + active-view pointer:
+- `self._views: dict[str, View]`
+- `self._active_view_id: str`
+- first default view created at init (for compatibility)
 
----
+**Acceptance:** single-view flows continue to work through the default view.
 
-## 5) Phase 2 — PlotHandle & Multi-View Plot Membership
+### A3. Range behavior migration
 
-### 2.1 Introduce `PlotHandle`
+Move current `_viewport_x_range` / `_viewport_y_range` semantics from figure-global to active-view delegated properties:
+- `fig.x_range`/`fig.y_range` map to active view defaults
+- `fig.current_x_range`/`fig.current_y_range` map to active view viewport
 
-A `PlotHandle` binds one `Plot` + one `View` + one plotly trace and stores per-view sampled data cache.
-
-### 2.2 `Plot` handle structure
-
-- `Plot._handles: dict[str, PlotHandle]` keyed by `view_id`.
-- `Plot.render(view_id: str | None = None)`:
-  - with `view_id`: render only that view
-  - without `view_id`: render only active-view handles
-
-### 2.3 Membership APIs
-
-- `plot.add_to_view(view)`
-- `plot.remove_from_view(view)`
-- `plot.views` returns membership IDs
+**Acceptance:** current range tests keep passing for default view; new tests prove per-view independence.
 
 ---
 
-## 6) Phase 3 — Rendering Pipeline
+## 4) Workstream B — Plot membership and rendering primitives
 
-### 3.1 Visibility-gated updates
+### B1. Add explicit `Plot.id`
+
+Ensure plot ID is first-class on `Plot` objects (not only dict key in `Figure.plots`).
+
+### B2. Add `PlotHandle`
+
+Implement `PlotHandle` as per-view trace runtime binding:
+- `plot_id`
+- `view_id`
+- `trace_handle`
+- optional cached x/y sampled arrays
+
+### B3. Replace single handle with per-view handle map
+
+In `Plot`:
+- replace `_plot_handle` with `_handles: dict[str, PlotHandle]`
+- add membership helpers:
+  - `add_to_view(view_id)`
+  - `remove_from_view(view_id)`
+  - `views` property
+
+### B4. Rendering API update
+
+Update `Plot.render(...)` semantics:
+- `render(view_id=...)` => render one membership target
+- `render()` => render active-view memberships only
+
+**Acceptance:** one plot can exist on multiple views and render independently.
+
+---
+
+## 5) Workstream C — Visibility-gated render pipeline
+
+### C1. Parameter-triggered render behavior
 
 On parameter changes:
+- render active-view handles immediately
+- mark all inactive views with matching plot memberships as stale
 
-- active view(s): render immediately
-- inactive views: `is_stale = True`
+### C2. Tab activation behavior
 
-On tab switch to a stale view:
+When active tab changes:
+- set new `active_view_id`
+- if target view is stale, render once and clear stale flag
+- trigger pane reflow/resize to avoid hidden-tab sizing issues
 
-- render once
-- clear stale flag
+### C3. Per-view relayout callback/debouncer
 
-### 3.2 Relayout handling per view
+Each view must have independent relayout event handling (x/y viewport updates and throttling), replacing the current figure-global relayout assumptions.
 
-- Register relayout callback per view.
-- Maintain independent debounce/throttle per view.
-
----
-
-## 7) Phase 4 — Tabbed Layout
-
-### 4.1 Tab container
-
-- Use `ipywidgets.Tab` for view switching.
-- Each tab child is a view pane.
-
-### 4.2 Shared sidebar with scoped info cards (decided)
-
-Sidebar structure:
-
-1. parameter controls (workspace-scoped)
-2. shared info cards (always shown)
-3. per-view info cards region (changes by active view)
-
-### 4.3 Title and labels (decided)
-
-- Workspace title appears above tab region.
-- Active view title appears above its plotting pane.
-- Per-view x/y labels map to that view’s axes.
+**Acceptance:** heavy parameter updates do not compute inactive views.
 
 ---
 
-## 8) Phase 5 — Public API
+## 6) Workstream D — Layout and widget composition
 
-### 5.1 View lifecycle
+### D1. Add tabbed plot container
 
-```python
-fig = Figure(title="Signal Analysis")
-fig.add_view("time", title="Time Domain", x_range=(0, 10), y_range=None)
-fig.add_view("freq", title="Frequency Domain", x_range=(0, 500), y_range=(0, 1))
-```
+Refactor `FigureLayout` to host an `ipywidgets.Tab` for views while preserving existing top title and sidebar shell.
 
-### 5.2 View selection context
+### D2. Sidebar composition
 
-```python
-with fig.view("time"):
-    plot(t, signal, id="signal")
-    info("Time-domain note", view="time")
-```
+Keep sidebar workspace-level:
+1. parameters (shared)
+2. shared info cards (always visible)
+3. view-scoped info region (swapped on tab change)
 
-### 5.3 Plot targeting
+### D3. Metadata rendering
 
-```python
-fig.plot(x, expr, view="time", id="curve_1")
-fig.plot(x, expr2, view=["time", "freq"], id="shared_curve")
-```
+Support:
+- workspace title (existing behavior)
+- per-view title (displayed above active pane)
+- per-view axis labels (per view widget layout)
 
-### 5.4 Info APIs (decided + cleanup)
-
-- Keep/introduce one primary API shape: `fig.info(..., view: str | None = None)`.
-- `view=None` => shared info card.
-- `view="time"` => visible only when that view is active.
-- **Remove** old methods:
-  - `fig.get_info_output()`
-  - `fig.add_info_component()`
-- No backward compatibility requirement for these removed methods.
+**Acceptance:** user can switch tabs and see correct plot + scoped info + labels.
 
 ---
 
-## 9) Phase 6 — Testing Plan
+## 7) Workstream E — Public API surface
 
-### 6.1 Unit tests
+### E1. View lifecycle API
 
-- range semantics: defaults vs viewport per view
-- autoscale y policy by `y_range is None` rule
-- plot identity uniqueness and stability
-- multi-view plot handle creation/removal
-- active-only rendering + stale-on-inactive
-- tab switch triggers stale render once
-- info-card visibility rules (shared + per-view)
-- figure title and per-view title/axis labels
+Add:
+- `fig.add_view(id, *, title=None, x_range=None, y_range=None, x_label=None, y_label=None)`
+- optional `fig.remove_view(id)` (if approved in clarifications)
+- optional `fig.views` inspection helper
 
-### 6.2 Integration notebook checks
+### E2. View context manager
 
-- two-tab shared-parameter demo
-- time/frequency demo with mixed y autoscale behavior
-- per-view info cards disappear/appear correctly on tab switch
+Add `with fig.view("time"):` for context-targeted `plot(...)` and `info(...)` calls.
 
----
+### E3. Plot targeting
 
-## 10) Deferred Items Register
+Extend `Figure.plot(...)` and module helper `plot(...)` with `view: str | Sequence[str] | None`.
 
-1. Per-view parameter dependency subsets for smarter stale marking.
-2. Drag-and-drop moving plots between views.
-3. Non-tab layouts (grid/split).
+### E4. Info targeting
+
+Extend `Figure.info(...)` and module helper `info(...)` with `view: str | None`:
+- `None` => shared
+- `"id"` => scoped to that view
+
+**Acceptance:** all new APIs have docstrings + examples and remain ergonomic in notebooks.
 
 ---
 
-## 11) Risks & Mitigations
+## 8) Workstream F — Snapshot, codegen, and migration compatibility
 
-- **Hidden-tab sizing quirks**: trigger resize on view activation.
-- **State drift between model and plotly widget**: keep a single update path per view.
-- **Performance with many views**: rely on stale flags + active-only computation.
-- **API confusion (`canvas` vs `view`)**: document `view` as preferred public name and treat `canvas` as transitional alias if temporarily needed.
+### F1. Snapshot schema extension
+
+Evolve `FigureSnapshot` to represent:
+- workspace metadata
+- view list + active view
+- per-view range/title/labels/autoscale state
+- plot memberships
+- shared + view-scoped info cards
+
+### F2. Code generation update
+
+Update `figure_to_code` pipeline so emitted code recreates view topology and scoped info cards.
+
+### F3. Compatibility policy
+
+Decide and implement schema compatibility strategy (e.g., `schema_version`).
+
+**Acceptance:** snapshot and generated code round-trip for multi-view figures.
 
 ---
 
-## 12) Implementation Sequence
+## 9) Workstream G — Testing and validation
 
-1. Phase 0 range/identity groundwork
-2. Phase 1 `View` abstraction + autoscale semantics
-3. Phase 2 PlotHandle multi-view support
-4. Phase 3 visibility-gated rendering
-5. Phase 4 tabbed layout + scoped info cards + titles/labels
-6. Phase 5 API wiring and old-info API removal
-7. Phase 6 tests and examples
+### G1. Unit tests
+
+- view creation, ID validation, and activation
+- per-view default vs viewport range behavior
+- autoscale policy (`y_range is None`)
+- multi-view plot memberships and handle lifecycle
+- parameter update active-only rendering
+- stale-refresh-on-activation behavior
+- shared vs scoped info visibility
+- view-specific titles/axis labels
+
+### G2. Regression tests
+
+- keep legacy-removal tests for old info helpers
+- confirm default single-view behavior remains unchanged
+
+### G3. Integration checks
+
+Notebook-driven checks for:
+- time/frequency two-tab workflow
+- shared parameter controls across tabs
+- scoped info card visibility on tab switch
+
+---
+
+## 10) Proposed implementation order
+
+1. **A (model)**: view registry + range delegation foundation.
+2. **B (plot handles)**: multi-view membership machinery.
+3. **C (pipeline)**: stale/active render gating.
+4. **D (layout)**: tab UI and scoped sidebar rendering.
+5. **E (API)**: public methods/context wiring.
+6. **F (snapshot/codegen)**: persistence + generated script parity.
+7. **G (tests/docs)**: complete coverage and notebook examples.
+
+This order minimizes risk by stabilizing runtime state before UI and serialization layers.
+
+---
+
+## 11) Risks and mitigations
+
+- **Risk:** hidden tab widgets report wrong size.  
+  **Mitigation:** force pane reflow on tab activation.
+
+- **Risk:** duplicate state paths (model vs widget) drift.  
+  **Mitigation:** one canonical update path for range writes per view.
+
+- **Risk:** rendering cost with many views.  
+  **Mitigation:** strict stale-flag policy + active-only evaluation.
+
+- **Risk:** API confusion during transition.  
+  **Mitigation:** keep user-facing term `view` consistently in docs/helpers/errors.
+
+---
+
+## 12) Exit checklist
+
+- [ ] Multi-view tabs are functional and documented.
+- [ ] Plot membership is explicit and tested.
+- [ ] Visibility-gated rendering verified.
+- [ ] Shared/scoped info cards verified.
+- [ ] Snapshot/codegen updated for views.
+- [ ] Single-view UX remains clean.
+- [ ] Docs/notebook examples updated.
