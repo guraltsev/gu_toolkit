@@ -93,26 +93,24 @@ Each phase below is intended to be mergeable while keeping notebook workflows fu
 
 ---
 
-## 6) Clarifications needed before implementation starts
+## 6) Clarifications incorporated into implementation direction
 
-To avoid rework, these questions should be answered/confirmed explicitly:
+The pending questions are now resolved and should be treated as implementation constraints:
 
-1. **Default view identity:** should the implicit first view always be `"main"`, or should it be user-configurable at `Figure(...)` construction?
+1. **Default view identity**
+   The implicit first view remains `"main"` by default, but this must be configurable in `Figure(...)` construction.
 
-ANSWER: Default main but configurable at Figure construction. 
+2. **`plot(id=...)` view narrowing behavior**
+   Re-scoping an existing plot to a narrower `view=` set should automatically remove dropped view memberships.
 
+3. **View deletion semantics**
+   Project scope includes `remove_view(...)`. Its behavior should be a thin wrapper around membership updates, and plots with no remaining view memberships are valid state.
 
-2. **Backwards compatibility for `plot(id=...)`:** if an existing plot is updated with a narrower `view=` set, should removed memberships be deleted automatically, or only when explicitly removed?
-ANSWER: automatically
+4. **Snapshot compatibility strategy**
+   Snapshot schema versioning (e.g., `schema_version`) is required, but scheduled as a final-priority part of the snapshot/codegen workstream.
 
-3. **View deletion semantics:** do we need `remove_view(...)` in this project, and what should happen to plots scoped only to that view?
-ANSWER: plots with no views are allowed. We need remove_view() but that is just a wrapper over updating the view= set
-
-4. **Snapshot compatibility strategy:** should `FigureSnapshot` be versioned (e.g., `schema_version`) to preserve loading/codegen behavior for older snapshots?
-ANSWER: yes eventually, this is the last priority for now. 
-
-5. **Initial tab selection behavior:** should stale-refresh run on first display for non-active tabs only, or should all views render once at startup then switch to visibility-gated mode?
-ANSWER: no render if not visible. 
+5. **Initial rendering policy for inactive tabs**
+   Non-visible views should not render at startup. Rendering should occur only when a view is visible/activated.
 
 ---
 

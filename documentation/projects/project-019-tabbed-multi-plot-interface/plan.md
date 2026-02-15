@@ -52,7 +52,7 @@ Create a dedicated view model (class/dataclass) with:
 Add view registry + active-view pointer:
 - `self._views: dict[str, View]`
 - `self._active_view_id: str`
-- first default view created at init (for compatibility)
+- first default view created at init (`"main"` unless configured otherwise for compatibility)
 
 **Acceptance:** single-view flows continue to work through the default view.
 
@@ -152,7 +152,7 @@ Support:
 
 Add:
 - `fig.add_view(id, *, title=None, x_range=None, y_range=None, x_label=None, y_label=None)`
-- optional `fig.remove_view(id)` (if approved in clarifications)
+- `fig.remove_view(id)` implemented as membership-update wrapper; plots may remain with zero view memberships
 - optional `fig.views` inspection helper
 
 ### E2. View context manager
@@ -162,6 +162,8 @@ Add `with fig.view("time"):` for context-targeted `plot(...)` and `info(...)` ca
 ### E3. Plot targeting
 
 Extend `Figure.plot(...)` and module helper `plot(...)` with `view: str | Sequence[str] | None`.
+
+When updating an existing `plot(id=...)`, narrowing the `view=` set must automatically remove dropped memberships.
 
 ### E4. Info targeting
 
@@ -190,7 +192,7 @@ Update `figure_to_code` pipeline so emitted code recreates view topology and sco
 
 ### F3. Compatibility policy
 
-Decide and implement schema compatibility strategy (e.g., `schema_version`).
+Implement schema compatibility strategy (e.g., `schema_version`) as the final-priority item in this workstream.
 
 **Acceptance:** snapshot and generated code round-trip for multi-view figures.
 
@@ -258,7 +260,7 @@ The following phases are explicit merge checkpoints; each checkpoint must leave 
    - **Done criteria:** one-view notebooks render as before; two-view basic demo works.
 
 4. **Phase P4 — Visibility-gated compute**
-   - Activate stale marking and refresh-on-tab-activation logic.
+   - Activate stale marking and refresh-on-tab-activation logic, with no startup rendering for non-visible tabs.
    - Add performance-focused tests validating inactive-view non-rendering.
    - **Done criteria:** correctness parity + expected render suppression behavior.
 
