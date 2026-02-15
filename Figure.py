@@ -124,6 +124,7 @@ from .Slider import FloatSlider
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .ParameterSnapshot import ParameterSnapshot
+from .FigureSnapshot import FigureSnapshot
 from .debouncing import QueuedDebouncer
 
 
@@ -932,6 +933,89 @@ class Figure:
         """
         return self.parameter(symbol, **kwargs)
 
+    def snapshot(self) -> FigureSnapshot:
+        """Return an immutable snapshot of the entire figure state.
+
+        The snapshot captures figure-level settings, full parameter metadata,
+        plot symbolic expressions with styling, and static info card content.
+
+        Returns
+        -------
+        FigureSnapshot
+
+        Examples
+        --------
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> snap = fig.snapshot()  # doctest: +SKIP
+        >>> snap.x_range  # doctest: +SKIP
+        (-4.0, 4.0)
+
+        See Also
+        --------
+        to_code : Generate a Python script from the snapshot.
+        """
+        return FigureSnapshot(
+            x_range=self.x_range,
+            y_range=self.y_range,
+            sampling_points=self.sampling_points or 500,
+            title=self.title or "",
+            parameters=self._params.snapshot(full=True),
+            plots={pid: p.snapshot(id=pid) for pid, p in self.plots.items()},
+            info_cards=self._info.snapshot(),
+        )
+
+    def to_code(self) -> str:
+        """Generate a self-contained Python script that recreates this figure.
+
+        Returns
+        -------
+        str
+            Complete Python source code.
+
+        Examples
+        --------
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> print(fig.to_code())  # doctest: +SKIP
+
+        See Also
+        --------
+        snapshot : Capture the underlying state object.
+        """
+        from .codegen import figure_to_code
+
+        return figure_to_code(self.snapshot())
+
+    def get_info_output(self, id: Optional[Hashable] = None, **kwargs: Any) -> widgets.Output:
+        """
+        Create (or retrieve) an Output widget in the Info sidebar.
+
+        Parameters
+        ----------
+        id : hashable, optional
+            Unique identifier for the output. If omitted, a new ID is generated.
+        **kwargs : Any
+            Layout keyword arguments for ``ipywidgets.Layout``.
+
+        Returns
+        -------
+        ipywidgets.Output
+            Output widget for the info panel.
+
+        Examples
+        --------
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> out = fig.get_info_output("summary")  # doctest: +SKIP
+
+        Notes
+        -----
+        Output widgets are added to the sidebar in the order they are created.
+        """
+        out = self._info.get_output(id, **kwargs)
+        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
+        return out
+
+    # Alias for backward compatibility
+    new_info_output = get_info_output
     def info(self, spec: Union[str, Callable[["Figure", Any], str], Sequence[Union[str, Callable[["Figure", Any], str]]]], id: Optional[Hashable] = None) -> None:
         """Create or replace a simple info card in the Info sidebar."""
         self._info.set_simple_card(spec=spec, id=id)

@@ -13,6 +13,7 @@ from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
 from .InputConvert import InputConvert
+from .PlotSnapshot import PlotSnapshot
 from .figure_context import FIGURE_DEFAULT, _is_figure_default
 from .numpify import DYNAMIC_PARAMETER, NumericFunction, numpify_cached
 
@@ -171,6 +172,34 @@ class Plot:
         """Return parameter symbols in deterministic numeric-argument order."""
         return self._numpified.vars[1:]
 
+
+    def snapshot(self, *, id: str = "") -> PlotSnapshot:
+        """Return an immutable snapshot of this plot's reproducible state.
+
+        Parameters
+        ----------
+        id : str, optional
+            Plot identifier to store in the snapshot.  When called from
+            :meth:`Figure.snapshot`, the figure passes the dict key.
+
+        Returns
+        -------
+        PlotSnapshot
+        """
+        return PlotSnapshot(
+            id=id,
+            var=self._var,
+            func=self._func,
+            parameters=tuple(self.parameters),
+            label=self.label,
+            visible=self.visible,
+            x_domain=self.x_domain,
+            sampling_points=self.sampling_points,
+            color=self.color,
+            thickness=self.thickness,
+            dash=self.dash,
+            opacity=self.opacity,
+        )
 
     @property
     def numeric_expression(self) -> NumericFunction:
