@@ -52,4 +52,4 @@ from .ParameterSnapshot import ParameterSnapshot
 from . import numpify as numpify_module
 from .PlotSnapshot import PlotSnapshot
 from .FigureSnapshot import FigureSnapshot, InfoCardSnapshot
-from .codegen import sympy_to_code, figure_to_code
+from .codegen import CodegenOptions, sympy_to_code, figure_to_code

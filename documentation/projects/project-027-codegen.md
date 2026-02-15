@@ -1,6 +1,6 @@
 # Project 027: Configurable Figure Code Generation
 
-**Status:** Proposal (clarified)  
+**Status:** Implemented  
 **Priority:** High
 
 ## Goal
@@ -61,20 +61,20 @@ class Figure:
 ```
 
 ## Implementation Plan
-- [ ] Introduce `CodegenOptions` in `codegen.py` and thread options through `figure_to_code`.
-- [ ] Export `CodegenOptions` from package root (`gu_toolkit.CodegenOptions`).
-- [ ] Add conditional generation for imports and symbol declarations.
-- [ ] Add configurable generation mode for explicit figure-method calls vs context-manager output style.
-- [ ] Update dynamic-info emission:
-  - [ ] emit commented-out registration code for dynamic entries,
-  - [ ] append standardized "define callables first" and `inspect.getsource(...)` guidance comments,
-  - [ ] when disabled, emit placeholder comment (`# dynamic info omitted`).
-- [ ] Add tests for each option combination and mixed static/dynamic info cards.
-- [ ] Update docs with examples for notebook embedding and script embedding.
+- [x] Introduce `CodegenOptions` in `codegen.py` and thread options through `figure_to_code`.
+- [x] Export `CodegenOptions` from package root (`gu_toolkit.CodegenOptions`).
+- [x] Add conditional generation for imports and symbol declarations.
+- [x] Add configurable generation mode for explicit figure-method calls vs context-manager output style.
+- [x] Update dynamic-info emission:
+  - [x] emit commented-out registration code for dynamic entries,
+  - [x] append standardized "define callables first" and `inspect.getsource(...)` guidance comments,
+  - [x] when disabled, emit placeholder comment (`# dynamic info omitted`).
+- [x] Add tests for each option combination and mixed static/dynamic info cards.
+- [x] Update docs with examples for notebook embedding and script embedding.
 
 ## Exit Criteria
-- [ ] Users can toggle imports and symbol definitions independently.
-- [ ] Users can select figure-method vs context-manager interface style and get deterministic output.
-- [ ] Dynamic info registrations appear as commented blocks with actionable recovery guidance directly below each call.
-- [ ] If dynamic comments are disabled, generated output still makes omission explicit.
-- [ ] New tests cover configuration branches and preserve current default behavior.
+- [x] Users can toggle imports and symbol definitions independently.
+- [x] Users can select figure-method vs context-manager interface style and get deterministic output.
+- [x] Dynamic info registrations appear as commented blocks with actionable recovery guidance directly below each call.
+- [x] If dynamic comments are disabled, generated output still makes omission explicit.
+- [x] New tests cover configuration branches and preserve current default behavior.

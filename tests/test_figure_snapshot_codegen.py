@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import sympy as sp
+import pytest
 
-from gu_toolkit import Figure, sympy_to_code
+from gu_toolkit import CodegenOptions, Figure, sympy_to_code
 
 
 def _build_exportable_figure(*, include_dynamic_info: bool) -> Figure:
@@ -64,26 +65,26 @@ def test_snapshot_captures_parameters_plots_and_info_cards() -> None:
     assert snap.info_cards[0].segments == ("<b>Static</b>", "<dynamic>")
 
 
-def test_to_code_emits_reconstruction_script_with_dynamic_info_comment() -> None:
+def test_to_code_default_is_context_manager_with_dynamic_info_comment_block() -> None:
     fig = _build_exportable_figure(include_dynamic_info=True)
 
     code = fig.to_code()
 
     assert "import sympy as sp" in code
-    assert "from gu_toolkit import Figure" in code
-    assert "fig = Figure(x_range=(-5.0, 5.0), y_range=(-3.0, 3.0), sampling_points=256)" in code
-    assert "fig.parameter(a, value=0.75, min=-2.0, max=2.0, step=0.05)" in code
-    assert "fig.parameter(b, value=-0.25, min=-1.0, max=1.0, step=0.05)" in code
-    assert "id='model'" in code
-    assert "# Info card 'status' contains dynamic segments that cannot be serialized." in code
+    assert "from gu_toolkit import Figure, parameter, plot, info" in code
+    assert "with fig:" in code
+    assert "parameter(a, value=0.75, min=-2.0, max=2.0, step=0.05)" in code
+    assert "plot(" in code
+    assert "# info('<b>Static</b>', id='status')" in code
+    assert "# print(inspect.getsource(my_dynamic_func))" in code
 
 
-def test_generated_code_round_trips_for_static_exportable_content() -> None:
+def test_to_code_supports_figure_methods_style_and_round_trip() -> None:
     fig = _build_exportable_figure(include_dynamic_info=False)
 
     original = fig.snapshot()
     ns: dict[str, object] = {}
-    exec(fig.to_code(), ns)
+    exec(fig.to_code(options=CodegenOptions(interface_style="figure_methods")), ns)
     rebuilt = ns["fig"]
 
     rebuilt_snapshot = rebuilt.snapshot()  # type: ignore[attr-defined]
@@ -104,6 +105,22 @@ def test_generated_code_round_trips_for_static_exportable_content() -> None:
     assert rebuilt_snapshot.info_cards[0].segments == ("<b>Static only</b>",)
 
 
+def test_to_code_can_disable_imports_symbols_and_dynamic_comment_blocks() -> None:
+    fig = _build_exportable_figure(include_dynamic_info=True)
+
+    code = fig.to_code(
+        options=CodegenOptions(
+            include_imports=False,
+            include_symbol_definitions=False,
+            include_dynamic_info_as_commented_blocks=False,
+        )
+    )
+
+    assert "import sympy as sp" not in code
+    assert "sp.symbols(" not in code
+    assert "# dynamic info omitted" in code
+
+
 def test_sympy_to_code_prefixes_sympy_functions_and_constants() -> None:
     x = sp.Symbol("x")
     expr = sp.pi + sp.sqrt(x) + sp.Abs(sp.sin(x))
@@ -113,3 +130,8 @@ def test_sympy_to_code_prefixes_sympy_functions_and_constants() -> None:
     assert "sp.pi" in rendered
     assert "sp.sqrt(x)" in rendered
     assert "sp.Abs(sp.sin(x))" in rendered
+
+
+def test_codegen_options_reject_invalid_interface_style() -> None:
+    with pytest.raises(ValueError, match="interface_style"):
+        CodegenOptions(interface_style="invalid")  # type: ignore[arg-type]

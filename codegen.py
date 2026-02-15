@@ -15,7 +15,8 @@ Two public helpers are provided:
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Sequence
+from dataclasses import dataclass
+from typing import Literal, Sequence
 
 import sympy as sp
 from sympy import Basic, Expr, Symbol
@@ -135,6 +136,36 @@ class _SpPrefixedPrinter(StrPrinter):
 _printer = _SpPrefixedPrinter()
 
 
+@dataclass(frozen=True)
+class CodegenOptions:
+    """Configuration knobs for :func:`figure_to_code`.
+
+    Parameters
+    ----------
+    include_imports : bool, optional
+        Whether to emit the import preamble.
+    include_symbol_definitions : bool, optional
+        Whether to emit ``sp.Symbol`` declarations.
+    interface_style : {"figure_methods", "context_manager"}, optional
+        Emission style for figure operations.
+    include_dynamic_info_as_commented_blocks : bool, optional
+        Whether dynamic ``fig.info(...)`` cards should be rendered as commented
+        code blocks with recovery guidance.
+    """
+
+    include_imports: bool = True
+    include_symbol_definitions: bool = True
+    interface_style: Literal["figure_methods", "context_manager"] = "context_manager"
+    include_dynamic_info_as_commented_blocks: bool = True
+
+    def __post_init__(self) -> None:
+        """Validate option values for deterministic code generation."""
+        if self.interface_style not in {"figure_methods", "context_manager"}:
+            raise ValueError(
+                "interface_style must be one of {'figure_methods', 'context_manager'}"
+            )
+
+
 def sympy_to_code(expr: Expr) -> str:
     """Convert a SymPy expression to a Python source fragment.
 
@@ -205,18 +236,19 @@ def _symbol_definitions(symbols: list[Symbol]) -> str:
     return f'{names} = sp.symbols("{quoted}")'
 
 
-def _parameter_call(sym: Symbol, meta: dict) -> str:
-    """Emit one ``fig.parameter(sym, ...)`` line."""
+def _parameter_call(sym: Symbol, meta: dict, *, style: Literal["figure_methods", "context_manager"]) -> str:
+    """Emit one parameter registration call."""
     parts = [sym.name]
-    caps = meta.get("capabilities", [])
     for key in ("value", "min", "max", "step"):
         if key in meta:
             parts.append(f"{key}={_fmt_float(float(meta[key]))}")
+    if style == "context_manager":
+        return f"parameter({', '.join(parts)})"
     return f"fig.parameter({', '.join(parts)})"
 
 
-def _plot_call(ps: PlotSnapshot) -> str:
-    """Emit one ``fig.plot(...)`` call."""
+def _plot_call(ps: PlotSnapshot, *, style: Literal["figure_methods", "context_manager"]) -> str:
+    """Emit one plot call."""
     expr_code = sympy_to_code(ps.func)
     param_list = "[" + ", ".join(p.name for p in ps.parameters) + "]"
 
@@ -246,38 +278,58 @@ def _plot_call(ps: PlotSnapshot) -> str:
 
     # Format: single line if short, multi-line otherwise
     joined = ", ".join(args)
-    call = f"fig.plot({joined})"
+    callee = "plot" if style == "context_manager" else "fig.plot"
+    call = f"{callee}({joined})"
     if len(call) <= 88:
         return call
 
     indent = "    "
     body = (",\n" + indent).join(args)
-    return f"fig.plot(\n{indent}{body},\n)"
+    return f"{callee}(\n{indent}{body},\n)"
 
 
-def _info_card_lines(card: InfoCardSnapshot) -> list[str]:
-    """Emit ``fig.info(...)`` or a comment for cards with dynamic segments."""
+def _info_card_lines(
+    card: InfoCardSnapshot,
+    *,
+    style: Literal["figure_methods", "context_manager"],
+    include_dynamic_comment_block: bool,
+) -> list[str]:
+    """Emit ``info(...)``/``fig.info(...)`` lines or dynamic info comments."""
+    call = "info" if style == "context_manager" else "fig.info"
     has_dynamic = any(seg == "<dynamic>" for seg in card.segments)
     static_parts = [seg for seg in card.segments if seg != "<dynamic>"]
 
     if has_dynamic:
-        lines = [f"# Info card {card.id!r} contains dynamic segments that cannot be serialized."]
-        if static_parts:
-            for part in static_parts:
-                lines.append(f"# Static segment: {part!r}")
+        if not include_dynamic_comment_block:
+            return ["# dynamic info omitted"]
+
+        static_spec = repr(static_parts[0]) if len(static_parts) == 1 else repr(static_parts)
+        suffix = f", id={card.id!r}" if card.id is not None else ""
+        lines = [
+            f"# {call}({static_spec}{suffix})",
+            "# NOTE: Dynamic info callable segments were omitted from this commented block.",
+            "# NOTE: Define every callable referenced by this card in scope before enabling the line above.",
+            "# import inspect",
+            "# print(inspect.getsource(my_dynamic_func))",
+        ]
         return lines
 
     if not static_parts:
         return []
 
     if len(static_parts) == 1:
-        return [f"fig.info({static_parts[0]!r})"]
+        line = f"{call}({static_parts[0]!r}"
+    else:
+        parts_repr = ", ".join(repr(s) for s in static_parts)
+        line = f"{call}([{parts_repr}]"
 
-    parts_repr = ", ".join(repr(s) for s in static_parts)
-    return [f"fig.info([{parts_repr}])"]
+    if card.id is not None:
+        line += f", id={card.id!r}"
+    line += ")"
+    return [line]
 
 
-def figure_to_code(snapshot: FigureSnapshot) -> str:
+def figure_to_code(snapshot: FigureSnapshot, options: CodegenOptions | None = None) -> str:
     """Generate a self-contained Python script from a :class:`FigureSnapshot`.
 
     The returned string, when executed in a Jupyter notebook or Python REPL
@@ -288,22 +340,29 @@ def figure_to_code(snapshot: FigureSnapshot) -> str:
     ----------
     snapshot : FigureSnapshot
         Immutable figure state captured via :meth:`Figure.snapshot`.
+    options : CodegenOptions | None, optional
+        Optional output-style and serialization policy configuration.
 
     Returns
     -------
     str
         Complete Python source code.
     """
+    options = options or CodegenOptions()
     lines: list[str] = []
 
     # -- imports ------------------------------------------------------------
-    lines.append("import sympy as sp")
-    lines.append("from gu_toolkit import Figure")
-    lines.append("")
+    if options.include_imports:
+        lines.append("import sympy as sp")
+        if options.interface_style == "context_manager":
+            lines.append("from gu_toolkit import Figure, parameter, plot, info")
+        else:
+            lines.append("from gu_toolkit import Figure")
+        lines.append("")
 
     # -- symbols ------------------------------------------------------------
     symbols = _collect_symbols(snapshot)
-    if symbols:
+    if symbols and options.include_symbol_definitions:
         lines.append("# Symbols")
         lines.append(_symbol_definitions(symbols))
         lines.append("")
@@ -320,30 +379,49 @@ def figure_to_code(snapshot: FigureSnapshot) -> str:
         lines.append(f"fig.title = {snapshot.title!r}")
     lines.append("")
 
-    # -- parameters ---------------------------------------------------------
+    # -- operation body -----------------------------------------------------
+    body_lines: list[str] = []
+
     if len(snapshot.parameters) > 0:
-        lines.append("# Parameters")
+        body_lines.append("# Parameters")
         for sym in snapshot.parameters:
             meta = dict(snapshot.parameters[sym])
-            lines.append(_parameter_call(sym, meta))
-        lines.append("")
+            body_lines.append(_parameter_call(sym, meta, style=options.interface_style))
+        body_lines.append("")
 
-    # -- plots --------------------------------------------------------------
     if snapshot.plots:
-        lines.append("# Plots")
+        body_lines.append("# Plots")
         for ps in snapshot.plots.values():
-            lines.append(_plot_call(ps))
-        lines.append("")
+            body_lines.append(_plot_call(ps, style=options.interface_style))
+        body_lines.append("")
 
-    # -- info cards ---------------------------------------------------------
     info_lines: list[str] = []
     for card in snapshot.info_cards:
-        info_lines.extend(_info_card_lines(card))
-
+        info_lines.extend(
+            _info_card_lines(
+                card,
+                style=options.interface_style,
+                include_dynamic_comment_block=options.include_dynamic_info_as_commented_blocks,
+            )
+        )
     if info_lines:
-        lines.append("# Info")
-        lines.extend(info_lines)
-        lines.append("")
+        body_lines.append("# Info")
+        body_lines.extend(info_lines)
+        body_lines.append("")
+
+    if options.interface_style == "context_manager":
+        lines.append("with fig:")
+        if not body_lines:
+            lines.append("    pass")
+            lines.append("")
+        else:
+            for line in body_lines:
+                if not line:
+                    lines.append("")
+                else:
+                    lines.append(f"    {line}")
+    else:
+        lines.extend(body_lines)
 
     # -- display ------------------------------------------------------------
     lines.append("fig")

@@ -919,8 +919,13 @@ class Figure:
             info_cards=self._info.snapshot(),
         )
 
-    def to_code(self) -> str:
+    def to_code(self, *, options: "CodegenOptions | None" = None) -> str:
         """Generate a self-contained Python script that recreates this figure.
+
+        Parameters
+        ----------
+        options : CodegenOptions | None, optional
+            Configuration for generated output structure.
 
         Returns
         -------
@@ -938,7 +943,7 @@ class Figure:
         """
         from .codegen import figure_to_code
 
-        return figure_to_code(self.snapshot())
+        return figure_to_code(self.snapshot(), options=options)
 
     def info(self, spec: Union[str, Callable[["Figure", Any], str], Sequence[Union[str, Callable[["Figure", Any], str]]]], id: Optional[Hashable] = None) -> None:
         """Create or replace a simple info card in the Info sidebar."""
