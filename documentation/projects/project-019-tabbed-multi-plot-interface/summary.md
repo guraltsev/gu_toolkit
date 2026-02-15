@@ -1,110 +1,110 @@
-# Project 019: Tabbed Multi-Plot Interface
+# Project 019: Tabbed Multi-Plot Interface (Refined Summary)
 
-**Priority:** High  
-**Effort:** Large  
-**Impact:** Introduces a multi-view plotting workspace with tabbed navigation, per-view viewport control, and visibility-aware rendering.
-
----
-
-## Problem Statement
-
-The current plotting architecture is effectively single-canvas:
-
-- `Figure` owns one `FigureWidget` and one sidebar layout.
-- Range semantics are blurred between defaults and live viewport state.
-- Plot-to-canvas binding is implicit and rigid (single handle per plot).
-- Rendering re-evaluates all plots on parameter changes regardless of visibility.
-
-This prevents a first-class workflow for one shared parameter workspace with multiple independent visual views (e.g., time/frequency, macro/zoom, raw/transformed).
+**Priority:** High
+**Effort:** Large
+**Impact:** Evolve `Figure` from a single-canvas coordinator into a multi-view workspace with tabbed navigation, per-view viewport state, and visibility-aware rendering.
 
 ---
 
-## Required Capabilities (from discussion)
+## 1) What the current codebase does today (analysis)
 
-1. **Per-view ranges, not figure-global ranges**
-   - Treat default x/y ranges as view-specific.
-   - Track current viewport ranges separately per view.
+This summary is grounded in the current implementation:
 
-2. **Clear plot identity and membership**
-   - Every plot must have a stable identifier.
-   - Membership in one or more views must be explicit, not inferred from one private handle.
+- `Figure` orchestrates exactly one Plotly `FigureWidget` and one `PlotlyPane` inside one `FigureLayout.plot_container`.
+- `FigureLayout` has a single plot area + one shared sidebar (`params_box`, `info_box`); there is no tab container yet.
+- `Plot` currently owns one `_plot_handle` (single trace binding), so plot membership is implicitly single-view.
+- `InfoPanelManager` supports shared info cards by ID, but has no built-in view scoping model.
+- `FigureSnapshot`/`codegen` are single-view oriented (`x_range`, `y_range`, one plot map), so serialization must be extended for multi-view.
 
-3. **Visibility-gated computation**
-   - Inactive tabs should not regenerate plot data.
-   - Inactive views become stale and re-render when activated.
+---
 
-4. **Tabbed interface with shared parameter controls**
-   - Parameters remain workspace-level.
-   - Multiple plotting views are organized via tabs.
+## 2) Confirmed decisions carried forward
 
-5. **Info-panel scoping model (decided)**
-   - Support **both** shared and per-view info cards.
-   - Shared info cards are always visible.
-   - Per-view info cards occupy the same area but only appear when that view is active.
+1. **Per-view range model**
+   Keep default ranges and viewport ranges distinct. The existing viewport control behavior in `Figure` is the bridge and should become per-view.
 
-6. **View metadata (decided)**
-   - Support figure-level title.
-   - Support per-view title and per-view x/y axis labels.
+2. **Info-card scoping model**
+   Support both:
+   - shared info (`view=None`) visible on all tabs,
+   - view-scoped info (`view="..."`) visible only for active view.
 
-7. **Autoscaling rule (decided)**
-   - If `y_range` is explicitly set on a view, do not autoscale y.
-   - If `y_range` is not set, allow y autoscaling for that view.
+3. **Autoscale rule**
+   For each view:
+   - explicit `y_range` => no y autoscale,
+   - `y_range is None` => y autoscale enabled.
 
-8. **Legacy info helper cleanup (decided)**
-   - Remove `fig.get_info_output()` and `fig.add_info_component()`.
-   - Do not keep backward compatibility for this old unused path.
+4. **Legacy info helper cleanup**
+   `get_info_output` and `add_info_component` remain removed (no compatibility layer).
+
+5. **Terminology**
+   Public API should use **View** (not Canvas) going forward.
+
+---
+
+## 3) Gap between current code and target
+
+The major architectural gap is that the current runtime model is `Figure -> many Plot`, where each `Plot` maps to one trace on one widget. Project 019 needs `Figure(workspace) -> many View`, and `Plot -> many PlotHandle(view-specific traces)`.
+
+Because of that, implementation must touch **state model**, **render pipeline**, **layout composition**, **public API**, and **snapshot/codegen** simultaneously (or in tightly controlled phases).
+
+---
+
+## 4) Refined scope and expected deliverables
+
+### In scope
+- New `View` abstraction with ID/title/labels/range state.
+- Tabbed UI (`ipywidgets.Tab`) containing one plot pane per view.
+- Explicit multi-view plot membership (`PlotHandle` per view).
+- Visibility-gated rendering (active renders now, inactive marked stale).
+- Shared + view-scoped info cards in shared sidebar.
+- Public API additions (`add_view`, `view(...)`, `plot(..., view=...)`, `info(..., view=...)`).
+- Updated snapshot/codegen to represent views and scoped info cards.
+- Full unit/integration tests for the above.
+
+### Out of scope (deferred)
+- Per-view parameter dependency subsets.
+- Drag-and-drop plot reassignment.
+- Non-tab layouts (grid/split).
 
 ---
 
 
-## Implemented Clarification: Viewport Controls in Current `Figure`
+## 5) Incremental phases that preserve a working system
 
-The current single-view `Figure` now treats viewport ranges as **controls** instead of passive cached fields:
+Each phase below is intended to be mergeable while keeping notebook workflows functional and tests green:
 
-- `_viewport_x_range` / `_viewport_y_range` are control-backed properties.
-- **Read** behavior queries the live Plotly widget range (`layout.xaxis.range` / `layout.yaxis.range`).
-- **Write** behavior moves only the current viewport window and does **not** mutate defaults (`x_range`, `y_range`).
-- Writing `None` re-applies the default axis range for that axis.
-- Plotly home/reset behavior remains anchored to default ranges.
+1. **Phase S1 — Foundation compatibility pass**
+   Land view registry internals behind the existing single-view public behavior (default view only), with no tab UI exposure yet.
 
-This is the concrete bridge between today’s single-view implementation and Project 019’s per-view range model.
+2. **Phase S2 — Multi-view model without UI switch**
+   Add `View` and `PlotHandle` data structures plus membership APIs, but keep rendering pinned to one active default view until tab wiring is ready.
 
----
+3. **Phase S3 — Tab UI + active-view routing**
+   Introduce `ipywidgets.Tab` and active view selection while preserving a default single-view code path for old notebooks.
 
-## Out of Scope / Deferred
+4. **Phase S4 — Visibility-gated rendering**
+   Enable stale-marking for inactive views and refresh-on-activation semantics, with regression tests proving no behavior regressions for single-view figures.
 
-- Per-view parameter dependency subsets (optimization): deferred.
-- Drag-and-drop plot reassignment between tabs: deferred.
-- Side-by-side grid layout: deferred (future project).
+5. **Phase S5 — Public API completion**
+   Expose `add_view`, `view(...)`, `plot(..., view=...)`, and `info(..., view=...)` with docs/examples, while keeping no-`view` calls mapped to the active/default view.
 
----
-
-## Deliverables
-
-- `plan.md` with phased implementation covering model, rendering, layout, API, and tests.
-- Explicit decision log integrated into the plan (no unresolved ambiguity for items already decided).
+6. **Phase S6 — Snapshot/codegen parity + hardening**
+   Extend snapshot/codegen schemas, finalize migration tests, and only then remove temporary compatibility shims introduced in earlier phases.
 
 ---
 
-## Implementation Status Checklist (updated)
+## 6) Clarifications needed before implementation starts
 
-### Completed
+To avoid rework, these questions should be answered/confirmed explicitly:
 
-- [x] Clarified viewport control semantics in current single-view `Figure` as an explicit bridge toward per-view viewport handling.
-- [x] Removed legacy info helper APIs called out in this project as cleanup targets:
-  - [x] `Figure.get_info_output()`
-  - [x] `Figure.add_info_component()`
-  - [x] Associated module-level helper exports
-- [x] Added regression coverage to lock in the legacy-info-helper removal behavior.
+1. **Default view identity:** should the implicit first view always be `"main"`, or should it be user-configurable at `Figure(...)` construction?
+2. **Backwards compatibility for `plot(id=...)`:** if an existing plot is updated with a narrower `view=` set, should removed memberships be deleted automatically, or only when explicitly removed?
+3. **View deletion semantics:** do we need `remove_view(...)` in this project, and what should happen to plots scoped only to that view?
+4. **Snapshot compatibility strategy:** should `FigureSnapshot` be versioned (e.g., `schema_version`) to preserve loading/codegen behavior for older snapshots?
+5. **Initial tab selection behavior:** should stale-refresh run on first display for non-active tabs only, or should all views render once at startup then switch to visibility-gated mode?
 
-### Remaining
+---
 
-- [ ] Introduce first-class `View` abstraction and tab container wiring (`ipywidgets.Tab`).
-- [ ] Implement per-view default range + viewport state ownership.
-- [ ] Implement explicit `PlotHandle` multi-view membership model (`plot_id -> handles by view_id`).
-- [ ] Add visibility-gated render behavior (active view renders; inactive views marked stale).
-- [ ] Implement stale-on-inactive and one-time refresh on tab activation.
-- [ ] Add per-view info card scoping (`view=None` shared, `view="..."` scoped).
-- [ ] Add/validate API for view lifecycle and targeting (`add_view`, `view(...)` context, `plot(..., view=...)`).
-- [ ] Add comprehensive tests for the remaining multi-view/tabbed behavior in Phase 1-6 of `plan.md`.
-- [ ] Add/refresh notebook integration examples in `documentation/Toolkit_overview.ipynb` for GUI-dependent checks.
+## 7) Execution note
+
+A detailed, phase-by-phase delivery plan is provided in `plan.md` and is now aligned with the observed implementation boundaries in `Figure.py`, `figure_plot.py`, `figure_layout.py`, `figure_info.py`, and snapshot/codegen modules.
