@@ -13,7 +13,7 @@ Primary files inspected:
 - `numpify.py`
 - `tests/test_prelude_nintegrate.py`
 - `tests/test_numpify_refactor.py`
-- `documentation/Bugs/open/issue-017-test_dynamic_parameter_context_mapping_protocol.md`
+- `documentation/Bugs/closed/issue-017-test_dynamic_parameter_context_mapping_protocol.md`
 
 ---
 

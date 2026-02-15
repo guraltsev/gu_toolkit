@@ -207,7 +207,7 @@ SymPy is imported twice — once before the wildcard import and once after. The 
 
 ### S5. Open Bug Not Addressed in Code
 
-**File:** `ParseLaTeX.py` / `documentation/Bugs/open/bug-002-parse-latex-ambiguous-tree.md`
+**File:** `ParseLaTeX.py` / `documentation/Bugs/closed/bug-002-parse-latex-ambiguous-tree.md`
 
 Bug 002 documents that `parse_latex()` can return a `Tree` object instead of a SymPy expression for certain inputs (unparenthesized products after fractions). The fix plan exists in documentation but has not been implemented. This is stale in the sense that the bug is documented but unfixed.
 

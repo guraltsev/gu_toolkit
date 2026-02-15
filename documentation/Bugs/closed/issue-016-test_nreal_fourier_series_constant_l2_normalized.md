@@ -14,4 +14,4 @@
 - Add regression tests for `expr=1` and `expr=2.5`.
 
 ## Disposition
-**Real bug / missing ergonomic support.**
+**Closed (fixed).** Constant numeric expressions are now supported by the regression test path.

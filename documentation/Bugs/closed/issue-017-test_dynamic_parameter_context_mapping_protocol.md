@@ -26,4 +26,4 @@ The dynamic context API is intended to accept context providers beyond plain dic
 3. Add/keep regression coverage with non-iterable context providers (like `_Ctx` in the failing test).
 
 ## Disposition
-**Open.** Reproducible in the provided test run and currently failing.
+**Closed (fixed).** Regression test now passes in the current test suite.

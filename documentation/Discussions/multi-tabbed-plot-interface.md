@@ -9,7 +9,7 @@ I want to adapt the code to support mutiple plots in a tabbed interface. This re
 - develop an intuitive public api for creating new plot outputs. 
 More?
 
-write a summary and a comprehensive and detailed plan for this functionality into documentation\bugs\open\projects\project-019-NAME_TO_DESCRIBE_THIS PROJECT\summary.md and documentation\bugs\open\projects\project-019-NAME_TO_DESCRIBE_THIS PROJECT\plan.md
+write a summary and a comprehensive and detailed plan for this functionality into documentation/projects/project-019-tabbed-multi-plot-interface/summary.md and documentation/projects/project-019-tabbed-multi-plot-interface/plan.md
 
 # Plan Summay 
 
