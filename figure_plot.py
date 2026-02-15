@@ -14,7 +14,7 @@ from sympy.core.symbol import Symbol
 
 from .InputConvert import InputConvert
 from .figure_context import FIGURE_DEFAULT, _is_figure_default
-from .numpify import DYNAMIC_PARAMETER, NumpifiedFunction, numpify_cached
+from .numpify import DYNAMIC_PARAMETER, NumericFunction, numpify_cached
 
 # SECTION: Plot (The specific logic for one curve) [id: Plot]
 # =============================================================================
@@ -173,8 +173,8 @@ class Plot:
 
 
     @property
-    def numeric_expression(self) -> NumpifiedFunction:
-        """Return numeric expression with parameters dynamically resolved from figure parameters."""
+    def numeric_expression(self) -> NumericFunction:
+        """Return a live :class:`NumericFunction` bound to the figure parameter context."""
         return self._numpified.set_parameter_context(self._smart_figure.parameters.parameter_context).freeze({
             sym: DYNAMIC_PARAMETER for sym in self._numpified.vars[1:]
         })

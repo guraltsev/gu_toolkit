@@ -118,7 +118,7 @@ from sympy.core.symbol import Symbol
 
 # Internal imports (assumed to exist in the same package)
 from .InputConvert import InputConvert
-from .numpify import NumpifiedFunction, numpify_cached
+from .numpify import numpify_cached
 from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
 from .Slider import FloatSlider
 from .ParamEvent import ParamEvent

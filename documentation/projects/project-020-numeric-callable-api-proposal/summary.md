@@ -1,66 +1,53 @@
-# Project 020: Numeric Callable API (Implemented)
+# Project 020: Numeric Callable API (Completed)
 
-## Implementation audit status
+## Completion status
 
-This project is **partially implemented**, but not yet fully complete against the full plan.
+This project is now **fully implemented**.
 
-### Still TODO
+## Delivered outcomes
 
-1. **Complete internal migration to `NumericFunction` (Phase 3.1).**
-   - Core modules still type/import against `NumpifiedFunction` in several places (for example: `Figure.py`, `figure_plot.py`, and `numeric_operations.py`).
-2. **Complete public narrative replacement (Phase 3.3).**
-   - Several docs and internal review notes still describe behavior primarily in `NumpifiedFunction` terms.
-3. **Post-migration cleanup (Phase 4).**
-   - Transitional compatibility surface has not been reduced yet (`NumpifiedFunction` remains part of runtime and dependent typing paths), and no cleanup pass has been documented.
+### Canonical API migration
 
-## What shipped
+- `NumericFunction` is the primary numeric callable abstraction used internally.
+- `numpify(...)` / `numpify_cached(...)` return `NumericFunction` instances.
+- Figure and numeric helper code paths now type against `NumericFunction` directly.
+- `NumpifiedFunction` remains available only as a compatibility constructor.
 
-This project is now implemented with `NumericFunction` as the canonical numeric callable API and a compatibility `NumpifiedFunction` constructor.
+### Unified `vars` contract
 
-### Core behavior
+`vars` supports all proposal forms:
 
-1. `numpify(...)` now returns `NumericFunction`.
-2. `NumpifiedFunction` remains available as a compatibility subclass/constructor.
-3. Legacy construction defaults `symbolic=None` when omitted.
-4. Freeze/unfreeze, dynamic parameter context, and call-signature behavior are shared through the same runtime class.
+1. **Pure positional** (`vars=(x, y)`)
+2. **Positional + keyed tail mapping** (`vars=(x, {"y": y, "scale": s})`)
+3. **Pure keyed mapping** (`vars={"x": x, "scale": s}`)
+4. **Indexed positional mapping + keyed mapping** (`vars={0: x, 1: y, "scale": s}`)
 
-## Unified `vars` contract
+Validation guarantees:
 
-`vars` now supports the proposal forms:
+- Integer keys are contiguous from `0`.
+- Non-integer keys are strings.
+- Duplicate symbols are rejected.
+- Argument-name normalization is deterministic and collision-safe.
 
-1. **Pure positional**
-   - `vars=(x, y)`
-2. **Positional + keyed tail mapping**
-   - `vars=(x, {"y": y, "scale": s})`
-3. **Pure keyed mapping**
-   - `vars={"x": x, "scale": s}`
-4. **Indexed positional mapping + keyed mapping**
-   - `vars={0: x, 1: y, "scale": s}`
+### Runtime parity and round-trip semantics
 
-Validation rules implemented:
+- `freeze(...)` / `unfreeze(...)` / dynamic parameter binding behavior is shared across canonical and compatibility construction paths.
+- `NumericFunction.vars` keeps legacy tuple-like iteration while supporting `vars()` round-trip reconstruction.
+- Signature introspection (`inspect.signature`) tracks currently free variables.
 
-- Integer keys must be contiguous from `0` with no gaps.
-- Non-integer mapping keys must be strings.
-- Duplicate symbols in the normalized contract are rejected.
+### Comprehensive tests
 
-## Round-trip behavior
+The numeric callable API test suite now covers:
 
-`NumericFunction.vars` is now a compatibility accessor with two modes:
+- constructor and return-type contract,
+- all supported `vars` input modes,
+- keyed and positional call validation,
+- contiguous integer-key enforcement,
+- freeze/unfreeze parity across `NumericFunction` and `NumpifiedFunction`,
+- dynamic parameter-context resolution,
+- free-variable/signature tracking,
+- vectorized execution behavior.
 
-- Iteration/indexing (`tuple(fn.vars)`) exposes positional symbols for legacy compatibility.
-- Calling (`fn.vars()`) returns the original normalized vars specification for round-trip reconstruction.
+## Notes
 
-## Test coverage added
-
-`tests/test_numeric_callable_api.py` covers:
-
-- `numpify` return type and `symbolic` payload.
-- legacy compatibility construction defaults.
-- mixed positional+keyed calling.
-- integer-key mapping behavior and contiguity validation.
-- freeze/unfreeze parity across canonical and compatibility construction.
-
-## Audit notes
-
-- Phase 1 and Phase 2 deliverables are implemented and covered by tests.
-- Full completion is currently blocked on Phase 3/4 migration and cleanup work above.
+`NumpifiedFunction` is intentionally retained as a compatibility alias during migration windows, but `NumericFunction` is the canonical narrative for new code and documentation.

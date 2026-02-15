@@ -15,11 +15,11 @@ import sympy as sp
 from IPython.display import HTML
 
 try:
-    from .numpify import NumericFunction, NumpifiedFunction, numpify_cached
+    from .numpify import NumericFunction, numpify_cached
 except ImportError:  # pragma: no cover
-    from numpify import NumericFunction, NumpifiedFunction, numpify_cached
+    from numpify import NumericFunction, numpify_cached
 
-_NUMERIC_CALLABLE_TYPES = (NumericFunction, NumpifiedFunction)
+_NUMERIC_CALLABLE_TYPES = (NumericFunction,)
 
 
 def _to_quad_limit(v):
@@ -55,7 +55,7 @@ def _resolve_numeric_callable(expr, x, freeze, freeze_kwargs):
         if len(required) > 1:
             raise TypeError(
                 "Generic callables with parameters are not supported yet; "
-                "pass a NumpifiedFunction/NumericFunction and use freeze=..."
+                "pass a NumericFunction and use freeze=..."
             )
         if freeze is not None or freeze_kwargs:
             raise TypeError("freeze= is only supported for symbolic/NumericFunction inputs")
@@ -64,7 +64,7 @@ def _resolve_numeric_callable(expr, x, freeze, freeze_kwargs):
         raise TypeError(f"Unsupported expr type for NIntegrate: {type(expr)}")
 
     if not compiled.vars:
-        raise TypeError("NIntegrate requires an x argument for numpified functions")
+        raise TypeError("NIntegrate requires an x argument for NumericFunction inputs")
     if len(compiled.vars) == 1:
         return compiled.freeze(freeze, **freeze_kwargs) if (freeze is not None or freeze_kwargs) else compiled
     return compiled.freeze(freeze, **freeze_kwargs) if (freeze is not None or freeze_kwargs) else compiled
