@@ -36,7 +36,7 @@ Completed in this merge:
 - Added snapshot creation methods across figure/plot/info subsystems.
 - Added script generation engine for figure reconstruction.
 - Added top-level API exports for snapshots and codegen helpers.
-- Kept backward-compatible `get_info_output` aliasing behavior while integrating the new snapshot/codegen methods.
+- Preserved `main` behavior that removes deprecated `get_info_output` / `add_info_component` APIs.
 
 ## Remaining TODOs
 

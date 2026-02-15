@@ -985,37 +985,6 @@ class Figure:
 
         return figure_to_code(self.snapshot())
 
-    def get_info_output(self, id: Optional[Hashable] = None, **kwargs: Any) -> widgets.Output:
-        """
-        Create (or retrieve) an Output widget in the Info sidebar.
-
-        Parameters
-        ----------
-        id : hashable, optional
-            Unique identifier for the output. If omitted, a new ID is generated.
-        **kwargs : Any
-            Layout keyword arguments for ``ipywidgets.Layout``.
-
-        Returns
-        -------
-        ipywidgets.Output
-            Output widget for the info panel.
-
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> out = fig.get_info_output("summary")  # doctest: +SKIP
-
-        Notes
-        -----
-        Output widgets are added to the sidebar in the order they are created.
-        """
-        out = self._info.get_output(id, **kwargs)
-        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
-        return out
-
-    # Alias for backward compatibility
-    new_info_output = get_info_output
     def info(self, spec: Union[str, Callable[["Figure", Any], str], Sequence[Union[str, Callable[["Figure", Any], str]]]], id: Optional[Hashable] = None) -> None:
         """Create or replace a simple info card in the Info sidebar."""
         self._info.set_simple_card(spec=spec, id=id)

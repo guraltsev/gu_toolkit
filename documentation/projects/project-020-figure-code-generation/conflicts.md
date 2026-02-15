@@ -15,7 +15,7 @@
 
 Resolution:
 - Kept `snapshot()` and `to_code()` from source branch.
-- Kept a single copy of `get_info_output(...)` plus `new_info_output` alias for compatibility.
+- Dropped `get_info_output(...)` / `new_info_output` to preserve `main`'s deprecation/removal.
 - Removed duplicate/conflict-marker blocks.
 
 2. `__init__.py`
@@ -31,4 +31,4 @@ Resolution:
 ## Post-Resolution Notes
 
 - No conflict markers remain.
-- Merge now contains the full figure snapshot/code-generation feature set plus existing `main` export compatibility behavior.
+- Merge now contains the full figure snapshot/code-generation feature set while preserving `main`'s removal of legacy info-output helpers.
