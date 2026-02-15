@@ -1,104 +1,59 @@
-"""Core Figure plotting system for interactive symbolic exploration.
+"""Interactive Figure orchestration for notebook plotting.
 
-The module hosts the coordinator class, plot abstraction, layout/parameter/info
-managers, and notebook helper functions used to build responsive, parameterized
-Plotly visualizations from SymPy expressions.
+Purpose
+-------
+This module provides the public ``Figure`` class and module-level convenience
+helpers that power the interactive plotting workflow in ``gu_toolkit``. It
+connects symbolic SymPy expressions to Plotly traces and notebook widgets so
+users can explore parameterized functions in real time.
+
+Concepts and structure
+----------------------
+The implementation is composition-based:
+
+- ``Figure`` coordinates rendering and exposes the public plotting API.
+- ``FigureLayout`` owns widget/layout construction.
+- ``ParameterManager`` owns controls and parameter hooks.
+- ``InfoPanelManager`` owns sidebar output/components.
+- ``Plot`` (from ``figure_plot``) encapsulates per-curve math/trace logic.
+
+Architecture notes
+------------------
+``Figure`` delegates as much behavior as possible to specialized collaborators
+(``figure_layout``, ``figure_parameters``, ``figure_info``, ``figure_plot``),
+while this module provides the top-level coordinator and user-facing helper
+functions (``plot``, ``parameter``, ``render``, range/title helpers, etc.).
+
+Important gotchas
+-----------------
+- Plotly ``FigureWidget`` requires a real container height; use the layout
+  helpers as designed when embedding in custom notebook UIs.
+- Parameter updates and relayout events are debounced/throttled to prevent
+  excessive rerenders.
+- Global helper functions route through the active figure context; ensure a
+  current figure is set (e.g., by using ``with fig:``) before calling them.
+
+Examples
+--------
+>>> import sympy as sp
+>>> from gu_toolkit.Figure import Figure
+>>> x, a = sp.symbols("x a")
+>>> fig = Figure()
+>>> fig.plot(x, a * sp.sin(x), parameters=[a], id="wave")  # doctest: +SKIP
+>>> fig  # doctest: +SKIP
+
+Discoverability
+---------------
+If you are extending behavior, inspect next:
+
+- ``figure_plot.py`` for per-curve sampling/render internals.
+- ``figure_parameters.py`` for parameter registration and hooks.
+- ``figure_layout.py`` for widget tree/layout decisions.
+- ``PlotlyPane.py`` for robust Plotly resizing in notebook containers.
 """
 
 from __future__ import annotations
 
-# NOTE: This file is Figure.py with the Info Components API implemented.
-#       It is intended as a drop-in replacement.
-
-"""Widgets and interactive plotting helpers for math exploration in Jupyter.
-
-This file defines two main ideas:
-
-1) OneShotOutput
-   A small safety wrapper around ``ipywidgets.Output`` that can only be displayed once.
-   This prevents a common notebook confusion: accidentally displaying the *same* widget
-   in multiple places and then wondering which one is “live”.
-
-2) Figure (+ Plot)
-   A thin, student-friendly wrapper around ``plotly.graph_objects.FigureWidget`` that:
-   - plots SymPy expressions by compiling them to NumPy via ``numpify_cached``,
-   - supports interactive parameter sliders (via ``FloatSlider``),
-   - optionally provides an *Info* area (a stack of ``ipywidgets.Output`` widgets),
-   - re-renders automatically when you pan/zoom (throttled) or move a slider.
-
-The intended workflow is:
-
-- define symbols with SymPy (e.g. ``x, a = sp.symbols("x a")``),
-- create a ``Figure``,
-- add one or more plots with ``Figure.plot(...)``,
-- optionally add parameters (sliders) explicitly by passing ``parameters=[a, ...]``.
-- otherwise, parameters are autodetected from the expression (all free symbols that are not the plot variable) and added automatically.
-
----------------------------------------------------------------------------
-Quick start (in a Jupyter notebook)
----------------------------------------------------------------------------
-
->>> import sympy as sp
->>> from Figure import Figure  # wherever this file lives
->>>
->>> x, a = sp.symbols("x a")
->>> fig = Figure(x_range=(-6, 6), y_range=(-3, 3))
->>> fig.plot(x, sp.sin(x), id="sin")
->>> fig.plot(x, a*sp.cos(x), id="a_cos")  # adds a slider for a
->>> fig.title = "Sine and a·Cosine"
->>> fig  # display in the output cell (or use display(fig))
-
-Tip: if you omit ``parameters`` when calling ``plot``, Figure will infer them
-from the expression and create sliders automatically. Pass ``[]`` to disable that.
-
-Info panel
-----------
-The sidebar has two sections:
-
-- **Parameters**: auto-created sliders for SymPy symbols.
-- **Info**: a container that holds *Output widgets* created by
-  :attr:`Figure.info_output`. This design is deliberate: printing directly
-  into a container widget is ambiguous in Jupyter, but printing into an
-  ``Output`` widget is well-defined.
-  Info outputs are keyed by id and can be retrieved via
-  ``fig.info_output[id]`` for advanced output-widget usage.
-
-Notes for students
-------------------
-- SymPy expressions are symbolic. They are like *formulas*.
-- Plotly needs numerical values (arrays of numbers).
-- ``numpify_cached`` bridges the two: it turns a SymPy expression into a NumPy-callable function.
-- Sliders provide the numeric values of parameters like ``a`` in real time.
-
-Architecture Note (For Developers)
-----------------------------------
-To avoid a "God Object," responsibilities are split via composition:
-- Figure: The main coordinator/facade.
-- FigureLayout: Handles all UI/Widget construction, CSS/JS injection, and layout logic.
-- ParameterManager: Handles slider creation, storage, and change hooks. Acts as a dict proxy.
-- InfoPanelManager: Handles the info sidebar and component registry.
-- Plot: Handles the specific math-to-trace rendering logic.
-
-
-Logging / debugging
--------------------
-This module uses the standard Python ``logging`` framework (no prints). By default it installs a
-``NullHandler``, so you will see nothing unless you configure logging.
-
-In a Jupyter/JupyterLab notebook, enable logs like this:
-
-    import logging
-    logging.basicConfig(level=logging.INFO)   # or logging.DEBUG
-
-To limit output to just this module, set its logger level instead:
-
-    import logging
-    logging.getLogger(__name__).setLevel(logging.DEBUG)
-
-Notes:
-- INFO render messages are rate-limited to ~1.0s.
-- DEBUG range messages (x_range/y_range) are rate-limited to ~0.5s.
-"""
 
 import re
 import time

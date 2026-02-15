@@ -1,4 +1,50 @@
-"""Plot model for Figure."""
+"""Per-curve plotting model used by :mod:`gu_toolkit.Figure`.
+
+Purpose
+-------
+Defines ``Plot``, the unit that turns one symbolic expression into one Plotly
+trace. The class handles expression compilation, domain sampling, numeric
+execution, and trace updates.
+
+Concepts and structure
+----------------------
+Each ``Plot`` instance owns:
+
+- symbolic state (variable/expression/parameters),
+- compiled numeric callable state (via ``numpify_cached``),
+- rendering state (sampled x/y arrays and trace handle),
+- style state (line/trace overrides).
+
+Architecture notes
+------------------
+``Plot`` is intentionally scoped to curve-level concerns and is orchestrated by
+``Figure``. Figure-level concerns (layout, parameter registry, batching,
+context management) are outside this module.
+
+Important gotchas
+-----------------
+- ``parameters`` defaults are immutable tuples to avoid cross-instance leakage.
+- ``sampling_points`` can be ``None`` to inherit figure defaults.
+- ``render()`` updates an existing trace in-place; consumers should not assume
+  a new trace object is created on each render.
+
+Examples
+--------
+>>> import sympy as sp
+>>> from gu_toolkit.Figure import Figure
+>>> x = sp.symbols("x")
+>>> fig = Figure()
+>>> p = fig.plot(x, sp.sin(x), id="sin")  # doctest: +SKIP
+>>> p.sampling_points = 800  # doctest: +SKIP
+
+Discoverability
+---------------
+See next:
+
+- ``Figure.py`` for orchestration and public API.
+- ``numpify.py`` for symbolic→numeric compilation.
+- ``PlotSnapshot.py`` for serialization/reproducibility support.
+"""
 
 from __future__ import annotations
 
@@ -38,9 +84,9 @@ class Plot:
         var: Symbol,
         func: Expr,
         smart_figure: "Figure",
-        parameters: Sequence[Symbol] = [],
+        parameters: Sequence[Symbol] = (),
         x_domain: Optional[RangeLike] = None,
-        sampling_points: Optional[int,str] = None,
+        sampling_points: Optional[Union[int, str]] = None,
         label: str = "",
         visible: VisibleSpec = True,
         color: Optional[str] = None,
@@ -126,7 +172,7 @@ class Plot:
         
         self.render()
 
-    def set_func(self, var: Symbol, func: Expr, parameters: Sequence[Symbol] = []) -> None:
+    def set_func(self, var: Symbol, func: Expr, parameters: Sequence[Symbol] = ()) -> None:
         """
         Set the independent variable and symbolic function for this plot.
         Triggers recompilation via ``numpify_cached``.

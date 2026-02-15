@@ -1,4 +1,44 @@
-"""General-purpose queued debouncing helpers."""
+"""Queued debouncing utilities for callback-driven UI updates.
+
+Purpose
+-------
+Provides ``QueuedDebouncer``, a small utility that buffers callback invocations
+and executes them on a fixed cadence.
+
+Concepts and structure
+----------------------
+Calls are queued as immutable payloads (args/kwargs). On each tick, the
+callback receives either the oldest call or, when ``drop_overflow=True``, only
+the most recent queued call.
+
+Architecture notes
+------------------
+Scheduling supports both async-loop and threaded environments:
+
+- Uses ``asyncio.get_running_loop().call_later`` when an event loop exists.
+- Falls back to ``threading.Timer`` otherwise.
+
+Important gotchas
+-----------------
+- Callback exceptions are logged and contained so the queue keeps processing.
+- The class does not retry failed callbacks; it only isolates failures.
+- ``execute_every_ms`` must be strictly positive.
+
+Examples
+--------
+>>> events = []
+>>> def cb(v):
+...     events.append(v)
+>>> d = QueuedDebouncer(cb, execute_every_ms=50, drop_overflow=True)
+>>> d(1); d(2)  # doctest: +SKIP
+
+Discoverability
+---------------
+Related modules:
+
+- ``Figure.py`` and ``figure_info.py`` for integration points.
+- ``tests/test_debouncing_error_handling.py`` for behavior guarantees.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +47,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Deque, Optional, Tuple
 import asyncio
 import threading
-import warnings
+import logging
 
 
 @dataclass
@@ -84,5 +124,5 @@ class QueuedDebouncer:
 
         try:
             self._callback(*call.args, **call.kwargs)
-        except Exception as exc:  # pragma: no cover - defensive callback boundary
-            warnings.warn(f"QueuedDebouncer callback failed: {exc}")
+        except Exception:  # pragma: no cover - defensive callback boundary
+            logging.getLogger(__name__).exception("QueuedDebouncer callback failed")
