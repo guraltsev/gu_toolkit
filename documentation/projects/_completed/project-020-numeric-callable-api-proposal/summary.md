@@ -45,3 +45,11 @@ The numeric callable suite covers:
 - dynamic context and freeze/unfreeze workflows,
 - free-variable/signature tracking,
 - vectorized execution behavior.
+
+## Implemented change log (since `2132b4463f4333bfb878c321872f1e098c08e9ae`)
+
+- `607667b`: completed the migration baseline by updating runtime consumers and expanding NumericFunction-focused tests (`numpify.py`, `Figure.py`, `figure_plot.py`, `numeric_operations.py`, `tests/test_numeric_callable_api.py`).
+- `17f293a`: removed the remaining `NumpifiedFunction` compatibility surface from public exports and aligned docs/tests with the new canonical API (`__init__.py`, `numpify.py`, `tests/test_numeric_callable_api.py`, `tests/test_numpify_refactor.py`, and related documentation updates).
+- `081aaea`: finalized project-020 planning/summary documentation with completion status.
+
+Project 020 is fully complete and has been moved under `documentation/projects/_completed/`.
