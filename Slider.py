@@ -6,6 +6,7 @@ step/default) and helper APIs for parameter-reference integration.
 
 import ipywidgets as widgets
 import traitlets
+from typing import Any, Sequence, cast
 
 from .InputConvert import InputConvert
 
@@ -41,13 +42,13 @@ class FloatSlider(widgets.VBox):
 
     def __init__(
         self,
-        value=0.0,
-        min=0.0,
-        max=1.0,
-        step=0.1,
-        description="Value:",
-        **kwargs,
-    ):
+        value: float = 0.0,
+        min: float = 0.0,
+        max: float = 1.0,
+        step: float = 0.1,
+        description: str = "Value:",
+        **kwargs: Any,
+    ) -> None:
         """Create a slider with a single editable numeric field and settings panel.
 
         Parameters
@@ -293,8 +294,8 @@ class FloatSlider(widgets.VBox):
         self.settings_panel.add_class("smart-slider-settings-panel")
         self.settings_modal.add_class("smart-slider-settings-modal")
         self.settings_modal.add_class("smart-slider-settings-modal-global")
-        self._top_row = None
-        self._modal_host = None
+        self._top_row: widgets.HBox | None = None
+        self._modal_host: widgets.Box | None = None
 
         # --- Layout -----------------------------------------------------------
         top_row = widgets.HBox(
@@ -360,7 +361,7 @@ class FloatSlider(widgets.VBox):
         finally:
             self._syncing = False
 
-    def _sync_number_from_slider(self, change) -> None:
+    def _sync_number_from_slider(self, change: Any) -> None:
         """Update the numeric field when the slider moves.
 
         Parameters
@@ -377,7 +378,7 @@ class FloatSlider(widgets.VBox):
             return
         self._sync_number_text(change.new)
 
-    def _sync_limit_texts(self, change) -> None:
+    def _sync_limit_texts(self, change: Any) -> None:
         """Refresh min/max limit text fields from the slider limits.
 
         Parameters
@@ -399,7 +400,7 @@ class FloatSlider(widgets.VBox):
         finally:
             self._syncing = False
 
-    def _commit_limit_value(self, change, *, limit: str) -> None:
+    def _commit_limit_value(self, change: Any, *, limit: str) -> None:
         """Parse and apply min/max limits from text inputs.
 
         Parameters
@@ -437,7 +438,7 @@ class FloatSlider(widgets.VBox):
             finally:
                 self._syncing = False
 
-    def _commit_min_value(self, change) -> None:
+    def _commit_min_value(self, change: Any) -> None:
         """Commit the minimum limit from the min text field.
 
         Parameters
@@ -452,7 +453,7 @@ class FloatSlider(widgets.VBox):
         """
         self._commit_limit_value(change, limit="min")
 
-    def _commit_max_value(self, change) -> None:
+    def _commit_max_value(self, change: Any) -> None:
         """Commit the maximum limit from the max text field.
 
         Parameters
@@ -467,7 +468,7 @@ class FloatSlider(widgets.VBox):
         """
         self._commit_limit_value(change, limit="max")
 
-    def _commit_text_value(self, change) -> None:
+    def _commit_text_value(self, change: Any) -> None:
         """
         Commit text input to the slider when the user finishes editing.
 
@@ -515,7 +516,7 @@ class FloatSlider(widgets.VBox):
 
     # --- Button handlers ------------------------------------------------------
 
-    def _reset(self, _) -> None:
+    def _reset(self, _: Any) -> None:
         """Reset the slider value to its initial default.
 
         Parameters
@@ -716,7 +717,7 @@ class FloatSlider(widgets.VBox):
         """
         self._reset(None)
 
-    def make_refs(self, symbols):
+    def make_refs(self, symbols: Sequence[Any]) -> dict[Any, Any]:
         """Create ParamRef mappings for provided symbols.
 
         Parameters
@@ -752,7 +753,7 @@ class FloatSlider(widgets.VBox):
         symbol = symbols[0]
         return {symbol: ProxyParamRef(symbol, self)}
 
-    def set_modal_host(self, host) -> None:
+    def set_modal_host(self, host: widgets.Box | None) -> None:
         """Attach the settings modal to a host container.
 
         Parameters
@@ -776,15 +777,18 @@ class FloatSlider(widgets.VBox):
         modal_add_class = getattr(self.settings_modal, "add_class", None)
         modal_remove_class = getattr(self.settings_modal, "remove_class", None)
 
+        top_row = cast(widgets.HBox, self._top_row)
+
         if host is None:
-            if self.settings_modal not in self.children:
-                self.children = (self._top_row, self.settings_modal)
+            current_children = cast(tuple[Any, ...], self.children)
+            if self.settings_modal not in current_children:
+                cast(Any, self).children = (top_row, self.settings_modal)
             if callable(modal_remove_class):
                 modal_remove_class("smart-slider-settings-modal-hosted")
             if callable(modal_add_class):
                 modal_add_class("smart-slider-settings-modal-global")
         else:
-            self.children = (self._top_row,)
+            cast(Any, self).children = (top_row,)
             add_class = getattr(host, "add_class", None)
             if callable(add_class):
                 add_class("smart-slider-modal-host")
@@ -797,7 +801,7 @@ class FloatSlider(widgets.VBox):
 
         self._modal_host = host
 
-    def _toggle_settings(self, _) -> None:
+    def _toggle_settings(self, _: Any) -> None:
         """Toggle visibility of the settings panel.
 
         Parameters
@@ -813,5 +817,4 @@ class FloatSlider(widgets.VBox):
         is_open = self.settings_modal.layout.display == "flex"
         self.settings_modal.layout.display = "none" if is_open else "flex"
         self.settings_panel.layout.display = "none" if is_open else "flex"
-
 
