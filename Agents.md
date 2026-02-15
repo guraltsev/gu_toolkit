@@ -14,10 +14,14 @@ This repository is notebook-facing and API-facing. Preserve the existing documen
 - Functions/classes listed in docs, guides, or examples.
 
 ## Module-level documentation
-- Each module should start with a brief docstring explaining:
+- Each module should start with a comprehensive docstring explaining:
   - what the module is for,
-  - key concepts/structure,
+  - concepts/structure,
+  - architecture
   - important gotchas.
+- Public modules documentation should also have:
+	- a section with examples of use 
+	- a section to aid discoverability (what to look at next).
 
 ## README/docs maintenance
 - If behavior, configuration, or public API changes, update docs in the same change.
