@@ -5,14 +5,14 @@
 
 `TypeError: argument of type '_Ctx' is not iterable`
 
-The failure is raised from `NumpifiedFunction.__call__` in `numpify.py` during dynamic parameter resolution.
+The failure is raised from `NumericFunction.__call__` in `numpify.py` during dynamic parameter resolution.
 
 ## Analysis
 - The failing path is dynamic-parameter evaluation after calling:
   - `set_parameter_context(ctx)`
   - `freeze({a: DYNAMIC_PARAMETER})`
 - `ctx` in the test is a context object that supports key-based retrieval but does not implement container membership via `__contains__`/iteration.
-- `NumpifiedFunction.__call__` currently checks dynamic availability with `if sym not in self._parameter_context:`.
+- `NumericFunction.__call__` currently checks dynamic availability with `if sym not in self._parameter_context:`.
 - That membership check assumes iterability/container semantics and raises `TypeError` for mapping-like context objects that are still valid parameter providers.
 
 ## Why this is a bug

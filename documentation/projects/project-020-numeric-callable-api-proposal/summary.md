@@ -1,66 +1,47 @@
-# Project 020: Numeric Callable API (Implemented)
+# Project 020: Numeric Callable API (Completed)
 
-## Implementation audit status
+## Completion status
 
-This project is **partially implemented**, but not yet fully complete against the full plan.
+This project is **fully implemented and cleaned up**.
 
-### Still TODO
+## Delivered outcomes
 
-1. **Complete internal migration to `NumericFunction` (Phase 3.1).**
-   - Core modules still type/import against `NumpifiedFunction` in several places (for example: `Figure.py`, `figure_plot.py`, and `numeric_operations.py`).
-2. **Complete public narrative replacement (Phase 3.3).**
-   - Several docs and internal review notes still describe behavior primarily in `NumpifiedFunction` terms.
-3. **Post-migration cleanup (Phase 4).**
-   - Transitional compatibility surface has not been reduced yet (`NumpifiedFunction` remains part of runtime and dependent typing paths), and no cleanup pass has been documented.
+### Canonical API
 
-## What shipped
+- `NumericFunction` is the only supported numeric callable class.
+- `numpify(...)` / `numpify_cached(...)` return `NumericFunction`.
+- Legacy `NumpifiedFunction` compatibility paths were removed from runtime and public exports.
 
-This project is now implemented with `NumericFunction` as the canonical numeric callable API and a compatibility `NumpifiedFunction` constructor.
+### Unified `vars` contract
 
-### Core behavior
+`vars` supports all proposed forms:
 
-1. `numpify(...)` now returns `NumericFunction`.
-2. `NumpifiedFunction` remains available as a compatibility subclass/constructor.
-3. Legacy construction defaults `symbolic=None` when omitted.
-4. Freeze/unfreeze, dynamic parameter context, and call-signature behavior are shared through the same runtime class.
+1. `vars=(x, y)`
+2. `vars=(x, {"y": y, "scale": s})`
+3. `vars={"x": x, "scale": s}`
+4. `vars={0: x, 1: y, "scale": s}`
 
-## Unified `vars` contract
+Validation guarantees:
 
-`vars` now supports the proposal forms:
+- integer keys are contiguous from `0`,
+- non-integer mapping keys are strings,
+- duplicate symbols are rejected,
+- normalized argument naming is deterministic and collision-safe.
 
-1. **Pure positional**
-   - `vars=(x, y)`
-2. **Positional + keyed tail mapping**
-   - `vars=(x, {"y": y, "scale": s})`
-3. **Pure keyed mapping**
-   - `vars={"x": x, "scale": s}`
-4. **Indexed positional mapping + keyed mapping**
-   - `vars={0: x, 1: y, "scale": s}`
+### Runtime behavior
 
-Validation rules implemented:
+- freeze/unfreeze behavior is implemented directly on `NumericFunction`.
+- dynamic parameter-context evaluation is supported via `set_parameter_context(...)` and `DYNAMIC_PARAMETER`.
+- `vars` remains backward-friendly as tuple-like iterable, while `vars()` returns the round-trip spec.
+- signature introspection tracks currently free variables.
 
-- Integer keys must be contiguous from `0` with no gaps.
-- Non-integer mapping keys must be strings.
-- Duplicate symbols in the normalized contract are rejected.
+### Comprehensive tests
 
-## Round-trip behavior
+The numeric callable suite covers:
 
-`NumericFunction.vars` is now a compatibility accessor with two modes:
-
-- Iteration/indexing (`tuple(fn.vars)`) exposes positional symbols for legacy compatibility.
-- Calling (`fn.vars()`) returns the original normalized vars specification for round-trip reconstruction.
-
-## Test coverage added
-
-`tests/test_numeric_callable_api.py` covers:
-
-- `numpify` return type and `symbolic` payload.
-- legacy compatibility construction defaults.
-- mixed positional+keyed calling.
-- integer-key mapping behavior and contiguity validation.
-- freeze/unfreeze parity across canonical and compatibility construction.
-
-## Audit notes
-
-- Phase 1 and Phase 2 deliverables are implemented and covered by tests.
-- Full completion is currently blocked on Phase 3/4 migration and cleanup work above.
+- constructor and return-type contract,
+- all supported `vars` modes,
+- keyed/positional calling validation,
+- dynamic context and freeze/unfreeze workflows,
+- free-variable/signature tracking,
+- vectorized execution behavior.

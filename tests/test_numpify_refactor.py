@@ -15,7 +15,7 @@ class _Cell:
 
 
 class _Ctx(Mapping[sp.Symbol, float]):
-    """Simple live parameter provider used by NumpifiedFunction tests."""
+    """Simple live parameter provider used by NumericFunction tests."""
 
     def __init__(self, mapping):
         self.parameters = {k: _Cell(v) for k, v in mapping.items()}

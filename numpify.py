@@ -106,7 +106,6 @@ __all__ = [
     "UNFREEZE",
     "ParameterContext",
     "NumericFunction",
-    "NumpifiedFunction",
 ]
 
 
@@ -417,13 +416,6 @@ class NumericFunction:
         return f"NumericFunction({self.symbolic!r}, vars=({vars_str}))"
 
 
-class NumpifiedFunction(NumericFunction):
-    """Compatibility constructor for :class:`NumericFunction`."""
-
-    def __init__(self, fn: Callable[..., Any], vars: _VarsInput | None = None, symbolic: sp.Basic | None = None, call_signature: tuple[tuple[sp.Symbol, str], ...] | None = None, source: str = "", **kwargs: Any) -> None:
-        super().__init__(fn=fn, vars=vars, symbolic=symbolic, call_signature=call_signature, source=source, **kwargs)
-
-
 def numpify(
     expr: Any,
     *,
@@ -528,7 +520,7 @@ def _numpify_uncached(
 
     Returns
     -------
-    NumpifiedFunction
+    NumericFunction
         A generated callable wrapper with expression metadata and source text.
 
     Raises
