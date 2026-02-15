@@ -1,4 +1,4 @@
-# Project 04: Testing Infrastructure & CI
+# Project 005: Testing Infrastructure & CI
 
 **Priority:** High
 **Effort:** Medium

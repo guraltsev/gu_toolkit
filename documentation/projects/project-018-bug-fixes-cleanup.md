@@ -1,4 +1,4 @@
-# Project 006: Fix Known Bugs & Clean Up Stale Code
+# Project 018: Fix Known Bugs & Clean Up Stale Code
 
 **Priority:** Medium
 **Effort:** Low

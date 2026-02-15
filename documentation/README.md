@@ -20,7 +20,6 @@ This folder uses a lightweight lifecycle structure so active work is easy to fin
 Use stable issue identifiers, for example:
 
 - `issue-018-short-description.md`
-- `bug-021-short-description.md`
 
 ## Project workflow (`documentation/projects`)
 
