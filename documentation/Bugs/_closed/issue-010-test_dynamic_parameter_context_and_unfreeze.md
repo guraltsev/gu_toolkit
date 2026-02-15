@@ -5,7 +5,7 @@
 
 ## Analysis
 - Same namespace/import collision as Issue 002.
-- Test scenario itself appears valid for `NumpifiedFunction` dynamic binding and unfreeze workflow.
+- Test scenario itself appears valid for `NumericFunction` dynamic binding and unfreeze workflow.
 
 ## Proposed solution
 - Apply Issue 002 fix.

@@ -106,7 +106,6 @@ __all__ = [
     "UNFREEZE",
     "ParameterContext",
     "NumericFunction",
-    "NumpifiedFunction",
 ]
 
 
@@ -415,16 +414,6 @@ class NumericFunction:
     def __repr__(self) -> str:
         vars_str = ", ".join(name for _, name in self.call_signature)
         return f"NumericFunction({self.symbolic!r}, vars=({vars_str}))"
-
-
-class NumpifiedFunction(NumericFunction):
-    """Backward-compatible alias constructor for :class:`NumericFunction`.
-
-    New code should use :class:`NumericFunction` directly.
-    """
-
-    def __init__(self, fn: Callable[..., Any], vars: _VarsInput | None = None, symbolic: sp.Basic | None = None, call_signature: tuple[tuple[sp.Symbol, str], ...] | None = None, source: str = "", **kwargs: Any) -> None:
-        super().__init__(fn=fn, vars=vars, symbolic=symbolic, call_signature=call_signature, source=source, **kwargs)
 
 
 def numpify(

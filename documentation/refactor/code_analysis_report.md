@@ -56,7 +56,7 @@ These choices prevent a class of subtle state-sharing bugs that are common in ca
 ### 4. Smart Compilation Pipeline
 `numpify.py` provides a thoughtful SymPy-to-NumPy compiler with a **compile-once, call-many** design:
 - Expressions are compiled with both the independent variable AND parameters as positional arguments (`figure_plot.py:159` — `numpify_cached(func, vars=[var] + parameters)`). On slider drags, the same compiled function is called with updated parameter values — **no recompilation occurs**.
-- `DYNAMIC_PARAMETER` sentinel and `NumpifiedFunction.set_parameter_context()` enable parameter values to be resolved from the figure's live `parameter_context` at call time (`figure_plot.py:178`), making the render path a pure function call with no compilation overhead.
+- `DYNAMIC_PARAMETER` sentinel and `NumericFunction.set_parameter_context()` enable parameter values to be resolved from the figure's live `parameter_context` at call time (`figure_plot.py:178`), making the render path a pure function call with no compilation overhead.
 - LRU caching (`numpify_cached`) avoids redundant compilation when the same symbolic expression is plotted again (e.g., re-executing a notebook cell). It is **not** needed for the slider-drag hot path — that path is already compilation-free by design.
 - Custom function support via `f_numpy` attribute detection means users can extend the system without modifying core code.
 - Identifier mangling handles edge cases (reserved words, symbols with special characters).

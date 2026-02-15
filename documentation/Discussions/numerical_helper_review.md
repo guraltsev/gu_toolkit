@@ -20,7 +20,7 @@ Primary files inspected:
 ## What the feature delivers well
 
 1. **Clear callable resolution pipeline for numeric helpers.**  
-   `_resolve_numeric_callable(...)` now centralizes behavior for symbolic expressions, `sympy.Lambda`, `NumpifiedFunction`, and plain callables. This makes `NIntegrate` and `NReal_Fourier_Series` share the same semantics and reduces divergence risk.
+   `_resolve_numeric_callable(...)` now centralizes behavior for symbolic expressions, `sympy.Lambda`, `NumericFunction`, and plain callables. This makes `NIntegrate` and `NReal_Fourier_Series` share the same semantics and reduces divergence risk.
 
 2. **Freeze forwarding is now explicit and consistent.**  
    Both `NIntegrate` and `NReal_Fourier_Series` accept `freeze` and `**freeze_kwargs`, and forward these through the shared resolution path. This is a practical improvement for multi-parameter symbolic expressions.
@@ -37,7 +37,7 @@ Primary files inspected:
 
 ### 1) Dynamic parameter-context protocol is still brittle/incomplete
 
-**Problem:** The runtime lookup in `NumpifiedFunction.__call__` still uses container membership (`if sym not in self._parameter_context:`) before indexed access. This assumes full container protocol support and can fail for valid key-retrieval context providers.
+**Problem:** The runtime lookup in `NumericFunction.__call__` still uses container membership (`if sym not in self._parameter_context:`) before indexed access. This assumes full container protocol support and can fail for valid key-retrieval context providers.
 
 **Observed behavior:** With a context object that implements `__getitem__` but not full iterable/container semantics, dynamic evaluation fails (`KeyError: 0` in local repro) instead of producing clear missing-parameter behavior.
 
@@ -87,7 +87,7 @@ This is not necessarily wrong today, but the verification envelope is narrow com
 
 ## Recommended follow-ups
 
-1. **Finish the dynamic-context protocol fix in `NumpifiedFunction.__call__`:**
+1. **Finish the dynamic-context protocol fix in `NumericFunction.__call__`:**
    - Prefer `try: value = ctx[sym]` (and possibly `ctx[sym.name]` fallback if desired),
    - treat `KeyError` as missing binding,
    - avoid membership checks relying on iteration/container protocol.

@@ -15,7 +15,6 @@ from .NamedFunction import NamedFunction as NamedFunction
 from .numeric_callable import (
     DYNAMIC_PARAMETER,
     NumericFunction,
-    NumpifiedFunction,
     ParameterContext,
     UNFREEZE,
     numpify,

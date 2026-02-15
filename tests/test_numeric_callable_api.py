@@ -36,14 +36,6 @@ def test_numpify_returns_numeric_function_with_symbolic() -> None:
     assert out.symbolic == x + 1
 
 
-def test_legacy_numpified_function_defaults_symbolic_none() -> None:
-    x = sp.Symbol("x")
-    legacy = numpify_module.NumpifiedFunction(lambda v: v + 2, vars=(x,))
-    assert isinstance(legacy, numpify_module.NumericFunction)
-    assert legacy.symbolic is None
-    assert legacy(3) == 5
-
-
 def test_numeric_function_can_wrap_pure_python_callable_without_symbolic() -> None:
     x, a, b = sp.symbols("x a b")
 
@@ -107,23 +99,6 @@ def test_integer_mapping_keys_must_be_contiguous() -> None:
         raise AssertionError("Expected contiguity validation failure")
 
 
-def test_freeze_unfreeze_parity_for_legacy_and_numeric() -> None:
-    x, a = sp.symbols("x a")
-    compiled = numpify_module.numpify(a * x, vars=(x, a), cache=False)
-
-    via_numeric = compiled.freeze({a: 2})
-    via_legacy = numpify_module.NumpifiedFunction(
-        compiled._fn,
-        vars=(x, a),
-        symbolic=compiled.symbolic,
-        call_signature=compiled.call_signature,
-        source=compiled.source,
-    ).freeze({a: 2})
-
-    assert via_numeric(3) == via_legacy(3) == 6
-    assert via_numeric.unfreeze(a)(3, 4) == via_legacy.unfreeze(a)(3, 4) == 12
-
-
 def test_dynamic_parameter_context_uses_lookup_only_mapping() -> None:
     x, a = sp.symbols("x a")
     compiled = numpify_module.numpify(a * x, vars=(x, a), cache=False)
@@ -145,6 +120,15 @@ def test_signature_and_free_var_tracking_with_keyed_tail() -> None:
     assert dynamic.free_vars == (x,)
     assert dynamic.free_var_signature == ((x, "x"),)
     assert str(inspect.signature(dynamic)) == "(x, /)"
+
+
+def test_freeze_unfreeze_roundtrip_for_numeric_function() -> None:
+    x, a = sp.symbols("x a")
+    compiled = numpify_module.numpify(a * x, vars=(x, a), cache=False)
+    frozen = compiled.freeze({a: 2.0})
+
+    assert frozen(3.0) == 6.0
+    assert frozen.unfreeze(a)(3.0, 4.0) == 12.0
 
 
 def test_keyed_calling_validation_errors() -> None:
