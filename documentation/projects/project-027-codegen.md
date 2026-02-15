@@ -1,6 +1,6 @@
 # Project 027: Configurable Figure Code Generation
 
-**Status:** Proposal  
+**Status:** Proposal (clarified)  
 **Priority:** High
 
 ## Goal
@@ -17,7 +17,7 @@ Add explicit codegen options (for `Figure.to_code(...)` and lower-level helper A
   - `False`: assume symbols already exist in caller scope.
 - `infinity_style: Literal["oo", "context"] = "oo"`
   - `"oo"`: preserve direct `sp.oo` usage in generated expressions/ranges.
-  - `"context"`: emit a context-manager style form using `with ..` where supported by the toolkit's generated-script conventions.
+  - `"context"`: emit a small context-manager prelude and `with ...:` block around generated figure setup so scripts can swap infinity semantics without editing each expression site.
 
 ## Dynamic Info Serialization Policy (New)
 When a registered `fig.info(...)` entry contains dynamic/callable segments:
@@ -29,6 +29,17 @@ When a registered `fig.info(...)` entry contains dynamic/callable segments:
      - `import inspect`
      - `print(inspect.getsource(my_dynamic_func))`
 3. Keep static-only info cards as active executable `fig.info(...)` calls.
+
+## Clarified Decisions (Resolved)
+The previous open questions are now resolved for implementation planning:
+
+1. **`infinity_style="context"` semantics**
+   - Use **one generated context block** around the figure-construction section (single context, not per-plot).
+   - Keep the rest of emitted code unchanged so diffs remain small between `"oo"` and `"context"` output.
+2. **Public API surface**
+   - Expose `CodegenOptions` publicly as `gu_toolkit.CodegenOptions` for discoverability and stable typing.
+3. **If commented dynamic info emission is disabled**
+   - Emit a **placeholder comment** (`# dynamic info omitted`) rather than silently dropping content.
 
 ## Proposed API Sketch
 ```python
@@ -53,21 +64,19 @@ class Figure:
 
 ## Implementation Plan
 - [ ] Introduce `CodegenOptions` in `codegen.py` and thread options through `figure_to_code`.
+- [ ] Export `CodegenOptions` from package root (`gu_toolkit.CodegenOptions`).
 - [ ] Add conditional generation for imports and symbol declarations.
-- [ ] Add configurable infinity emission mode (`sp.oo` vs context-manager output mode).
+- [ ] Add configurable infinity emission mode (`sp.oo` vs single context-manager wrapper mode).
 - [ ] Update dynamic-info emission:
   - [ ] emit commented-out registration code for dynamic entries,
-  - [ ] append standardized "define callables first" and `inspect.getsource(...)` guidance comments.
+  - [ ] append standardized "define callables first" and `inspect.getsource(...)` guidance comments,
+  - [ ] when disabled, emit placeholder comment (`# dynamic info omitted`).
 - [ ] Add tests for each option combination and mixed static/dynamic info cards.
 - [ ] Update docs with examples for notebook embedding and script embedding.
-
-## Open Questions
-- [ ] Confirm exact syntax/semantics expected for the `"context"` infinity style (single context, per-block context, or helper wrapper).
-- [ ] Decide whether `CodegenOptions` should live publicly (`gu_toolkit.CodegenOptions`) or remain internal keyword options.
-- [ ] Decide default behavior for dynamic info when comments are disabled (drop vs placeholder comment).
 
 ## Exit Criteria
 - [ ] Users can toggle imports and symbol definitions independently.
 - [ ] Users can select infinity emission style and get deterministic output.
 - [ ] Dynamic info registrations appear as commented blocks with actionable recovery guidance directly below each call.
+- [ ] If dynamic comments are disabled, generated output still makes omission explicit.
 - [ ] New tests cover configuration branches and preserve current default behavior.

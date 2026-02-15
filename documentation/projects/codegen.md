@@ -7,7 +7,7 @@
 - [x] `Figure.to_code()` pipeline exists (`codegen.py`, `Figure.py`).
 - [x] Regression tests for generated code flow exist (`tests/test_figure_snapshot_codegen.py`).
 - [ ] Confirm current docs match exact serialization limits (dynamic info/hook behavior).
-- [x] Numbered follow-up proposal created: `project-027-codegen.md`.
+- [x] Numbered follow-up proposal created and clarified: `project-027-codegen.md`.
 
 ---
 
