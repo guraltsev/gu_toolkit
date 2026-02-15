@@ -32,3 +32,27 @@ def test_plot_membership_helpers_add_and_remove_views() -> None:
     assert p.views == ("alt", "main")
     p.remove_views("main")
     assert p.views == ("alt",)
+
+
+def test_parameter_change_marks_inactive_view_stale_until_activation() -> None:
+    x, a = sp.symbols("x a")
+    fig = Figure()
+    fig.add_view("alt")
+    fig.plot(x, a * sp.sin(x), parameters=[a], id="sin", view=("main", "alt"))
+
+    fig.parameter(a, value=1.0)
+    fig.set_active_view("main")
+    fig.parameter(a).value = 2.0
+
+    assert fig.views["alt"].is_stale is True
+    fig.set_active_view("alt")
+    assert fig.views["alt"].is_stale is False
+
+
+def test_layout_shows_tabs_only_for_multi_view() -> None:
+    fig = Figure()
+    assert fig._layout.view_tabs.layout.display == "none"
+    fig.add_view("alt")
+    assert fig._layout.view_tabs.layout.display == "flex"
+    assert fig._layout.view_tabs.get_title(0) == "main"
+    assert fig._layout.view_tabs.get_title(1) == "alt"
