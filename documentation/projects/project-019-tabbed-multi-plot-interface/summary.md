@@ -98,10 +98,21 @@ Each phase below is intended to be mergeable while keeping notebook workflows fu
 To avoid rework, these questions should be answered/confirmed explicitly:
 
 1. **Default view identity:** should the implicit first view always be `"main"`, or should it be user-configurable at `Figure(...)` construction?
+
+ANSWER: Default main but configurable at Figure construction. 
+
+
 2. **Backwards compatibility for `plot(id=...)`:** if an existing plot is updated with a narrower `view=` set, should removed memberships be deleted automatically, or only when explicitly removed?
+ANSWER: automatically
+
 3. **View deletion semantics:** do we need `remove_view(...)` in this project, and what should happen to plots scoped only to that view?
+ANSWER: plots with no views are allowed. We need remove_view() but that is just a wrapper over updating the view= set
+
 4. **Snapshot compatibility strategy:** should `FigureSnapshot` be versioned (e.g., `schema_version`) to preserve loading/codegen behavior for older snapshots?
+ANSWER: yes eventually, this is the last priority for now. 
+
 5. **Initial tab selection behavior:** should stale-refresh run on first display for non-active tabs only, or should all views render once at startup then switch to visibility-gated mode?
+ANSWER: no render if not visible. 
 
 ---
 
