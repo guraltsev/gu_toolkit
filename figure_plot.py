@@ -49,6 +49,7 @@ See next:
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from collections.abc import Mapping
 from typing import Any, Dict, Optional, Sequence, Tuple, Union
 
@@ -62,6 +63,22 @@ from .InputConvert import InputConvert
 from .PlotSnapshot import PlotSnapshot
 from .figure_context import FIGURE_DEFAULT, _is_figure_default
 from .numpify import DYNAMIC_PARAMETER, NumericFunction, numpify_cached
+
+NumberLike = Union[int, float]
+NumberLikeOrStr = Union[int, float, str]
+RangeLike = Tuple[NumberLikeOrStr, NumberLikeOrStr]
+VisibleSpec = Union[bool, str]
+
+
+@dataclass
+class PlotHandle:
+    """Per-view runtime handle for a plot trace binding."""
+
+    plot_id: str
+    view_id: str
+    trace_handle: Optional[go.Scatter]
+    cached_x: Optional[np.ndarray] = None
+    cached_y: Optional[np.ndarray] = None
 
 # SECTION: Plot (The specific logic for one curve) [id: Plot]
 # =============================================================================
@@ -95,6 +112,8 @@ class Plot:
         line: Optional[Mapping[str, Any]] = None,
         opacity: Optional[Union[int, float]] = None,
         trace: Optional[Mapping[str, Any]] = None,
+        plot_id: str = "",
+        view_ids: Optional[Sequence[str]] = None,
     ) -> None:
         """
         Create a new Plot instance. (Usually called by Figure.plot)
@@ -149,12 +168,21 @@ class Plot:
         ``Plot`` directly.
         """
         self._smart_figure = smart_figure
+        self.id = plot_id or label or "plot"
         self._x_data: Optional[np.ndarray] = None
         self._y_data: Optional[np.ndarray] = None
-        
-        # Add trace to figure
+        self._handles: Dict[str, PlotHandle] = {}
+        self._view_ids = set(view_ids or (self._smart_figure.active_view_id,))
+
+        # Add active-view trace (phase 2 keeps rendering pinned to active view).
         self._smart_figure.figure_widget.add_scatter(x=[], y=[], mode="lines", name=label, visible=visible)
         self._plot_handle = self._smart_figure.figure_widget.data[-1]
+        for view_id in self._view_ids:
+            self._handles[view_id] = PlotHandle(
+                plot_id=self.id,
+                view_id=view_id,
+                trace_handle=self._plot_handle if view_id == self._smart_figure.active_view_id else None,
+            )
 
         self._suspend_render = True
         self._update_line_style(color=color, thickness=thickness, dash=dash, line=line)
@@ -217,6 +245,41 @@ class Plot:
     def parameters(self) -> tuple[Symbol, ...]:
         """Return parameter symbols in deterministic numeric-argument order."""
         return self._numpified.vars[1:]
+
+    @property
+    def views(self) -> tuple[str, ...]:
+        """Return sorted view memberships for this plot."""
+        return tuple(sorted(self._view_ids))
+
+    def add_to_view(self, view_id: str) -> None:
+        """Add this plot to a view membership set."""
+        if view_id in self._view_ids:
+            return
+        self._view_ids.add(view_id)
+        self._handles[view_id] = PlotHandle(plot_id=self.id, view_id=view_id, trace_handle=None)
+
+    def remove_from_view(self, view_id: str) -> None:
+        """Remove this plot from a view membership set."""
+        if view_id not in self._view_ids:
+            return
+        self._view_ids.remove(view_id)
+        self._handles.pop(view_id, None)
+
+    def add_views(self, views: Union[str, Sequence[str]]) -> None:
+        """Add one or more views to this plot."""
+        if isinstance(views, str):
+            self.add_to_view(views)
+            return
+        for view_id in views:
+            self.add_to_view(view_id)
+
+    def remove_views(self, views: Union[str, Sequence[str]]) -> None:
+        """Remove one or more views from this plot."""
+        if isinstance(views, str):
+            self.remove_from_view(views)
+            return
+        for view_id in views:
+            self.remove_from_view(view_id)
 
 
     def snapshot(self, *, id: str = "") -> PlotSnapshot:
@@ -577,7 +640,7 @@ class Plot:
         if value is True:
             self.render()
 
-    def render(self) -> None:
+    def render(self, view_id: Optional[str] = None) -> None:
         """
         Compute (x, y) samples and update the Plotly trace.
         Skips computation if the plot is hidden.
@@ -598,11 +661,19 @@ class Plot:
         Rendering uses the figure's current viewport if it has been panned or
         zoomed.
         """
+        target_view = view_id or self._smart_figure.active_view_id
+        if target_view not in self._view_ids:
+            return
         if self._suspend_render or self.visible is not True:
             return
 
-        # 1. Determine Range
+        # Phase 2 keeps concrete rendering pinned to active view only.
         fig = self._smart_figure
+        if target_view != fig.active_view_id:
+            fig.views[target_view].is_stale = True
+            return
+
+        # 1. Determine Range
         viewport = fig.current_x_range or fig.x_range
         
         if self.x_domain is None:
@@ -715,6 +786,16 @@ class Plot:
                 self.sampling_points = None
             else:
                 self.sampling_points = InputConvert(val, int)
+
+        if 'view' in kwargs:
+            requested = kwargs['view']
+            if requested is not None:
+                requested_views = {requested} if isinstance(requested, str) else set(requested)
+                for view_id in tuple(self._view_ids):
+                    if view_id not in requested_views:
+                        self.remove_from_view(view_id)
+                for view_id in requested_views:
+                    self.add_to_view(view_id)
 
         self._update_line_style(
             color=kwargs.get("color"),

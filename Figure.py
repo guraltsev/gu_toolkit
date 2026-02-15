@@ -109,6 +109,7 @@ from .figure_layout import FigureLayout, OneShotOutput
 from .figure_parameters import ParameterManager
 from .figure_info import InfoPanelManager
 from .figure_plot import Plot
+from .figure_view import View
 
 # -----------------------------
 # Small type aliases
@@ -163,7 +164,7 @@ class Figure:
     
     __slots__ = [
         "_layout", "_params", "_info", "_figure", "_pane", "plots",
-        "_x_range", "_y_range", "_sampling_points", "_debug",
+        "_views", "_active_view_id", "_default_view_id", "_sampling_points", "_debug",
         "_render_info_last_log_t", "_render_debug_last_log_t", "_relayout_debouncer",
         "_has_been_displayed", "_print_capture"
     ]
@@ -174,6 +175,7 @@ class Figure:
         x_range: RangeLike = (-4, 4),
         y_range: RangeLike = (-3, 3),
         debug: bool = False,
+        default_view_id: str = "main",
     ) -> None:
         """Initialize a Figure instance with default ranges and sampling.
 
@@ -286,9 +288,11 @@ class Figure:
         self._layout.set_plot_widget(self._pane.widget, reflow_callback=self._pane.reflow)
 
         # 4. Set Initial State
-        self.x_range = x_range
-        self.y_range = y_range
-        
+        self._default_view_id = str(default_view_id)
+        self._views: Dict[str, View] = {}
+        self._active_view_id = self._default_view_id
+        self.add_view(self._default_view_id, x_range=x_range, y_range=y_range)
+
         # 5. Bind Events
         self._render_info_last_log_t = 0.0
         self._render_debug_last_log_t = 0.0
@@ -304,6 +308,79 @@ class Figure:
         )
 
     # --- Properties ---
+
+    @property
+    def active_view_id(self) -> str:
+        """Return the currently active view identifier."""
+        return self._active_view_id
+
+    @property
+    def views(self) -> Dict[str, View]:
+        """Return the workspace view registry."""
+        return self._views
+
+    def _active_view(self) -> View:
+        """Return the active view model."""
+        return self._views[self._active_view_id]
+
+    def add_view(
+        self,
+        id: str,
+        *,
+        title: Optional[str] = None,
+        x_range: Optional[RangeLike] = None,
+        y_range: Optional[RangeLike] = None,
+        x_label: Optional[str] = None,
+        y_label: Optional[str] = None,
+    ) -> View:
+        """Add a view model to the workspace registry."""
+        view_id = str(id)
+        if view_id in self._views:
+            raise ValueError(f"View '{view_id}' already exists")
+        xr = x_range if x_range is not None else (-4.0, 4.0)
+        yr = y_range if y_range is not None else (-3.0, 3.0)
+        view = View(
+            id=view_id,
+            title=title or view_id,
+            x_label=x_label or "",
+            y_label=y_label or "",
+            default_x_range=(float(InputConvert(xr[0], float)), float(InputConvert(xr[1], float))),
+            default_y_range=(float(InputConvert(yr[0], float)), float(InputConvert(yr[1], float))),
+            is_active=(not self._views),
+        )
+        self._views[view_id] = view
+        if view.is_active:
+            self._active_view_id = view_id
+            self._figure.update_xaxes(range=view.default_x_range)
+            self._figure.update_yaxes(range=view.default_y_range)
+        return view
+
+    def set_active_view(self, id: str) -> None:
+        """Set the active view id and synchronize widget ranges."""
+        if id not in self._views:
+            raise KeyError(f"Unknown view: {id}")
+        current = self._active_view()
+        current.viewport_x_range = self._viewport_x_range
+        current.viewport_y_range = self._viewport_y_range
+        current.is_active = False
+
+        self._active_view_id = id
+        nxt = self._active_view()
+        nxt.is_active = True
+        self._figure.update_xaxes(range=nxt.viewport_x_range or nxt.default_x_range)
+        self._figure.update_yaxes(range=nxt.viewport_y_range or nxt.default_y_range)
+
+    def remove_view(self, id: str) -> None:
+        """Remove a view and drop plot memberships to it."""
+        if id == self._active_view_id:
+            raise ValueError("Cannot remove active view")
+        if id == self._default_view_id:
+            raise ValueError("Cannot remove default view")
+        if id not in self._views:
+            return
+        del self._views[id]
+        for plot in self.plots.values():
+            plot.remove_from_view(id)
 
     @property
     def title(self) -> str:
@@ -420,7 +497,7 @@ class Figure:
         --------
         y_range : The default y-axis range.
         """
-        return self._x_range
+        return self._active_view().default_x_range
     
     @x_range.setter
     def x_range(self, value: RangeLike) -> None:
@@ -444,8 +521,9 @@ class Figure:
         -----
         This updates the default Plotly axis range and the visible viewport immediately.
         """
-        self._x_range = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
-        self._figure.update_xaxes(range=self._x_range)
+        rng = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        self._active_view().default_x_range = rng
+        self._figure.update_xaxes(range=rng)
 
     @property
     def y_range(self) -> Tuple[float, float]:
@@ -466,7 +544,7 @@ class Figure:
         --------
         x_range : The default x-axis range.
         """
-        return self._y_range
+        return self._active_view().default_y_range
     
     @y_range.setter
     def y_range(self, value: RangeLike) -> None:
@@ -490,8 +568,9 @@ class Figure:
         -----
         This updates the default Plotly axis range and the visible viewport immediately.
         """
-        self._y_range = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
-        self._figure.update_yaxes(range=self._y_range)
+        rng = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        self._active_view().default_y_range = rng
+        self._figure.update_yaxes(range=rng)
 
     @property
     def _viewport_x_range(self) -> Optional[Tuple[float, float]]:
@@ -503,14 +582,19 @@ class Figure:
         rng = self._figure.layout.xaxis.range
         if rng is None:
             return None
-        return (float(rng[0]), float(rng[1]))
+        result = (float(rng[0]), float(rng[1]))
+        self._active_view().viewport_x_range = result
+        return result
 
     @_viewport_x_range.setter
     def _viewport_x_range(self, value: Optional[RangeLike]) -> None:
         if value is None:
-            self._figure.update_xaxes(range=self._x_range)
+            rng = self._active_view().default_x_range
+            self._active_view().viewport_x_range = rng
+            self._figure.update_xaxes(range=rng)
             return
         rng = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        self._active_view().viewport_x_range = rng
         self._figure.update_xaxes(range=rng)
 
     @property
@@ -523,14 +607,19 @@ class Figure:
         rng = self._figure.layout.yaxis.range
         if rng is None:
             return None
-        return (float(rng[0]), float(rng[1]))
+        result = (float(rng[0]), float(rng[1]))
+        self._active_view().viewport_y_range = result
+        return result
 
     @_viewport_y_range.setter
     def _viewport_y_range(self, value: Optional[RangeLike]) -> None:
         if value is None:
-            self._figure.update_yaxes(range=self._y_range)
+            rng = self._active_view().default_y_range
+            self._active_view().viewport_y_range = rng
+            self._figure.update_yaxes(range=rng)
             return
         rng = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        self._active_view().viewport_y_range = rng
         self._figure.update_yaxes(range=rng)
 
     @property
@@ -655,6 +744,7 @@ class Figure:
         line: Optional[Mapping[str, Any]] = None,
         opacity: Optional[Union[int, float]] = None,
         trace: Optional[Mapping[str, Any]] = None,
+        view: Optional[Union[str, Sequence[str]]] = None,
     ) -> Plot:
         """
         Plot a SymPy expression on the figure (and keep it “live”).
@@ -765,17 +855,20 @@ class Figure:
                 line=line,
                 opacity=opacity,
                 trace=trace,
+                view=view,
             )
             if label is not None:
                 update_kwargs["label"] = label
             self.plots[id].update(**update_kwargs)
             plot = self.plots[id]    
         else: 
+            view_ids = (view,) if isinstance(view, str) else (tuple(view) if view is not None else (self.active_view_id,))
             plot = Plot(
                 var=var, func=func, smart_figure=self, parameters=parameters,
                 x_domain=x_domain, sampling_points=sampling_points,
                 label=(id if label is None else label), visible=visible,
-                color=color, thickness=thickness, dash=dash, line=line, opacity=opacity, trace=trace
+                color=color, thickness=thickness, dash=dash, line=line, opacity=opacity, trace=trace,
+                plot_id=id, view_ids=view_ids,
             )
             self.plots[id] = plot
         
@@ -846,7 +939,7 @@ class Figure:
         
         # 1. Update all plots
         for plot in self.plots.values():
-            plot.render()
+            plot.render(view_id=self.active_view_id)
         
         # 2. Run hooks (if triggered by parameter change)
         # Note: ParameterManager triggers this render, then we run hooks.
@@ -1352,6 +1445,7 @@ def plot(
     opacity: Optional[Union[int, float]] = None,
     line: Optional[Mapping[str, Any]] = None,
     trace: Optional[Mapping[str, Any]] = None,
+    view: Optional[Union[str, Sequence[str]]] = None,
 ) -> Plot:
     """
     Plot a SymPy expression on the current figure, or create a new figure per call.
@@ -1435,4 +1529,5 @@ def plot(
         line=line,
         opacity=opacity,
         trace=trace,
+        view=view,
     )
