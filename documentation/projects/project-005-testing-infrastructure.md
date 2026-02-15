@@ -154,9 +154,8 @@ Priority areas for new tests:
 
 ## Acceptance Criteria
 
-- [ ] All test files use standard pytest patterns (no custom harnesses)
-- [ ] All test imports use package imports (no `importlib.util` hacks)
+- [ ] All test files use standard pytest patterns when possible (custom harnesses only when strictly needed).  Avoid fragile approaches
 - [ ] `pytest` runs all tests from any working directory
 - [ ] Coverage report is generated on each run
 - [ ] GitHub Actions runs tests on PR and push
-- [ ] At least one new test for each gap area listed above
+- [ ] New tests for each gap area listed above
