@@ -146,7 +146,7 @@ Panel should stay opaque and elevated:
 At minimum run:
 
 ```bash
-python -m py_compile SmartSlider.py SmartFigure.py
+python -m py_compile Slider.py Figure.py
 ```
 
 And manually verify in notebook:
