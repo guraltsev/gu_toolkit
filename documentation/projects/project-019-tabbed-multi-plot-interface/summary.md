@@ -1,7 +1,7 @@
 # Project 019: Tabbed Multi-Plot Interface (Refined Summary)
 
-**Priority:** High  
-**Effort:** Large  
+**Priority:** High
+**Effort:** Large
 **Impact:** Evolve `Figure` from a single-canvas coordinator into a multi-view workspace with tabbed navigation, per-view viewport state, and visibility-aware rendering.
 
 ---
@@ -20,23 +20,23 @@ This summary is grounded in the current implementation:
 
 ## 2) Confirmed decisions carried forward
 
-1. **Per-view range model**  
+1. **Per-view range model**
    Keep default ranges and viewport ranges distinct. The existing viewport control behavior in `Figure` is the bridge and should become per-view.
 
-2. **Info-card scoping model**  
+2. **Info-card scoping model**
    Support both:
    - shared info (`view=None`) visible on all tabs,
    - view-scoped info (`view="..."`) visible only for active view.
 
-3. **Autoscale rule**  
+3. **Autoscale rule**
    For each view:
    - explicit `y_range` => no y autoscale,
    - `y_range is None` => y autoscale enabled.
 
-4. **Legacy info helper cleanup**  
+4. **Legacy info helper cleanup**
    `get_info_output` and `add_info_component` remain removed (no compatibility layer).
 
-5. **Terminology**  
+5. **Terminology**
    Public API should use **View** (not Canvas) going forward.
 
 ---
@@ -68,7 +68,32 @@ Because of that, implementation must touch **state model**, **render pipeline**,
 
 ---
 
-## 5) Clarifications needed before implementation starts
+
+## 5) Incremental phases that preserve a working system
+
+Each phase below is intended to be mergeable while keeping notebook workflows functional and tests green:
+
+1. **Phase S1 — Foundation compatibility pass**
+   Land view registry internals behind the existing single-view public behavior (default view only), with no tab UI exposure yet.
+
+2. **Phase S2 — Multi-view model without UI switch**
+   Add `View` and `PlotHandle` data structures plus membership APIs, but keep rendering pinned to one active default view until tab wiring is ready.
+
+3. **Phase S3 — Tab UI + active-view routing**
+   Introduce `ipywidgets.Tab` and active view selection while preserving a default single-view code path for old notebooks.
+
+4. **Phase S4 — Visibility-gated rendering**
+   Enable stale-marking for inactive views and refresh-on-activation semantics, with regression tests proving no behavior regressions for single-view figures.
+
+5. **Phase S5 — Public API completion**
+   Expose `add_view`, `view(...)`, `plot(..., view=...)`, and `info(..., view=...)` with docs/examples, while keeping no-`view` calls mapped to the active/default view.
+
+6. **Phase S6 — Snapshot/codegen parity + hardening**
+   Extend snapshot/codegen schemas, finalize migration tests, and only then remove temporary compatibility shims introduced in earlier phases.
+
+---
+
+## 6) Clarifications needed before implementation starts
 
 To avoid rework, these questions should be answered/confirmed explicitly:
 
@@ -80,6 +105,6 @@ To avoid rework, these questions should be answered/confirmed explicitly:
 
 ---
 
-## 6) Execution note
+## 7) Execution note
 
 A detailed, phase-by-phase delivery plan is provided in `plan.md` and is now aligned with the observed implementation boundaries in `Figure.py`, `figure_plot.py`, `figure_layout.py`, `figure_info.py`, and snapshot/codegen modules.

@@ -223,7 +223,7 @@ Notebook-driven checks for:
 
 ---
 
-## 10) Proposed implementation order
+## 9) Proposed implementation order
 
 1. **A (model)**: view registry + range delegation foundation.
 2. **B (plot handles)**: multi-view membership machinery.
@@ -234,6 +234,43 @@ Notebook-driven checks for:
 7. **G (tests/docs)**: complete coverage and notebook examples.
 
 This order minimizes risk by stabilizing runtime state before UI and serialization layers.
+
+---
+
+
+## 10) Consistent-state delivery phases (merge-safe checkpoints)
+
+The following phases are explicit merge checkpoints; each checkpoint must leave the repository runnable and behaviorally coherent:
+
+1. **Phase P1 — Internal view scaffolding (no UX change)**
+   - Introduce `View` container and registry in `Figure`.
+   - Keep all current APIs routed to the default view.
+   - **Done criteria:** existing tests pass unchanged; no notebook breakage in single-view flows.
+
+2. **Phase P2 — PlotHandle migration under compatibility layer**
+   - Migrate `Plot` from single `_plot_handle` to per-view handle map.
+   - Keep render behavior equivalent for the default view.
+   - **Done criteria:** plot update/removal semantics unchanged in current tests.
+
+3. **Phase P3 — Tab layout activation**
+   - Add tab container and active-view selection plumbing.
+   - Keep default figure rendering identical when only one view exists.
+   - **Done criteria:** one-view notebooks render as before; two-view basic demo works.
+
+4. **Phase P4 — Visibility-gated compute**
+   - Activate stale marking and refresh-on-tab-activation logic.
+   - Add performance-focused tests validating inactive-view non-rendering.
+   - **Done criteria:** correctness parity + expected render suppression behavior.
+
+5. **Phase P5 — Public API rollout**
+   - Ship `add_view`, `view(...)`, and `view=` targeting in `plot/info`.
+   - Finalize shared vs scoped info behavior in sidebar.
+   - **Done criteria:** docs/examples/tests cover all new user-facing paths.
+
+6. **Phase P6 — Snapshot/codegen and cleanup**
+   - Add multi-view snapshot/schema support and codegen parity.
+   - Remove temporary transition glue only after back-compat tests pass.
+   - **Done criteria:** round-trip snapshot/codegen succeeds for multi-view figures.
 
 ---
 
