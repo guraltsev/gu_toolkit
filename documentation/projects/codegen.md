@@ -1,5 +1,16 @@
 # Design: Smart Figure Code Generation System
 
+**Status:** Mostly implemented
+
+## Status Update (2026-02-15)
+- [x] Snapshot dataclasses exist (`PlotSnapshot.py`, `FigureSnapshot.py`).
+- [x] `Figure.to_code()` pipeline exists (`codegen.py`, `Figure.py`).
+- [x] Regression tests for generated code flow exist (`tests/test_figure_snapshot_codegen.py`).
+- [ ] Confirm current docs match exact serialization limits (dynamic info/hook behavior).
+- [ ] Decide whether this should be renamed to a numbered project file for consistency.
+
+---
+
 ## Goal
 
 Add a `fig.to_code()` method (and supporting snapshot infrastructure) that emits

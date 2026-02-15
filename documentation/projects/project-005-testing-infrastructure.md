@@ -1,10 +1,21 @@
 # Project 005: Testing Infrastructure & CI
 
-**Priority:** High
-**Effort:** Medium
-**Impact:** Prevents regressions, enables confident refactoring, standardizes test execution
+**Status:** Active
+
+## Status Update (2026-02-15)
+
+### Completed
+- [x] `tox.ini` exists.
+- [x] Pytest and coverage configuration exist in `pyproject.toml`.
+- [x] GitHub Actions workflow exists at `.github/workflows/tests.yml`.
+
+### Remaining TODO
+- [ ] Remove stale guidance in this document that says CI/tox are missing.
+- [ ] Standardize remaining non-pytest notebook/manual test patterns where practical.
+- [ ] Raise coverage threshold once flaky/notebook-only tests are addressed.
 
 ---
+
 
 ## Problem
 

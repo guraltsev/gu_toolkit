@@ -1,44 +1,75 @@
 # Documentation Organization
 
-This folder uses a lightweight lifecycle structure so active work is easy to find and completed work is archived without losing history.
+This folder uses a lightweight lifecycle model:
+- **Issues (`Bugs/`)** track defects with clear reproduction/fix criteria.
+- **Projects (`projects/`)** track scoped bodies of work with TODO checklists.
+- **Discussions (`Discussions/`)** hold exploratory design notes that are not yet executable plans.
+- **Developer guides (`develop_guide/`)** document implementation behavior and architecture.
+
+> The legacy `refactor/` bucket is intentionally retired. New work must be represented as either an issue or a project.
 
 ## Top-level sections
 
-- `Bugs/`: issue reports and bug-tracking notes.
-- `projects/`: project-level planning and execution notes.
-- `Discussions/`: exploratory notes and decision discussions.
-- `develop_guide/`: developer-facing implementation guides.
-- `refactor/`: larger technical design and refactor proposals.
+- `Bugs/`: active issues/bug reports.
+- `Bugs/closed/`: resolved issues.
+- `projects/`: active project plans.
+- `projects/_completed/`: completed project records.
+- `Discussions/`: exploratory/decision content.
+- `develop_guide/`: durable implementation guides.
 
-## Bug workflow (`documentation/Bugs`)
+---
 
-- `documentation/Bugs/`: active or triaged bug reports.
-- `documentation/Bugs/closed/`: resolved bugs (fixed, invalid, or otherwise finished).
+## Issue workflow (`documentation/Bugs`)
 
-### Bug file naming
+### Active issue file requirements
+Each active issue file should contain:
+1. **Title** (`Issue NNN: ...`).
+2. **Status** (`Open`, `Blocked`, `In Progress`, etc.).
+3. **Summary** (1-3 paragraphs).
+4. **Evidence** (files/tests/observed behavior).
+5. **TODO checklist** with actionable tasks.
+6. **Exit criteria** (what must be true to close it).
 
-Use stable issue identifiers, for example:
-
+### Issue naming
+Use stable, sortable names:
 - `issue-018-short-description.md`
+
+### Closing issues
+When fixed or otherwise resolved:
+1. Move file to `Bugs/closed/`.
+2. Update status/disposition in the file body.
+3. Keep original issue ID in filename.
+4. Link to validating tests/commits when available.
+
+---
 
 ## Project workflow (`documentation/projects`)
 
-- `documentation/projects/`: active projects.
-- `documentation/projects/_completed/`: completed projects.
+### Active project file requirements
+Every active project should include:
+1. **Title + project ID** (`Project NNN: ...`).
+2. **Status** (`Backlog`, `Active`, `Discovery`, `Blocked`).
+3. **Goal/Scope** section.
+4. **TODO checklist** of remaining work.
+5. **Exit criteria** (completion definition).
 
-Each project should usually live in its own folder and include:
+### Preferred project structures
+Use one of these patterns:
+- **Single-file project**: `project-0NN-topic.md`.
+- **Project folder**: `project-0NN-topic/plan.md` + `summary.md` (for larger efforts).
 
-- `summary.md`: rationale, scope, and status snapshot.
-- `plan.md`: phased implementation plan and checklist.
+### Completing projects
+When a project is done:
+1. Move file/folder to `projects/_completed/`.
+2. Mark final status and completion date.
+3. Leave a concise summary of delivered outcomes.
 
-If a project is represented by a single standalone markdown file, move that file into `_completed/` when the project is done.
+---
 
-## Lifecycle rules
+## Documentation hygiene rules
 
-1. Start new work in the active folders:
-   - `Bugs/`
-   - `projects/`
-2. When work is completed, move files/folders to:
-   - `Bugs/closed/`
-   - `projects/_completed/`
-3. Keep references up to date when paths change.
+1. **No stale buckets**: do not add new files under `refactor/`.
+2. **Keep TODOs current**: update checklists whenever scope/status changes.
+3. **Prefer executable tracking**: defects -> issues, implementation roadmaps -> projects.
+4. **Update links after moves**: ensure cross-references remain valid.
+5. **Use consistent IDs**: new issues/projects should use the next available number.
