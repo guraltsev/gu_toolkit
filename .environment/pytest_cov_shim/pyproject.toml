@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pytest-cov-shim"
+version = "0.1.0"
+description = "Local fallback pytest plugin that accepts --cov flags in offline environments"
+requires-python = ">=3.10"
+dependencies = ["pytest>=8"]
+
+[project.entry-points.pytest11]
+pytest_cov_shim = "pytest_cov_shim.plugin"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

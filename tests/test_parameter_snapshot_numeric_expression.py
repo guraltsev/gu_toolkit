@@ -1,15 +1,9 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import numpy as np
 import sympy as sp
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT.parent))
-
-from gu_toolkit import Figure  # noqa: E402
+from gu_toolkit import Figure
 
 def test_snapshot_order_and_values() -> None:
     a, b, c = sp.symbols("a b c")
@@ -70,19 +64,3 @@ def test_symbolic_expression_returns_sympy_expr() -> None:
     fig = Figure()
     plot = fig.plot(x, a * x, parameters=[a], id="sx")
     assert plot.symbolic_expression == a * x
-
-def main() -> None:
-    tests = [
-        test_snapshot_order_and_values,
-        test_snapshot_entry_immutability,
-        test_numeric_expression_live_provider_binding,
-        test_numeric_expression_can_be_frozen_manually,
-        test_numeric_expression_unfreeze_without_keys_accepts_full_positional_input,
-        test_symbolic_expression_returns_sympy_expr,
-    ]
-    for test in tests:
-        test()
-    print(f"OK: {len(tests)} tests passed")
-
-if __name__ == "__main__":
-    main()

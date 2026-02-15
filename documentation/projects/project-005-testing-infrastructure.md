@@ -8,31 +8,25 @@
 - [x] `tox.ini` exists.
 - [x] Pytest and coverage configuration exist in `pyproject.toml`.
 - [x] GitHub Actions workflow exists at `.github/workflows/tests.yml`.
+- [x] Legacy manual `main()` harness in `tests/test_parameter_snapshot_numeric_expression.py` was converted to pytest-native discovery.
 
 ### Remaining TODO
-- [ ] Remove stale guidance in this document that says CI/tox are missing.
-- [ ] Standardize remaining non-pytest notebook/manual test patterns where practical.
 - [ ] Raise coverage threshold once flaky/notebook-only tests are addressed.
+- [ ] Continue converting notebook/manual tests to fully automated pytest coverage where practical.
 
 ---
 
 
 ## Problem
 
-### No CI/CD Pipeline
-There are no GitHub Actions workflows, no `tox.ini`, and no automated test execution. Tests are run manually, which means regressions can slip into merged PRs.
+### Remaining Non-Standard Test Harnesses
+Most Python test modules now use direct pytest discovery. The remaining non-standard coverage is primarily notebook-based (`*.ipynb`) demos/tests that are not yet part of routine CI execution.
 
-### Non-Standard Test Harness
-Test files use inconsistent patterns:
-- `test_Figure_module_params.py` uses a custom `main()` function and manual `_assert_raises` helper.
-- `test_info_cards.py` assumes pytest discovery (no `main()`).
-- `test_NamedFunction.py`, `test_numpify_refactor.py`, `test_numpify_cache_behavior.py` use `importlib.util.spec_from_file_location` with hardcoded relative paths like `Path("NamedFunction.py")`.
+### Import Robustness
+Most tests now import through the package root via `tests/conftest.py`, but this should remain the default for all newly added tests to avoid path-sensitive behavior.
 
-### Fragile Test Imports
-The `spec_from_file_location` pattern breaks if tests are run from any directory other than the project root. With proper packaging (`pip install -e .`), tests can simply `import gu_toolkit` and all path issues disappear.
-
-### No Coverage Reporting
-There is no visibility into which code paths are tested.
+### Coverage Bar Still Conservative
+Coverage is reported in CI, but `fail_under = 50` is intentionally conservative while notebook-only and integration-heavy paths are still being stabilized.
 
 ## Recommended Changes
 
@@ -143,19 +137,19 @@ jobs:
 
 Priority areas for new tests:
 
-| Area | Current Tests | Needed |
+| Area | Current Tests | Follow-up |
 |------|--------------|--------|
-| ParseLaTeX ambiguous tree (bug-002) | 0 | Regression test for Tree return type |
-| Slider widget value parsing | 0 | Test expression parsing, error recovery |
-| PlotlyPane resize behavior | 0 (notebook only) | At minimum, test Python-side logic |
-| Figure render pipeline | 0 | End-to-end: create figure, add plot, trigger render |
-| Context stack thread safety | 0 | Test concurrent push/pop |
-| QueuedDebouncer error handling | 0 | Test callback that raises exception |
+| ParseLaTeX ambiguous tree (bug-002) | `tests/test_parse_latex_regression.py` | Expand parser edge-case corpus as bugs are found |
+| Slider widget value parsing | `tests/test_slider_parsing.py` | Add integration coverage for notebook widget wiring |
+| PlotlyPane resize behavior | `tests/test_plotlypane_behavior.py` | Add browser-level checks when CI browser coverage is added |
+| Figure render pipeline | `tests/test_figure_render_pipeline.py` | Add more complex multi-plot scenarios |
+| Context stack thread safety | `tests/test_figure_context_thread_safety.py` | Stress-test with higher concurrency once timing stabilized |
+| QueuedDebouncer error handling | `tests/test_debouncing_error_handling.py` | Add timing-sensitive debounce race regressions as needed |
 
 ## Acceptance Criteria
 
-- [ ] All test files use standard pytest patterns when possible (custom harnesses only when strictly needed).  Avoid fragile approaches
-- [ ] `pytest` runs all tests from any working directory
-- [ ] Coverage report is generated on each run
-- [ ] GitHub Actions runs tests on PR and push
-- [ ] New tests for each gap area listed above
+- [x] All test files use standard pytest patterns when possible (custom harnesses only when strictly needed).
+- [x] `pytest` runs all tests from any working directory
+- [x] Coverage report is generated on each run
+- [x] GitHub Actions runs tests on PR and push
+- [x] New tests for each gap area listed above
