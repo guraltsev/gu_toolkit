@@ -57,7 +57,8 @@ Because of that, implementation must touch **state model**, **render pipeline**,
 - Explicit multi-view plot membership (`PlotHandle` per view).
 - Visibility-gated rendering (active renders now, inactive marked stale).
 - Shared + view-scoped info cards in shared sidebar.
-- Public API additions (`add_view`, `view(...)`, `plot(..., view=...)`, `info(..., view=...)`).
+- Public API additions (`add_view`, `view(...)`, `plot(..., views=...)`, `info(..., view=...)`, 
+`plots['id'].views` return  tuple of handles, `plots['id'].add_views(viewid or viewhandel or tuple thereof)` `plots['id'].remove_views(viewid or viewhandel or tuple thereof)` (ignore already absent views).
 - Updated snapshot/codegen to represent views and scoped info cards.
 - Full unit/integration tests for the above.
 
