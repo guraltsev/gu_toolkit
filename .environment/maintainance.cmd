@@ -10,3 +10,5 @@ if exist requirements.txt (
   echo requirements.txt not found; skipping dependency installation.
 )
 if errorlevel 1 exit /b %errorlevel%
+
+python .environment\install_test_tools.py

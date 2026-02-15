@@ -6,3 +6,5 @@ if [[ -f requirements.txt ]]; then
 else
   echo "requirements.txt not found; skipping dependency installation."
 fi
+
+python ./.environment/install_test_tools.py
