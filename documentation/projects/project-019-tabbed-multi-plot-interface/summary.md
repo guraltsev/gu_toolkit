@@ -32,9 +32,10 @@ This summary is grounded in the current implementation:
    For each view:
    - explicit `y_range` => no y autoscale,
    - `y_range is None` => y autoscale enabled.
+   Also, `Figure(...)` / default plotting constructor range arguments initialize the **default first view only**; every additional view owns its own independent ranges.
 
 4. **Legacy info helper cleanup**
-   `get_info_output` and `add_info_component` remain removed (no compatibility layer).
+   `get_info_output` and `add_info_component` remain removed. No backward-compatibility shim is required for this old path.
 
 5. **Terminology**
    Public API should use **View** (not Canvas) going forward.
@@ -94,14 +95,25 @@ Each phase below is intended to be mergeable while keeping notebook workflows fu
 ---
 
 ## 6) Clarifications needed before implementation starts
+This project now has clarifications for major design choices:
 
-To avoid rework, these questions should be answered/confirmed explicitly:
+1. **Info scoping is dual-mode by default**
+   - `info(..., view=None)` is shared and visible on all views.
+   - `info(..., view="<id>")` is view-scoped, rendered in the same sidebar region, and hidden when switching away from that view.
 
-1. **Default view identity:** should the implicit first view always be `"main"`, or should it be user-configurable at `Figure(...)` construction?
-2. **Backwards compatibility for `plot(id=...)`:** if an existing plot is updated with a narrower `view=` set, should removed memberships be deleted automatically, or only when explicitly removed?
-3. **View deletion semantics:** do we need `remove_view(...)` in this project, and what should happen to plots scoped only to that view?
-4. **Snapshot compatibility strategy:** should `FigureSnapshot` be versioned (e.g., `schema_version`) to preserve loading/codegen behavior for older snapshots?
-5. **Initial tab selection behavior:** should stale-refresh run on first display for non-active tabs only, or should all views render once at startup then switch to visibility-gated mode?
+2. **Deferred work is explicit**
+   - Per-view parameter dependency subsets are postponed.
+   - Drag-and-drop plot reassignment is postponed.
+   - Non-tab/grid layouts are postponed.
+
+3. **View-centric metadata is required**
+   - Keep workspace title centered at top.
+   - Add per-view title centered above the active view surface.
+   - Keep per-view axis labels (`x_label`, `y_label`) first-class.
+
+4. **Terminology and API direction are fixed**
+   - Use `View` consistently in user-facing API/docs.
+   - No resurrection of removed legacy info APIs.
 
 ---
 

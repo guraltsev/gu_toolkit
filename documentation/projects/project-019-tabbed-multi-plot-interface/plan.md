@@ -13,7 +13,7 @@ Implement a multi-view plotting workspace where one `Figure` owns shared paramet
 - Users can create multiple named views in tabs.
 - Plots can belong to one or multiple views with stable IDs.
 - Parameter changes render only active view(s); inactive views are marked stale and refresh once on activation.
-- Info cards can be shared or view-scoped.
+- Info cards can be shared (all views) or view-scoped (active view only in the same sidebar region).
 - Existing single-view usage remains simple and intuitive.
 - Snapshot/codegen reflect the new view model.
 
@@ -52,7 +52,7 @@ Create a dedicated view model (class/dataclass) with:
 Add view registry + active-view pointer:
 - `self._views: dict[str, View]`
 - `self._active_view_id: str`
-- first default view created at init (for compatibility)
+- first default view created at init (with constructor `x_range`/`y_range` applying to this view only)
 
 **Acceptance:** single-view flows continue to work through the default view.
 
@@ -152,12 +152,12 @@ Support:
 
 Add:
 - `fig.add_view(id, *, title=None, x_range=None, y_range=None, x_label=None, y_label=None)`
-- optional `fig.remove_view(id)` (if approved in clarifications)
-- optional `fig.views` inspection helper
+- `fig.remove_view(id)` is deferred (not part of this project scope)
+- `fig.views` inspection helper
 
 ### E2. View context manager
 
-Add `with fig.view("time"):` for context-targeted `plot(...)` and `info(...)` calls.
+Add `with fig.view("time"):` for context-targeted `plot(...)` and `info(...)` calls (equivalent to passing `view="time"`).
 
 ### E3. Plot targeting
 
@@ -166,8 +166,12 @@ Extend `Figure.plot(...)` and module helper `plot(...)` with `view: str | Sequen
 ### E4. Info targeting
 
 Extend `Figure.info(...)` and module helper `info(...)` with `view: str | None`:
-- `None` => shared
+- `None` => shared (visible on all views)
 - `"id"` => scoped to that view
+
+Keep rendering in one sidebar area where scoped cards swap with active tab/view.
+
+Remove legacy helpers `fig.get_info_output()` and `fig.add_info_component()` with no compatibility bridge.
 
 **Acceptance:** all new APIs have docstrings + examples and remain ergonomic in notebooks.
 
@@ -190,7 +194,7 @@ Update `figure_to_code` pipeline so emitted code recreates view topology and sco
 
 ### F3. Compatibility policy
 
-Decide and implement schema compatibility strategy (e.g., `schema_version`).
+Implement schema compatibility strategy (e.g., `schema_version`) while prioritizing clean multi-view semantics in current code generation paths.
 
 **Acceptance:** snapshot and generated code round-trip for multi-view figures.
 
@@ -211,7 +215,7 @@ Decide and implement schema compatibility strategy (e.g., `schema_version`).
 
 ### G2. Regression tests
 
-- keep legacy-removal tests for old info helpers
+- keep/extend removal tests for old info helpers (`get_info_output`, `add_info_component`)
 - confirm default single-view behavior remains unchanged
 
 ### G3. Integration checks
@@ -223,7 +227,15 @@ Notebook-driven checks for:
 
 ---
 
-## 9) Proposed implementation order
+## 10) Explicitly deferred items from clarifications
+
+- Per-view parameter dependency subsets for stale-mark filtering.
+- Drag-and-drop plot reassignment across views.
+- Non-tab multi-view layouts (e.g., side-by-side/grid).
+
+---
+
+## 11) Proposed implementation order
 
 1. **A (model)**: view registry + range delegation foundation.
 2. **B (plot handles)**: multi-view membership machinery.
@@ -238,7 +250,7 @@ This order minimizes risk by stabilizing runtime state before UI and serializati
 ---
 
 
-## 10) Consistent-state delivery phases (merge-safe checkpoints)
+## 12) Consistent-state delivery phases (merge-safe checkpoints)
 
 The following phases are explicit merge checkpoints; each checkpoint must leave the repository runnable and behaviorally coherent:
 
@@ -274,7 +286,7 @@ The following phases are explicit merge checkpoints; each checkpoint must leave 
 
 ---
 
-## 11) Risks and mitigations
+## 13) Risks and mitigations
 
 - **Risk:** hidden tab widgets report wrong size.  
   **Mitigation:** force pane reflow on tab activation.
@@ -290,7 +302,7 @@ The following phases are explicit merge checkpoints; each checkpoint must leave 
 
 ---
 
-## 12) Exit checklist
+## 14) Exit checklist
 
 - [ ] Multi-view tabs are functional and documented.
 - [ ] Plot membership is explicit and tested.
