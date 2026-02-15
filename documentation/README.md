@@ -6,12 +6,11 @@ This folder uses a lightweight lifecycle model:
 - **Discussions (`Discussions/`)** hold exploratory design notes that are not yet executable plans.
 - **Developer guides (`develop_guide/`)** document implementation behavior and architecture.
 
-> The legacy `refactor/` bucket is intentionally retired. New work must be represented as either an issue or a project.
 
 ## Top-level sections
 
 - `Bugs/`: active issues/bug reports.
-- `Bugs/closed/`: resolved issues.
+- `Bugs/_closed/`: resolved issues.
 - `projects/`: active project plans.
 - `projects/_completed/`: completed project records.
 - `Discussions/`: exploratory/decision content.
@@ -36,7 +35,7 @@ Use stable, sortable names:
 
 ### Closing issues
 When fixed or otherwise resolved:
-1. Move file to `Bugs/closed/`.
+1. Move file to `Bugs/_closed/`.
 2. Update status/disposition in the file body.
 3. Keep original issue ID in filename.
 4. Link to validating tests/commits when available.

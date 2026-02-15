@@ -24,7 +24,7 @@ This repository is notebook-facing and API-facing. Preserve the existing documen
 - In this repository, that typically means one or more of:
   - `documentation/README.md`
   - `documentation/develop_guide/*.md`
-  - project/issue/discussion docs where behavior is tracked.
+  - project/issue/discussion docs (in `documentation/bugs/` or `documentation/projects/`) where behavior is tracked.
 - If no docs update is needed, state why in the PR summary.
 
 ## Completion checklist (before finalizing)
