@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sympy as sp
+import gu_toolkit
 from gu_toolkit import Figure, info
 import gu_toolkit.figure_info as figure_info_module
 
@@ -94,3 +95,14 @@ def test_module_level_info_helper_targets_current_figure() -> None:
         assert "module-card" in fig.info_output
     finally:
         figure_info_module.QueuedDebouncer = original
+
+
+def test_legacy_info_helpers_removed_from_figure_api() -> None:
+    fig = Figure()
+    assert not hasattr(fig, "get_info_output")
+    assert not hasattr(fig, "add_info_component")
+
+
+def test_legacy_info_helpers_removed_from_module_api() -> None:
+    assert not hasattr(gu_toolkit, "get_info_output")
+    assert not hasattr(gu_toolkit, "add_info_component")
