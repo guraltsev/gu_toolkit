@@ -1,8 +1,15 @@
-"""Figure layout primitives."""
+"""Figure layout primitives.
+
+This module builds the notebook widget tree used by :class:`Figure`.
+
+Project 019 phase 3 adds a lightweight tab selector that allows the figure to
+switch between multiple logical views while preserving the existing one-view
+layout behavior.
+"""
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Callable, Dict, Optional, Sequence
 
 import ipywidgets as widgets
 from IPython.display import display
@@ -215,6 +222,8 @@ class FigureLayout:
         plotting logic and parameter updates.
         """
         self._reflow_callback: Optional[Callable[[], None]] = None
+        self._tab_view_ids: tuple[str, ...] = ()
+        self._suspend_tab_events = False
 
         # 1. Title Bar
         #    We use HTMLMath for proper LaTeX title rendering.
@@ -245,6 +254,11 @@ class FigureLayout:
                 padding="0px",
                 flex="1 1 560px",
             ),
+        )
+        self.view_tabs = widgets.Tab(
+            children=(),
+            selected_index=None,
+            layout=widgets.Layout(display="none", width="100%", margin="0 0 6px 0"),
         )
 
         # 3. Controls Sidebar (The "Right" Panel)
@@ -281,8 +295,13 @@ class FigureLayout:
 
         # 4. Main Content Wrapper (Flex)
         #    Uses flex-wrap so the sidebar drops below the plot on narrow screens.
+        self.left_panel = widgets.VBox(
+            [self.view_tabs, self.plot_container],
+            layout=widgets.Layout(width="100%", flex="1 1 560px", margin="0px", padding="0px"),
+        )
+
         self.content_wrapper = widgets.Box(
-            [self.plot_container, self.sidebar_container],
+            [self.left_panel, self.sidebar_container],
             layout=widgets.Layout(
                 display="flex", flex_flow="row wrap", align_items="flex-start",
                 width="100%", gap="8px"
@@ -450,6 +469,47 @@ class FigureLayout:
         self.plot_container.children = (widget,)
         self._reflow_callback = reflow_callback
 
+    def set_view_tabs(self, view_ids: Sequence[str], *, active_view_id: str) -> None:
+        """Configure the optional view-tab selector.
+
+        Parameters
+        ----------
+        view_ids : sequence[str]
+            Ordered list of view identifiers.
+        active_view_id : str
+            Identifier that should be selected.
+        """
+        labels = tuple(str(v) for v in view_ids)
+        self._tab_view_ids = labels
+        self._suspend_tab_events = True
+        try:
+            if len(labels) <= 1:
+                self.view_tabs.children = ()
+                self.view_tabs.selected_index = None
+                self.view_tabs.layout.display = "none"
+                return
+            self.view_tabs.children = tuple(widgets.Box() for _ in labels)
+            for idx, view_id in enumerate(labels):
+                self.view_tabs.set_title(idx, view_id)
+            self.view_tabs.layout.display = "flex"
+            self.view_tabs.selected_index = labels.index(active_view_id)
+        finally:
+            self._suspend_tab_events = False
+
+    def observe_tab_selection(self, callback: Callable[[str], None]) -> None:
+        """Observe tab selection and call ``callback`` with the selected view id."""
+
+        def _on_tab_change(change: Dict[str, Any]) -> None:
+            if self._suspend_tab_events:
+                return
+            index = change.get("new")
+            if index is None:
+                return
+            if 0 <= int(index) < len(self._tab_view_ids):
+                callback(self._tab_view_ids[int(index)])
+
+        self.view_tabs.observe(_on_tab_change, names="selected_index")
+
     def _on_full_width_change(self, change: Dict[str, Any]) -> None:
         """Toggle CSS flex properties for full-width mode.
 
@@ -464,7 +524,7 @@ class FigureLayout:
         """
         is_full = change["new"]
         layout = self.content_wrapper.layout
-        plot_layout = self.plot_container.layout
+        plot_layout = self.left_panel.layout
         sidebar_layout = self.sidebar_container.layout
 
         if is_full:

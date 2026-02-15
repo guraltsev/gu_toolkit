@@ -286,6 +286,7 @@ class Figure:
             defer_reveal=True,
         )
         self._layout.set_plot_widget(self._pane.widget, reflow_callback=self._pane.reflow)
+        self._layout.observe_tab_selection(self.set_active_view)
 
         # 4. Set Initial State
         self._default_view_id = str(default_view_id)
@@ -353,12 +354,16 @@ class Figure:
             self._active_view_id = view_id
             self._figure.update_xaxes(range=view.default_x_range)
             self._figure.update_yaxes(range=view.default_y_range)
+        self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
         return view
 
     def set_active_view(self, id: str) -> None:
         """Set the active view id and synchronize widget ranges."""
         if id not in self._views:
             raise KeyError(f"Unknown view: {id}")
+        if id == self._active_view_id:
+            return
+
         current = self._active_view()
         current.viewport_x_range = self._viewport_x_range
         current.viewport_y_range = self._viewport_y_range
@@ -369,6 +374,13 @@ class Figure:
         nxt.is_active = True
         self._figure.update_xaxes(range=nxt.viewport_x_range or nxt.default_x_range)
         self._figure.update_yaxes(range=nxt.viewport_y_range or nxt.default_y_range)
+
+        if nxt.is_stale:
+            self.render(reason="view_activation")
+            nxt.is_stale = False
+
+        self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
+        self._pane.reflow()
 
     def remove_view(self, id: str) -> None:
         """Remove a view and drop plot memberships to it."""
@@ -381,6 +393,7 @@ class Figure:
         del self._views[id]
         for plot in self.plots.values():
             plot.remove_from_view(id)
+        self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
 
     @property
     def title(self) -> str:
@@ -937,10 +950,17 @@ class Figure:
         """
         self._log_render(reason, trigger)
         
-        # 1. Update all plots
+        # 1. Update active-view plots
         for plot in self.plots.values():
             plot.render(view_id=self.active_view_id)
-        
+
+        # 1b. Mark inactive memberships stale on parameter changes.
+        if reason == "param_change":
+            for plot in self.plots.values():
+                for view_id in plot.views:
+                    if view_id != self.active_view_id:
+                        self._views[view_id].is_stale = True
+
         # 2. Run hooks (if triggered by parameter change)
         # Note: ParameterManager triggers this render, then we run hooks.
         if reason == "param_change" and trigger:
