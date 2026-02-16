@@ -137,12 +137,12 @@ The design introduces per-view runtime state, explicit plot-to-view memberships,
 
 
 ## Status
-Active
+Completed (2026-02-16)
 
 
 ## TODO checklist
-- [ ] Keep phase progress synchronized with implementation status.
+- [x] Keep phase progress synchronized with implementation status.
 
 
 ## Exit criteria
-- [ ] Multi-view behavior is implemented with backward-compatible single-view defaults.
+- [x] Multi-view behavior is implemented with backward-compatible single-view defaults.

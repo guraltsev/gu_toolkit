@@ -1,6 +1,6 @@
 # Project 028: Per-View FigureWidget Architecture Proposal
 
-**Status:** Implemented
+**Status:** Completed (2026-02-16)
 **Priority:** High
 **Depends on:** Project 019 tabbed multi-view foundation
 
@@ -224,7 +224,7 @@ The runtime now creates one `FigureWidget` and `PlotlyPane` per view and mounts 
 
 
 ## Status
-Implemented
+Completed (2026-02-16)
 
 
 ## Goal/Scope
@@ -232,17 +232,17 @@ See existing context and scope sections below for detailed boundaries.
 
 
 ## TODO checklist
-- [ ] Keep this checklist aligned with project milestones.
+- [x] Keep this checklist aligned with project milestones.
 
 
 ## Exit criteria
-- [ ] Planned deliverables are implemented and validated by tests.
+- [x] Planned deliverables are implemented and validated by tests.
 
 ## Summary of design
 The implementation/design details for this project are captured in the existing project-specific sections above (for example, context, proposed areas, implementation plan, or architecture notes). This section exists to keep the project format consistent across active project records.
 
 ## Open questions
-- None currently beyond items already tracked in the TODO checklist.
+- None.
 
 ## Challenges and mitigations
 - **Challenge:** Scope drift as related cleanup and modernization work is discovered.
