@@ -1,6 +1,6 @@
 # Project 028: Per-View FigureWidget Architecture Proposal
 
-**Status:** Proposal (not implemented)
+**Status:** Implemented
 **Priority:** High
 **Depends on:** Project 019 tabbed multi-view foundation
 
@@ -15,7 +15,7 @@ The new requested direction is stronger isolation:
 - plots only materialized in the views they belong to,
 - no cross-view trace handles to hide/show.
 
-This document is a planning proposal only. No runtime behavior is changed in this project file.
+This document tracks the architecture and now reflects the implemented runtime behavior.
 
 ---
 
@@ -216,3 +216,8 @@ ANSWER: No autodisposal
 - Active-tab rendering remains responsive and visually correct.
 - Per-view viewport and labeling isolation retained.
 - Existing public APIs remain usable with documented active-view `figure_widget` semantics.
+
+
+## 12) Implementation Notes (Current)
+
+The runtime now creates one `FigureWidget` and `PlotlyPane` per view and mounts each pane inside its tab content area. `Figure.figure_widget` resolves to the active view widget, and `Figure.figure_widget_for(view_id)` provides explicit access to non-active view widgets. Plot trace handles are now allocated in their owning view widget only.

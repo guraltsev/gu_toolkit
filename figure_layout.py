@@ -222,8 +222,10 @@ class FigureLayout:
         plotting logic and parameter updates.
         """
         self._reflow_callback: Optional[Callable[[], None]] = None
+        self._view_reflow_callbacks: Dict[str, Callable[[], None]] = {}
         self._tab_view_ids: tuple[str, ...] = ()
         self._suspend_tab_events = False
+        self._view_plot_widgets: Dict[str, widgets.Widget] = {}
 
         # 1. Title Bar
         #    We use HTMLMath for proper LaTeX title rendering.
@@ -470,6 +472,32 @@ class FigureLayout:
         self._reflow_callback = reflow_callback
         self._sync_plot_container_host(active_view_id=self._tab_view_ids[0] if self._tab_view_ids else None)
 
+    def set_view_plot_widget(
+        self,
+        view_id: str,
+        widget: widgets.Widget,
+        *,
+        reflow_callback: Optional[Callable[[], None]] = None,
+    ) -> None:
+        """Attach a plot widget to a specific view tab.
+
+        Parameters
+        ----------
+        view_id : str
+            View identifier that should own the widget.
+        widget : ipywidgets.Widget
+            Plot widget to place inside the view tab content area.
+        reflow_callback : callable, optional
+            Reflow callback for this specific view.
+        """
+        view_key = str(view_id)
+        self._view_plot_widgets[view_key] = widget
+        if reflow_callback is not None:
+            self._view_reflow_callbacks[view_key] = reflow_callback
+        if len(self._tab_view_ids) <= 1:
+            self.plot_container.children = (widget,)
+        self._sync_plot_container_host(active_view_id=view_key)
+
     def set_view_tabs(self, view_ids: Sequence[str], *, active_view_id: str) -> None:
         """Configure the optional view-tab selector.
 
@@ -496,7 +524,14 @@ class FigureLayout:
             # Recreating children on every selection change can reset the
             # underlying widget state and spuriously bounce selection back.
             if labels != previous_labels:
-                self.view_tabs.children = tuple(widgets.Box(layout=widgets.Layout(width="100%")) for _ in labels)
+                children = []
+                for view_id in labels:
+                    child = widgets.Box(layout=widgets.Layout(width="100%"))
+                    widget = self._view_plot_widgets.get(view_id)
+                    if widget is not None:
+                        child.children = (widget,)
+                    children.append(child)
+                self.view_tabs.children = tuple(children)
                 for idx, view_id in enumerate(labels):
                     self.view_tabs.set_title(idx, view_id)
 
@@ -508,19 +543,22 @@ class FigureLayout:
             self._suspend_tab_events = False
 
     def _sync_plot_container_host(self, *, active_view_id: Optional[str]) -> None:
-        """Place the shared plot container either below tabs or inside the active tab."""
+        """Place plot widgets in the appropriate host (single-view vs tabbed)."""
         if len(self._tab_view_ids) <= 1:
             self.plot_container.layout.display = "flex"
             return
         if active_view_id is None or active_view_id not in self._tab_view_ids:
             return
-        active_index = self._tab_view_ids.index(active_view_id)
         for idx, child in enumerate(self.view_tabs.children):
-            if idx == active_index:
-                if tuple(child.children) != (self.plot_container,):
-                    child.children = (self.plot_container,)
-            elif child.children:
-                child.children = ()
+            view_id = self._tab_view_ids[idx]
+            widget = self._view_plot_widgets.get(view_id)
+            child.children = (widget,) if widget is not None else ()
+
+    def trigger_reflow_for_view(self, view_id: str) -> None:
+        """Trigger the registered reflow callback for ``view_id`` if present."""
+        callback = self._view_reflow_callbacks.get(str(view_id))
+        if callback is not None:
+            callback()
 
     def observe_tab_selection(self, callback: Callable[[str], None]) -> None:
         """Observe tab selection and call ``callback`` with the selected view id."""
@@ -569,6 +607,11 @@ class FigureLayout:
             sidebar_layout.max_width = "400px"
             sidebar_layout.width = "auto"
             sidebar_layout.padding = "0px 0px 0px 10px"
+        if len(self._tab_view_ids) > 1 and self._tab_view_ids:
+            active_idx = self.view_tabs.selected_index
+            if active_idx is not None and 0 <= int(active_idx) < len(self._tab_view_ids):
+                self.trigger_reflow_for_view(self._tab_view_ids[int(active_idx)])
+                return
         if self._reflow_callback is not None:
             self._reflow_callback()
 
