@@ -1,7 +1,7 @@
 # Project 029: `plot()` Callable-First Semantics Alignment (Summary)
 
-**Status:** Active (Design)
-**Type:** Design-only project (no implementation in this project)
+**Status:** Implemented
+**Type:** Design + runtime implementation
 
 ## Objective
 
@@ -111,3 +111,10 @@ Dedicated error families:
 - Approved provider-mismatch error contract.
 - Approved canonical normalization schema.
 - Approved migration/deprecation plan and test blueprint.
+
+
+## Implementation notes
+
+- `Figure.plot(...)` and module-level `plot(...)` now accept callable-first forms (`plot(f, x, ...)` and `plot(f, (x, xmin, xmax), ...)`) while keeping legacy `plot(x, expr, ...)` compatibility.
+- Supported first arguments in runtime are: SymPy expressions, `NumericFunction`, and plain Python callables with fixed positional arguments.
+- For multi-variable callables/`NumericFunction`, users must provide `vars=...` when variable inference is ambiguous.
