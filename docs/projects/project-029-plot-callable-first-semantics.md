@@ -23,8 +23,8 @@ The new `plot()` input model should accept a first argument `f` and infer/resolv
 2. **`NumericFunction` (unfrozen)**.
 3. **`NumericFunction` (frozen, no provider)**.
 4. **`NumericFunction` whose provider is this figure's parameter manager**.
-5. **Python callable with exactly one positional variable**.
-6. **Python callable with multiple variables** only when `vars=(...)` is provided.
+5. **Python callable with multiple variables** only when `vars=(...)` is provided.
+6. **Python callable with exactly one positional variable**. then one assumes that `vars=(var_symbol)` automatically
 
 ### Explicitly unsupported for now
 - **`NumericFunction` with an external provider** (i.e., provider is not this figure's parameter manager) should raise a meaningful, actionable error (or `NotImplementedError` with guidance).
@@ -33,7 +33,8 @@ The new `plot()` input model should accept a first argument `f` and infer/resolv
 Primary target forms:
 - `plot(f, x)`
 - `plot(f, (x, xmin, xmax))`
-- `plot(f, vars=(x1, x2, ...), ...)` for multi-variable callable/function contexts
+- `plot(f, x, vars=(x, a, b...), ...)` or `plot(f, x, vars={0:x, 1:a, 'b':b...}, ...)` for multi-variable callable/function contexts
+	In this last case, the function f should be converted to an unfrozen NumericFunction with vars as a specification (according to the syntax of NumericFunction) then it should be plotted. One should also enrich NumericFunction constructor to help by auto-vectorizing f (after running some heuristics to detect that the output is coherent, unless safe=False is passed (not default). 
 
 Compatibility notes (design intent):
 - Existing forms should be audited and either retained, deprecated, or rejected with clear messaging.
@@ -115,9 +116,14 @@ Design-time acceptance tests to add during implementation phase:
 - Phase C: tighten/retire ambiguous legacy forms after deprecation window.
 
 ## Open Questions
-- Should `(var, min, max)` take precedence over legacy `min/max` kwargs when both are present, or be mutually exclusive?
-- For callable introspection, what is the exact accepted definition of "positional variable" with defaults/`*args`?
+- Should `(var, min, max)` take precedence over legacy `min/max` kwargs when both are present, or be mutually exclusive? Mutually exclusive. 
+ANSWER: Both present should raise meaningful error.
+- For callable introspection, what is the exact accepted definition of "positional variable" with defaults/`*args`? 
+ANSWER: See NumericFunction implementation
 - Should external-provider `NumericFunction` errors suggest a concrete helper API (if available) to rebind provider?
+ANSWER: NumericFunction should expose an api to detach provider but keep DYNAMIC variables as such. 
+REMARK: Carefully investigate convention for dynamic variables in NumericFunction. Effectively, for symbolic expressions or partially frozen/unfrozen NumericFunctions plot should first create a NumericFunction (or just take it), then take arguments that are bound to symbols and make them DYNAMIC and register itself as a provider.
+We do not accept external providers because we do not have a system of multiple providers  in NumericFunction
 
 ## TODO checklist
 - [ ] Confirm and document canonical `plot()` signature for transition period.
