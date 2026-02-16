@@ -146,10 +146,20 @@ Priority areas for new tests:
 | Context stack thread safety | `tests/test_figure_context_thread_safety.py` | Stress-test with higher concurrency once timing stabilized |
 | QueuedDebouncer error handling | `tests/test_debouncing_error_handling.py` | Add timing-sensitive debounce race regressions as needed |
 
-## Acceptance Criteria
+## TODO checklist
+- [ ] Keep this checklist aligned with project milestones.
 
+## Exit criteria
 - [x] All test files use standard pytest patterns when possible (custom harnesses only when strictly needed).
 - [x] `pytest` runs all tests from any working directory
 - [x] Coverage report is generated on each run
 - [x] GitHub Actions runs tests on PR and push
 - [x] New tests for each gap area listed above
+
+
+## Status
+Active
+
+
+## Goal/Scope
+See existing context and scope sections below for detailed boundaries.

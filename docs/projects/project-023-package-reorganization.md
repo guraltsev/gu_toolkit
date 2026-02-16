@@ -3,7 +3,10 @@
 **Status:** Backlog  
 **Priority:** Low
 
-## Goal
+## Status
+Backlog
+
+## Goal/Scope
 Reorganize the flat module layout into focused subpackages to improve long-term maintainability.
 
 ## Proposed Areas
@@ -12,13 +15,13 @@ Reorganize the flat module layout into focused subpackages to improve long-term 
 - `math/` for symbolic/numeric helpers.
 - `core/` for protocols, events, snapshots, and utilities.
 
-## TODO
+## TODO checklist
 - [ ] Draft a no-break public API compatibility matrix.
 - [ ] Define migration sequence (small moves with tests after each step).
 - [ ] Add compatibility shims for legacy internal imports where necessary.
 - [ ] Perform snake_case cleanup as part of module moves.
 
-## Exit Criteria
+## Exit criteria
 - [ ] Public API remains stable.
 - [ ] Internal structure is grouped by responsibility.
 - [ ] Test suite passes during and after migration.

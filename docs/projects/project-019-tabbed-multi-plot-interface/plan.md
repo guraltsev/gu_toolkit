@@ -4,6 +4,12 @@
 
 ---
 
+## Detailed blueprint for implementation
+The phased workstreams below provide the implementation blueprint in execution order.
+
+## Description of test suite for acceptance
+Acceptance requires unit, regression, and integration coverage for view lifecycle, rendering, and serialization behavior.
+
 ## 1) Objective and success criteria
 
 ### Objective
@@ -301,3 +307,6 @@ The following phases are explicit merge checkpoints; each checkpoint must leave 
 - [x] Snapshot/codegen updated for views.
 - [ ] Single-view UX remains clean.
 - [ ] Docs/notebook examples updated.
+
+## Phase integrity and mitigation
+Each phase is designed to leave the toolkit in a consistent and functioning state; if partial rollout is required, use feature flags and compatibility shims to prevent regressions.

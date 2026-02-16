@@ -118,3 +118,31 @@ The pending questions are now resolved and should be treated as implementation c
 ## 7) Execution note
 
 A detailed, phase-by-phase delivery plan is provided in `plan.md` and is now aligned with the observed implementation boundaries in `Figure.py`, `figure_plot.py`, `figure_layout.py`, `figure_info.py`, and snapshot/codegen modules.
+
+
+## Goal/Scope
+Deliver a tabbed multi-view plotting interface while preserving default single-view behavior.
+
+
+## Summary of design
+The design introduces per-view runtime state, explicit plot-to-view memberships, and lazy rendering for inactive views.
+
+
+## Open questions
+- None currently; unresolved items should be tracked here.
+
+
+## Challenges and mitigations
+- Hidden-tab rendering quirks are mitigated with activation-time reflow and stale-view refresh policy.
+
+
+## Status
+Active
+
+
+## TODO checklist
+- [ ] Keep phase progress synchronized with implementation status.
+
+
+## Exit criteria
+- [ ] Multi-view behavior is implemented with backward-compatible single-view defaults.

@@ -11,12 +11,19 @@ Packaging is now in place (`pyproject.toml`, `requirements.txt`, `tox.ini`, pyte
 - [x] Add runtime dependency manifest (`requirements.txt`).
 - [x] Add local test tooling (`tox.ini`, pytest config).
 
-## TODO
+## Goal/Scope
+See existing context and scope sections below for detailed boundaries.
+
+## TODO checklist
 - [ ] Expand `.gitignore` to include common Python build/test artifacts.
 - [ ] Decide whether to keep flat package layout or migrate to `src/` layout.
 - [ ] Add versioning/release policy notes (tagging + publish process).
 - [ ] Verify optional dependency groups are documented for contributors.
 
-## Exit Criteria
+## Exit criteria
 - [ ] Packaging/release docs reflect actual workflow.
 - [ ] Local/dev install and test commands are documented and reproducible.
+
+
+## Status
+Active

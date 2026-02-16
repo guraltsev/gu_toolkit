@@ -90,7 +90,7 @@ This file applies to everything under `documentation/`.
 - Do not create new content under retired buckets.
 ```
 
-## TODO
+## TODO checklist
 - [ ] Review proposal wording and decide whether to require examples as MUST vs SHOULD for all public functions.
 - [ ] If approved, add root `AGENTS.md`.
 - [ ] If approved, add `documentation/AGENTS.md` for scoped docs process rules.
