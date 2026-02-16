@@ -56,3 +56,14 @@ def test_layout_shows_tabs_only_for_multi_view() -> None:
     assert fig._layout.view_tabs.layout.display == "flex"
     assert fig._layout.view_tabs.get_title(0) == "main"
     assert fig._layout.view_tabs.get_title(1) == "alt"
+
+
+def test_set_active_view_does_not_rebuild_tab_children() -> None:
+    fig = Figure()
+    fig.add_view("frequency")
+
+    first_children = fig._layout.view_tabs.children
+    fig.set_active_view("frequency")
+
+    assert fig._layout.view_tabs.children is first_children
+    assert fig.active_view_id == "frequency"

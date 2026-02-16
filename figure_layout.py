@@ -480,6 +480,7 @@ class FigureLayout:
             Identifier that should be selected.
         """
         labels = tuple(str(v) for v in view_ids)
+        previous_labels = self._tab_view_ids
         self._tab_view_ids = labels
         self._suspend_tab_events = True
         try:
@@ -488,9 +489,15 @@ class FigureLayout:
                 self.view_tabs.selected_index = None
                 self.view_tabs.layout.display = "none"
                 return
-            self.view_tabs.children = tuple(widgets.Box() for _ in labels)
-            for idx, view_id in enumerate(labels):
-                self.view_tabs.set_title(idx, view_id)
+
+            # Rebuild tab children only when the tab set actually changes.
+            # Recreating children on every selection change can reset the
+            # underlying widget state and spuriously bounce selection back.
+            if labels != previous_labels:
+                self.view_tabs.children = tuple(widgets.Box() for _ in labels)
+                for idx, view_id in enumerate(labels):
+                    self.view_tabs.set_title(idx, view_id)
+
             self.view_tabs.layout.display = "flex"
             self.view_tabs.selected_index = labels.index(active_view_id)
         finally:
