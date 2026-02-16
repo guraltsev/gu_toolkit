@@ -250,12 +250,10 @@ def _parameter_call(sym: Symbol, meta: dict, *, style: Literal["figure_methods",
 def _plot_call(ps: PlotSnapshot, *, style: Literal["figure_methods", "context_manager"]) -> str:
     """Emit one plot call."""
     expr_code = sympy_to_code(ps.func)
-    param_list = "[" + ", ".join(p.name for p in ps.parameters) + "]"
 
     args = [
-        f"{ps.var.name}",
         f"{expr_code}",
-        f"parameters={param_list}",
+        f"{ps.var.name}",
         f"id={ps.id!r}",
         f"label={ps.label!r}",
     ]
