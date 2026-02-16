@@ -79,7 +79,7 @@ from .Slider import FloatSlider
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .ParameterSnapshot import ParameterSnapshot
-from .FigureSnapshot import FigureSnapshot
+from .FigureSnapshot import FigureSnapshot, ViewSnapshot
 from .debouncing import QueuedDebouncer
 
 
@@ -352,6 +352,7 @@ class Figure:
         self._views[view_id] = view
         if view.is_active:
             self._active_view_id = view_id
+            self._info.set_active_view(view_id)
             self._figure.update_xaxes(range=view.default_x_range)
             self._figure.update_yaxes(range=view.default_y_range)
         self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
@@ -372,6 +373,7 @@ class Figure:
         self._active_view_id = id
         nxt = self._active_view()
         nxt.is_active = True
+        self._info.set_active_view(id)
         self._figure.update_xaxes(range=nxt.viewport_x_range or nxt.default_x_range)
         self._figure.update_yaxes(range=nxt.viewport_y_range or nxt.default_y_range)
 
@@ -381,6 +383,17 @@ class Figure:
 
         self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
         self._pane.reflow()
+
+    @contextmanager
+    def view(self, id: str) -> Iterator["Figure"]:
+        """Temporarily switch the active workspace view within a context."""
+        previous = self.active_view_id
+        self.set_active_view(id)
+        try:
+            yield self
+        finally:
+            if previous in self._views:
+                self.set_active_view(previous)
 
     def remove_view(self, id: str) -> None:
         """Remove a view and drop plot memberships to it."""
@@ -1030,6 +1043,20 @@ class Figure:
             parameters=self._params.snapshot(full=True),
             plots={pid: p.snapshot(id=pid) for pid, p in self.plots.items()},
             info_cards=self._info.snapshot(),
+            views=tuple(
+                ViewSnapshot(
+                    id=view.id,
+                    title=view.title,
+                    x_label=view.x_label,
+                    y_label=view.y_label,
+                    x_range=view.default_x_range,
+                    y_range=view.default_y_range,
+                    viewport_x_range=view.viewport_x_range,
+                    viewport_y_range=view.viewport_y_range,
+                )
+                for view in self._views.values()
+            ),
+            active_view_id=self.active_view_id,
         )
 
     def to_code(self, *, options: "CodegenOptions | None" = None) -> str:
@@ -1058,9 +1085,15 @@ class Figure:
 
         return figure_to_code(self.snapshot(), options=options)
 
-    def info(self, spec: Union[str, Callable[["Figure", Any], str], Sequence[Union[str, Callable[["Figure", Any], str]]]], id: Optional[Hashable] = None) -> None:
+    def info(
+        self,
+        spec: Union[str, Callable[["Figure", Any], str], Sequence[Union[str, Callable[["Figure", Any], str]]]],
+        id: Optional[Hashable] = None,
+        *,
+        view: Optional[str] = None,
+    ) -> None:
         """Create or replace a simple info card in the Info sidebar."""
-        self._info.set_simple_card(spec=spec, id=id)
+        self._info.set_simple_card(spec=spec, id=id, view=view)
         self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
 
     def add_hook(self, callback: Callable[[Optional[ParamEvent]], Any], *, run_now: bool = True) -> Hashable:
@@ -1356,9 +1389,14 @@ def render(reason: str = "manual", trigger: Optional[ParamEvent] = None) -> None
     _require_current_figure().render(reason=reason, trigger=trigger)
 
 
-def info(spec: Union[str, Callable[[Figure, Any], str], Sequence[Union[str, Callable[[Figure, Any], str]]]], id: Optional[Hashable] = None) -> None:
+def info(
+    spec: Union[str, Callable[[Figure, Any], str], Sequence[Union[str, Callable[[Figure, Any], str]]]],
+    id: Optional[Hashable] = None,
+    *,
+    view: Optional[str] = None,
+) -> None:
     """Create or replace a simplified info card on the current figure."""
-    _require_current_figure().info(spec=spec, id=id)
+    _require_current_figure().info(spec=spec, id=id, view=view)
 
 
 def set_x_range(value: RangeLike) -> None:

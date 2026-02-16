@@ -44,6 +44,8 @@ class PlotSnapshot:
         Line dash pattern.
     opacity : float or None
         Trace opacity (0.0 – 1.0).
+    views : tuple[str, ...]
+        View memberships for this plot.
     """
 
     id: str
@@ -58,6 +60,7 @@ class PlotSnapshot:
     thickness: Optional[float]
     dash: Optional[str]
     opacity: Optional[float]
+    views: tuple[str, ...] = ()
 
     def __repr__(self) -> str:
         return (
