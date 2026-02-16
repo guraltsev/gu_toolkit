@@ -75,9 +75,3 @@ When a project is done:
 4. **Use consistent IDs**: new issues/projects should use the next available number.
 
 
----
-
-## Retired/legacy locations
-
-- `docs/issues/` is legacy content retained for historical context. Do not add new issue/defect tracking files there.
-- Use `docs/Bugs/` and `docs/projects/` for all new lifecycle-managed documentation artifacts.
