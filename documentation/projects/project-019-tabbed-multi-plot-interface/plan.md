@@ -297,7 +297,7 @@ The following phases are explicit merge checkpoints; each checkpoint must leave 
 - [ ] Multi-view tabs are functional and documented.
 - [ ] Plot membership is explicit and tested.
 - [ ] Visibility-gated rendering verified.
-- [ ] Shared/scoped info cards verified.
-- [ ] Snapshot/codegen updated for views.
+- [x] Shared/scoped info cards verified.
+- [x] Snapshot/codegen updated for views.
 - [ ] Single-view UX remains clean.
 - [ ] Docs/notebook examples updated.

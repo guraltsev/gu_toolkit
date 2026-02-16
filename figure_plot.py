@@ -308,6 +308,7 @@ class Plot:
             thickness=self.thickness,
             dash=self.dash,
             opacity=self.opacity,
+            views=self.views,
         )
 
     @property
