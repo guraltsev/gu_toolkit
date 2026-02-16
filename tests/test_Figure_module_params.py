@@ -208,6 +208,7 @@ def test_relayout_debounce_delays_first_event_until_timer() -> None:
         Figure.render = _render_spy
 
         fig = Figure()
+        calls.clear()
         fig._throttled_relayout()
 
         assert calls == []
@@ -236,6 +237,7 @@ def test_relayout_debounce_drop_overflow_keeps_final_event() -> None:
         Figure.render = _render_spy
 
         fig = Figure()
+        calls.clear()
         fig._throttled_relayout()
         fig._throttled_relayout()
         fig._throttled_relayout()
