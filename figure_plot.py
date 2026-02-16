@@ -279,6 +279,37 @@ class Plot:
         self._var = var
         self._func = func
 
+    def set_numeric_function(
+        self,
+        var: Symbol,
+        numeric_function: NumericFunction,
+        parameters: Sequence[Symbol] = (),
+    ) -> None:
+        """Set a precompiled :class:`NumericFunction` backend for this plot.
+
+        Parameters
+        ----------
+        var : sympy.Symbol
+            Independent variable used as x-axis samples.
+        numeric_function : NumericFunction
+            Numeric callable to evaluate during rendering.
+        parameters : sequence[sympy.Symbol], optional
+            Symbols to bind as dynamic figure parameters.
+
+        Returns
+        -------
+        None
+        """
+        self._numpified = numeric_function
+        self._var = var
+        if numeric_function.symbolic is not None:
+            self._func = sp.sympify(numeric_function.symbolic)
+        elif isinstance(getattr(self, "_func", None), sp.Expr):
+            self._func = self._func
+        else:
+            self._func = sp.Symbol("f_numeric")
+
+
     @property
     def symbolic_expression(self) -> Expr:
         """Return the current symbolic expression used by this plot."""
@@ -287,7 +318,7 @@ class Plot:
     @property
     def parameters(self) -> tuple[Symbol, ...]:
         """Return parameter symbols in deterministic numeric-argument order."""
-        return self._numpified.vars[1:]
+        return tuple(sym for sym in self._numpified.all_vars if sym != self._var)
 
     @property
     def views(self) -> tuple[str, ...]:
@@ -361,7 +392,7 @@ class Plot:
     def numeric_expression(self) -> NumericFunction:
         """Return a live :class:`NumericFunction` bound to the figure parameter context."""
         return self._numpified.set_parameter_context(self._smart_figure.parameters.parameter_context).freeze({
-            sym: DYNAMIC_PARAMETER for sym in self._numpified.vars[1:]
+            sym: DYNAMIC_PARAMETER for sym in self._numpified.all_vars if sym != self._var
         })
 
     @property

@@ -77,6 +77,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         parameter value updates.
         """
         self._refs: Dict[Symbol, ParamRef] = {}
+        self._parameter_context_view = _ParameterContextView(self._refs)
         self._controls: List[Any] = []
         self._hooks: Dict[Hashable, Callable[[ParamEvent], Any]] = {}
         self._hook_counter: int = 0
@@ -226,7 +227,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
     @property
     def parameter_context(self) -> Mapping[Symbol, Any]:
         """Live Mapping[Symbol, value] view for numeric evaluation contexts."""
-        return _ParameterContextView(self._refs)
+        return self._parameter_context_view
 
     @property
     def has_params(self) -> bool:
