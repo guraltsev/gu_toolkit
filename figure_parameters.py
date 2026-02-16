@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
 
@@ -278,6 +279,10 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         if hook_id is None:
             self._hook_counter += 1
             hook_id = f"hook:{self._hook_counter}"
+        elif isinstance(hook_id, str):
+            match = re.fullmatch(r"hook:(\d+)", hook_id)
+            if match is not None:
+                self._hook_counter = max(self._hook_counter, int(match.group(1)))
         self._hooks[hook_id] = callback
         
         return hook_id
