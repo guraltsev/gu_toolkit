@@ -1219,18 +1219,34 @@ class Figure:
 
     # --- Internal / Plumbing ---
 
-    def _throttled_relayout(self, view_id: str, *args: Any) -> None:
-        """Queue relayout events through the per-view debouncing wrapper."""
-        debouncer = self._relayout_debouncers.get(view_id)
+    def _throttled_relayout(self, view_id: Optional[str] = None, *args: Any) -> None:
+        """Queue relayout events through the per-view debouncing wrapper.
+
+        Parameters
+        ----------
+        view_id : str or None, optional
+            Target view identifier. ``None`` falls back to the active view for
+            backward compatibility with older direct test calls.
+        """
+        target_view = self.active_view_id if view_id is None else str(view_id)
+        debouncer = self._relayout_debouncers.get(target_view)
         if debouncer is not None:
             debouncer(*args)
 
-    def _run_relayout(self, *_, view_id: str) -> None:
-        """Execute one relayout render from the queued debouncer."""
-        if view_id == self.active_view_id:
+    def _run_relayout(self, *_, view_id: Optional[str] = None) -> None:
+        """Execute one relayout render from the queued debouncer.
+
+        Parameters
+        ----------
+        view_id : str or None, optional
+            Target view identifier. ``None`` falls back to the active view for
+            backward compatibility.
+        """
+        target_view = self.active_view_id if view_id is None else str(view_id)
+        if target_view == self.active_view_id:
             self.render(reason="relayout")
-        else:
-            self._views[view_id].is_stale = True
+        elif target_view in self._views:
+            self._views[target_view].is_stale = True
 
     def _log_render(self, reason: str, trigger: Any) -> None:
         """Log render information with rate-limiting.
