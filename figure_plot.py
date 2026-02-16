@@ -198,15 +198,15 @@ class Plot:
 
     def _create_trace_handle(self, *, view_id: str, label: str) -> PlotHandle:
         """Create and register a per-view Plotly trace handle."""
-        should_show = bool(view_id == self._smart_figure.active_view_id and self._visible)
-        self._smart_figure.figure_widget.add_scatter(
+        figure_widget = self._smart_figure.figure_widget_for(view_id)
+        figure_widget.add_scatter(
             x=[],
             y=[],
             mode="lines",
             name=label,
-            visible=should_show,
+            visible=self._visible,
         )
-        trace_handle = self._smart_figure.figure_widget.data[-1]
+        trace_handle = figure_widget.data[-1]
         handle = PlotHandle(plot_id=self.id, view_id=view_id, trace_handle=trace_handle)
         self._handles[view_id] = handle
         return handle
@@ -229,18 +229,17 @@ class Plot:
         return None
 
     def _set_visibility_for_target_view(self, target_view: str) -> None:
-        """Keep only the target view trace visible for this plot."""
-        for view_id, handle in self._handles.items():
-            if handle.trace_handle is None:
-                continue
-            handle.trace_handle.visible = self._visible if view_id == target_view else False
+        """Apply visibility updates to the requested view trace only."""
+        handle = self._handles.get(target_view)
+        if handle is not None and handle.trace_handle is not None:
+            handle.trace_handle.visible = self._visible
 
     def _remove_trace_handle(self, *, view_id: str) -> None:
         """Remove and detach the trace mapped to ``view_id`` if present."""
         handle = self._handles.get(view_id)
         if handle is None or handle.trace_handle is None:
             return
-        figure_widget = self._smart_figure.figure_widget
+        figure_widget = self._smart_figure.figure_widget_for(view_id)
         figure_widget.data = tuple(trace for trace in figure_widget.data if trace is not handle.trace_handle)
         handle.trace_handle = None
 
@@ -693,7 +692,8 @@ class Plot:
         render : Recompute samples when a plot becomes visible.
         """
         self._visible = value
-        self._set_visibility_for_target_view(self._smart_figure.active_view_id)
+        for view_id in self._view_ids:
+            self._set_visibility_for_target_view(view_id)
         if value is True:
             self.render()
 
@@ -753,7 +753,7 @@ class Plot:
         target_handle = self._handles[target_view].trace_handle
         if target_handle is None:
             return
-        with fig.figure_widget.batch_update():
+        with fig.figure_widget_for(target_view).batch_update():
             target_handle.x = x_values
             target_handle.y = y_values
 
