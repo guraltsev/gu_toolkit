@@ -468,6 +468,7 @@ class FigureLayout:
         """
         self.plot_container.children = (widget,)
         self._reflow_callback = reflow_callback
+        self._sync_plot_container_host(active_view_id=self._tab_view_ids[0] if self._tab_view_ids else None)
 
     def set_view_tabs(self, view_ids: Sequence[str], *, active_view_id: str) -> None:
         """Configure the optional view-tab selector.
@@ -488,20 +489,38 @@ class FigureLayout:
                 self.view_tabs.children = ()
                 self.view_tabs.selected_index = None
                 self.view_tabs.layout.display = "none"
+                self.plot_container.layout.display = "flex"
                 return
 
             # Rebuild tab children only when the tab set actually changes.
             # Recreating children on every selection change can reset the
             # underlying widget state and spuriously bounce selection back.
             if labels != previous_labels:
-                self.view_tabs.children = tuple(widgets.Box() for _ in labels)
+                self.view_tabs.children = tuple(widgets.Box(layout=widgets.Layout(width="100%")) for _ in labels)
                 for idx, view_id in enumerate(labels):
                     self.view_tabs.set_title(idx, view_id)
 
             self.view_tabs.layout.display = "flex"
+            self.plot_container.layout.display = "none"
             self.view_tabs.selected_index = labels.index(active_view_id)
+            self._sync_plot_container_host(active_view_id=active_view_id)
         finally:
             self._suspend_tab_events = False
+
+    def _sync_plot_container_host(self, *, active_view_id: Optional[str]) -> None:
+        """Place the shared plot container either below tabs or inside the active tab."""
+        if len(self._tab_view_ids) <= 1:
+            self.plot_container.layout.display = "flex"
+            return
+        if active_view_id is None or active_view_id not in self._tab_view_ids:
+            return
+        active_index = self._tab_view_ids.index(active_view_id)
+        for idx, child in enumerate(self.view_tabs.children):
+            if idx == active_index:
+                if tuple(child.children) != (self.plot_container,):
+                    child.children = (self.plot_container,)
+            elif child.children:
+                child.children = ()
 
     def observe_tab_selection(self, callback: Callable[[str], None]) -> None:
         """Observe tab selection and call ``callback`` with the selected view id."""

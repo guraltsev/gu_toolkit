@@ -64,3 +64,50 @@ def test_snapshot_and_codegen_capture_multi_view_state() -> None:
     assert "fig.add_view('alt'" in code
     assert "view=('alt', 'main')" in code or "view=('main', 'alt')" in code
     assert "info('alt only', id='alt', view='alt')" in code
+
+
+def test_view_scoped_plot_is_hidden_when_switching_to_other_view() -> None:
+    x = sp.symbols("x")
+    fig = Figure()
+    fig.add_view("frequency")
+
+    fig.plot(x, sp.sin(x), id="main-wave")
+    with fig.view("frequency"):
+        fig.plot(x, sp.cos(x), id="freq-only")
+
+    fig.set_active_view("main")
+    assert fig.figure_widget.data[1].visible is False
+
+    fig.set_active_view("frequency")
+    assert fig.figure_widget.data[1].visible is True
+
+
+def test_multi_view_layout_embeds_plot_inside_active_tab() -> None:
+    fig = Figure()
+    fig.add_view("frequency")
+
+    active_idx = fig._layout.view_tabs.selected_index
+    assert active_idx is not None
+    assert fig._layout.plot_container.layout.display == "none"
+    assert fig._layout.view_tabs.children[active_idx].children == (fig._layout.plot_container,)
+
+
+def test_view_scoped_plots_use_per_view_traces_without_extra_handles() -> None:
+    x = sp.symbols("x")
+    fig = Figure()
+    fig.add_view("frequency")
+
+    fig.plot(x, sp.sin(x), id="main-only", view="main")
+    fig.plot(x, sp.cos(x), id="freq-only", view="frequency")
+
+    assert len(fig.figure_widget.data) == 2
+    assert fig.plots["main-only"].views == ("main",)
+    assert fig.plots["freq-only"].views == ("frequency",)
+
+    fig.set_active_view("main")
+    visible_names = [trace.name for trace in fig.figure_widget.data if trace.visible is True]
+    assert visible_names == ["main-only"]
+
+    fig.set_active_view("frequency")
+    visible_names = [trace.name for trace in fig.figure_widget.data if trace.visible is True]
+    assert visible_names == ["freq-only"]
