@@ -3,19 +3,19 @@
 This file applies to everything under `docs/`.
 
 ## Follow documentation lifecycle conventions
-- New defects go under `docs/Bugs/` with stable, sortable filenames.
-- Completed issues move to `docs/Bugs/_closed/`.
-- New implementation roadmaps go under `docs/projects/`.
-- Completed projects move to `docs/projects/_completed/`.
+- New defects go under `docs/Bugs/` with stable, sortable filenames (DO NOT put open issues in `open` subfolder).
+- Completed issues move to `docs/Bugs/_closed/` (note the underscrore).
+- New implementation roadmaps go under `docs/projects/` (DO NOT put open issues in `open` subfolder).
+- Completed projects move to `docs/projects/_completed/`(note the underscrore).
 - Make sure `docs/README.md` is up to date with current best practices and organization of this project. Do not include specific bug information in `docs/README.md`
 
-## Required structure for issue files
+## Required structure for issue files (markdown)
 Should contain at least the following as top level sections
 - Title (`Issue NNN: ...`)
 - Status
 - Summary
 - Evidence
-- TODO checklist
+- TODO
 - Exit criteria
 
 ## Required structure for (small) project files 
@@ -23,7 +23,7 @@ Should contain at least the following as top level sections
 - Title + project ID
 - Status
 - Goal/Scope
-- TODO checklist
+- TODO
 - Exit criteria
 
 ## Required structure for (larger) project files
@@ -36,7 +36,7 @@ Should contain at least the following as top level sections
 		- Open questions (if any)
 		- Challenges and mitigations
 		- Status
-		- TODO checklist
+		- TODO
 		- Exit criteria
 	- Plan.md 
 	Should contain at least the following as top level sections
