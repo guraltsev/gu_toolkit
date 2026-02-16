@@ -5,7 +5,6 @@ This folder uses a lightweight lifecycle model:
 - **Projects (`projects/`)** track scoped bodies of work with TODO checklists.
 - **Discussions (`Discussions/`)** hold exploratory design notes that are not yet executable plans.
 - **Developer guides (`develop_guide/`)** document implementation behavior and architecture.
-.
 
 ## Top-level sections
 
@@ -43,7 +42,7 @@ When fixed or otherwise resolved:
 
 ---
 
-## Project workflow (`documentation/projects`)
+## Project workflow (`docs/projects`)
 
 ### Active project file requirements
 Every active project should include:
@@ -68,8 +67,15 @@ When a project is done:
 
 ## Documentation hygiene rules
 
-2. **Keep TODOs current**: update checklists whenever scope/status changes.
-3. **Prefer executable tracking**: defects -> issues, implementation roadmaps -> projects.
-4. **Update links after moves**: ensure cross-references remain valid.
-5. **Use consistent IDs**: new issues/projects should use the next available number.
+1. **Keep TODOs current**: update checklists whenever scope/status changes.
+2. **Prefer executable tracking**: defects -> issues, implementation roadmaps -> projects.
+3. **Update links after moves**: ensure cross-references remain valid.
+4. **Use consistent IDs**: new issues/projects should use the next available number.
 
+
+---
+
+## Retired/legacy locations
+
+- `docs/issues/` is legacy content retained for historical context. Do not add new issue/defect tracking files there.
+- Use `docs/Bugs/` and `docs/projects/` for all new lifecycle-managed documentation artifacts.

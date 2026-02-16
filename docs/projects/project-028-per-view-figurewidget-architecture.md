@@ -221,3 +221,19 @@ ANSWER: No autodisposal
 ## 12) Implementation Notes (Current)
 
 The runtime now creates one `FigureWidget` and `PlotlyPane` per view and mounts each pane inside its tab content area. `Figure.figure_widget` resolves to the active view widget, and `Figure.figure_widget_for(view_id)` provides explicit access to non-active view widgets. Plot trace handles are now allocated in their owning view widget only.
+
+
+## Status
+Implemented
+
+
+## Goal/Scope
+See existing context and scope sections below for detailed boundaries.
+
+
+## TODO checklist
+- [ ] Keep this checklist aligned with project milestones.
+
+
+## Exit criteria
+- [ ] Planned deliverables are implemented and validated by tests.

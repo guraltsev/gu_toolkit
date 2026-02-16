@@ -3,7 +3,10 @@
 **Status:** Implemented  
 **Priority:** High
 
-## Goal
+## Status
+Implemented
+
+## Goal/Scope
 Extend figure code-generation so users can choose output style and safely preserve dynamic-info registration context in generated scripts.
 
 ## Requested Configuration Surface
@@ -72,7 +75,10 @@ class Figure:
 - [x] Add tests for each option combination and mixed static/dynamic info cards.
 - [x] Update docs with examples for notebook embedding and script embedding.
 
-## Exit Criteria
+## TODO checklist
+- [ ] Keep this checklist aligned with project milestones.
+
+## Exit criteria
 - [x] Users can toggle imports and symbol definitions independently.
 - [x] Users can select figure-method vs context-manager interface style and get deterministic output.
 - [x] Dynamic info registrations appear as commented blocks with actionable recovery guidance directly below each call.
