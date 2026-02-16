@@ -26,7 +26,7 @@ def test_plot_membership_helpers_add_and_remove_views() -> None:
     x = sp.symbols("x")
     fig = Figure()
     fig.add_view("alt")
-    p = fig.plot(x, sp.sin(x), id="sin")
+    p = fig.plot(sp.sin(x), x, id="sin")
     assert p.views == ("main",)
     p.add_to_view("alt")
     assert p.views == ("alt", "main")
@@ -38,7 +38,7 @@ def test_parameter_change_marks_inactive_view_stale_until_activation() -> None:
     x, a = sp.symbols("x a")
     fig = Figure()
     fig.add_view("alt")
-    fig.plot(x, a * sp.sin(x), parameters=[a], id="sin", view=("main", "alt"))
+    fig.plot(a * sp.sin(x), x, parameters=[a], id="sin", view=("main", "alt"))
 
     fig.parameter(a, value=1.0)
     fig.set_active_view("main")

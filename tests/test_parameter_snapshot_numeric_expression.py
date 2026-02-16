@@ -30,7 +30,7 @@ def test_snapshot_entry_immutability() -> None:
 def test_numeric_expression_live_provider_binding() -> None:
     x, a = sp.symbols("x a")
     fig = Figure()
-    plot = fig.plot(x, a * x, parameters=[a], id="ax")
+    plot = fig.plot(a * x, x, parameters=[a], id="ax")
 
     fig.parameters[a].value = 2.0
     x_values = np.array([1.0, 2.0, 3.0])
@@ -44,7 +44,7 @@ def test_numeric_expression_live_provider_binding() -> None:
 def test_numeric_expression_can_be_frozen_manually() -> None:
     x, a, b = sp.symbols("x a b")
     fig = Figure()
-    plot = fig.plot(x, a * x + b, parameters=[a, b], id="line")
+    plot = fig.plot(a * x + b, x, parameters=[a, b], id="line")
 
     frozen = plot.numeric_expression.freeze({a: 2.0, b: 3.0})
     y = np.asarray(frozen(np.array([1.0, 2.0])))
@@ -53,7 +53,7 @@ def test_numeric_expression_can_be_frozen_manually() -> None:
 def test_numeric_expression_unfreeze_without_keys_accepts_full_positional_input() -> None:
     x, a, b = sp.symbols("x a b")
     fig = Figure()
-    plot = fig.plot(x, a * x + b, parameters=[a, b], id="line-live")
+    plot = fig.plot(a * x + b, x, parameters=[a, b], id="line-live")
 
     unfrozen = plot.numeric_expression.unfreeze()
     y = np.asarray(unfrozen(np.array([1.0, 2.0]), 4.0, 5.0))
@@ -62,5 +62,5 @@ def test_numeric_expression_unfreeze_without_keys_accepts_full_positional_input(
 def test_symbolic_expression_returns_sympy_expr() -> None:
     x, a = sp.symbols("x a")
     fig = Figure()
-    plot = fig.plot(x, a * x, parameters=[a], id="sx")
+    plot = fig.plot(a * x, x, parameters=[a], id="sx")
     assert plot.symbolic_expression == a * x

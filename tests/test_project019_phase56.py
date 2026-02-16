@@ -11,7 +11,7 @@ def test_view_context_manager_scopes_plot_and_restores_active_view() -> None:
     fig.add_view("alt")
 
     with fig.view("alt"):
-        fig.plot(x, sp.cos(x), id="cos_alt")
+        fig.plot(sp.cos(x), x, id="cos_alt")
         assert fig.active_view_id == "alt"
 
     assert fig.active_view_id == "main"
@@ -49,7 +49,7 @@ def test_snapshot_and_codegen_capture_multi_view_state() -> None:
     x = sp.symbols("x")
     fig = Figure()
     fig.add_view("alt", x_range=(-2, 2), y_range=(-1, 1), x_label="time", y_label="amp")
-    fig.plot(x, sp.sin(x), id="wave", view=("main", "alt"))
+    fig.plot(sp.sin(x), x, id="wave", view=("main", "alt"))
     fig.info("shared", id="shared")
     fig.info("alt only", id="alt", view="alt")
     fig.set_active_view("alt")
@@ -71,9 +71,9 @@ def test_view_scoped_plot_uses_isolated_figure_widgets() -> None:
     fig = Figure()
     fig.add_view("frequency")
 
-    fig.plot(x, sp.sin(x), id="main-wave", view="main")
+    fig.plot(sp.sin(x), x, id="main-wave", view="main")
     with fig.view("frequency"):
-        fig.plot(x, sp.cos(x), id="freq-only", view="frequency")
+        fig.plot(sp.cos(x), x, id="freq-only", view="frequency")
 
     main_widget = fig.figure_widget_for("main")
     freq_widget = fig.figure_widget_for("frequency")
@@ -99,8 +99,8 @@ def test_view_scoped_plots_use_per_view_traces_without_extra_handles() -> None:
     fig = Figure()
     fig.add_view("frequency")
 
-    fig.plot(x, sp.sin(x), id="main-only", view="main")
-    fig.plot(x, sp.cos(x), id="freq-only", view="frequency")
+    fig.plot(sp.sin(x), x, id="main-only", view="main")
+    fig.plot(sp.cos(x), x, id="freq-only", view="frequency")
 
     assert len(fig.figure_widget_for("main").data) == 1
     assert len(fig.figure_widget_for("frequency").data) == 1

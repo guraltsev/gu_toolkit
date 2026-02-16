@@ -9,7 +9,7 @@ def test_figure_render_pipeline_updates_trace_data() -> None:
     x, a = sp.symbols("x a")
     fig = Figure(sampling_points=30)
     pref = fig.parameter(a, value=2.0)
-    plot = fig.plot(x, a * x, parameters=[a], id="line")
+    plot = fig.plot(a * x, x, parameters=[a], id="line")
 
     before = plot.y_data.copy()
     pref.value = 3.0

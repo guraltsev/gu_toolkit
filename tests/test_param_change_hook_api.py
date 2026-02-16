@@ -11,7 +11,7 @@ from gu_toolkit import Figure
 def _figure_with_parameter() -> tuple[Figure, sp.Symbol]:
     x, a = sp.symbols("x a")
     fig = Figure(x_range=(-6, 6), y_range=(-3, 3))
-    fig.plot(x, a * sp.sin(x), parameters=[a], id="a_sin")
+    fig.plot(a * sp.sin(x), x, parameters=[a], id="a_sin")
     return fig, a
 
 
