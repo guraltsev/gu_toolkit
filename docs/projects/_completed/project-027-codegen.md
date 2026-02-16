@@ -1,10 +1,10 @@
 # Project 027: Configurable Figure Code Generation
 
-**Status:** Implemented  
+**Status:** Completed (2026-02-16)  
 **Priority:** High
 
 ## Status
-Implemented
+Completed (2026-02-16)
 
 ## Goal/Scope
 Extend figure code-generation so users can choose output style and safely preserve dynamic-info registration context in generated scripts.
@@ -76,7 +76,7 @@ class Figure:
 - [x] Update docs with examples for notebook embedding and script embedding.
 
 ## TODO checklist
-- [ ] Keep this checklist aligned with project milestones.
+- [x] Keep this checklist aligned with project milestones.
 
 ## Exit criteria
 - [x] Users can toggle imports and symbol definitions independently.
@@ -89,7 +89,7 @@ class Figure:
 The implementation/design details for this project are captured in the existing project-specific sections above (for example, context, proposed areas, implementation plan, or architecture notes). This section exists to keep the project format consistent across active project records.
 
 ## Open questions
-- None currently beyond items already tracked in the TODO checklist.
+- None.
 
 ## Challenges and mitigations
 - **Challenge:** Scope drift as related cleanup and modernization work is discovered.
