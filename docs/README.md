@@ -75,3 +75,12 @@ When a project is done:
 4. **Use consistent IDs**: new issues/projects should use the next available number.
 
 
+## API examples policy
+
+For plotting examples in docs and notebooks, use the callable-first API style:
+- `fig.plot(expr_or_callable, x, ...)`
+- `plot(expr_or_callable, x, ...)`
+- range form: `plot(f, (x, xmin, xmax), ...)`
+
+Use callable-first examples consistently in documentation and notebooks.
+

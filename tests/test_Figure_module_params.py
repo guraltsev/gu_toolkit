@@ -80,7 +80,7 @@ def test_params_setitem_sugar() -> None:
 def test_plot_opacity_shortcut_and_validation() -> None:
     x = sp.symbols("x")
     fig = Figure()
-    plot = fig.plot(x, sp.sin(x), id="sin", opacity=0.4)
+    plot = fig.plot(sp.sin(x), x, id="sin", opacity=0.4)
     assert plot.opacity == 0.4
 
     plot.update(opacity=0.7)
@@ -97,7 +97,7 @@ def test_plot_opacity_shortcut_and_validation() -> None:
 def test_plot_cached_samples_none_before_first_render() -> None:
     x = sp.symbols("x")
     fig = Figure()
-    plot = fig.plot(x, sp.sin(x), id="sin_hidden", visible=False)
+    plot = fig.plot(sp.sin(x), x, id="sin_hidden", visible=False)
 
     assert plot.x_data is None
     assert plot.y_data is None
@@ -105,9 +105,9 @@ def test_plot_cached_samples_none_before_first_render() -> None:
 def test_plot_update_accepts_visible_kwarg() -> None:
     x = sp.symbols("x")
     fig = Figure()
-    fig.plot(x, sp.sin(x), id="sin")
+    fig.plot(sp.sin(x), x, id="sin")
 
-    updated = fig.plot(x, sp.sin(x), id="sin", visible=False)
+    updated = fig.plot(sp.sin(x), x, id="sin", visible=False)
 
     assert updated.visible is False
     assert updated.x_data is not None
@@ -116,7 +116,7 @@ def test_plot_update_accepts_visible_kwarg() -> None:
 def test_plot_render_caches_read_only_samples() -> None:
     x = sp.symbols("x")
     fig = Figure()
-    plot = fig.plot(x, sp.sin(x), id="sin")
+    plot = fig.plot(sp.sin(x), x, id="sin")
 
     x_data = plot.x_data
     y_data = plot.y_data
@@ -135,7 +135,7 @@ def test_plot_render_caches_read_only_samples() -> None:
 def test_plot_render_replaces_cached_samples() -> None:
     x = sp.symbols("x")
     fig = Figure()
-    plot = fig.plot(x, sp.sin(x), id="sin")
+    plot = fig.plot(sp.sin(x), x, id="sin")
 
     first_x = plot.x_data
     first_y = plot.y_data
@@ -158,7 +158,7 @@ def test_plot_render_replaces_cached_samples() -> None:
 def test_plot_figure_property_exposes_owner_and_context_manager() -> None:
     x, a = sp.symbols("x a")
     fig = Figure()
-    plot = fig.plot(x, sp.sin(x), id="sin")
+    plot = fig.plot(sp.sin(x), x, id="sin")
 
     assert plot.figure is fig
 
@@ -178,7 +178,7 @@ def test_plot_style_options_are_discoverable() -> None:
 def test_plot_accepts_label_kwarg_on_create() -> None:
     x = sp.symbols("x")
     fig = Figure()
-    plot = fig.plot(x, sp.sin(x), id="sin", label="Sine")
+    plot = fig.plot(sp.sin(x), x, id="sin", label="Sine")
 
     assert plot.label == "Sine"
     assert fig.figure_widget.data[0].name == "Sine"
@@ -187,8 +187,8 @@ def test_plot_accepts_label_kwarg_on_create() -> None:
 def test_plot_accepts_label_kwarg_on_update() -> None:
     x = sp.symbols("x")
     fig = Figure()
-    fig.plot(x, sp.sin(x), id="sin", label="Sine")
-    updated = fig.plot(x, sp.cos(x), id="sin", label="Cosine")
+    fig.plot(sp.sin(x), x, id="sin", label="Sine")
+    updated = fig.plot(sp.cos(x), x, id="sin", label="Cosine")
 
     assert updated.label == "Cosine"
     assert fig.figure_widget.data[0].name == "Cosine"

@@ -6,7 +6,7 @@ import sympy as sp
 from gu_toolkit import Figure, numpify
 
 
-def test_plot_supports_callable_first_sympy_expression() -> None:
+def test_plot_supports_sympy_expression_callable_first() -> None:
     x = sp.Symbol("x")
     fig = Figure()
 
@@ -14,6 +14,18 @@ def test_plot_supports_callable_first_sympy_expression() -> None:
 
     assert plot.symbolic_expression == sp.sin(x)
     assert plot.parameters == ()
+
+
+def test_plot_rejects_var_expr_argument_order() -> None:
+    x = sp.Symbol("x")
+    fig = Figure()
+
+    try:
+        fig.plot(x, sp.sin(x), id="bad_order")
+    except TypeError as exc:
+        assert "plot variable" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("Expected argument-order rejection")
 
 
 def test_plot_supports_callable_first_python_callable() -> None:
