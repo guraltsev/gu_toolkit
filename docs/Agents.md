@@ -8,6 +8,7 @@ This file applies to everything under `docs/`.
 - New implementation roadmaps go under `docs/projects/` (DO NOT put open issues in `open` subfolder).
 - Completed projects move to `docs/projects/_completed/`(note the underscrore).
 - Make sure `docs/README.md` is up to date with current best practices and organization of this project. Do not include specific bug information in `docs/README.md`
+- NEVER delete issues/projects. Just move them to closed/completed when they are done. 
 
 ## Required structure for issue files (markdown)
 Should contain at least the following as top level sections
