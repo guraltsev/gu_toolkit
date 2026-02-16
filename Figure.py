@@ -61,7 +61,7 @@ import warnings
 import logging
 from contextlib import ExitStack, contextmanager
 from collections.abc import Mapping
-from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator, List
+from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator, List, NamedTuple
 
 import ipywidgets as widgets
 import numpy as np
@@ -79,7 +79,7 @@ from .Slider import FloatSlider
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .ParameterSnapshot import ParameterSnapshot
-from .FigureSnapshot import FigureSnapshot
+from .FigureSnapshot import FigureSnapshot, ViewSnapshot
 from .debouncing import QueuedDebouncer
 
 
@@ -109,6 +109,7 @@ from .figure_layout import FigureLayout, OneShotOutput
 from .figure_parameters import ParameterManager
 from .figure_info import InfoPanelManager
 from .figure_plot import Plot
+from .figure_view import View
 
 # -----------------------------
 # Small type aliases
@@ -129,6 +130,14 @@ PLOT_STYLE_OPTIONS: Dict[str, str] = {
 
 # SECTION: Figure (The Coordinator) [id: Figure]
 # =============================================================================
+
+
+class _ViewRuntime(NamedTuple):
+    """Runtime objects owned by a single workspace view."""
+
+    figure_widget: go.FigureWidget
+    pane: PlotlyPane
+
 
 class Figure:
     """
@@ -162,9 +171,9 @@ class Figure:
     """
     
     __slots__ = [
-        "_layout", "_params", "_info", "_figure", "_pane", "plots",
-        "_x_range", "_y_range", "_sampling_points", "_debug",
-        "_render_info_last_log_t", "_render_debug_last_log_t", "_relayout_debouncer",
+        "_layout", "_params", "_info", "_view_runtime", "_figure", "_pane", "plots",
+        "_views", "_active_view_id", "_default_view_id", "_sampling_points", "_debug",
+        "_render_info_last_log_t", "_render_debug_last_log_t", "_relayout_debouncers",
         "_has_been_displayed", "_print_capture"
     ]
 
@@ -174,6 +183,7 @@ class Figure:
         x_range: RangeLike = (-4, 4),
         y_range: RangeLike = (-3, 3),
         debug: bool = False,
+        default_view_id: str = "main",
     ) -> None:
         """Initialize a Figure instance with default ranges and sampling.
 
@@ -222,9 +232,45 @@ class Figure:
         self._info = InfoPanelManager(self._layout.info_box)
         self._info.bind_figure(self)
 
-        # 3. Initialize Plotly Figure
-        self._figure = go.FigureWidget()
-        self._figure.update_layout(
+        # 3. Initialize Per-View Plotly Runtime
+        self._view_runtime: Dict[str, _ViewRuntime] = {}
+        self._relayout_debouncers: Dict[str, QueuedDebouncer] = {}
+        self._layout.observe_tab_selection(self.set_active_view)
+
+        # 4. Set Initial State
+        self._default_view_id = str(default_view_id)
+        self._views: Dict[str, View] = {}
+        self._active_view_id = self._default_view_id
+        self.add_view(self._default_view_id, x_range=x_range, y_range=y_range)
+
+        # Backward-compat convenience aliases mirror the active view runtime.
+        active_runtime = self._runtime_for_view(self._active_view_id)
+        self._figure = active_runtime.figure_widget
+        self._pane = active_runtime.pane
+
+        # 5. Bind Events
+        self._render_info_last_log_t = 0.0
+        self._render_debug_last_log_t = 0.0
+
+    # --- Properties ---
+
+    @property
+    def active_view_id(self) -> str:
+        """Return the currently active view identifier."""
+        return self._active_view_id
+
+    @property
+    def views(self) -> Dict[str, View]:
+        """Return the workspace view registry."""
+        return self._views
+
+    def _active_view(self) -> View:
+        """Return the active view model."""
+        return self._views[self._active_view_id]
+
+    def _default_figure_layout(self) -> Dict[str, Any]:
+        """Return shared Plotly layout defaults copied into each view widget."""
+        return dict(
             autosize=True,
             template="plotly_white",
             showlegend=True,
@@ -272,8 +318,17 @@ class Figure:
                 gridwidth=1,
             ),
         )
-        self._pane = PlotlyPane(
-            self._figure,
+
+    def _runtime_for_view(self, view_id: str) -> _ViewRuntime:
+        """Return the per-view runtime bundle for ``view_id``."""
+        return self._view_runtime[view_id]
+
+    def _create_view_runtime(self, *, view_id: str) -> _ViewRuntime:
+        """Create and register per-view widget runtime state."""
+        figure_widget = go.FigureWidget()
+        figure_widget.update_layout(**self._default_figure_layout())
+        pane = PlotlyPane(
+            figure_widget,
             style=PlotlyPaneStyle(
                 padding_px=8,
                 border="1px solid rgba(15,23,42,0.08)",
@@ -283,27 +338,115 @@ class Figure:
             autorange_mode="none",
             defer_reveal=True,
         )
-        self._layout.set_plot_widget(self._pane.widget, reflow_callback=self._pane.reflow)
+        runtime = _ViewRuntime(figure_widget=figure_widget, pane=pane)
+        self._view_runtime[view_id] = runtime
+        self._layout.set_view_plot_widget(view_id, pane.widget, reflow_callback=pane.reflow)
 
-        # 4. Set Initial State
-        self.x_range = x_range
-        self.y_range = y_range
-        
-        # 5. Bind Events
-        self._render_info_last_log_t = 0.0
-        self._render_debug_last_log_t = 0.0
-        self._relayout_debouncer = QueuedDebouncer(
-            self._run_relayout,
+        debouncer = QueuedDebouncer(
+            lambda *args: self._run_relayout(view_id=view_id, *args),
             execute_every_ms=500,
             drop_overflow=True,
         )
-        self._figure.layout.on_change(
-            self._throttled_relayout,
-            "xaxis.range", "xaxis.range[0]", "xaxis.range[1]",
-            "yaxis.range", "yaxis.range[0]", "yaxis.range[1]",
+        self._relayout_debouncers[view_id] = debouncer
+        figure_widget.layout.on_change(
+            lambda *args: self._throttled_relayout(view_id, *args),
+            "xaxis.range", "yaxis.range",
         )
+        return runtime
 
-    # --- Properties ---
+    def add_view(
+        self,
+        id: str,
+        *,
+        title: Optional[str] = None,
+        x_range: Optional[RangeLike] = None,
+        y_range: Optional[RangeLike] = None,
+        x_label: Optional[str] = None,
+        y_label: Optional[str] = None,
+    ) -> View:
+        """Add a view model to the workspace registry."""
+        view_id = str(id)
+        if view_id in self._views:
+            raise ValueError(f"View '{view_id}' already exists")
+        xr = x_range if x_range is not None else (-4.0, 4.0)
+        yr = y_range if y_range is not None else (-3.0, 3.0)
+        view = View(
+            id=view_id,
+            title=title or view_id,
+            x_label=x_label or "",
+            y_label=y_label or "",
+            default_x_range=(float(InputConvert(xr[0], float)), float(InputConvert(xr[1], float))),
+            default_y_range=(float(InputConvert(yr[0], float)), float(InputConvert(yr[1], float))),
+            is_active=(not self._views),
+        )
+        self._views[view_id] = view
+        runtime = self._create_view_runtime(view_id=view_id)
+        runtime.figure_widget.update_xaxes(range=view.default_x_range)
+        runtime.figure_widget.update_yaxes(range=view.default_y_range)
+        if view.is_active:
+            self._active_view_id = view_id
+            self._info.set_active_view(view_id)
+            self._figure = runtime.figure_widget
+            self._pane = runtime.pane
+        self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
+        return view
+
+    def set_active_view(self, id: str) -> None:
+        """Set the active view id and synchronize widget ranges."""
+        if id not in self._views:
+            raise KeyError(f"Unknown view: {id}")
+        if id == self._active_view_id:
+            return
+
+        current = self._active_view()
+        current.viewport_x_range = self._viewport_x_range
+        current.viewport_y_range = self._viewport_y_range
+        current.is_active = False
+
+        self._active_view_id = id
+        nxt = self._active_view()
+        nxt.is_active = True
+        self._info.set_active_view(id)
+
+        runtime = self._runtime_for_view(id)
+        self._figure = runtime.figure_widget
+        self._pane = runtime.pane
+        self._figure.update_xaxes(range=nxt.viewport_x_range or nxt.default_x_range)
+        self._figure.update_yaxes(range=nxt.viewport_y_range or nxt.default_y_range)
+
+        for plot in self.plots.values():
+            plot.render(view_id=self._active_view_id)
+        if nxt.is_stale:
+            nxt.is_stale = False
+
+        self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
+        self._layout.trigger_reflow_for_view(self._active_view_id)
+
+    @contextmanager
+    def view(self, id: str) -> Iterator["Figure"]:
+        """Temporarily switch the active workspace view within a context."""
+        previous = self.active_view_id
+        self.set_active_view(id)
+        try:
+            yield self
+        finally:
+            if previous in self._views:
+                self.set_active_view(previous)
+
+    def remove_view(self, id: str) -> None:
+        """Remove a view and drop plot memberships to it."""
+        if id == self._active_view_id:
+            raise ValueError("Cannot remove active view")
+        if id == self._default_view_id:
+            raise ValueError("Cannot remove default view")
+        if id not in self._views:
+            return
+        del self._views[id]
+        self._view_runtime.pop(id, None)
+        self._relayout_debouncers.pop(id, None)
+        for plot in self.plots.values():
+            plot.remove_from_view(id)
+        self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
 
     @property
     def title(self) -> str:
@@ -353,25 +496,31 @@ class Figure:
     
     @property
     def figure_widget(self) -> go.FigureWidget:
-        """Access the underlying Plotly FigureWidget.
+        """Access the active view's Plotly FigureWidget.
 
         Returns
         -------
         plotly.graph_objects.FigureWidget
-            The interactive Plotly widget.
-
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> isinstance(fig.figure_widget, go.FigureWidget)  # doctest: +SKIP
-        True
-
-        Notes
-        -----
-        Directly mutating the widget is supported, but changes may bypass
-        Figure's helper methods.
+            The interactive Plotly widget for :attr:`active_view_id`.
         """
-        return self._figure
+        return self._runtime_for_view(self._active_view_id).figure_widget
+
+    def figure_widget_for(self, view_id: str) -> go.FigureWidget:
+        """Return the Plotly FigureWidget backing ``view_id``.
+
+        Parameters
+        ----------
+        view_id : str
+            Target view identifier.
+
+        Returns
+        -------
+        plotly.graph_objects.FigureWidget
+            The widget owned by that view.
+        """
+        if view_id not in self._views:
+            raise KeyError(f"Unknown view: {view_id}")
+        return self._runtime_for_view(view_id).figure_widget
     
     @property
     def parameters(self) -> ParameterManager:
@@ -420,7 +569,7 @@ class Figure:
         --------
         y_range : The default y-axis range.
         """
-        return self._x_range
+        return self._active_view().default_x_range
     
     @x_range.setter
     def x_range(self, value: RangeLike) -> None:
@@ -444,8 +593,9 @@ class Figure:
         -----
         This updates the default Plotly axis range and the visible viewport immediately.
         """
-        self._x_range = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
-        self._figure.update_xaxes(range=self._x_range)
+        rng = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        self._active_view().default_x_range = rng
+        self._figure.update_xaxes(range=rng)
 
     @property
     def y_range(self) -> Tuple[float, float]:
@@ -466,7 +616,7 @@ class Figure:
         --------
         x_range : The default x-axis range.
         """
-        return self._y_range
+        return self._active_view().default_y_range
     
     @y_range.setter
     def y_range(self, value: RangeLike) -> None:
@@ -490,8 +640,9 @@ class Figure:
         -----
         This updates the default Plotly axis range and the visible viewport immediately.
         """
-        self._y_range = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
-        self._figure.update_yaxes(range=self._y_range)
+        rng = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        self._active_view().default_y_range = rng
+        self._figure.update_yaxes(range=rng)
 
     @property
     def _viewport_x_range(self) -> Optional[Tuple[float, float]]:
@@ -503,14 +654,19 @@ class Figure:
         rng = self._figure.layout.xaxis.range
         if rng is None:
             return None
-        return (float(rng[0]), float(rng[1]))
+        result = (float(rng[0]), float(rng[1]))
+        self._active_view().viewport_x_range = result
+        return result
 
     @_viewport_x_range.setter
     def _viewport_x_range(self, value: Optional[RangeLike]) -> None:
         if value is None:
-            self._figure.update_xaxes(range=self._x_range)
+            rng = self._active_view().default_x_range
+            self._active_view().viewport_x_range = rng
+            self._figure.update_xaxes(range=rng)
             return
         rng = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        self._active_view().viewport_x_range = rng
         self._figure.update_xaxes(range=rng)
 
     @property
@@ -523,14 +679,19 @@ class Figure:
         rng = self._figure.layout.yaxis.range
         if rng is None:
             return None
-        return (float(rng[0]), float(rng[1]))
+        result = (float(rng[0]), float(rng[1]))
+        self._active_view().viewport_y_range = result
+        return result
 
     @_viewport_y_range.setter
     def _viewport_y_range(self, value: Optional[RangeLike]) -> None:
         if value is None:
-            self._figure.update_yaxes(range=self._y_range)
+            rng = self._active_view().default_y_range
+            self._active_view().viewport_y_range = rng
+            self._figure.update_yaxes(range=rng)
             return
         rng = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        self._active_view().viewport_y_range = rng
         self._figure.update_yaxes(range=rng)
 
     @property
@@ -655,6 +816,7 @@ class Figure:
         line: Optional[Mapping[str, Any]] = None,
         opacity: Optional[Union[int, float]] = None,
         trace: Optional[Mapping[str, Any]] = None,
+        view: Optional[Union[str, Sequence[str]]] = None,
     ) -> Plot:
         """
         Plot a SymPy expression on the figure (and keep it “live”).
@@ -765,17 +927,20 @@ class Figure:
                 line=line,
                 opacity=opacity,
                 trace=trace,
+                view=view,
             )
             if label is not None:
                 update_kwargs["label"] = label
             self.plots[id].update(**update_kwargs)
             plot = self.plots[id]    
         else: 
+            view_ids = (view,) if isinstance(view, str) else (tuple(view) if view is not None else (self.active_view_id,))
             plot = Plot(
                 var=var, func=func, smart_figure=self, parameters=parameters,
                 x_domain=x_domain, sampling_points=sampling_points,
                 label=(id if label is None else label), visible=visible,
-                color=color, thickness=thickness, dash=dash, line=line, opacity=opacity, trace=trace
+                color=color, thickness=thickness, dash=dash, line=line, opacity=opacity, trace=trace,
+                plot_id=id, view_ids=view_ids,
             )
             self.plots[id] = plot
         
@@ -844,10 +1009,17 @@ class Figure:
         """
         self._log_render(reason, trigger)
         
-        # 1. Update all plots
+        # 1. Update active-view plots
         for plot in self.plots.values():
-            plot.render()
-        
+            plot.render(view_id=self.active_view_id)
+
+        # 1b. Mark inactive memberships stale on parameter changes.
+        if reason == "param_change":
+            for plot in self.plots.values():
+                for view_id in plot.views:
+                    if view_id != self.active_view_id:
+                        self._views[view_id].is_stale = True
+
         # 2. Run hooks (if triggered by parameter change)
         # Note: ParameterManager triggers this render, then we run hooks.
         if reason == "param_change" and trigger:
@@ -917,6 +1089,20 @@ class Figure:
             parameters=self._params.snapshot(full=True),
             plots={pid: p.snapshot(id=pid) for pid, p in self.plots.items()},
             info_cards=self._info.snapshot(),
+            views=tuple(
+                ViewSnapshot(
+                    id=view.id,
+                    title=view.title,
+                    x_label=view.x_label,
+                    y_label=view.y_label,
+                    x_range=view.default_x_range,
+                    y_range=view.default_y_range,
+                    viewport_x_range=view.viewport_x_range,
+                    viewport_y_range=view.viewport_y_range,
+                )
+                for view in self._views.values()
+            ),
+            active_view_id=self.active_view_id,
         )
 
     def to_code(self, *, options: "CodegenOptions | None" = None) -> str:
@@ -945,9 +1131,15 @@ class Figure:
 
         return figure_to_code(self.snapshot(), options=options)
 
-    def info(self, spec: Union[str, Callable[["Figure", Any], str], Sequence[Union[str, Callable[["Figure", Any], str]]]], id: Optional[Hashable] = None) -> None:
+    def info(
+        self,
+        spec: Union[str, Callable[["Figure", Any], str], Sequence[Union[str, Callable[["Figure", Any], str]]]],
+        id: Optional[Hashable] = None,
+        *,
+        view: Optional[str] = None,
+    ) -> None:
         """Create or replace a simple info card in the Info sidebar."""
-        self._info.set_simple_card(spec=spec, id=id)
+        self._info.set_simple_card(spec=spec, id=id, view=view)
         self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
 
     def add_hook(self, callback: Callable[[Optional[ParamEvent]], Any], *, run_now: bool = True) -> Hashable:
@@ -1027,13 +1219,34 @@ class Figure:
 
     # --- Internal / Plumbing ---
 
-    def _throttled_relayout(self, *args: Any) -> None:
-        """Queue relayout events through the shared debouncing wrapper."""
-        self._relayout_debouncer(*args)
+    def _throttled_relayout(self, view_id: Optional[str] = None, *args: Any) -> None:
+        """Queue relayout events through the per-view debouncing wrapper.
 
-    def _run_relayout(self, *_: Any) -> None:
-        """Execute one relayout render from the queued debouncer."""
-        self.render(reason="relayout")
+        Parameters
+        ----------
+        view_id : str or None, optional
+            Target view identifier. ``None`` falls back to the active view for
+            backward compatibility with older direct test calls.
+        """
+        target_view = self.active_view_id if view_id is None else str(view_id)
+        debouncer = self._relayout_debouncers.get(target_view)
+        if debouncer is not None:
+            debouncer(*args)
+
+    def _run_relayout(self, *_, view_id: Optional[str] = None) -> None:
+        """Execute one relayout render from the queued debouncer.
+
+        Parameters
+        ----------
+        view_id : str or None, optional
+            Target view identifier. ``None`` falls back to the active view for
+            backward compatibility.
+        """
+        target_view = self.active_view_id if view_id is None else str(view_id)
+        if target_view == self.active_view_id:
+            self.render(reason="relayout")
+        elif target_view in self._views:
+            self._views[target_view].is_stale = True
 
     def _log_render(self, reason: str, trigger: Any) -> None:
         """Log render information with rate-limiting.
@@ -1243,9 +1456,14 @@ def render(reason: str = "manual", trigger: Optional[ParamEvent] = None) -> None
     _require_current_figure().render(reason=reason, trigger=trigger)
 
 
-def info(spec: Union[str, Callable[[Figure, Any], str], Sequence[Union[str, Callable[[Figure, Any], str]]]], id: Optional[Hashable] = None) -> None:
+def info(
+    spec: Union[str, Callable[[Figure, Any], str], Sequence[Union[str, Callable[[Figure, Any], str]]]],
+    id: Optional[Hashable] = None,
+    *,
+    view: Optional[str] = None,
+) -> None:
     """Create or replace a simplified info card on the current figure."""
-    _require_current_figure().info(spec=spec, id=id)
+    _require_current_figure().info(spec=spec, id=id, view=view)
 
 
 def set_x_range(value: RangeLike) -> None:
@@ -1352,6 +1570,7 @@ def plot(
     opacity: Optional[Union[int, float]] = None,
     line: Optional[Mapping[str, Any]] = None,
     trace: Optional[Mapping[str, Any]] = None,
+    view: Optional[Union[str, Sequence[str]]] = None,
 ) -> Plot:
     """
     Plot a SymPy expression on the current figure, or create a new figure per call.
@@ -1435,4 +1654,5 @@ def plot(
         line=line,
         opacity=opacity,
         trace=trace,
+        view=view,
     )

@@ -58,6 +58,7 @@ class InfoPanelManager:
         segments: list[Union["InfoPanelManager._StaticSegment", "InfoPanelManager._DynamicSegment"]]
         debouncer: QueuedDebouncer
         pending_ctx: Optional["InfoPanelManager.InfoChangeContext"] = None
+        view_id: Optional[str] = None
 
     def __init__(self, layout_box: widgets.Box) -> None:
         """Initialize the info panel manager.
@@ -86,6 +87,7 @@ class InfoPanelManager:
         self._simple_cards: Dict[Hashable, InfoPanelManager._SimpleInfoCard] = {}
         self._simple_counter = 0
         self._update_seq = 0
+        self._active_view_id: Optional[str] = None
 
     def get_output(self, id: Optional[Hashable] = None, **layout_kwargs: Any) -> widgets.Output:
         """
@@ -206,7 +208,13 @@ class InfoPanelManager:
         """
         return len(self._outputs) > 0
 
-    def set_simple_card(self, spec: Union[str, Callable, Sequence[Union[str, Callable]]], id: Optional[Hashable] = None) -> Hashable:
+    def set_simple_card(
+        self,
+        spec: Union[str, Callable, Sequence[Union[str, Callable]]],
+        id: Optional[Hashable] = None,
+        *,
+        view: Optional[str] = None,
+    ) -> Hashable:
         """Create or replace a simple rich-text info card."""
         if id is None:
             id = self._next_simple_id()
@@ -234,9 +242,22 @@ class InfoPanelManager:
             )
             self._simple_cards[id] = card
 
+        card.view_id = view
         self._rebuild_simple_card(card, normalized)
+        self._apply_card_visibility(card)
         return id
 
+
+
+    def _apply_card_visibility(self, card: _SimpleInfoCard) -> None:
+        visible = card.view_id is None or card.view_id == self._active_view_id
+        card.output.layout.display = "block" if visible else "none"
+
+    def set_active_view(self, view_id: str) -> None:
+        """Update which scoped info cards are visible in the sidebar."""
+        self._active_view_id = str(view_id)
+        for card in self._simple_cards.values():
+            self._apply_card_visibility(card)
 
     def _next_simple_id(self) -> str:
         while True:
@@ -350,7 +371,7 @@ class InfoPanelManager:
                     segs.append(seg.text)
                 else:
                     segs.append("<dynamic>")
-            results.append(InfoCardSnapshot(id=card.id, segments=tuple(segs)))
+            results.append(InfoCardSnapshot(id=card.id, segments=tuple(segs), view_id=card.view_id))
         return tuple(results)
 
 

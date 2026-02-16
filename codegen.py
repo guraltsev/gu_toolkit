@@ -275,6 +275,11 @@ def _plot_call(ps: PlotSnapshot, *, style: Literal["figure_methods", "context_ma
         args.append(f"dash={ps.dash!r}")
     if ps.opacity is not None:
         args.append(f"opacity={_fmt_float(ps.opacity)}")
+    if getattr(ps, "views", ()):
+        if len(ps.views) == 1:
+            args.append(f"view={ps.views[0]!r}")
+        else:
+            args.append(f"view={tuple(ps.views)!r}")
 
     # Format: single line if short, multi-line otherwise
     joined = ", ".join(args)
@@ -299,12 +304,15 @@ def _info_card_lines(
     has_dynamic = any(seg == "<dynamic>" for seg in card.segments)
     static_parts = [seg for seg in card.segments if seg != "<dynamic>"]
 
+    view_suffix = f", view={card.view_id!r}" if card.view_id is not None else ""
+
     if has_dynamic:
         if not include_dynamic_comment_block:
             return ["# dynamic info omitted"]
 
         static_spec = repr(static_parts[0]) if len(static_parts) == 1 else repr(static_parts)
         suffix = f", id={card.id!r}" if card.id is not None else ""
+        suffix += view_suffix
         lines = [
             f"# {call}({static_spec}{suffix})",
             "# NOTE: Dynamic info callable segments were omitted from this commented block.",
@@ -325,6 +333,8 @@ def _info_card_lines(
 
     if card.id is not None:
         line += f", id={card.id!r}"
+    if card.view_id is not None:
+        line += f", view={card.view_id!r}"
     line += ")"
     return [line]
 
@@ -377,6 +387,18 @@ def figure_to_code(snapshot: FigureSnapshot, options: CodegenOptions | None = No
     )
     if snapshot.title:
         lines.append(f"fig.title = {snapshot.title!r}")
+    if getattr(snapshot, "views", ()):
+        for view in snapshot.views:
+            if view.id == "main":
+                continue
+            lines.append(
+                "fig.add_view("
+                f"{view.id!r}, title={view.title!r}, x_range=({_fmt_float(view.x_range[0])}, {_fmt_float(view.x_range[1])}), "
+                f"y_range=({_fmt_float(view.y_range[0])}, {_fmt_float(view.y_range[1])}), "
+                f"x_label={view.x_label!r}, y_label={view.y_label!r})"
+            )
+        if snapshot.active_view_id != "main":
+            lines.append(f"fig.set_active_view({snapshot.active_view_id!r})")
     lines.append("")
 
     # -- operation body -----------------------------------------------------

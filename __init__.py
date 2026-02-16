@@ -51,5 +51,5 @@ from .ParameterSnapshot import ParameterSnapshot
 # Optional explicit module handle to avoid callable/module name ambiguity.
 from . import numpify as numpify_module
 from .PlotSnapshot import PlotSnapshot
-from .FigureSnapshot import FigureSnapshot, InfoCardSnapshot
+from .FigureSnapshot import FigureSnapshot, InfoCardSnapshot, ViewSnapshot
 from .codegen import CodegenOptions, sympy_to_code, figure_to_code
