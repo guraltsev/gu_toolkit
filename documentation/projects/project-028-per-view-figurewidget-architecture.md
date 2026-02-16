@@ -201,8 +201,11 @@ Deprecation candidate:
 ## 10) Open Questions
 
 1. Should inactive view runtimes be created eagerly at `add_view` or lazily at first activation?
+ANSWER: Created eagerly
 2. Should `Figure.snapshot()` capture per-view widget layout overrides if users mutate underlying plotly layout directly?
+ANSWER: Yes
 3. Do we want an explicit memory policy (`auto_dispose_inactive_views=True/False`) in a later phase?
+ANSWER: No autodisposal
 
 ---
 
