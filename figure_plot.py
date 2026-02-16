@@ -173,22 +173,18 @@ class Plot:
         self._y_data: Optional[np.ndarray] = None
         self._handles: Dict[str, PlotHandle] = {}
         self._view_ids = set(view_ids or (self._smart_figure.active_view_id,))
+        self._visible: VisibleSpec = visible
 
-        # Add active-view trace (phase 2 keeps rendering pinned to active view).
-        self._smart_figure.figure_widget.add_scatter(x=[], y=[], mode="lines", name=label, visible=visible)
-        self._plot_handle = self._smart_figure.figure_widget.data[-1]
-        for view_id in self._view_ids:
-            self._handles[view_id] = PlotHandle(
-                plot_id=self.id,
-                view_id=view_id,
-                trace_handle=self._plot_handle if view_id == self._smart_figure.active_view_id else None,
-            )
+        for view_id in sorted(self._view_ids):
+            self._create_trace_handle(view_id=view_id, label=label)
 
         self._suspend_render = True
         self._update_line_style(color=color, thickness=thickness, dash=dash, line=line)
         self.opacity = opacity
         if trace:
-            self._plot_handle.update(**dict(trace))
+            trace_update = dict(trace)
+            for trace_handle in self._iter_trace_handles():
+                trace_handle.update(**trace_update)
         self.set_func(var, func, parameters)
         self.x_domain = x_domain
         
@@ -199,6 +195,54 @@ class Plot:
         self._suspend_render = False
         
         self.render()
+
+    def _create_trace_handle(self, *, view_id: str, label: str) -> PlotHandle:
+        """Create and register a per-view Plotly trace handle."""
+        should_show = bool(view_id == self._smart_figure.active_view_id and self._visible)
+        self._smart_figure.figure_widget.add_scatter(
+            x=[],
+            y=[],
+            mode="lines",
+            name=label,
+            visible=should_show,
+        )
+        trace_handle = self._smart_figure.figure_widget.data[-1]
+        handle = PlotHandle(plot_id=self.id, view_id=view_id, trace_handle=trace_handle)
+        self._handles[view_id] = handle
+        return handle
+
+    def _iter_trace_handles(self) -> Sequence[go.Scatter]:
+        """Return all live Plotly trace handles for this plot."""
+        return tuple(
+            handle.trace_handle
+            for handle in self._handles.values()
+            if handle.trace_handle is not None
+        )
+
+    def _reference_trace_handle(self) -> Optional[go.Scatter]:
+        """Return a representative trace handle for style/property reads."""
+        active = self._handles.get(self._smart_figure.active_view_id)
+        if active is not None and active.trace_handle is not None:
+            return active.trace_handle
+        for trace_handle in self._iter_trace_handles():
+            return trace_handle
+        return None
+
+    def _set_visibility_for_target_view(self, target_view: str) -> None:
+        """Keep only the target view trace visible for this plot."""
+        for view_id, handle in self._handles.items():
+            if handle.trace_handle is None:
+                continue
+            handle.trace_handle.visible = self._visible if view_id == target_view else False
+
+    def _remove_trace_handle(self, *, view_id: str) -> None:
+        """Remove and detach the trace mapped to ``view_id`` if present."""
+        handle = self._handles.get(view_id)
+        if handle is None or handle.trace_handle is None:
+            return
+        figure_widget = self._smart_figure.figure_widget
+        figure_widget.data = tuple(trace for trace in figure_widget.data if trace is not handle.trace_handle)
+        handle.trace_handle = None
 
     def set_func(self, var: Symbol, func: Expr, parameters: Sequence[Symbol] = ()) -> None:
         """
@@ -256,13 +300,16 @@ class Plot:
         if view_id in self._view_ids:
             return
         self._view_ids.add(view_id)
-        self._handles[view_id] = PlotHandle(plot_id=self.id, view_id=view_id, trace_handle=None)
+        self._create_trace_handle(view_id=view_id, label=self.label)
+        if view_id == self._smart_figure.active_view_id and self._visible is True:
+            self.render(view_id=view_id)
 
     def remove_from_view(self, view_id: str) -> None:
         """Remove this plot from a view membership set."""
         if view_id not in self._view_ids:
             return
         self._view_ids.remove(view_id)
+        self._remove_trace_handle(view_id=view_id)
         self._handles.pop(view_id, None)
 
     def add_views(self, views: Union[str, Sequence[str]]) -> None:
@@ -375,7 +422,8 @@ class Plot:
         --------
         update : Update the label alongside other plot attributes.
         """
-        return self._plot_handle.name
+        ref = self._reference_trace_handle()
+        return ref.name if ref is not None else ""
 
     @label.setter
     def label(self, value: str) -> None:
@@ -401,14 +449,16 @@ class Plot:
         --------
         label : Read the current legend label.
         """
-        self._plot_handle.name = value
+        for trace_handle in self._iter_trace_handles():
+            trace_handle.name = value
 
     @property
     def color(self) -> Optional[str]:
         """Return the current line color for this plot."""
-        if self._plot_handle.line is None:
+        ref = self._reference_trace_handle()
+        if ref is None or ref.line is None:
             return None
-        return self._plot_handle.line.color
+        return ref.line.color
 
     @color.setter
     def color(self, value: Optional[str]) -> None:
@@ -418,9 +468,10 @@ class Plot:
     @property
     def thickness(self) -> Optional[float]:
         """Return the current line thickness for this plot."""
-        if self._plot_handle.line is None:
+        ref = self._reference_trace_handle()
+        if ref is None or ref.line is None:
             return None
-        return self._plot_handle.line.width
+        return ref.line.width
 
     @thickness.setter
     def thickness(self, value: Optional[Union[int, float]]) -> None:
@@ -430,9 +481,10 @@ class Plot:
     @property
     def dash(self) -> Optional[str]:
         """Return the current line dash style for this plot."""
-        if self._plot_handle.line is None:
+        ref = self._reference_trace_handle()
+        if ref is None or ref.line is None:
             return None
-        return self._plot_handle.line.dash
+        return ref.line.dash
 
     @dash.setter
     def dash(self, value: Optional[str]) -> None:
@@ -442,18 +494,21 @@ class Plot:
     @property
     def opacity(self) -> Optional[float]:
         """Return the current trace opacity for this plot."""
-        return self._plot_handle.opacity
+        ref = self._reference_trace_handle()
+        return None if ref is None else ref.opacity
 
     @opacity.setter
     def opacity(self, value: Optional[Union[int, float]]) -> None:
         """Set the trace opacity for this plot (0.0 to 1.0)."""
         if value is None:
-            self._plot_handle.opacity = None
+            for trace_handle in self._iter_trace_handles():
+                trace_handle.opacity = None
             return
         opacity = float(InputConvert(value, float))
         if not 0.0 <= opacity <= 1.0:
             raise ValueError("opacity must be between 0.0 and 1.0")
-        self._plot_handle.opacity = opacity
+        for trace_handle in self._iter_trace_handles():
+            trace_handle.opacity = opacity
 
     @property
     def figure(self) -> "Figure":
@@ -611,7 +666,7 @@ class Plot:
         -----
         ``"legendonly"`` hides the trace while keeping it in the legend.
         """
-        return self._plot_handle.visible
+        return self._visible
 
     @visible.setter
     def visible(self, value: VisibleSpec) -> None:
@@ -637,7 +692,8 @@ class Plot:
         --------
         render : Recompute samples when a plot becomes visible.
         """
-        self._plot_handle.visible = value
+        self._visible = value
+        self._set_visibility_for_target_view(self._smart_figure.active_view_id)
         if value is True:
             self.render()
 
@@ -663,9 +719,10 @@ class Plot:
         zoomed.
         """
         target_view = view_id or self._smart_figure.active_view_id
+        self._set_visibility_for_target_view(target_view)
         if target_view not in self._view_ids:
             return
-        if self._suspend_render or self.visible is not True:
+        if self._suspend_render or self._visible is not True:
             return
 
         # Phase 2 keeps concrete rendering pinned to active view only.
@@ -693,9 +750,12 @@ class Plot:
         self._y_data = y_values.copy()
         
         # 4. Update Trace
+        target_handle = self._handles[target_view].trace_handle
+        if target_handle is None:
+            return
         with fig.figure_widget.batch_update():
-            self._plot_handle.x = x_values
-            self._plot_handle.y = y_values
+            target_handle.x = x_values
+            target_handle.y = y_values
 
     def _update_line_style(
         self,
@@ -730,9 +790,10 @@ class Plot:
         if dash is not None:
             line_updates["dash"] = dash
         if line_updates:
-            current_line = _coerce_line_value(self._plot_handle.line)
-            current_line.update(line_updates)
-            self._plot_handle.line = current_line
+            for trace_handle in self._iter_trace_handles():
+                current_line = _coerce_line_value(trace_handle.line)
+                current_line.update(line_updates)
+                trace_handle.line = current_line
     
     def update(self, **kwargs: Any) -> None:
         """Update multiple plot attributes at once.
@@ -807,7 +868,9 @@ class Plot:
         if "opacity" in kwargs:
             self.opacity = kwargs["opacity"]
         if kwargs.get("trace"):
-            self._plot_handle.update(**dict(kwargs["trace"]))
+            trace_update = dict(kwargs["trace"])
+            for trace_handle in self._iter_trace_handles():
+                trace_handle.update(**trace_update)
         
         # Function update
         if any(k in kwargs for k in ('var', 'func', 'parameters')):

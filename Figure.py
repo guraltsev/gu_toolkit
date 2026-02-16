@@ -377,8 +377,9 @@ class Figure:
         self._figure.update_xaxes(range=nxt.viewport_x_range or nxt.default_x_range)
         self._figure.update_yaxes(range=nxt.viewport_y_range or nxt.default_y_range)
 
+        for plot in self.plots.values():
+            plot.render(view_id=self._active_view_id)
         if nxt.is_stale:
-            self.render(reason="view_activation")
             nxt.is_stale = False
 
         self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
