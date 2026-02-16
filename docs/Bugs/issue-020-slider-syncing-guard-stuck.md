@@ -10,11 +10,11 @@ Open
 - `Slider.py` has multiple `_syncing` toggles across UI synchronization paths.
 - The guard is relied upon in value/text/limits handlers.
 
-## TODO checklist
+## TODO
 - [ ] Audit all `_syncing` write paths for guaranteed reset behavior.
 - [ ] Convert vulnerable paths to `try/finally` patterns where missing.
 - [ ] Add regression tests that simulate parse/update errors during sync.
 
-## Exit Criteria
+## Exit criteria
 - [ ] `_syncing` always returns to `False` after failed or successful sync attempts.
 - [ ] Slider remains interactive after malformed input and callback errors.

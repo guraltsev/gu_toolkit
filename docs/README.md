@@ -53,9 +53,11 @@ Every active project should include:
 5. **Exit criteria** (completion definition).
 
 ### Preferred project structures
-Use one of these patterns:
-- **Single-file project**: `project-0NN-topic.md`.
-- **Project folder**: `project-0NN-topic/plan.md` + `summary.md` (for larger efforts).
+Use a **project folder** by default:
+- `project-0NN-topic/summary.md`
+- `project-0NN-topic/plan.md` (optional only when implementation planning is not yet decided)
+
+Legacy single-file projects may exist, but new projects should use the folder structure so summary and execution planning stay separated.
 
 ### Completing projects
 When a project is done:
