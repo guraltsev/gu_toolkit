@@ -129,7 +129,7 @@ Key behaviors (frontend):
 
 ### 1. User defines plots
 
-When a user calls `fig.plot(x, expr, ...)`, Figure:
+When a user calls `fig.plot(expr, x, ...)`, Figure:
 1. Creates or updates a `Plot` instance (tracked by ID).
 2. Autodetects parameters from the expression (all free symbols excluding the plot variable) unless overridden.
 3. Ensures corresponding sliders are created via `ParameterManager`.
