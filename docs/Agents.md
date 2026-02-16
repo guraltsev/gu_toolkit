@@ -19,17 +19,9 @@ Should contain at least the following as top level sections
 - TODO
 - Exit criteria
 
-## Required structure for (small) project files 
-Should contain at least the following as top level sections
-- Title + project ID
-- Status
-- Goal/Scope
-- TODO
-- Exit criteria
-
-## Required structure for (larger) project files
-- FOLDER with information
-	- Summary.md
+## Required structure for project files
+Projects should generally be contained in a named folder with files providing information
+- Summary.md
 	Should contain at least the following as top level sections
 		- Title + project ID
 		- Goal/Scope
@@ -39,12 +31,14 @@ Should contain at least the following as top level sections
 		- Status
 		- TODO
 		- Exit criteria
-	- Plan.md 
+- Plan.md 
 	Should contain at least the following as top level sections
 		- Detailed blueprint for implementation
 		- Description of test suite for acceptance
 		- Preferably, list of phases that leave the whole toolkit in a consistent and functioning state
 		- If impossible, description and mitigation.
+
+If plan has not been decided on yet, it is acceptable for plan.md to be missing. 
 
 
 ## Hygiene
