@@ -26,9 +26,9 @@ This repository is notebook-facing and API-facing. Preserve the existing documen
 ## README/docs maintenance
 - If behavior, configuration, or public API changes, update docs in the same change.
 - In this repository, that typically means one or more of:
-  - `documentation/README.md`
-  - `documentation/develop_guide/*.md`
-  - project/issue/discussion docs (in `documentation/bugs/` or `documentation/projects/`) where behavior is tracked.
+  - `docs/README.md`
+  - `docs/develop_guide/*.md`
+  - project/issue/discussion docs (in `docs/bugs/` or `docs/projects/`) where behavior is tracked.
 - If no docs update is needed, state why in the PR summary.
 
 ## Completion checklist (before finalizing)
