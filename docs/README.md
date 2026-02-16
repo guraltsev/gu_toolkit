@@ -82,5 +82,5 @@ For plotting examples in docs and notebooks, use the callable-first API style:
 - `plot(expr_or_callable, x, ...)`
 - range form: `plot(f, (x, xmin, xmax), ...)`
 
-Do not add new examples using the retired legacy order `plot(x, expr, ...)`.
+Use callable-first examples consistently in documentation and notebooks.
 

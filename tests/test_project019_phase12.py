@@ -38,7 +38,8 @@ def test_parameter_change_marks_inactive_view_stale_until_activation() -> None:
     x, a = sp.symbols("x a")
     fig = Figure()
     fig.add_view("alt")
-    fig.plot(a * sp.sin(x), x, parameters=[a], id="sin", view=("main", "alt"))
+    fig.parameter(a)
+    fig.plot(a * sp.sin(x), x, id="sin", view=("main", "alt"))
 
     fig.parameter(a, value=1.0)
     fig.set_active_view("main")

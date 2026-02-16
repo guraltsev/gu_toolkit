@@ -11,11 +11,13 @@ def test_param_change_hooks_run_inside_triggering_figure_context() -> None:
     fig2 = Figure(x_range=(-4, 4), y_range=(-2, 2))
 
     with fig1:
-        fig1.plot(a * sp.sin(x), x, parameters=[a], id="a_sin")
+        fig1.parameter(a)
+        fig1.plot(a * sp.sin(x), x, id="a_sin")
         params[a].value = 1
 
     with fig2:
-        fig2.plot(c * sp.cos(x), x, parameters=[c], id="c_cos")
+        fig2.parameter(c)
+        fig2.plot(c * sp.cos(x), x, id="c_cos")
         params[c].value = 1
 
     log: list[tuple[str, float]] = []

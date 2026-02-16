@@ -39,7 +39,8 @@ Examples
 >>> from gu_toolkit.Figure import Figure
 >>> x, a = sp.symbols("x a")
 >>> fig = Figure()
->>> fig.plot(a * sp.sin(x), x, parameters=[a], id="wave")  # doctest: +SKIP
+>>> fig.parameter(a, min=-2, max=2)  # doctest: +SKIP
+>>> fig.plot(a * sp.sin(x), x, id="wave")  # doctest: +SKIP
 >>> fig  # doctest: +SKIP
 
 Discoverability
@@ -196,8 +197,7 @@ def _normalize_plot_inputs(
         expr = sp.Symbol(id_hint or getattr(f, "__name__", "f"))
     else:
         raise TypeError(
-            "plot() expects first argument to be a SymPy expression, NumericFunction, or callable. "
-            "Legacy plot(var, expr, ...) is no longer supported."
+            "plot() expects first argument to be a SymPy expression, NumericFunction, or callable."
         )
 
     if vars_tuple is not None:
@@ -272,7 +272,8 @@ class Figure:
     >>> import sympy as sp
     >>> x, a = sp.symbols("x a")
     >>> fig = Figure()
-    >>> fig.plot(a*sp.sin(x), x, parameters=[a], id="a_sin")
+    >>> fig.parameter(a, min=-2, max=2)
+    >>> fig.plot(a*sp.sin(x), x, id="a_sin")
     >>> fig
     """
     
@@ -935,9 +936,9 @@ class Figure:
         var : sympy.Symbol or tuple
             Plot variable ``x`` or ``(x, min, max)`` range tuple.
         parameters : list[sympy.Symbol] or None, optional
-            Parameter symbols. If None, they are inferred from the expression.
-            If [], that means explicitly no parameters. Parameter creation and
-            updates are delegated to :class:`ParameterManager` (refactored API).
+            Deprecated. Use :meth:`parameter` / :attr:`parameters` to create and
+            manage controls explicitly. If omitted, symbols are inferred from
+            the expression.
         x_domain : RangeLike or None, optional
             Domain of the independent variable (e.g. ``(-10, 10)``).
             If "figure_default", the figure's range is used when plotting. 
@@ -979,13 +980,14 @@ class Figure:
         --------
         >>> x, a = sp.symbols("x a")  # doctest: +SKIP
         >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.plot(a * sp.sin(x), x, parameters=[a], id="a_sin")  # doctest: +SKIP
+        >>> fig.parameter(a, min=-2, max=2)  # doctest: +SKIP
+        >>> fig.plot(a * sp.sin(x), x, id="a_sin")  # doctest: +SKIP
         >>> fig.plot(sp.sin(x), x, id="sin")  # doctest: +SKIP
 
         Notes
         -----
-        Passing ``parameters=[]`` disables automatic parameter creation even if
-        the expression has free symbols other than ``var``.
+        Prefer explicit parameter setup with :meth:`parameter`/``parameters``
+        before plotting.
 
         All supported style options for this method are discoverable via
         :meth:`Figure.plot_style_options`.
@@ -1019,6 +1021,13 @@ class Figure:
 
         if isinstance(var, tuple) and len(var) == 3:
             x_domain = (var[1], var[2])
+
+        if parameters is not None:
+            warnings.warn(
+                "plot(..., parameters=...) is deprecated; use parameter()/parameters to register controls.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         # Parameter Autodetection
         if parameters is None:
@@ -1481,9 +1490,9 @@ class _CurrentParametersProxy(Mapping):
     >>> x, a = sp.symbols("x a")  # doctest: +SKIP
     >>> fig = Figure()  # doctest: +SKIP
     >>> with fig:  # doctest: +SKIP
-    ...     fig.plot(a * sp.sin(x), x, parameters=[a])  # doctest: +SKIP
-    ...     params[a].value = 5  # doctest: +SKIP
     ...     parameter(a, min=-10, max=10)  # doctest: +SKIP
+    ...     fig.plot(a * sp.sin(x), x)  # doctest: +SKIP
+    ...     params[a].value = 5  # doctest: +SKIP
     """
 
     def _fig(self) -> "Figure":
@@ -1713,7 +1722,8 @@ def plot(
     var : sympy.Symbol or tuple
         Plot variable ``x`` or ``(x, min, max)`` range tuple.
     parameters : sequence[sympy.Symbol], optional
-        Parameter symbols used in the expression. If ``None``, they are inferred.
+        Deprecated. Use :func:`parameter` / :data:`parameters` for explicit
+        control registration. If omitted, symbols are inferred.
     id : str, optional
         Plot identifier for update or creation.
     label : str, optional
@@ -1750,7 +1760,8 @@ def plot(
     Examples
     --------
     >>> x, a = sp.symbols("x a")  # doctest: +SKIP
-    >>> plot(a * sp.sin(x), x, parameters=[a], id="a_sin")  # doctest: +SKIP
+    >>> parameter(a, min=-1, max=1)  # doctest: +SKIP
+    >>> plot(a * sp.sin(x), x, id="a_sin")  # doctest: +SKIP
     >>> plot(sp.sin(x), x, id="sin")  # doctest: +SKIP
 
     Notes

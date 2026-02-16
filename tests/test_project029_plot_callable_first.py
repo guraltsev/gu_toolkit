@@ -16,16 +16,16 @@ def test_plot_supports_sympy_expression_callable_first() -> None:
     assert plot.parameters == ()
 
 
-def test_plot_rejects_legacy_var_expr_order() -> None:
+def test_plot_rejects_var_expr_argument_order() -> None:
     x = sp.Symbol("x")
     fig = Figure()
 
     try:
-        fig.plot(x, sp.sin(x), id="legacy")
+        fig.plot(x, sp.sin(x), id="bad_order")
     except TypeError as exc:
         assert "plot variable" in str(exc)
     else:  # pragma: no cover
-        raise AssertionError("Expected legacy-signature rejection")
+        raise AssertionError("Expected argument-order rejection")
 
 
 def test_plot_supports_callable_first_python_callable() -> None:
