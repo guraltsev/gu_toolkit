@@ -61,7 +61,7 @@ import warnings
 import logging
 from contextlib import ExitStack, contextmanager
 from collections.abc import Mapping
-from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator, List
+from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator, List, NamedTuple
 
 import ipywidgets as widgets
 import numpy as np
@@ -131,6 +131,14 @@ PLOT_STYLE_OPTIONS: Dict[str, str] = {
 # SECTION: Figure (The Coordinator) [id: Figure]
 # =============================================================================
 
+
+class _ViewRuntime(NamedTuple):
+    """Runtime objects owned by a single workspace view."""
+
+    figure_widget: go.FigureWidget
+    pane: PlotlyPane
+
+
 class Figure:
     """
     An interactive Plotly figure for plotting SymPy functions with slider parameters.
@@ -163,9 +171,9 @@ class Figure:
     """
     
     __slots__ = [
-        "_layout", "_params", "_info", "_figure", "_pane", "plots",
+        "_layout", "_params", "_info", "_view_runtime", "_figure", "_pane", "plots",
         "_views", "_active_view_id", "_default_view_id", "_sampling_points", "_debug",
-        "_render_info_last_log_t", "_render_debug_last_log_t", "_relayout_debouncer",
+        "_render_info_last_log_t", "_render_debug_last_log_t", "_relayout_debouncers",
         "_has_been_displayed", "_print_capture"
     ]
 
@@ -224,9 +232,45 @@ class Figure:
         self._info = InfoPanelManager(self._layout.info_box)
         self._info.bind_figure(self)
 
-        # 3. Initialize Plotly Figure
-        self._figure = go.FigureWidget()
-        self._figure.update_layout(
+        # 3. Initialize Per-View Plotly Runtime
+        self._view_runtime: Dict[str, _ViewRuntime] = {}
+        self._relayout_debouncers: Dict[str, QueuedDebouncer] = {}
+        self._layout.observe_tab_selection(self.set_active_view)
+
+        # 4. Set Initial State
+        self._default_view_id = str(default_view_id)
+        self._views: Dict[str, View] = {}
+        self._active_view_id = self._default_view_id
+        self.add_view(self._default_view_id, x_range=x_range, y_range=y_range)
+
+        # Backward-compat convenience aliases mirror the active view runtime.
+        active_runtime = self._runtime_for_view(self._active_view_id)
+        self._figure = active_runtime.figure_widget
+        self._pane = active_runtime.pane
+
+        # 5. Bind Events
+        self._render_info_last_log_t = 0.0
+        self._render_debug_last_log_t = 0.0
+
+    # --- Properties ---
+
+    @property
+    def active_view_id(self) -> str:
+        """Return the currently active view identifier."""
+        return self._active_view_id
+
+    @property
+    def views(self) -> Dict[str, View]:
+        """Return the workspace view registry."""
+        return self._views
+
+    def _active_view(self) -> View:
+        """Return the active view model."""
+        return self._views[self._active_view_id]
+
+    def _default_figure_layout(self) -> Dict[str, Any]:
+        """Return shared Plotly layout defaults copied into each view widget."""
+        return dict(
             autosize=True,
             template="plotly_white",
             showlegend=True,
@@ -274,8 +318,17 @@ class Figure:
                 gridwidth=1,
             ),
         )
-        self._pane = PlotlyPane(
-            self._figure,
+
+    def _runtime_for_view(self, view_id: str) -> _ViewRuntime:
+        """Return the per-view runtime bundle for ``view_id``."""
+        return self._view_runtime[view_id]
+
+    def _create_view_runtime(self, *, view_id: str) -> _ViewRuntime:
+        """Create and register per-view widget runtime state."""
+        figure_widget = go.FigureWidget()
+        figure_widget.update_layout(**self._default_figure_layout())
+        pane = PlotlyPane(
+            figure_widget,
             style=PlotlyPaneStyle(
                 padding_px=8,
                 border="1px solid rgba(15,23,42,0.08)",
@@ -285,44 +338,21 @@ class Figure:
             autorange_mode="none",
             defer_reveal=True,
         )
-        self._layout.set_plot_widget(self._pane.widget, reflow_callback=self._pane.reflow)
-        self._layout.observe_tab_selection(self.set_active_view)
+        runtime = _ViewRuntime(figure_widget=figure_widget, pane=pane)
+        self._view_runtime[view_id] = runtime
+        self._layout.set_view_plot_widget(view_id, pane.widget, reflow_callback=pane.reflow)
 
-        # 4. Set Initial State
-        self._default_view_id = str(default_view_id)
-        self._views: Dict[str, View] = {}
-        self._active_view_id = self._default_view_id
-        self.add_view(self._default_view_id, x_range=x_range, y_range=y_range)
-
-        # 5. Bind Events
-        self._render_info_last_log_t = 0.0
-        self._render_debug_last_log_t = 0.0
-        self._relayout_debouncer = QueuedDebouncer(
-            self._run_relayout,
+        debouncer = QueuedDebouncer(
+            lambda *args: self._run_relayout(view_id=view_id, *args),
             execute_every_ms=500,
             drop_overflow=True,
         )
-        self._figure.layout.on_change(
-            self._throttled_relayout,
-            "xaxis.range", "xaxis.range[0]", "xaxis.range[1]",
-            "yaxis.range", "yaxis.range[0]", "yaxis.range[1]",
+        self._relayout_debouncers[view_id] = debouncer
+        figure_widget.layout.on_change(
+            lambda *args: self._throttled_relayout(view_id, *args),
+            "xaxis.range", "yaxis.range",
         )
-
-    # --- Properties ---
-
-    @property
-    def active_view_id(self) -> str:
-        """Return the currently active view identifier."""
-        return self._active_view_id
-
-    @property
-    def views(self) -> Dict[str, View]:
-        """Return the workspace view registry."""
-        return self._views
-
-    def _active_view(self) -> View:
-        """Return the active view model."""
-        return self._views[self._active_view_id]
+        return runtime
 
     def add_view(
         self,
@@ -350,11 +380,14 @@ class Figure:
             is_active=(not self._views),
         )
         self._views[view_id] = view
+        runtime = self._create_view_runtime(view_id=view_id)
+        runtime.figure_widget.update_xaxes(range=view.default_x_range)
+        runtime.figure_widget.update_yaxes(range=view.default_y_range)
         if view.is_active:
             self._active_view_id = view_id
             self._info.set_active_view(view_id)
-            self._figure.update_xaxes(range=view.default_x_range)
-            self._figure.update_yaxes(range=view.default_y_range)
+            self._figure = runtime.figure_widget
+            self._pane = runtime.pane
         self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
         return view
 
@@ -374,6 +407,10 @@ class Figure:
         nxt = self._active_view()
         nxt.is_active = True
         self._info.set_active_view(id)
+
+        runtime = self._runtime_for_view(id)
+        self._figure = runtime.figure_widget
+        self._pane = runtime.pane
         self._figure.update_xaxes(range=nxt.viewport_x_range or nxt.default_x_range)
         self._figure.update_yaxes(range=nxt.viewport_y_range or nxt.default_y_range)
 
@@ -383,7 +420,7 @@ class Figure:
             nxt.is_stale = False
 
         self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
-        self._pane.reflow()
+        self._layout.trigger_reflow_for_view(self._active_view_id)
 
     @contextmanager
     def view(self, id: str) -> Iterator["Figure"]:
@@ -405,6 +442,8 @@ class Figure:
         if id not in self._views:
             return
         del self._views[id]
+        self._view_runtime.pop(id, None)
+        self._relayout_debouncers.pop(id, None)
         for plot in self.plots.values():
             plot.remove_from_view(id)
         self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
@@ -457,25 +496,31 @@ class Figure:
     
     @property
     def figure_widget(self) -> go.FigureWidget:
-        """Access the underlying Plotly FigureWidget.
+        """Access the active view's Plotly FigureWidget.
 
         Returns
         -------
         plotly.graph_objects.FigureWidget
-            The interactive Plotly widget.
-
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> isinstance(fig.figure_widget, go.FigureWidget)  # doctest: +SKIP
-        True
-
-        Notes
-        -----
-        Directly mutating the widget is supported, but changes may bypass
-        Figure's helper methods.
+            The interactive Plotly widget for :attr:`active_view_id`.
         """
-        return self._figure
+        return self._runtime_for_view(self._active_view_id).figure_widget
+
+    def figure_widget_for(self, view_id: str) -> go.FigureWidget:
+        """Return the Plotly FigureWidget backing ``view_id``.
+
+        Parameters
+        ----------
+        view_id : str
+            Target view identifier.
+
+        Returns
+        -------
+        plotly.graph_objects.FigureWidget
+            The widget owned by that view.
+        """
+        if view_id not in self._views:
+            raise KeyError(f"Unknown view: {view_id}")
+        return self._runtime_for_view(view_id).figure_widget
     
     @property
     def parameters(self) -> ParameterManager:
@@ -1174,13 +1219,18 @@ class Figure:
 
     # --- Internal / Plumbing ---
 
-    def _throttled_relayout(self, *args: Any) -> None:
-        """Queue relayout events through the shared debouncing wrapper."""
-        self._relayout_debouncer(*args)
+    def _throttled_relayout(self, view_id: str, *args: Any) -> None:
+        """Queue relayout events through the per-view debouncing wrapper."""
+        debouncer = self._relayout_debouncers.get(view_id)
+        if debouncer is not None:
+            debouncer(*args)
 
-    def _run_relayout(self, *_: Any) -> None:
+    def _run_relayout(self, *_, view_id: str) -> None:
         """Execute one relayout render from the queued debouncer."""
-        self.render(reason="relayout")
+        if view_id == self.active_view_id:
+            self.render(reason="relayout")
+        else:
+            self._views[view_id].is_stale = True
 
     def _log_render(self, reason: str, trigger: Any) -> None:
         """Log render information with rate-limiting.

@@ -66,30 +66,32 @@ def test_snapshot_and_codegen_capture_multi_view_state() -> None:
     assert "info('alt only', id='alt', view='alt')" in code
 
 
-def test_view_scoped_plot_is_hidden_when_switching_to_other_view() -> None:
+def test_view_scoped_plot_uses_isolated_figure_widgets() -> None:
     x = sp.symbols("x")
     fig = Figure()
     fig.add_view("frequency")
 
-    fig.plot(x, sp.sin(x), id="main-wave")
+    fig.plot(x, sp.sin(x), id="main-wave", view="main")
     with fig.view("frequency"):
-        fig.plot(x, sp.cos(x), id="freq-only")
+        fig.plot(x, sp.cos(x), id="freq-only", view="frequency")
 
-    fig.set_active_view("main")
-    assert fig.figure_widget.data[1].visible is False
+    main_widget = fig.figure_widget_for("main")
+    freq_widget = fig.figure_widget_for("frequency")
 
-    fig.set_active_view("frequency")
-    assert fig.figure_widget.data[1].visible is True
+    assert len(main_widget.data) == 1
+    assert len(freq_widget.data) == 1
+    assert main_widget.data[0].name == "main-wave"
+    assert freq_widget.data[0].name == "freq-only"
 
 
-def test_multi_view_layout_embeds_plot_inside_active_tab() -> None:
+def test_multi_view_layout_embeds_plot_widget_inside_active_tab() -> None:
     fig = Figure()
     fig.add_view("frequency")
 
     active_idx = fig._layout.view_tabs.selected_index
     assert active_idx is not None
     assert fig._layout.plot_container.layout.display == "none"
-    assert fig._layout.view_tabs.children[active_idx].children == (fig._layout.plot_container,)
+    assert fig._layout.view_tabs.children[active_idx].children[0] is fig._pane.widget
 
 
 def test_view_scoped_plots_use_per_view_traces_without_extra_handles() -> None:
@@ -100,7 +102,8 @@ def test_view_scoped_plots_use_per_view_traces_without_extra_handles() -> None:
     fig.plot(x, sp.sin(x), id="main-only", view="main")
     fig.plot(x, sp.cos(x), id="freq-only", view="frequency")
 
-    assert len(fig.figure_widget.data) == 2
+    assert len(fig.figure_widget_for("main").data) == 1
+    assert len(fig.figure_widget_for("frequency").data) == 1
     assert fig.plots["main-only"].views == ("main",)
     assert fig.plots["freq-only"].views == ("frequency",)
 
