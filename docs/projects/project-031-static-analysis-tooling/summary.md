@@ -35,7 +35,8 @@ projects (022, 023) safer to execute.
    SymPy interop edge cases where stubs are incomplete.
 
 3. **pre-commit** — Git hooks to run ruff format and ruff check before
-   commits. This prevents style drift at the source.
+   commits. Turn them off by default but allow a simple way to run them for enforcement if desired. 
+   
 
 ## TODO checklist
 
@@ -47,7 +48,8 @@ projects (022, 023) safer to execute.
 - [ ] Add a `lint` job to `.github/workflows/tests.yml` (or a separate
       workflow) that runs `ruff check`, `ruff format --check`, and `mypy`.
 - [ ] Fix any existing violations surfaced by initial ruff/mypy runs.
-- [ ] Add `.pre-commit-config.yaml` with ruff hooks.
+- [ ] Design and implement simple manual pre-commit commands with ruff hooks.
+- [ ] Make CI perform these commands mandatorily on par with tests
 - [ ] Document the lint/format workflow in `develop_guide/`.
 
 ## Exit criteria
@@ -55,8 +57,10 @@ projects (022, 023) safer to execute.
 - [ ] `ruff check` and `ruff format --check` pass in CI on every PR.
 - [ ] `mypy` passes on at least the `core/` and `snapshot/` modules
       (expanding over time).
-- [ ] Pre-commit hooks are configured and documented.
-- [ ] New contributors can run `pre-commit run --all-files` locally.
+- [ ] optional but suggested Pre-commit hooks implemented and documented, and easy to run.
+- [ ] New contributors CAN run pre-commit validation locally. 
+- [ ] CI performs these commands mandatorily and reports failure as failure of tests
+
 
 ## Challenges and mitigations
 
@@ -74,5 +78,4 @@ projects (022, 023) safer to execute.
 
 - **Challenge:** Pre-commit hooks add friction for contributors unfamiliar
   with them.
-  **Mitigation:** Document setup in developer guide; make hooks optional
-  locally (CI is the gate of record).
+  **Mitigation:** Make pre-commit hooks opt in and easy to run manually. Document setup in developer guide. CI runs them as tests. 
