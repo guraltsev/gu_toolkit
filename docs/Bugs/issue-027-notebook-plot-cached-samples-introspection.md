@@ -4,6 +4,8 @@
 Open
 
 ## Summary
+Assessment (2026-02-17): implementation is partially complete; coverage and/or documentation gaps listed below keep this issue open.
+
 State-of-completion checklist:
 - [x] Plot sample caches are exposed via `x_data` and `y_data` properties with regression tests.
 - [x] Tests confirm sample buffers are read-only and replaced on re-render.

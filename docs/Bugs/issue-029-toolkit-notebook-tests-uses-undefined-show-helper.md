@@ -4,6 +4,8 @@
 Open
 
 ## Summary
+Assessment (2026-02-17): implementation is partially complete; coverage and/or documentation gaps listed below keep this issue open.
+
 State-of-completion checklist:
 - [ ] Notebook test section **B3** still calls `show()` inside `with fig_gui:` and raises `NameError`.
 - [ ] Public notebook namespace exports `render()` but not `show()`, so the B3 snippet is currently not executable as written.

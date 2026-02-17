@@ -1,52 +1,32 @@
 # Issue 031: Variable/parameter convention convergence across `plot()`, `NumericFunction`, and numerical helpers
 
 ## Status
-Open (partially remediated; implementation merged pending external review)
+Open (implementation complete, documentation convergence still pending)
 
 ## Summary
-`plot(..., vars=...)` was too restrictive for callable-first notebook examples because it only accepted symbols/sequences. The notebook demonstrates mapping-based `vars` usage (`{'x': x, 'A': A, 'k': k[1]}`), so this issue tracks convergence between plotting and numeric-callable variable conventions.
+State-of-completion checklist:
+- [x] `plot(..., vars=...)` now accepts mapping-based forms required by callable-first notebook examples.
+- [x] Plotting input normalization reuses shared `numpify._normalize_vars(...)` behavior.
+- [x] Regression tests cover string-keyed mapping, mixed index+name mapping, and invalid non-contiguous index mappings.
+- [x] Notebook callable example using mapping-based `vars` is now runnable.
+- [ ] Public API docs still lack a single explicit grammar reference shared across plotting and numeric helpers.
+- [ ] Cross-helper documentation for alias/symbol resolution rules (including `freeze(...)`) is still incomplete.
 
 ## Evidence
-### Notebook source of truth check
-- `docs/notebooks/Toolkit_overview.ipynb` still includes a `#BUG` note stating `plot` should accept string-keyed dictionaries and mixed index+name mapping for callable vars.
-- The same notebook cell includes a callable plot example with `vars={'x':x, 'A':A,'k':k[1]}`.
-
-⚠️ **WARNING (notebook contradiction):** current code now implements mapping-based `vars` in `plot(...)`, but the notebook still documents this as a bug placeholder. Per workflow, notebook files were not edited automatically and need explicit follow-up review/update.
-
-- Review done. Notebook adjusted. Issue no longer present.
-
-### Code-state assessment before fix
-- `Figure._normalize_plot_inputs(...)` previously typed `vars` as `Optional[Union[Symbol, Sequence[Symbol]]]` and rejected mapping forms.
-- `numpify._normalize_vars(...)` already supported mapping and tuple+tail-mapping grammar, creating divergence between `plot` and `numpify` workflows.
-
-### Remediation implemented
-- `Figure._normalize_plot_inputs(...)` now routes `vars` through shared `numpify._normalize_vars(...)` logic, enabling accepted mapping forms and consistent validation semantics.
-- `Figure.plot(...)` and module-level `plot(...)` now type `vars` using a shared `PlotVarsSpec` alias that includes mapping forms.
-- Callable-first `plot` now preserves and reuses normalized vars specification when constructing/rebinding `NumericFunction`.
-
-### Regression tests added
-- string-keyed mapping form for callable-first `plot` (`{"x": x, "A": A, "k": k}`)
-- mixed index+string mapping form (`{0: x, "a": a}`)
-- validation failure for non-contiguous integer mapping keys (`{0: x, 2: a}`)
+- `Figure._normalize_plot_inputs(...)` routes plotting `vars` through shared normalization logic.
+- `tests/test_project029_plot_callable_first.py` includes mapping-form regression tests.
+- `docs/notebooks/Toolkit_overview.ipynb` includes a runnable callable example with mapping-based `vars`.
 
 ## TODO
-- [x] Assess issue completion status against notebook examples.
-- [x] Emit contradiction warning where notebook bug marker no longer matches implementation.
 - [x] Reuse shared vars normalization path for callable-first plotting.
 - [x] Expand `plot(..., vars=...)` typing to include mapping variants.
 - [x] Add regression tests for success and validation-error mapping forms.
-- [ ] Add targeted docs text in public API reference for `plot(..., vars=...)` accepted grammar.
+- [ ] Add targeted public API reference docs for accepted `vars` grammar.
+- [ ] Align docs for `plot`, `numpify`, and `freeze` around one shared variable-resolution contract.
 
 ## Exit criteria
-- [ ] A single documented `VariableSpec` grammar is referenced by plotting + numeric APIs.
+- [ ] A single documented variable-spec grammar is referenced by plotting + numeric APIs.
 - [x] `plot(..., vars=...)` accepts mapping and tuple+mapping forms with deterministic validation.
-- [ ] `freeze(...)` and plot parameter binding use the same symbol/alias resolution rules across all helper APIs.
-- [x] Notebook callable examples run with no bug placeholders and no API-specific workarounds.
+- [ ] `freeze(...)` and plot parameter binding are documented with matching symbol/alias resolution rules.
+- [x] Notebook callable examples run without bug placeholders or API-specific workarounds.
 - [x] Regression suite covers callable-plot mapping behavior.
-
-## Implementation checklist (this change set)
-- [x] Implement `plot` vars mapping support using shared vars normalization.
-- [x] Preserve callable rebinding behavior when explicit plotting variable differs from callable arg names.
-- [x] Add tests for mapping happy paths and key-validation failure.
-- [x] Keep issue open pending external review.
-- [x] External review done

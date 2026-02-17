@@ -4,6 +4,8 @@
 Open
 
 ## Summary
+Assessment (2026-02-17): implementation is partially complete; coverage and/or documentation gaps listed below keep this issue open.
+
 State-of-completion checklist:
 - [x] `_syncing` writes in `FloatSlider` sync helpers are guarded with `try/finally` reset paths (`_sync_number_text`, `_sync_limit_texts`, and invalid-limit rollback branch).
 - [x] User-facing slider docs/docstrings were expanded and now describe parse/revert behavior for text commits.
