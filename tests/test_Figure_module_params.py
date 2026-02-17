@@ -94,6 +94,43 @@ def test_plot_opacity_shortcut_and_validation() -> None:
 
 
 
+
+
+def test_plot_style_aliases_are_accepted_and_conflicts_rejected() -> None:
+    x = sp.symbols("x")
+    fig = Figure()
+
+    plot = fig.plot(sp.sin(x), x, id="sin", width=3, alpha=0.25)
+    assert plot.thickness == 3
+    assert plot.opacity == 0.25
+
+    plot_same = fig.plot(sp.sin(x), x, id="sin", thickness=2, width=2, opacity=0.5, alpha=0.5)
+    assert plot_same.thickness == 2
+    assert plot_same.opacity == 0.5
+
+    with pytest.raises(ValueError, match="thickness=.*width"):
+        fig.plot(sp.sin(x), x, id="sin", thickness=2, width=4)
+
+    with pytest.raises(ValueError, match="opacity=.*alpha"):
+        fig.plot(sp.sin(x), x, id="sin", opacity=0.4, alpha=0.9)
+
+
+def test_plot_update_aliases_support_and_conflicts() -> None:
+    x = sp.symbols("x")
+    fig = Figure()
+    plot = fig.plot(sp.sin(x), x, id="sin")
+
+    plot.update(width=5, alpha=0.3)
+    assert plot.thickness == 5
+    assert plot.opacity == 0.3
+
+    with pytest.raises(ValueError, match="thickness=.*width"):
+        plot.update(thickness=1, width=2)
+
+    with pytest.raises(ValueError, match="opacity=.*alpha"):
+        plot.update(opacity=0.2, alpha=0.8)
+
+
 def test_plot_cached_samples_none_before_first_render() -> None:
     x = sp.symbols("x")
     fig = Figure()
@@ -168,7 +205,7 @@ def test_plot_figure_property_exposes_owner_and_context_manager() -> None:
 
 def test_plot_style_options_are_discoverable() -> None:
     options = plot_style_options()
-    for key in ("color", "thickness", "dash", "opacity", "line", "trace"):
+    for key in ("color", "thickness", "width", "dash", "opacity", "alpha", "line", "trace"):
         assert key in options
 
     fig_options = Figure.plot_style_options()
