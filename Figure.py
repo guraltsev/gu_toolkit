@@ -124,11 +124,34 @@ VisibleSpec = Union[bool, str]  # Plotly uses True/False or the string "legendon
 PLOT_STYLE_OPTIONS: Dict[str, str] = {
     "color": "Line color. Accepts CSS-like names (e.g., red), hex (#RRGGBB), or rgb()/rgba() strings.",
     "thickness": "Line width in pixels. Larger values draw thicker lines.",
+    "width": "Alias for thickness.",
     "dash": "Line pattern. Supported values: solid, dot, dash, longdash, dashdot, longdashdot.",
     "opacity": "Overall trace opacity from 0.0 (fully transparent) to 1.0 (fully opaque).",
+    "alpha": "Alias for opacity.",
     "line": "Extra line-style fields as a mapping (for advanced per-line styling).",
     "trace": "Extra trace fields as a mapping (for advanced full-trace styling).",
 }
+
+
+def _resolve_style_aliases(*, thickness: Optional[Union[int, float]], width: Optional[Union[int, float]], opacity: Optional[Union[int, float]], alpha: Optional[Union[int, float]]) -> tuple[Optional[Union[int, float]], Optional[Union[int, float]]]:
+    """Resolve plot style aliases into canonical values.
+
+    Raises
+    ------
+    ValueError
+        If alias and canonical values are both provided with different values.
+    """
+    if width is not None:
+        if thickness is not None and width != thickness:
+            raise ValueError("plot() received both thickness= and width= with different values; use only one.")
+        thickness = width if thickness is None else thickness
+
+    if alpha is not None:
+        if opacity is not None and alpha != opacity:
+            raise ValueError("plot() received both opacity= and alpha= with different values; use only one.")
+        opacity = alpha if opacity is None else opacity
+
+    return thickness, opacity
 
 
 
@@ -902,8 +925,8 @@ class Figure:
         Notes
         -----
         These options can be passed directly to :meth:`plot` and :func:`plot`.
-        Current supported shortcut keys are: ``color``, ``thickness``,
-        ``dash``, ``opacity``, ``line``, and ``trace``.
+        Current supported shortcut keys are: ``color``, ``thickness``/``width``,
+        ``dash``, ``opacity``/``alpha``, ``line``, and ``trace``.
         """
         return dict(PLOT_STYLE_OPTIONS)
 
@@ -919,9 +942,11 @@ class Figure:
         sampling_points: Optional[Union[int, str]] = None,
         color: Optional[str] = None,
         thickness: Optional[Union[int, float]] = None,
+        width: Optional[Union[int, float]] = None,
         dash: Optional[str] = None,
         line: Optional[Mapping[str, Any]] = None,
         opacity: Optional[Union[int, float]] = None,
+        alpha: Optional[Union[int, float]] = None,
         trace: Optional[Mapping[str, Any]] = None,
         view: Optional[Union[str, Sequence[str]]] = None,
         vars: Optional[Union[Symbol, Sequence[Symbol]]] = None,
@@ -960,6 +985,8 @@ class Figure:
             hex values (e.g., ``"#ff0000"``), and ``rgb(...)``/``rgba(...)``.
         thickness : int or float, optional
             Line width in pixels. ``1`` is thin; larger values produce thicker lines.
+        width : int or float, optional
+            Alias for ``thickness``.
         dash : str or None, optional
             Line pattern. Supported values: ``"solid"``, ``"dot"``, ``"dash"``,
             ``"longdash"``, ``"dashdot"``, ``"longdashdot"``.
@@ -968,6 +995,8 @@ class Figure:
         opacity : int or float, optional
             Overall curve opacity between ``0.0`` (fully transparent) and
             ``1.0`` (fully opaque).
+        alpha : int or float, optional
+            Alias for ``opacity``.
         trace : mapping or None, optional
             Extra full-trace style fields as a mapping (advanced usage).
 
@@ -996,7 +1025,7 @@ class Figure:
         --------
         parameter : Create sliders without plotting.
         plot_style_options : List supported style kwargs and meanings
-            (`color`, `thickness`, `dash`, `opacity`, `line`, `trace`).
+            (`color`, `thickness`, `width`, `dash`, `opacity`, `alpha`, `line`, `trace`).
         """
         # ID Generation
         if id is None:
@@ -1028,6 +1057,13 @@ class Figure:
                 DeprecationWarning,
                 stacklevel=2,
             )
+
+        thickness, opacity = _resolve_style_aliases(
+            thickness=thickness,
+            width=width,
+            opacity=opacity,
+            alpha=alpha,
+        )
 
         # Parameter Autodetection
         if parameters is None:
@@ -1645,8 +1681,8 @@ def plot_style_options() -> Dict[str, str]:
 
     Notes
     -----
-    Current supported shortcut keys are: ``color``, ``thickness``, ``dash``,
-    ``opacity``, ``line``, and ``trace``.
+    Current supported shortcut keys are: ``color``, ``thickness``/``width``, ``dash``,
+    ``opacity``/``alpha``, ``line``, and ``trace``.
     """
     return Figure.plot_style_options()
 
@@ -1705,8 +1741,10 @@ def plot(
     sampling_points: Optional[Union[int, str]] = None,
     color: Optional[str] = None,
     thickness: Optional[Union[int, float]] = None,
+    width: Optional[Union[int, float]] = None,
     dash: Optional[str] = None,
     opacity: Optional[Union[int, float]] = None,
+    alpha: Optional[Union[int, float]] = None,
     line: Optional[Mapping[str, Any]] = None,
     trace: Optional[Mapping[str, Any]] = None,
     view: Optional[Union[str, Sequence[str]]] = None,
@@ -1741,6 +1779,8 @@ def plot(
         hex values (e.g., ``"#ff0000"``), and ``rgb(...)``/``rgba(...)``.
     thickness : int or float, optional
         Line width in pixels. ``1`` is thin; larger values produce thicker lines.
+    width : int or float, optional
+        Alias for ``thickness``.
     dash : str or None, optional
         Line pattern. Supported values: ``"solid"``, ``"dot"``, ``"dash"``,
         ``"longdash"``, ``"dashdot"``, ``"longdashdot"``.
@@ -1749,6 +1789,8 @@ def plot(
     opacity : int or float, optional
         Overall curve opacity between ``0.0`` (fully transparent) and
         ``1.0`` (fully opaque).
+    alpha : int or float, optional
+        Alias for ``opacity``.
     trace : mapping or None, optional
         Extra full-trace style fields as a mapping (advanced usage).
 
@@ -1776,7 +1818,7 @@ def plot(
     --------
     Figure.plot : Instance method with the same signature.
     plot_style_options : List supported style kwargs and meanings
-        (`color`, `thickness`, `dash`, `opacity`, `line`, `trace`).
+        (`color`, `thickness`, `width`, `dash`, `opacity`, `alpha`, `line`, `trace`).
     """
     fig = _current_figure()
     if fig is None:
@@ -1793,9 +1835,11 @@ def plot(
         sampling_points=sampling_points,
         color=color,
         thickness=thickness,
+        width=width,
         dash=dash,
         line=line,
         opacity=opacity,
+        alpha=alpha,
         trace=trace,
         view=view,
         vars=vars,
