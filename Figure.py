@@ -202,6 +202,8 @@ def _normalize_plot_inputs(
 
     if vars_tuple is not None:
         bound_symbols = vars_tuple
+        if numeric_fn is not None:
+            numeric_fn = NumericFunction(f, vars=bound_symbols)
     else:
         bound_symbols = call_symbols
 
