@@ -103,7 +103,9 @@ def test_dynamic_parameter_context_uses_lookup_only_mapping() -> None:
     x, a = sp.symbols("x a")
     compiled = numpify_module.numpify(a * x, vars=(x, a), cache=False)
     ctx = _LookupOnlyCtx({a: 2.0})
-    dynamic = compiled.set_parameter_context(ctx).freeze({a: numpify_module.DYNAMIC_PARAMETER})
+    dynamic = compiled.set_parameter_context(ctx).freeze(
+        {a: numpify_module.DYNAMIC_PARAMETER}
+    )
 
     assert dynamic(3.0) == 6.0
     ctx.set_value(a, 4.0)
@@ -112,7 +114,9 @@ def test_dynamic_parameter_context_uses_lookup_only_mapping() -> None:
 
 def test_signature_and_free_var_tracking_with_keyed_tail() -> None:
     x, y, s = sp.symbols("x y s")
-    compiled = numpify_module.numpify(x + y * s, vars=(x, {"y": y, "scale": s}), cache=False)
+    compiled = numpify_module.numpify(
+        x + y * s, vars=(x, {"y": y, "scale": s}), cache=False
+    )
 
     assert str(inspect.signature(compiled)) == "(x, y, s, /)"
 
@@ -133,7 +137,9 @@ def test_freeze_unfreeze_roundtrip_for_numeric_function() -> None:
 
 def test_keyed_calling_validation_errors() -> None:
     x, y, s = sp.symbols("x y s")
-    compiled = numpify_module.numpify(x + y * s, vars=(x, {"y": y, "scale": s}), cache=False)
+    compiled = numpify_module.numpify(
+        x + y * s, vars=(x, {"y": y, "scale": s}), cache=False
+    )
 
     try:
         compiled(2, y=3)

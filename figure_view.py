@@ -16,7 +16,6 @@ than tab-widget composition.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -53,8 +52,7 @@ class View:
     y_label: str
     default_x_range: tuple[float, float]
     default_y_range: tuple[float, float]
-    viewport_x_range: Optional[tuple[float, float]] = None
-    viewport_y_range: Optional[tuple[float, float]] = None
+    viewport_x_range: tuple[float, float] | None = None
+    viewport_y_range: tuple[float, float] | None = None
     is_active: bool = False
     is_stale: bool = False
-

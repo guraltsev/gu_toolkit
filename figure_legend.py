@@ -49,7 +49,7 @@ from __future__ import annotations
 
 import html
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 import ipywidgets as widgets
 
@@ -71,10 +71,10 @@ class LegendPanelManager:
     def __init__(self, layout_box: widgets.Box) -> None:
         """Initialize a legend manager bound to the provided layout box."""
         self._layout_box = layout_box
-        self._rows: Dict[str, LegendRowModel] = {}
-        self._plots: Dict[str, Any] = {}
+        self._rows: dict[str, LegendRowModel] = {}
+        self._plots: dict[str, Any] = {}
         self._ordered_plot_ids: list[str] = []
-        self._active_view_id: Optional[str] = None
+        self._active_view_id: str | None = None
         self._suspended_plot_ids: set[str] = set()
 
     @property
@@ -84,7 +84,9 @@ class LegendPanelManager:
 
     def on_plot_added(self, plot: Any) -> None:
         """Register a plot and create a row if needed."""
-        plot_id = self._normalize_plot_id(getattr(plot, "id", None), fallback_prefix="plot")
+        plot_id = self._normalize_plot_id(
+            getattr(plot, "id", None), fallback_prefix="plot"
+        )
         self._plots[plot_id] = plot
         if plot_id not in self._ordered_plot_ids:
             self._ordered_plot_ids.append(plot_id)
@@ -94,7 +96,9 @@ class LegendPanelManager:
 
     def on_plot_updated(self, plot: Any) -> None:
         """Refresh row contents for an existing plot or lazily add it."""
-        plot_id = self._normalize_plot_id(getattr(plot, "id", None), fallback_prefix="plot")
+        plot_id = self._normalize_plot_id(
+            getattr(plot, "id", None), fallback_prefix="plot"
+        )
         if plot_id not in self._rows:
             self.on_plot_added(plot)
             return
@@ -148,13 +152,25 @@ class LegendPanelManager:
             indent=False,
             layout=widgets.Layout(width="28px", min_width="28px", margin="0"),
         )
-        label_widget = widgets.HTMLMath(value="", layout=widgets.Layout(margin="0", width="100%"))
+        label_widget = widgets.HTMLMath(
+            value="", layout=widgets.Layout(margin="0", width="100%")
+        )
         container = widgets.HBox(
             [toggle, label_widget],
-            layout=widgets.Layout(width="100%", align_items="center", margin="0", gap="6px"),
+            layout=widgets.Layout(
+                width="100%", align_items="center", margin="0", gap="6px"
+            ),
         )
-        toggle.observe(lambda change, pid=plot_id: self._on_toggle_changed(pid, change), names="value")
-        return LegendRowModel(plot_id=plot_id, container=container, toggle=toggle, label_widget=label_widget)
+        toggle.observe(
+            lambda change, pid=plot_id: self._on_toggle_changed(pid, change),
+            names="value",
+        )
+        return LegendRowModel(
+            plot_id=plot_id,
+            container=container,
+            toggle=toggle,
+            label_widget=label_widget,
+        )
 
     def _sync_row_widgets(self, *, row: LegendRowModel, plot: Any) -> None:
         """Incrementally update label/toggle to mirror current plot state."""
@@ -170,7 +186,7 @@ class LegendPanelManager:
             finally:
                 self._suspended_plot_ids.discard(row.plot_id)
 
-    def _on_toggle_changed(self, plot_id: str, change: Dict[str, Any]) -> None:
+    def _on_toggle_changed(self, plot_id: str, change: dict[str, Any]) -> None:
         """Propagate user checkbox toggles to bound plot visibility."""
         if change.get("name") != "value":
             return
@@ -185,8 +201,6 @@ class LegendPanelManager:
     def _coerce_visible_to_bool(value: Any) -> bool:
         """Map mixed visibility states to v1 legend checkbox semantics."""
         return value is True
-
-
 
     @staticmethod
     def _normalize_plot_id(raw_plot_id: Any, *, fallback_prefix: str) -> str:

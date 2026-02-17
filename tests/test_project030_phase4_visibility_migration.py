@@ -28,4 +28,3 @@ def test_phase4_legend_toggle_migrates_legendonly_to_boolean_visibility() -> Non
 
     row.toggle.value = True
     assert fig.plots["legacy"].visible is True
-

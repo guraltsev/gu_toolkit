@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sympy as sp
+
 from gu_toolkit.NamedFunction import NamedFunction
 
 
@@ -46,4 +47,3 @@ def test_opaque_definition_stays_opaque() -> None:
 
     expr = G(x).rewrite("expand_definition")
     assert expr == G(x), expr
-

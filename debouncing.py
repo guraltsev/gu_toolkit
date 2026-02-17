@@ -42,17 +42,18 @@ Related modules:
 
 from __future__ import annotations
 
-from collections import deque
-from dataclasses import dataclass
-from typing import Any, Callable, Deque, Optional, Tuple
 import asyncio
-import threading
 import logging
+import threading
+from collections import deque
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
 class _QueuedCall:
-    args: Tuple[Any, ...]
+    args: tuple[Any, ...]
     kwargs: dict[str, Any]
 
 
@@ -82,9 +83,9 @@ class QueuedDebouncer:
         self._execute_every_s = execute_every_ms / 1000.0
         self._drop_overflow = bool(drop_overflow)
 
-        self._queue: Deque[_QueuedCall] = deque()
+        self._queue: deque[_QueuedCall] = deque()
         self._lock = threading.Lock()
-        self._timer: Optional[Any] = None
+        self._timer: Any | None = None
 
     def __call__(self, *args: Any, **kwargs: Any) -> None:
         with self._lock:
@@ -106,7 +107,7 @@ class QueuedDebouncer:
         self._timer = loop.call_later(delay_s, self._on_tick)
 
     def _on_tick(self) -> None:
-        call: Optional[_QueuedCall] = None
+        call: _QueuedCall | None = None
 
         with self._lock:
             self._timer = None

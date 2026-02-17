@@ -37,19 +37,30 @@ def _resolve_numeric_callable(expr, x, freeze, freeze_kwargs):
         variables = tuple(expr.variables)
         if not variables:
             const_val = float(sp.N(expr.expr))
-            return lambda t: np.full_like(np.asarray(t, dtype=float), const_val, dtype=float)
+            return lambda t: np.full_like(
+                np.asarray(t, dtype=float), const_val, dtype=float
+            )
         compiled = numpify_cached(expr.expr, vars=variables)
-    elif isinstance(expr, sp.Basic) or isinstance(expr, (int, float, complex, np.number)):
+    elif isinstance(expr, (sp.Basic, int, float, complex, np.number)):
         symbolic_expr = sp.sympify(expr)
         if not isinstance(x, sp.Symbol):
-            raise TypeError(f"NIntegrate expects x to be a sympy Symbol for symbolic expressions, got {type(x)}")
-        required_symbols = tuple(sorted((symbolic_expr.free_symbols - {x}), key=lambda s: s.name))
+            raise TypeError(
+                f"NIntegrate expects x to be a sympy Symbol for symbolic expressions, got {type(x)}"
+            )
+        required_symbols = tuple(
+            sorted((symbolic_expr.free_symbols - {x}), key=lambda s: s.name)
+        )
         compiled = numpify_cached(symbolic_expr, vars=(x, *required_symbols))
     elif callable(expr):
         signature = inspect.signature(expr)
         positional = [
-            param for param in signature.parameters.values()
-            if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            param
+            for param in signature.parameters.values()
+            if param.kind
+            in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
         ]
         required = [param for param in positional if param.default is inspect._empty]
         if len(required) > 1:
@@ -58,7 +69,9 @@ def _resolve_numeric_callable(expr, x, freeze, freeze_kwargs):
                 "pass a NumericFunction and use freeze=..."
             )
         if freeze is not None or freeze_kwargs:
-            raise TypeError("freeze= is only supported for symbolic/NumericFunction inputs")
+            raise TypeError(
+                "freeze= is only supported for symbolic/NumericFunction inputs"
+            )
         return expr
     else:
         raise TypeError(f"Unsupported expr type for NIntegrate: {type(expr)}")
@@ -66,8 +79,16 @@ def _resolve_numeric_callable(expr, x, freeze, freeze_kwargs):
     if not compiled.vars:
         raise TypeError("NIntegrate requires an x argument for NumericFunction inputs")
     if len(compiled.vars) == 1:
-        return compiled.freeze(freeze, **freeze_kwargs) if (freeze is not None or freeze_kwargs) else compiled
-    return compiled.freeze(freeze, **freeze_kwargs) if (freeze is not None or freeze_kwargs) else compiled
+        return (
+            compiled.freeze(freeze, **freeze_kwargs)
+            if (freeze is not None or freeze_kwargs)
+            else compiled
+        )
+    return (
+        compiled.freeze(freeze, **freeze_kwargs)
+        if (freeze is not None or freeze_kwargs)
+        else compiled
+    )
 
 
 def NIntegrate(expr, var_and_limits, freeze=None, **freeze_kwargs):
@@ -87,11 +108,15 @@ def NIntegrate(expr, var_and_limits, freeze=None, **freeze_kwargs):
     return value
 
 
-def NReal_Fourier_Series(expr, var_and_limits, samples=4000, freeze=None, **freeze_kwargs):
+def NReal_Fourier_Series(
+    expr, var_and_limits, samples=4000, freeze=None, **freeze_kwargs
+):
     try:
         x, a, b = var_and_limits
     except Exception as exc:  # pragma: no cover
-        raise TypeError("NReal_Fourier_Series expects limits as a tuple: (x, a, b)") from exc
+        raise TypeError(
+            "NReal_Fourier_Series expects limits as a tuple: (x, a, b)"
+        ) from exc
 
     if int(samples) < 2:
         raise ValueError("samples must be >= 2")
@@ -158,7 +183,9 @@ def play(expr, var_and_limits, loop=True, autoplay=False):
     else:
         y = np.ravel(y)
         if y.shape[0] != sample_count:
-            raise ValueError("Expression must evaluate to one audio sample per time point")
+            raise ValueError(
+                "Expression must evaluate to one audio sample per time point"
+            )
 
     y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
     peak = float(np.max(np.abs(y))) if y.size else 0.0
@@ -178,7 +205,7 @@ def play(expr, var_and_limits, loop=True, autoplay=False):
     loop_attr = " loop" if loop else ""
     autoplay_attr = " autoplay" if autoplay else ""
     return HTML(
-        f'<audio controls{autoplay_attr}{loop_attr} '
+        f"<audio controls{autoplay_attr}{loop_attr} "
         f'src="data:audio/wav;base64,{encoded}"></audio>'
     )
 

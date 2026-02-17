@@ -18,7 +18,9 @@ def test_parse_latex_falls_back_when_lark_returns_tree() -> None:
             return sp.Symbol("x") + 1
         raise AssertionError("unexpected backend")
 
-    with patch("gu_toolkit.ParseLaTeX._sympy_parse_latex", side_effect=_fake_parse_latex):
+    with patch(
+        "gu_toolkit.ParseLaTeX._sympy_parse_latex", side_effect=_fake_parse_latex
+    ):
         out = parse_latex(r"\\frac{1}{2}x")
 
     assert out == sp.Symbol("x") + 1

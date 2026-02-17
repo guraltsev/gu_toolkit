@@ -6,9 +6,7 @@ import numpy as np
 import sympy as sp
 
 from gu_toolkit import Figure
-from gu_toolkit.numeric_operations import NIntegrate
-from gu_toolkit.numeric_operations import NReal_Fourier_Series
-from gu_toolkit.numeric_operations import play
+from gu_toolkit.numeric_operations import NIntegrate, NReal_Fourier_Series, play
 
 
 def test_nintegrate_finite_interval() -> None:
@@ -34,7 +32,9 @@ def test_nintegrate_symbolic_expr_freeze_missing_raises() -> None:
     try:
         NIntegrate(a * x + b, (x, 0, 1), freeze={a: 2.0})
     except TypeError as exc:
-        assert "Missing positional argument" in str(exc) or "required positional arguments" in str(exc)
+        assert "Missing positional argument" in str(
+            exc
+        ) or "required positional arguments" in str(exc)
         assert "b" in str(exc)
     else:  # pragma: no cover - defensive
         raise AssertionError("Expected error for missing freeze binding")
@@ -46,7 +46,9 @@ def test_nintegrate_symbolic_expr_without_freeze_raises_missing_arg() -> None:
     try:
         NIntegrate(a * x + b, (x, 0, 1))
     except TypeError as exc:
-        assert "Missing positional argument" in str(exc) or "required positional arguments" in str(exc)
+        assert "Missing positional argument" in str(
+            exc
+        ) or "required positional arguments" in str(exc)
         assert "a" in str(exc)
     else:  # pragma: no cover - defensive
         raise AssertionError("Expected missing-argument TypeError")
@@ -59,7 +61,11 @@ def test_nintegrate_symbolic_expr_with_smartfigure_binding() -> None:
     fig.parameters[a].value = 2.0
     fig.parameters[b].value = 3.0
 
-    result = NIntegrate(a * x + b, (x, 0, 1), freeze={a: fig.parameters[a].value, b: fig.parameters[b].value})
+    result = NIntegrate(
+        a * x + b,
+        (x, 0, 1),
+        freeze={a: fig.parameters[a].value, b: fig.parameters[b].value},
+    )
     assert math.isclose(result, 4.0, rel_tol=1e-10, abs_tol=1e-12)
 
 
@@ -121,7 +127,9 @@ def test_nintegrate_sympy_lambda_without_freeze_raises_missing_arg() -> None:
     try:
         NIntegrate(lam, (x, 0, 1))
     except TypeError as exc:
-        assert "Missing positional argument" in str(exc) or "required positional arguments" in str(exc)
+        assert "Missing positional argument" in str(
+            exc
+        ) or "required positional arguments" in str(exc)
         assert "a" in str(exc)
     else:  # pragma: no cover - defensive
         raise AssertionError("Expected missing-argument TypeError")
@@ -132,14 +140,18 @@ def test_nreal_fourier_series_constant_l2_normalized() -> None:
     cos_coeffs, sin_coeffs = NReal_Fourier_Series(1, (x, 0, 2 * sp.pi), samples=4096)
 
     assert cos_coeffs.shape == sin_coeffs.shape
-    assert math.isclose(cos_coeffs[0], math.sqrt(2.0 * math.pi), rel_tol=3e-3, abs_tol=3e-3)
+    assert math.isclose(
+        cos_coeffs[0], math.sqrt(2.0 * math.pi), rel_tol=3e-3, abs_tol=3e-3
+    )
     assert np.all(np.abs(cos_coeffs[1:25]) < 1e-2)
     assert np.all(np.abs(sin_coeffs[:25]) < 1e-2)
 
 
 def test_nreal_fourier_series_single_mode_matches_expected_component() -> None:
     x = sp.Symbol("x")
-    cos_coeffs, sin_coeffs = NReal_Fourier_Series(sp.sin(3 * x), (x, 0, 2 * sp.pi), samples=4096)
+    cos_coeffs, sin_coeffs = NReal_Fourier_Series(
+        sp.sin(3 * x), (x, 0, 2 * sp.pi), samples=4096
+    )
 
     assert math.isclose(sin_coeffs[3], math.sqrt(math.pi), rel_tol=3e-3, abs_tol=3e-3)
     assert np.all(np.abs(cos_coeffs[:10]) < 1e-2)
@@ -152,11 +164,11 @@ def test_play_returns_non_autoplay_audio_by_default() -> None:
     x = sp.Symbol("x")
     widget = play(sp.sin(2 * sp.pi * 220 * x), (x, 0, 0.01), loop=False)
     data = widget.data
-    assert '<audio controls ' in data
-    assert 'autoplay' not in data
+    assert "<audio controls " in data
+    assert "autoplay" not in data
 
 
 def test_play_can_enable_autoplay_explicitly() -> None:
     x = sp.Symbol("x")
     widget = play(sp.sin(2 * sp.pi * 220 * x), (x, 0, 0.01), loop=False, autoplay=True)
-    assert 'autoplay' in widget.data
+    assert "autoplay" in widget.data

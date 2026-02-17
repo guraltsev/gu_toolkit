@@ -22,6 +22,8 @@ dependencies = [
 dev = [
   "pytest>=8",
   "pytest-cov>=5",
+  "ruff>=0.1.0",
+  "mypy>=1.8.0",
 ]
 pandas = [
   "pandas",
@@ -45,3 +47,87 @@ omit = ["*/tests/*"]
 [tool.coverage.report]
 show_missing = true
 fail_under = 75
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+# Enable:
+# E - pycodestyle errors
+# F - pyflakes
+# W - pycodestyle warnings
+# I - isort (import sorting)
+# UP - pyupgrade (modern Python idioms)
+# B - flake8-bugbear (common bugs)
+# C4 - flake8-comprehensions
+# SIM - flake8-simplify
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+
+# Ignore specific rules that conflict with scientific/notebook code style
+ignore = [
+  "E501",    # Line too long (handled by formatter)
+  "SIM108",  # Use ternary operator (can reduce readability in complex cases)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]  # Allow unused imports and star imports in __init__.py files
+"tests/*" = ["F401", "F811"]  # Allow unused imports and redefinitions in tests
+"*.ipynb" = ["E402", "F403", "F405"]  # Notebooks: allow imports not at top, star imports, and star import usage
+"Figure.py" = ["E402"]  # Deferred imports for circular import handling
+"notebook_namespace.py" = ["E402", "F403"]  # Intentional star imports and deferred imports for notebook convenience
+
+[tool.ruff.lint.isort]
+known-first-party = ["gu_toolkit"]
+force-single-line = false
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Start permissive, tighten per module
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+show_column_numbers = true
+explicit_package_bases = true
+namespace_packages = true
+
+# Per-module configuration - start strict on core modules
+[[tool.mypy.overrides]]
+module = [
+  "figure_context",
+  "figure_info",
+  "figure_layout",
+  "figure_legend",
+  "figure_parameters",
+  "figure_plot",
+  "figure_view",
+  "ParamRef",
+  "ParamEvent",
+  "ParameterSnapshot",
+  "InputConvert",
+]
+disallow_untyped_defs = true
+disallow_any_unimported = false
+
+# Allow missing imports for third-party libraries without stubs
+[[tool.mypy.overrides]]
+module = [
+  "sympy.*",
+  "plotly.*",
+  "anywidget.*",
+  "IPython.*",
+  "ipywidgets.*",
+  "numpy.*",
+  "pytest.*",
+  "traitlets.*",
+  "pandas.*",
+  "scipy.*",
+]
+ignore_missing_imports = true

@@ -3,23 +3,23 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
-from typing import Any, Callable, Dict, Iterator, Optional, Sequence, Tuple, Union
+from collections.abc import Callable, Hashable, Iterator, Mapping, Sequence
+from typing import Any
 
 import ipywidgets as widgets
 import sympy as sp
 from sympy.core.symbol import Symbol
 
+from .ParameterSnapshot import ParameterSnapshot, ParameterValueSnapshot
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
-from .ParameterSnapshot import ParameterSnapshot, ParameterValueSnapshot
 from .Slider import FloatSlider
 
 
 class _ParameterContextView(Mapping[Symbol, Any]):
     """Live Mapping[Symbol, value] view over ParameterManager refs."""
 
-    def __init__(self, refs: Dict[Symbol, ParamRef]) -> None:
+    def __init__(self, refs: dict[Symbol, ParamRef]) -> None:
         self._refs = refs
 
     def __getitem__(self, key: Symbol) -> Any:
@@ -31,8 +31,10 @@ class _ParameterContextView(Mapping[Symbol, Any]):
     def __len__(self) -> int:
         return len(self._refs)
 
+
 # SECTION: ParameterManager (The Model for Parameters) [id: ParameterManager]
 # =============================================================================
+
 
 class ParameterManager(Mapping[Symbol, ParamRef]):
     """
@@ -50,7 +52,12 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
     from the "rendering" of the figure.
     """
 
-    def __init__(self, render_callback: Callable[[str, ParamEvent], None], layout_box: widgets.Box, modal_host: Optional[widgets.Box] = None) -> None:
+    def __init__(
+        self,
+        render_callback: Callable[[str, ParamEvent], None],
+        layout_box: widgets.Box,
+        modal_host: widgets.Box | None = None,
+    ) -> None:
         """Initialize the manager with a render callback and layout container.
 
         Parameters
@@ -76,16 +83,22 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         ``render_callback`` is invoked by :meth:`_on_param_change` whenever any
         parameter value updates.
         """
-        self._refs: Dict[Symbol, ParamRef] = {}
+        self._refs: dict[Symbol, ParamRef] = {}
         self._parameter_context_view = _ParameterContextView(self._refs)
-        self._controls: List[Any] = []
-        self._hooks: Dict[Hashable, Callable[[ParamEvent], Any]] = {}
+        self._controls: list[Any] = []
+        self._hooks: dict[Hashable, Callable[[ParamEvent], Any]] = {}
         self._hook_counter: int = 0
         self._render_callback = render_callback
-        self._layout_box = layout_box # The VBox where sliders live
+        self._layout_box = layout_box  # The VBox where sliders live
         self._modal_host = modal_host
 
-    def parameter(self, symbols: Union[Symbol, Sequence[Symbol]], *, control: Optional[Any] = None, **control_kwargs: Any):
+    def parameter(
+        self,
+        symbols: Symbol | Sequence[Symbol],
+        *,
+        control: Any | None = None,
+        **control_kwargs: Any,
+    ):
         """
         Create or reuse parameter references for the given symbols.
 
@@ -135,24 +148,28 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         if control is not None and existing:
             for symbol in existing:
                 if self._refs[symbol].widget is not control:
-                    raise ValueError(f"Symbol {symbol} is already bound to a different control.")
+                    raise ValueError(
+                        f"Symbol {symbol} is already bound to a different control."
+                    )
 
-        defaults = {'value': 0.0, 'min': -1.0, 'max': 1.0, 'step': 0.01}
+        defaults = {"value": 0.0, "min": -1.0, "max": 1.0, "step": 0.01}
 
         if control is None:
             for symbol in missing:
                 config = {**defaults, **control_kwargs}
                 new_control = FloatSlider(
                     description=f"${sp.latex(symbol)}$",
-                    value=float(config['value']),
-                    min=float(config['min']),
-                    max=float(config['max']),
-                    step=float(config['step'])
+                    value=float(config["value"]),
+                    min=float(config["min"]),
+                    max=float(config["max"]),
+                    step=float(config["step"]),
                 )
                 self._attach_modal_host(new_control)
                 refs = new_control.make_refs([symbol])
                 if symbol not in refs:
-                    raise KeyError(f"Control did not provide a ref for symbol {symbol}.")
+                    raise KeyError(
+                        f"Control did not provide a ref for symbol {symbol}."
+                    )
                 ref = refs[symbol]
                 ref.observe(self._on_param_change)
                 self._refs[symbol] = ref
@@ -164,7 +181,9 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
             refs = control.make_refs(missing)
             for symbol in missing:
                 if symbol not in refs:
-                    raise KeyError(f"Control did not provide a ref for symbol {symbol}.")
+                    raise KeyError(
+                        f"Control did not provide a ref for symbol {symbol}."
+                    )
                 ref = refs[symbol]
                 ref.observe(self._on_param_change)
                 self._refs[symbol] = ref
@@ -200,7 +219,9 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         if callable(attach_fn):
             attach_fn(self._modal_host)
 
-    def snapshot(self, *, full: bool = False) -> ParameterValueSnapshot | ParameterSnapshot:
+    def snapshot(
+        self, *, full: bool = False
+    ) -> ParameterValueSnapshot | ParameterSnapshot:
         """Return parameter values or a full immutable metadata snapshot.
 
         Parameters
@@ -209,9 +230,9 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
             If False, return a detached ``dict[Symbol, value]``.
             If True, return a full :class:`ParameterSnapshot` including metadata.
         """
-        entries: Dict[Symbol, Dict[str, Any]] = {}
+        entries: dict[Symbol, dict[str, Any]] = {}
         for symbol, ref in self._refs.items():
-            entry: Dict[str, Any] = {"value": ref.value}
+            entry: dict[str, Any] = {"value": ref.value}
             caps = list(ref.capabilities)
             entry["capabilities"] = caps
             for name in caps:
@@ -222,7 +243,6 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         if full:
             return snapshot
         return snapshot.value_map()
-
 
     @property
     def parameter_context(self) -> Mapping[Symbol, Any]:
@@ -251,10 +271,14 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         """
         return len(self._refs) > 0
 
-    def add_hook(self, callback: Callable[[Optional[ParamEvent]], Any], hook_id: Optional[Hashable] = None) -> Hashable:
+    def add_hook(
+        self,
+        callback: Callable[[ParamEvent | None], Any],
+        hook_id: Hashable | None = None,
+    ) -> Hashable:
         """
         Register a parameter change hook.
-        
+
         Parameters
         ----------
         callback: Callable
@@ -285,10 +309,10 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
             if match is not None:
                 self._hook_counter = max(self._hook_counter, int(match.group(1)))
         self._hooks[hook_id] = callback
-        
+
         return hook_id
 
-    def fire_hook(self, hook_id: Hashable, event: Optional[ParamEvent]) -> None:
+    def fire_hook(self, hook_id: Hashable, event: ParamEvent | None) -> None:
         """Fire a specific hook with a ParamEvent.
 
         Parameters
@@ -331,8 +355,8 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         None
         """
         self._render_callback("param_change", event)
-    
-    def get_hooks(self) -> Dict[Hashable, Callable]:
+
+    def get_hooks(self) -> dict[Hashable, Callable]:
         """Return a copy of the registered hook dictionary.
 
         Returns
@@ -356,7 +380,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
 
     # --- Dict-like Interface for Backward Compatibility ---
     # This allows `fig.parameters[symbol]` to work in user hooks.
-    
+
     def __getitem__(self, key: Symbol) -> ParamRef:
         """Return the param ref for the given symbol.
 
@@ -383,7 +407,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         get : Safe lookup with a default.
         """
         return self._refs[key]
-    
+
     def __contains__(self, key: Symbol) -> bool:
         """Check if a slider exists for a symbol.
 
@@ -410,8 +434,8 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         has_params : Determine whether any parameters exist.
         """
         return key in self._refs
-    
-    def items(self) -> Iterator[Tuple[Symbol, ParamRef]]:
+
+    def items(self) -> Iterator[tuple[Symbol, ParamRef]]:
         """Iterate over ``(Symbol, ParamRef)`` pairs.
 
         Returns
@@ -431,7 +455,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         This mirrors the behavior of ``dict.items`` for compatibility.
         """
         return self._refs.items()
-    
+
     def keys(self) -> Iterator[Symbol]:
         """Iterate over parameter symbols.
 
@@ -452,7 +476,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         values : Iterate over parameter references.
         """
         return self._refs.keys()
-    
+
     def values(self) -> Iterator[ParamRef]:
         """Iterate over param refs.
 
@@ -473,7 +497,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         keys : Iterate over parameter symbols.
         """
         return self._refs.values()
-    
+
     def get(self, key: Symbol, default: Any = None) -> Any:
         """Return a param ref if present; otherwise return a default.
 
@@ -564,7 +588,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         """
         return self._refs[symbol].widget
 
-    def widgets(self) -> List[Any]:
+    def widgets(self) -> list[Any]:
         """Return unique widgets/controls suitable for display.
 
         Returns

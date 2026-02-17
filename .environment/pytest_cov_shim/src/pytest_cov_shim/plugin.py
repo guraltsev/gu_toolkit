@@ -4,7 +4,9 @@ from __future__ import annotations
 
 
 def pytest_addoption(parser):
-    group = parser.getgroup("cov", "coverage reporting with distributed testing support")
+    group = parser.getgroup(
+        "cov", "coverage reporting with distributed testing support"
+    )
     group.addoption(
         "--cov",
         action="append",

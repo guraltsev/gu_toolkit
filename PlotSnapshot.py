@@ -8,7 +8,6 @@ parameter list, styling, and domain/sampling overrides.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
 
 from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
@@ -53,13 +52,13 @@ class PlotSnapshot:
     func: Expr
     parameters: tuple[Symbol, ...]
     label: str
-    visible: Union[bool, str]
-    x_domain: Optional[Tuple[float, float]]
-    sampling_points: Optional[int]
-    color: Optional[str]
-    thickness: Optional[float]
-    dash: Optional[str]
-    opacity: Optional[float]
+    visible: bool | str
+    x_domain: tuple[float, float] | None
+    sampling_points: int | None
+    color: str | None
+    thickness: float | None
+    dash: str | None
+    opacity: float | None
     views: tuple[str, ...] = ()
 
     def __repr__(self) -> str:

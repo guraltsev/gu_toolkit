@@ -8,8 +8,8 @@ self-contained Python script.
 
 from __future__ import annotations
 
+from collections.abc import Hashable
 from dataclasses import dataclass, field
-from typing import Dict, Hashable, Optional, Tuple, Union
 
 from .ParameterSnapshot import ParameterSnapshot
 from .PlotSnapshot import PlotSnapshot
@@ -31,7 +31,7 @@ class InfoCardSnapshot:
 
     id: Hashable
     segments: tuple[str, ...]
-    view_id: Optional[str] = None
+    view_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -62,10 +62,10 @@ class ViewSnapshot:
     title: str
     x_label: str
     y_label: str
-    x_range: Tuple[float, float]
-    y_range: Tuple[float, float]
-    viewport_x_range: Optional[Tuple[float, float]] = None
-    viewport_y_range: Optional[Tuple[float, float]] = None
+    x_range: tuple[float, float]
+    y_range: tuple[float, float]
+    viewport_x_range: tuple[float, float] | None = None
+    viewport_y_range: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -94,12 +94,12 @@ class FigureSnapshot:
         Currently selected view id.
     """
 
-    x_range: Tuple[float, float]
-    y_range: Tuple[float, float]
+    x_range: tuple[float, float]
+    y_range: tuple[float, float]
     sampling_points: int
     title: str
     parameters: ParameterSnapshot
-    plots: Dict[str, PlotSnapshot]
+    plots: dict[str, PlotSnapshot]
     info_cards: tuple[InfoCardSnapshot, ...]
     views: tuple[ViewSnapshot, ...] = field(default_factory=tuple)
     active_view_id: str = "main"

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import sympy as sp
+
 import gu_toolkit
-from gu_toolkit import Figure, info
 import gu_toolkit.figure_info as figure_info_module
+from gu_toolkit import Figure, info
 
 
 class _ImmediateDebouncer:

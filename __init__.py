@@ -10,26 +10,19 @@ building blocks (parameter events/references and numeric-expression wrappers)
 for advanced integrations.
 """
 
-from .notebook_namespace import *
-from .NamedFunction import NamedFunction as NamedFunction
-from .numeric_callable import (
-    DYNAMIC_PARAMETER,
-    NumericFunction,
-    ParameterContext,
-    UNFREEZE,
-    numpify,
-    numpify_cached,
-)
-
-from .Figure import Figure, FigureLayout, Plot
-from .Slider import FloatSlider
+# Optional explicit module handle to avoid callable/module name ambiguity.
+from . import numpify as numpify_module
+from .codegen import CodegenOptions, figure_to_code, sympy_to_code
 from .Figure import (
+    Figure,
+    FigureLayout,
+    Plot,
     current_figure,
-    info,
     get_sampling_points,
     get_title,
     get_x_range,
     get_y_range,
+    info,
     parameter,
     parameters,
     params,
@@ -42,14 +35,20 @@ from .Figure import (
     set_x_range,
     set_y_range,
 )
-from .ParseLaTeX import parse_latex
+from .FigureSnapshot import FigureSnapshot, InfoCardSnapshot, ViewSnapshot
+from .NamedFunction import NamedFunction as NamedFunction
+from .notebook_namespace import *
+from .numeric_callable import (
+    DYNAMIC_PARAMETER,
+    UNFREEZE,
+    NumericFunction,
+    ParameterContext,
+    numpify,
+    numpify_cached,
+)
+from .ParameterSnapshot import ParameterSnapshot
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
-
-from .ParameterSnapshot import ParameterSnapshot
-
-# Optional explicit module handle to avoid callable/module name ambiguity.
-from . import numpify as numpify_module
+from .ParseLaTeX import parse_latex
 from .PlotSnapshot import PlotSnapshot
-from .FigureSnapshot import FigureSnapshot, InfoCardSnapshot, ViewSnapshot
-from .codegen import CodegenOptions, sympy_to_code, figure_to_code
+from .Slider import FloatSlider

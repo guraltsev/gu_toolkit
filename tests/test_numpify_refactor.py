@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Iterator, Mapping
+from importlib import import_module
 
 import sympy as sp
-from importlib import import_module
 
 numpify_module = import_module("gu_toolkit.numpify")
 
@@ -28,6 +28,7 @@ class _Ctx(Mapping[sp.Symbol, float]):
 
     def __len__(self) -> int:
         return len(self.parameters)
+
 
 def test_identifier_mangling_and_collision() -> None:
     a = sp.Symbol("lambda")
@@ -54,6 +55,7 @@ def test_dynamic_parameter_context_and_unfreeze() -> None:
 
     unbound = bound.unfreeze(a)
     assert unbound(3.0, 5.0) == 15.0
+
 
 def test_unfreeze_without_keys_unfreezes_all_nonfree_vars() -> None:
     x, a, b = sp.symbols("x a b")

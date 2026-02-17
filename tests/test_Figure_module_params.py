@@ -8,15 +8,15 @@ Run (from the repo root):
 
 from __future__ import annotations
 
-import sympy as sp
 import pytest
+import sympy as sp
 
-from gu_toolkit import Figure, params, parameter, plot_style_options
 import gu_toolkit.debouncing as debouncing_module
+from gu_toolkit import Figure, parameter, params, plot_style_options
 
 
 class _FakeTimer:
-    created: list["_FakeTimer"] = []
+    created: list[_FakeTimer] = []
 
     def __init__(self, delay: float, callback):
         self.delay = delay
@@ -31,7 +31,6 @@ class _FakeTimer:
 
     def cancel(self) -> None:
         self.canceled = True
-
 
 
 def test_params_proxy_context_access() -> None:
@@ -76,7 +75,6 @@ def test_params_setitem_sugar() -> None:
         assert params[a].value == 7
 
 
-
 def test_plot_opacity_shortcut_and_validation() -> None:
     x = sp.symbols("x")
     fig = Figure()
@@ -87,13 +85,7 @@ def test_plot_opacity_shortcut_and_validation() -> None:
     assert plot.opacity == 0.7
 
     with pytest.raises(ValueError):
-        setattr(plot, "opacity", 1.2)
-
-
-
-
-
-
+        plot.opacity = 1.2
 
 
 def test_plot_style_aliases_are_accepted_and_conflicts_rejected() -> None:
@@ -104,7 +96,9 @@ def test_plot_style_aliases_are_accepted_and_conflicts_rejected() -> None:
     assert plot.thickness == 3
     assert plot.opacity == 0.25
 
-    plot_same = fig.plot(sp.sin(x), x, id="sin", thickness=2, width=2, opacity=0.5, alpha=0.5)
+    plot_same = fig.plot(
+        sp.sin(x), x, id="sin", thickness=2, width=2, opacity=0.5, alpha=0.5
+    )
     assert plot_same.thickness == 2
     assert plot_same.opacity == 0.5
 
@@ -138,6 +132,7 @@ def test_plot_cached_samples_none_before_first_render() -> None:
 
     assert plot.x_data is None
     assert plot.y_data is None
+
 
 def test_plot_update_accepts_visible_kwarg() -> None:
     x = sp.symbols("x")
@@ -191,7 +186,6 @@ def test_plot_render_replaces_cached_samples() -> None:
     assert len(first_x) != len(second_x)
 
 
-
 def test_plot_figure_property_exposes_owner_and_context_manager() -> None:
     x, a = sp.symbols("x a")
     fig = Figure()
@@ -203,9 +197,19 @@ def test_plot_figure_property_exposes_owner_and_context_manager() -> None:
         param_ref = parameter(a)
         assert params[a] is param_ref
 
+
 def test_plot_style_options_are_discoverable() -> None:
     options = plot_style_options()
-    for key in ("color", "thickness", "width", "dash", "opacity", "alpha", "line", "trace"):
+    for key in (
+        "color",
+        "thickness",
+        "width",
+        "dash",
+        "opacity",
+        "alpha",
+        "line",
+        "trace",
+    ):
         assert key in options
 
     fig_options = Figure.plot_style_options()
@@ -289,7 +293,6 @@ def test_relayout_debounce_drop_overflow_keeps_final_event() -> None:
     finally:
         debouncing_module.threading.Timer = original_timer
         Figure.render = original_render
-
 
 
 def test_viewport_range_controls_read_widget_state() -> None:

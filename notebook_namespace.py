@@ -9,11 +9,14 @@ from __future__ import annotations
 __all__ = []
 
 import sympy as sp
+
 __all__ += ["sp"]
 from sympy import *
+
 __all__ += list(getattr(sp, "__all__", []))
 
 import numpy as np
+
 __all__ += ["np"]
 
 try:
@@ -24,15 +27,42 @@ else:
     __all__ += ["pd"]
 
 try:
-    from .symbolic_extensions import FunctionFamily, Infix, SymbolFamily, eq, ge, gt, le, lt
     from .numeric_operations import NIntegrate, NReal_Fourier_Series, play
+    from .symbolic_extensions import (
+        FunctionFamily,
+        Infix,
+        SymbolFamily,
+        eq,
+        ge,
+        gt,
+        le,
+        lt,
+    )
 except ImportError:  # pragma: no cover
-    from symbolic_extensions import FunctionFamily, Infix, SymbolFamily, eq, ge, gt, le, lt
     from numeric_operations import NIntegrate, NReal_Fourier_Series, play
+    from symbolic_extensions import (
+        FunctionFamily,
+        Infix,
+        SymbolFamily,
+        eq,
+        ge,
+        gt,
+        le,
+        lt,
+    )
 
 __all__ += [
-    "SymbolFamily", "FunctionFamily", "Infix", "eq", "lt", "le", "gt", "ge",
-    "NIntegrate", "NReal_Fourier_Series", "play",
+    "SymbolFamily",
+    "FunctionFamily",
+    "Infix",
+    "eq",
+    "lt",
+    "le",
+    "gt",
+    "ge",
+    "NIntegrate",
+    "NReal_Fourier_Series",
+    "play",
 ]
 
 for _ch in "abcdefghijklmnopqrstuvwxyz":
@@ -77,13 +107,36 @@ psi = SymbolFamily("psi")
 omega = SymbolFamily("omega")
 
 __all__ += [
-    "alpha", "beta", "gamma", "delta", "epsilon", "varepsilon", "zeta", "eta",
-    "theta", "vartheta", "kappa", "lam", "mu", "nu", "xi", "rho",
-    "sigma", "varsigma", "tau", "phi", "varphi", "chi", "psi", "omega",
+    "alpha",
+    "beta",
+    "gamma",
+    "delta",
+    "epsilon",
+    "varepsilon",
+    "zeta",
+    "eta",
+    "theta",
+    "vartheta",
+    "kappa",
+    "lam",
+    "mu",
+    "nu",
+    "xi",
+    "rho",
+    "sigma",
+    "varsigma",
+    "tau",
+    "phi",
+    "varphi",
+    "chi",
+    "psi",
+    "omega",
 ]
 
 del _ch
 
-from IPython.display import HTML, Latex, display
 from pprint import pprint
+
+from IPython.display import HTML, Latex, display
+
 __all__ += ["HTML", "Latex", "display", "pprint"]
