@@ -4,33 +4,24 @@
 Open
 
 ## Summary
-The example notebook (`docs/notebooks/Toolkit_overview.ipynb`) includes a callable-first plotting cell that should work without manual parameter-context plumbing, but currently fails with a `KeyError` for missing symbol `x`.
-
-This breaks a core tutorial path and makes the callable API appear unusable in basic scenarios.
+State-of-completion checklist:
+- [x] Deterministic regression test exists for callable arg-name mismatch with explicit `vars=(x, a)` rebinding.
+- [x] Callable normalization fix for explicit `vars=` rebinding is implemented in `Figure._normalize_plot_inputs`.
+- [x] Project-level callable-first test suite covers single-variable and multi-variable callable plotting paths.
+- [ ] The example notebook still contains the captured `KeyError` traceback and `#BUG` marker in callable walkthrough cells.
+- [ ] Notebook parity acceptance test is still failing due to placeholder bug markers.
 
 ## Evidence
-- Notebook cell labeled "Numeric callable: damped oscillation" contains a captured traceback ending with:
-  - `KeyError: "parameter_context is missing symbol x ('x')"`
-- The same notebook marks the follow-up callable-with-params cell as `# BUG same as above`, indicating the failure pattern is not isolated.
+- `tests/test_project029_plot_callable_first.py::test_plot_callable_first_explicit_vars_rebinds_callable_order_to_plot_variable` passes.
+- `tests/test_notebook_documentation_quality.py::test_toolkit_overview_notebook_has_no_placeholder_bug_markers` currently fails because notebook bug markers remain.
+- `docs/notebooks/Toolkit_overview.ipynb` still includes `#BUG: see below` and a markdown traceback block for missing `x` context.
 
 ## TODO
-- [x] Reproduce the failure with a deterministic regression test in `tests/` (focused on `Figure.plot` + callable input with mismatched callable arg name vs plot symbol).
-- [x] Define expected behavior for callable-first usage where `x` is the independent variable and must not be treated as missing dynamic parameter context.
-- [x] Implement the fix in callable normalization so explicit `vars=(...)` rebinding is respected for Python callables.
-- [x] Add a notebook-oriented regression test suite entry by encoding the failing notebook behavior in pytest.
-- [ ] Update the example notebook once fixed to remove stale BUG comments and keep the example runnable.
-
-## Implementation checklist
-- [x] Assessed completion state and confirmed regression still reproducible from notebook traceback.
-- [x] Planned remediation: rebind callable variable signature to explicit `vars=` symbols during plot input normalization.
-- [x] Implemented fix in `Figure._normalize_plot_inputs`.
-- [x] Added regression test coverage for callable argument-name mismatch (`lambda t, a: ...` with `vars=(x, a)`).
-- [ ] External review and manual notebook validation pending before closure.
+- [x] Reproduce the failure with a deterministic regression test.
+- [x] Implement callable normalization fix and assert expected behavior in tests.
+- [ ] Replace notebook traceback/BUG placeholder with working runnable example text and code.
+- [ ] Re-run notebook documentation quality test after notebook cleanup.
 
 ## Exit criteria
-- Callable plotting in notebook-style flows executes without `KeyError` for `x`.
-- Automated tests cover:
-  - callable without extra params,
-  - callable with explicit `vars=(x, A, k)` plus sliders,
-  - render/re-render paths.
-- The example notebook section is executable end-to-end without this failure.
+- [ ] Callable plotting tutorial path in notebook runs without `KeyError` tracebacks in published content.
+- [ ] Automated tests cover callable-first render/re-render behavior and notebook quality gates.
