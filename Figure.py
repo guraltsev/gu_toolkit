@@ -110,6 +110,7 @@ from .figure_context import (
 from .figure_layout import FigureLayout, OneShotOutput
 from .figure_parameters import ParameterManager
 from .figure_info import InfoPanelManager
+from .figure_legend import LegendPanelManager
 from .figure_plot import Plot
 from .figure_view import View
 
@@ -343,7 +344,7 @@ class Figure:
     """
     
     __slots__ = [
-        "_layout", "_params", "_info", "_view_runtime", "_figure", "_pane", "plots",
+        "_layout", "_params", "_info", "_legend", "_view_runtime", "_figure", "_pane", "plots",
         "_views", "_active_view_id", "_default_view_id", "_sampling_points", "_debug",
         "_render_info_last_log_t", "_render_debug_last_log_t", "_relayout_debouncers",
         "_has_been_displayed", "_print_capture"
@@ -403,6 +404,7 @@ class Figure:
         )
         self._info = InfoPanelManager(self._layout.info_box)
         self._info.bind_figure(self)
+        self._legend = LegendPanelManager(self._layout.legend_box)
 
         # 3. Initialize Per-View Plotly Runtime
         self._view_runtime: Dict[str, _ViewRuntime] = {}
@@ -414,6 +416,8 @@ class Figure:
         self._views: Dict[str, View] = {}
         self._active_view_id = self._default_view_id
         self.add_view(self._default_view_id, x_range=x_range, y_range=y_range)
+        self._legend.set_active_view(self._active_view_id)
+        self._sync_sidebar_visibility()
 
         # Backward-compat convenience aliases mirror the active view runtime.
         active_runtime = self._runtime_for_view(self._active_view_id)
@@ -558,6 +562,7 @@ class Figure:
         if view.is_active:
             self._active_view_id = view_id
             self._info.set_active_view(view_id)
+            self._legend.set_active_view(view_id)
             self._figure = runtime.figure_widget
             self._pane = runtime.pane
         self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
@@ -579,6 +584,7 @@ class Figure:
         nxt = self._active_view()
         nxt.is_active = True
         self._info.set_active_view(id)
+        self._legend.set_active_view(id)
 
         runtime = self._runtime_for_view(id)
         self._figure = runtime.figure_widget
@@ -593,6 +599,7 @@ class Figure:
 
         self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
         self._layout.trigger_reflow_for_view(self._active_view_id)
+        self._sync_sidebar_visibility()
 
     @contextmanager
     def view(self, id: str) -> Iterator["Figure"]:
@@ -613,12 +620,22 @@ class Figure:
             raise ValueError("Cannot remove default view")
         if id not in self._views:
             return
+        for plot in self.plots.values():
+            plot.remove_from_view(id)
+            self._legend.on_plot_updated(plot)
         del self._views[id]
         self._view_runtime.pop(id, None)
         self._relayout_debouncers.pop(id, None)
-        for plot in self.plots.values():
-            plot.remove_from_view(id)
         self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
+        self._sync_sidebar_visibility()
+
+    def _sync_sidebar_visibility(self) -> None:
+        """Apply consolidated sidebar section visibility from all managers."""
+        self._layout.update_sidebar_visibility(
+            self._params.has_params,
+            self._info.has_info,
+            self._legend.has_legend,
+        )
 
     @property
     def title(self) -> str:
@@ -1135,7 +1152,7 @@ class Figure:
             self.parameter(parameters)
         
         # Update UI visibility
-        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info, False)
+        self._sync_sidebar_visibility()
 
         # Create or Update Plot
         if id in self.plots:
@@ -1165,6 +1182,8 @@ class Figure:
                 update_kwargs["label"] = label
             self.plots[id].update(**update_kwargs)
             plot = self.plots[id]    
+            self._legend.on_plot_updated(plot)
+            self._sync_sidebar_visibility()
         else: 
             view_ids = (view,) if isinstance(view, str) else (tuple(view) if view is not None else (self.active_view_id,))
             plot = Plot(
@@ -1175,6 +1194,8 @@ class Figure:
                 plot_id=id, view_ids=view_ids,
             )
             self.plots[id] = plot
+            self._legend.on_plot_added(plot)
+            self._sync_sidebar_visibility()
 
         if normalized_numeric_fn is not None:
             plot.set_numeric_function(normalized_var, normalized_numeric_fn, parameters=parameters)
@@ -1211,7 +1232,7 @@ class Figure:
         add_param : Backward-compatible alias.
         """
         result = self._params.parameter(symbols, control=control, **control_kwargs)
-        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info, False)
+        self._sync_sidebar_visibility()
         return result
         
 
@@ -1422,7 +1443,7 @@ class Figure:
     ) -> None:
         """Create or replace a simple info card in the Info sidebar."""
         self._info.set_simple_card(spec=spec, id=id, view=view)
-        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info, False)
+        self._sync_sidebar_visibility()
 
     def add_hook(self, callback: Callable[[Optional[ParamEvent]], Any], *, run_now: bool = True) -> Hashable:
         """Alias for :meth:`add_param_change_hook`.
