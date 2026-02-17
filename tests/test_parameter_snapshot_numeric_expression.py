@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 import sympy as sp
 
 from gu_toolkit import Figure
@@ -68,3 +69,53 @@ def test_symbolic_expression_returns_sympy_expr() -> None:
     fig.parameter(a)
     plot = fig.plot(a * x, x, id="sx")
     assert plot.symbolic_expression == a * x
+
+
+def test_snapshot_value_map_allows_unambiguous_string_lookup() -> None:
+    a, b = sp.symbols("a b")
+    fig = Figure()
+    fig.parameter((a, b), value=1.0)
+
+    values = fig.parameters.snapshot()
+    assert values[a] == 1.0
+    assert values["b"] == 1.0
+
+
+def test_snapshot_full_allows_unambiguous_string_lookup() -> None:
+    a = sp.symbols("a")
+    fig = Figure()
+    fig.parameter(a, min=-2, max=2, step=0.5, value=0.75)
+
+    snap = fig.parameters.snapshot(full=True)
+    assert snap["a"]["value"] == 0.75
+
+
+def test_snapshot_string_lookup_unknown_name_has_actionable_error() -> None:
+    a = sp.symbols("a")
+    fig = Figure()
+    fig.parameter(a, value=1.0)
+
+    snap = fig.parameters.snapshot(full=True)
+    with pytest.raises(KeyError, match="Unknown parameter name"):
+        _ = snap["missing"]
+
+
+def test_snapshot_string_lookup_ambiguous_name_has_actionable_error() -> None:
+    q_real = sp.Symbol("q", real=True)
+    q_integer = sp.Symbol("q", integer=True)
+    fig = Figure()
+    fig.parameter((q_real, q_integer), value=1.0)
+
+    values = fig.parameters.snapshot()
+    with pytest.raises(KeyError, match="Ambiguous parameter name"):
+        _ = values["q"]
+
+
+def test_snapshot_keys_and_iteration_remain_symbol_based() -> None:
+    a, b = sp.symbols("a b")
+    fig = Figure()
+    fig.parameter((a, b), value=1.0)
+
+    values = fig.parameters.snapshot()
+    assert list(values.keys()) == [a, b]
+    assert list(values) == [a, b]
