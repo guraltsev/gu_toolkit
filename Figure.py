@@ -1135,7 +1135,7 @@ class Figure:
             self.parameter(parameters)
         
         # Update UI visibility
-        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
+        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info, False)
 
         # Create or Update Plot
         if id in self.plots:
@@ -1211,7 +1211,7 @@ class Figure:
         add_param : Backward-compatible alias.
         """
         result = self._params.parameter(symbols, control=control, **control_kwargs)
-        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
+        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info, False)
         return result
         
 
@@ -1422,7 +1422,7 @@ class Figure:
     ) -> None:
         """Create or replace a simple info card in the Info sidebar."""
         self._info.set_simple_card(spec=spec, id=id, view=view)
-        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info)
+        self._layout.update_sidebar_visibility(self._params.has_params, self._info.has_info, False)
 
     def add_hook(self, callback: Callable[[Optional[ParamEvent]], Any], *, run_now: bool = True) -> Hashable:
         """Alias for :meth:`add_param_change_hook`.
