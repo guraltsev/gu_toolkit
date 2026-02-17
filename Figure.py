@@ -80,7 +80,7 @@ from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
 from .Slider import FloatSlider
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
-from .ParameterSnapshot import ParameterSnapshot
+from .ParameterSnapshot import ParameterSnapshot, ParameterValueSnapshot
 from .FigureSnapshot import FigureSnapshot, ViewSnapshot
 from .debouncing import QueuedDebouncer
 
@@ -1652,7 +1652,7 @@ class _CurrentParametersProxy(Mapping):
         """Proxy to the current figure's :meth:`ParameterManager.parameter`."""
         return self._mgr().parameter(symbols, control=control, **kwargs)
 
-    def snapshot(self, *, full: bool = False) -> Dict[Symbol, Any] | ParameterSnapshot:
+    def snapshot(self, *, full: bool = False) -> ParameterValueSnapshot | ParameterSnapshot:
         """Return current-figure parameter values or full snapshot metadata."""
         return self._mgr().snapshot(full=full)
 

@@ -12,7 +12,7 @@ from sympy.core.symbol import Symbol
 
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
-from .ParameterSnapshot import ParameterSnapshot
+from .ParameterSnapshot import ParameterSnapshot, ParameterValueSnapshot
 from .Slider import FloatSlider
 
 
@@ -200,7 +200,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         if callable(attach_fn):
             attach_fn(self._modal_host)
 
-    def snapshot(self, *, full: bool = False) -> Dict[Symbol, Any] | ParameterSnapshot:
+    def snapshot(self, *, full: bool = False) -> ParameterValueSnapshot | ParameterSnapshot:
         """Return parameter values or a full immutable metadata snapshot.
 
         Parameters
