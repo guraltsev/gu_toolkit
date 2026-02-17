@@ -10,7 +10,7 @@ with or without Codex.
 - `maintainance.sh` / `maintainance.cmd`
   - Upgrades `pip`, then installs dependencies from `requirements.txt` if the file exists.
 - `install_test_tools.py`
-  - Installs a local fallback pytest plugin shim when `pytest-cov` is unavailable (common in offline Codex environments) so `pytest --cov ...` commands do not fail on argument parsing.
+  - First attempts to install real `pytest-cov`; if that is unavailable (common in offline Codex environments), installs a local fallback pytest plugin shim so `pytest --cov ...` commands do not fail on argument parsing.
 - `pytest_cov_shim/`
   - Local editable package used by `install_test_tools.py`; accepts `--cov`/`--cov-report` options and emits a clear summary that real coverage was not generated.
 

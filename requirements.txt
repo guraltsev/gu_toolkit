@@ -7,3 +7,7 @@ ipywidgets
 plotly
 anywidget
 traitlets
+
+# Testing infrastructure dependencies (used by .environment scripts)
+pytest>=8
+pytest-cov>=5
