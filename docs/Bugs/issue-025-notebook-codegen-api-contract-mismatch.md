@@ -5,7 +5,7 @@ Open
 
 ## Summary
 The example notebook identifies several code-generation contract problems:
-- `fig.code` should be read-only,
+- `fig.code` should be a read-only parameter,
 - option-bearing code generation should use `fig.get_code(options)`,
 - generated snippets should call `display(fig)` explicitly,
 - context-generated code should place `set_title(...)` inside the `with fig:` block,
