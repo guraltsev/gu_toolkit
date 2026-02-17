@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import sympy as sp
 
-from gu_toolkit import Figure, numpify
+from gu_toolkit import Figure, SymbolFamily, numpify
 
 
 def test_plot_supports_sympy_expression_callable_first() -> None:
@@ -108,3 +108,33 @@ def test_plot_supports_numeric_function_first_argument() -> None:
     ys = plot.y_data
     assert xs is not None and ys is not None
     assert np.allclose(ys, 2.5 * xs)
+
+
+def test_plot_callable_first_single_variable_rebinds_arg_name_without_explicit_vars() -> None:
+    """Single-argument callables should rebind to the explicit plotting symbol.
+
+    Regression coverage for issue-023 notebook path where callable arg-name
+    differs from the plotting symbol (e.g. ``lambda t: ...`` with ``plot(..., x)``).
+    """
+    x = sp.Symbol("x")
+    fig = Figure()
+
+    plot = fig.plot(lambda t: t**2 + 1, x, id="rebind_single")
+    xs = plot.x_data
+    ys = plot.y_data
+
+    assert xs is not None and ys is not None
+    assert np.allclose(ys, xs**2 + 1)
+
+
+def test_plot_callable_first_supports_symbolfamily_plot_variable() -> None:
+    """Callable-first plotting should work when using ``SymbolFamily`` symbols."""
+    x = SymbolFamily("x")
+    fig = Figure()
+
+    plot = fig.plot(lambda t: np.exp(-0.15 * t**2) * np.cos(3 * t), x, id="damped")
+    xs = plot.x_data
+    ys = plot.y_data
+
+    assert xs is not None and ys is not None
+    assert np.allclose(ys, np.exp(-0.15 * xs**2) * np.cos(3 * xs))
