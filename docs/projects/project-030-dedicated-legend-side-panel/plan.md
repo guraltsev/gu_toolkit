@@ -2,227 +2,199 @@
 
 ## Detailed blueprint for implementation
 
-### Phase 0 — Baseline and design lock
+### Phase 0 â€” Contract lock and migration guardrails
 
-1. Confirm final UX scope for v1:
-   - row toggle (show/hide),
-   - LaTeX label display,
-   - per-tab filtered rows.
-2. Freeze a minimal internal API contract for legend manager events:
-   - on plot add,
-   - on plot update,
-   - on plot remove,
-   - on active view change.
-3. Define temporary migration flag behavior for internal Plotly legend coexistence.
+1. Lock v1 scope: per-view filtered rows, toggle visibility, LaTeX labels.
+2. Define `LegendPanelManager` interface and event contract:
+   - `on_plot_added(plot)`
+   - `on_plot_updated(plot)`
+   - `on_plot_removed(plot_id)`
+   - `set_active_view(view_id)`
+   - `refresh(reason=...)`
+3. Decide migration behavior for Plotly legend:
+   - feature flag for dual-mode,
+   - default target mode `showlegend=False`.
+4. Decide visibility semantics:
+   - UI control emits boolean visible state,
+   - compatibility handling for `"legendonly"` only where needed.
 
-**Deliverable:** approved v1 contract and rollout policy.
-
----
-
-### Phase 1 — Layout primitives in `FigureLayout`
-
-1. Add legend UI containers to sidebar stack:
-   - `legend_header` (HTML),
-   - `legend_box` (VBox).
-2. Extend visibility orchestration:
-   - evolve `update_sidebar_visibility(has_params, has_info)` into a contract that includes legend presence.
-3. Preserve current responsive behavior:
-   - no regressions in full-width toggle,
-   - no regressions in `PlotlyPane` reflow triggers.
-
-**Deliverable:** layout supports a third sidebar section for legend content.
+**Deliverable:** frozen API contract and rollout policy.
 
 ---
 
-### Phase 2 — Introduce `LegendPanelManager`
+### Phase 1 â€” Extend `FigureLayout` for legend section
 
-1. Create manager responsible for row lifecycle and sync.
-2. Define row model fields (minimum):
-   - `plot_id`,
-   - display label (math-capable),
-   - visibility state,
-   - optional per-row actions.
-3. Implement active-view filtering behavior:
-   - show rows for plots present in selected view,
-   - hide or ghost rows not in view (decision pending from Phase 0).
-4. Add debounced/guarded refresh API to avoid UI churn during batched updates.
+1. Add layout primitives:
+   - `legend_header` (`widgets.HTML`)
+   - `legend_box` (`widgets.VBox`)
+2. Insert legend widgets into `sidebar_container` ordering (params, info, legend).
+3. Extend `update_sidebar_visibility` signature to:
+   - `update_sidebar_visibility(has_params, has_info, has_legend)`.
+4. Keep existing responsive behavior intact:
+   - full-width mode,
+   - wrap behavior,
+   - Plotly reflow callback triggers.
 
-**Deliverable:** isolated panel manager with deterministic row state.
-
----
-
-### Phase 3 — Wire manager into `Figure` lifecycle
-
-1. Initialize legend manager alongside parameter/info managers.
-2. On `Figure.plot(...)` create/update flows, notify legend manager.
-3. On `remove_view`, `set_active_view`, and future plot deletion flow, notify legend manager.
-4. Guarantee single source of truth:
-   - manager reads/writes `Plot` properties,
-   - no duplicate visibility/style state store.
-
-**Deliverable:** legend panel is always synchronized with figure plot registry and tab selection.
+**Deliverable:** layout can host legend content without regressions.
 
 ---
 
-### Phase 4 — Replace Plotly internal legend interactions
+### Phase 2 â€” Implement `LegendPanelManager`
 
-1. Add configuration mode:
-   - dual-mode (internal legend + side panel), then
-   - panel-primary (`showlegend=False`).
-2. Ensure side-panel toggle parity with legacy legend click:
-   - toggle off -> `plot.visible = False` (or `"legendonly"` if chosen),
-   - toggle on -> `plot.visible = True` and render behavior unchanged.
-3. Confirm no regression in multi-view stale/active render behavior.
+1. Create new module (recommended: `figure_legend.py`) with:
+   - row dataclass/model,
+   - widget creation/update helpers,
+   - active-view filtering logic.
+2. Row contents (v1):
+   - visibility toggle,
+   - `HTMLMath` label,
+   - stable plot-id binding.
+3. Internal manager responsibilities:
+   - maintain deterministic insertion order,
+   - idempotent refresh,
+   - avoid full widget tree rebuild where possible.
+4. Add `has_legend` property for sidebar visibility orchestration.
 
-**Deliverable:** internal legend can be disabled without loss of essential functionality.
+**Deliverable:** standalone legend manager with deterministic behavior.
 
 ---
 
-### Phase 5 — LaTeX labels in legend rows
+### Phase 3 â€” Wire manager into `Figure`
 
-1. Render row labels with `HTMLMath`.
-2. Define escaping/sanitization rules for plain text labels.
-3. Validate labels from common sources:
+1. Initialize legend manager after layout/managers are created.
+2. Update all sidebar visibility calls to include legend presence.
+3. Hook lifecycle events:
+   - during plot create/update in `Figure.plot(...)`,
+   - during plot removal flows,
+   - during `add_view`, `set_active_view`, and `remove_view`.
+4. Ensure manager reads/writes `Plot` state directly (no duplicate state store).
+
+**Deliverable:** legend panel stays synchronized with plot/view lifecycle.
+
+---
+
+### Phase 4 â€” Visibility semantics and Plotly legend migration
+
+1. Add feature flag/config switch for migration:
+   - temporary dual-mode (optional),
+   - canonical side-panel mode.
+2. Set Plotly layout default to `showlegend=False` in canonical mode.
+3. Ensure parity:
+   - toggle off => plot hidden in active view renders,
+   - toggle on => plot re-renders and remains in panel.
+4. Handle legacy `"legendonly"` states safely during migration.
+
+**Deliverable:** toolkit legend replaces Plotly legend for primary interactions.
+
+---
+
+### Phase 5 â€” LaTeX labels and row UX hardening
+
+1. Render labels through `HTMLMath`.
+2. Define plain-text fallback and escaping behavior.
+3. Validate label sources:
    - explicit `label=...`,
-   - default id labels,
-   - labels containing `$...$` math markup.
+   - default `id`,
+   - mixed math/plain text.
+4. Add empty/error-safe row rendering policy.
 
-**Deliverable:** readable labels for both plain text and math-rich content.
+**Deliverable:** reliable label rendering for notebook usage.
 
 ---
 
-### Phase 6 — Properties (cogwheel) foundation
+### Phase 6 â€” Optional row actions (deferred v1.1 track)
 
-1. Add a per-row action slot (cog icon/button).
-2. Implement a minimal properties surface for existing `Plot` controls:
+1. Reserve action slot (e.g., cog button) per row.
+2. Implement minimal style editing if approved:
    - opacity,
    - color,
    - dash,
    - thickness,
    - sampling points.
-3. Route edits through existing setters / `plot.update(...)`.
-4. Define validation/error display policy for invalid values.
+3. Route updates through existing plot setters or `plot.update(...)`.
+4. Keep advanced actions behind feature flag until stable.
 
-**Deliverable:** panel can edit plot appearance and sampling without introducing new core plot state.
-
----
-
-### Phase 7 — Equation editing via MathLive -> SymPy -> numpify
-
-1. Add equation-edit action per row.
-2. Integrate MathLive widget bridge for authoring LaTeX expressions.
-3. On submit:
-   - parse via `parse_latex`,
-   - normalize symbols/vars,
-   - update existing plot function,
-   - trigger render and panel refresh.
-4. Error handling:
-   - parse failures,
-   - ambiguous variable inference,
-   - compilation/runtime numeric errors.
-
-**Deliverable:** user can edit an existing plot equation graphically and re-render safely.
+**Deliverable:** extensible row action foundation without destabilizing v1.
 
 ---
 
-### Phase 8 — Add new plot flow via MathLive -> SymPy -> numpify
+### Phase 7 â€” Documentation and migration notes
 
-1. Add “+ Plot” action in legend panel header.
-2. Reuse equation editor pipeline for creation.
-3. Define id generation and default label policy.
-4. Attach new plot to active view by default.
+1. Update `docs/README.md` and relevant guide pages with new legend workflow.
+2. Add migration note mapping old Plotly legend interactions to new panel controls.
+3. Update project and bug references impacted by legend behavior changes.
 
-**Deliverable:** users can add new plots through graphical equation input.
+**Deliverable:** docs aligned with shipped behavior.
 
 ---
-
-### Phase 9 — Cleanup and hardening
-
-1. Remove temporary dual-mode fallback when stable.
-2. Update docs and notebook examples to show side-panel-first workflow.
-3. Add migration notes for users accustomed to Plotly legend interactions.
-
-**Deliverable:** side panel is canonical legend/edit surface.
 
 ## Description of test suite for acceptance
 
 ### Unit tests
 
 1. **Legend manager lifecycle**
-   - add/update/remove plot row behavior,
-   - active view filtering,
-   - state refresh idempotency.
+   - row add/update/remove,
+   - stable ordering,
+   - idempotent refresh.
+2. **View filtering**
+   - only active-view-member plots appear,
+   - switching active view updates visible rows.
+3. **Visibility synchronization**
+   - row toggle updates `plot.visible`,
+   - programmatic visibility update updates row state.
+4. **Label rendering**
+   - plain text,
+   - LaTeX markup,
+   - malformed input fallback.
+5. **Sidebar visibility orchestration**
+   - params/info/legend combinations correctly show/hide sections and container.
 
-2. **Figure integration**
-   - rows created for new plots,
-   - rows updated on label/style/visibility changes,
-   - rows react to `set_active_view` and `remove_view`.
+### Integration tests
 
-3. **Visibility parity**
-   - row toggle modifies `plot.visible`,
-   - hidden plot skips render and re-renders on show.
-
-4. **LaTeX label rendering**
-   - plain text labels,
-   - math labels with delimiters,
-   - malformed label safety behavior.
-
-5. **Properties editing**
-   - opacity bounds validation,
-   - line style updates, sampling point updates,
-   - error propagation UX hooks.
-
-6. **Equation edit flow**
-   - parse success path,
-   - parse fallback behavior,
-   - ambiguous var handling,
-   - numeric compile path updates.
-
-7. **Add-plot flow**
-   - creation from editor,
-   - active-view assignment,
-   - generated ids/labels consistency.
-
-### Integration/browser tests
-
-1. Tab switch while toggling legend rows (state remains consistent).
-2. Sidebar width changes do not break plot resizing behavior (`PlotlyPane`).
-3. Per-row property edits immediately affect rendered traces.
-4. Equation edit and add-plot flows complete without notebook reload.
+1. `Figure.plot()` + tab switching + legend toggles remain consistent.
+2. `remove_view` and plot membership changes do not leave orphan rows.
+3. Plot reflow and resize behavior remains stable when sidebar sections appear/disappear.
 
 ### Regression tests
 
-1. Existing parameter slider behavior unchanged.
-2. Existing info panel behavior unchanged.
-3. Existing callable-first `plot()` flows unchanged when panel not used.
+1. Parameter workflows unchanged.
+2. Info panel workflows unchanged.
+3. Callable-first plotting workflows unchanged.
+4. Snapshot/codegen behavior remains correct when legend is disabled in Plotly layout.
 
-## Phased rollout that keeps toolkit consistent and functioning
+## Preferable implementation sequence with safe checkpoints
 
-- **Safe checkpoint A (after Phase 2):** Layout + manager exists but does not replace Plotly legend.
-- **Safe checkpoint B (after Phase 4):** Side panel can fully replace show/hide interactions.
-- **Safe checkpoint C (after Phase 6):** Style/sampling edits supported through panel.
-- **Safe checkpoint D (after Phase 8):** End-to-end graphical equation editing and creation complete.
+- **Checkpoint A (after Phase 1):** layout supports legend section, no behavior change.
+- **Checkpoint B (after Phase 3):** manager wired and synchronized, Plotly legend still available.
+- **Checkpoint C (after Phase 4):** side-panel legend canonical, compatibility path still available.
+- **Checkpoint D (after Phase 5):** label rendering hardened, ready for broad usage.
 
-Each checkpoint should be releasable independently, with feature flags where needed.
+Each checkpoint must leave the toolkit in a releasable, functioning state.
+
+## If consistency cannot be maintained in one phase
+
+- Use feature flags to keep incomplete legend behavior isolated.
+- Avoid partial replacement of Plotly legend without complete toggle parity.
+- Gate optional row actions until core lifecycle/visibility is stable.
 
 ## Risks and mitigation
 
-1. **Notebook frontend variability for MathLive integration**  
-   Mitigation: keep parser/compile logic in Python and isolate frontend bridge.
+1. **Widget churn/performance for many plots**
+   Mitigation: incremental updates, debounced refresh, avoid full rebuild by default.
 
-2. **UI complexity growth in sidebar**  
-   Mitigation: progressive disclosure (compact rows, modal/expanders for advanced editing).
+2. **State mismatch across views**
+   Mitigation: single-source `Plot` state, explicit lifecycle hooks in `Figure`.
 
-3. **Performance under many plots/tabs**  
-   Mitigation: incremental row updates + debounced refresh + avoid full widget tree rebuilds.
+3. **Migration confusion**
+   Mitigation: release notes + dual-mode transition window.
 
-4. **User confusion during migration**  
-   Mitigation: temporary coexistence mode and clear release notes with before/after interaction mapping.
+4. **Notebook frontend variance**
+   Mitigation: keep manager logic in Python and minimize frontend-specific assumptions.
 
 ## Definition of done
 
-- Plotly internal legend is no longer required for core show/hide workflow.
-- Dedicated side-panel legend works per tab with LaTeX-capable labels.
-- Row-level properties editor supports style + sampling controls.
-- Equation edit and add-plot flows run through MathLive -> SymPy -> numpify path.
-- Automated tests cover lifecycle, view switching, editing flows, and regressions.
+- Legend panel is present and synchronized with active view tabs.
+- Plot visibility is controlled primarily through the legend panel.
+- Labels support LaTeX rendering in notebook UI.
+- Plotly internal legend is no longer required by default.
+- Acceptance and regression tests pass for lifecycle, filtering, and compatibility.
