@@ -105,6 +105,7 @@ from .figure_context import (
     _push_current_figure,
     _require_current_figure,
     _use_figure,
+    current_figure,  # noqa: F401 - re-exported for __init__.py
 )
 from .figure_info import InfoPanelManager
 from .figure_layout import FigureLayout
