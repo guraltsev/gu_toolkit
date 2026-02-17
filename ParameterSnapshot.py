@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from copy import deepcopy
 from types import MappingProxyType
-from typing import Any, Dict
+from typing import Any
 
 from sympy.core.symbol import Symbol
 
@@ -24,7 +24,7 @@ class ParameterValueSnapshot(Mapping[Symbol, Any]):
 
     def __init__(self, entries: Mapping[Symbol, Mapping[str, Any]]) -> None:
         """Deep-copy value entries while preserving insertion order."""
-        self._values: Dict[Symbol, Any] = {
+        self._values: dict[Symbol, Any] = {
             symbol: deepcopy(entry["value"]) for symbol, entry in entries.items()
         }
 
@@ -77,7 +77,7 @@ class ParameterSnapshot(Mapping[Symbol, Mapping[str, Any]]):
 
     def __init__(self, entries: Mapping[Symbol, Mapping[str, Any]]) -> None:
         """Copy source entries deeply while preserving insertion order."""
-        self._entries: Dict[Symbol, Dict[str, Any]] = {
+        self._entries: dict[Symbol, dict[str, Any]] = {
             symbol: deepcopy(dict(entry)) for symbol, entry in entries.items()
         }
 

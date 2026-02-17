@@ -25,7 +25,9 @@ def test_phase5_label_prefers_explicit_label_and_escapes_html() -> None:
     manager = LegendPanelManager(box)
     manager.set_active_view("main")
 
-    plot = _FakePlot(id="plot_id", label="f(x) <b>unsafe</b>", visible=True, views=("main",))
+    plot = _FakePlot(
+        id="plot_id", label="f(x) <b>unsafe</b>", visible=True, views=("main",)
+    )
     manager.on_plot_added(plot)
 
     row = manager._rows["plot_id"]

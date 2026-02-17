@@ -63,7 +63,9 @@ def test_plot_supports_callable_first_multivariable_with_explicit_vars() -> None
     assert np.allclose(ys, 3.0 * xs)
 
 
-def test_plot_callable_first_explicit_vars_rebinds_callable_order_to_plot_variable() -> None:
+def test_plot_callable_first_explicit_vars_rebinds_callable_order_to_plot_variable() -> (
+    None
+):
     """Regression test for issue-023 notebook callable/x context mismatch.
 
     When a callable argument name (e.g. ``t``) differs from the symbol used as
@@ -110,7 +112,9 @@ def test_plot_supports_numeric_function_first_argument() -> None:
     assert np.allclose(ys, 2.5 * xs)
 
 
-def test_plot_callable_first_single_variable_rebinds_arg_name_without_explicit_vars() -> None:
+def test_plot_callable_first_single_variable_rebinds_arg_name_without_explicit_vars() -> (
+    None
+):
     """Single-argument callables should rebind to the explicit plotting symbol.
 
     Regression coverage for issue-023 notebook path where callable arg-name
@@ -152,7 +156,9 @@ def test_plot_callable_first_supports_string_keyed_vars_mapping() -> None:
     k = sp.Symbol("k_1")
     fig = Figure()
 
-    plot = fig.plot(lambda x, A, k: A + k * x, x, vars={"x": x, "A": A, "k": k}, id="mapped")
+    plot = fig.plot(
+        lambda x, A, k: A + k * x, x, vars={"x": x, "A": A, "k": k}, id="mapped"
+    )
     fig.parameters[A].value = 2.0
     fig.parameters[k].value = 3.0
     plot.render()

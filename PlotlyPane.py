@@ -173,12 +173,10 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Any, Optional
 
 import anywidget
-import traitlets
 import ipywidgets as W
-
+import traitlets
 
 __all__ = ["PlotlyResizeDriver", "PlotlyPaneStyle", "PlotlyPane"]
 
@@ -269,7 +267,9 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
     """
 
     host_selector = traitlets.Unicode("").tag(sync=True)
-    autorange_mode = traitlets.Unicode("none").tag(sync=True)  # "none" | "once" | "always"
+    autorange_mode = traitlets.Unicode("none").tag(
+        sync=True
+    )  # "none" | "once" | "always"
     defer_reveal = traitlets.Bool(True).tag(sync=True)
 
     debounce_ms = traitlets.Int(60).tag(sync=True)
@@ -708,7 +708,7 @@ class PlotlyPane:
         figw: W.Widget,
         *,
         style: PlotlyPaneStyle = PlotlyPaneStyle(),
-        autorange_mode: str = "none",   # "none" | "once" | "always"
+        autorange_mode: str = "none",  # "none" | "once" | "always"
         defer_reveal: bool = True,
         debounce_ms: int = 60,
         min_delta_px: int = 2,

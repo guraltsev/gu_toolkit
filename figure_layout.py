@@ -9,13 +9,15 @@ layout behavior.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 import ipywidgets as widgets
 from IPython.display import display
 
 # SECTION: OneShotOutput [id: OneShotOutput]
 # =============================================================================
+
 
 class OneShotOutput(widgets.Output):
     """
@@ -37,12 +39,12 @@ class OneShotOutput(widgets.Output):
     - having it be the last expression in a cell,
     - calling ``display(output)``,
     - placing it inside another widget/layout that is displayed.
-   
+
      Attributes
     ----------
     _displayed : bool
         Internal flag tracking whether the widget has been displayed.
-    
+
       Examples
     --------
     Basic output usage:
@@ -97,7 +99,9 @@ class OneShotOutput(widgets.Output):
         super().__init__()
         self._displayed = False
 
-    def _repr_mimebundle_(self, include: Any = None, exclude: Any = None, **kwargs: Any) -> Any:
+    def _repr_mimebundle_(
+        self, include: Any = None, exclude: Any = None, **kwargs: Any
+    ) -> Any:
         """
         IPython rich display hook used by ipywidgets.
 
@@ -184,10 +188,11 @@ class OneShotOutput(widgets.Output):
 # SECTION: FigureLayout (The View) [id: FigureLayout]
 # =============================================================================
 
+
 class FigureLayout:
     """
     Manages the visual structure and widget hierarchy of a Figure.
-    
+
     This class isolates all the "messy" UI code (CSS strings, JavaScript injection,
     VBox/HBox nesting) from the mathematical logic.
 
@@ -221,15 +226,17 @@ class FigureLayout:
         This class focuses on widget composition; :class:`Figure` handles
         plotting logic and parameter updates.
         """
-        self._reflow_callback: Optional[Callable[[], None]] = None
-        self._view_reflow_callbacks: Dict[str, Callable[[], None]] = {}
+        self._reflow_callback: Callable[[], None] | None = None
+        self._view_reflow_callbacks: dict[str, Callable[[], None]] = {}
         self._tab_view_ids: tuple[str, ...] = ()
         self._suspend_tab_events = False
-        self._view_plot_widgets: Dict[str, widgets.Widget] = {}
+        self._view_plot_widgets: dict[str, widgets.Widget] = {}
 
         # 1. Title Bar
         #    We use HTMLMath for proper LaTeX title rendering.
-        self.title_html = widgets.HTMLMath(value=title, layout=widgets.Layout(margin="0px"))
+        self.title_html = widgets.HTMLMath(
+            value=title, layout=widgets.Layout(margin="0px")
+        )
         self.full_width_checkbox = widgets.Checkbox(
             value=False,
             description="Full width plot",
@@ -239,7 +246,10 @@ class FigureLayout:
         self._titlebar = widgets.HBox(
             [self.title_html, self.full_width_checkbox],
             layout=widgets.Layout(
-                width="100%", align_items="center", justify_content="space-between", margin="0 0 6px 0"
+                width="100%",
+                align_items="center",
+                justify_content="space-between",
+                margin="0 0 6px 0",
             ),
         )
 
@@ -265,7 +275,9 @@ class FigureLayout:
 
         # 3. Controls Sidebar (The "Right" Panel)
         #    Initially hidden (display="none") until parameters/info/legend widgets are added.
-        self.params_header = widgets.HTML("<b>Parameters</b>", layout=widgets.Layout(display="none", margin="0"))
+        self.params_header = widgets.HTML(
+            "<b>Parameters</b>", layout=widgets.Layout(display="none", margin="0")
+        )
         self.params_box = widgets.VBox(
             layout=widgets.Layout(
                 width="100%",
@@ -276,7 +288,9 @@ class FigureLayout:
             )
         )
 
-        self.info_header = widgets.HTML("<b>Info</b>", layout=widgets.Layout(display="none", margin="10px 0 0 0"))
+        self.info_header = widgets.HTML(
+            "<b>Info</b>", layout=widgets.Layout(display="none", margin="10px 0 0 0")
+        )
         self.info_box = widgets.VBox(
             layout=widgets.Layout(
                 width="100%",
@@ -287,7 +301,9 @@ class FigureLayout:
             )
         )
 
-        self.legend_header = widgets.HTML("<b>Legend</b>", layout=widgets.Layout(display="none", margin="10px 0 0 0"))
+        self.legend_header = widgets.HTML(
+            "<b>Legend</b>", layout=widgets.Layout(display="none", margin="10px 0 0 0")
+        )
         self.legend_box = widgets.VBox(
             layout=widgets.Layout(
                 width="100%",
@@ -308,8 +324,12 @@ class FigureLayout:
                 self.legend_box,
             ],
             layout=widgets.Layout(
-                margin="0px", padding="0px 0px 0px 10px", flex="0 1 380px",
-                min_width="300px", max_width="400px", display="none"
+                margin="0px",
+                padding="0px 0px 0px 10px",
+                flex="0 1 380px",
+                min_width="300px",
+                max_width="400px",
+                display="none",
             ),
         )
 
@@ -317,19 +337,26 @@ class FigureLayout:
         #    Uses flex-wrap so the sidebar drops below the plot on narrow screens.
         self.left_panel = widgets.VBox(
             [self.view_tabs, self.plot_container],
-            layout=widgets.Layout(width="100%", flex="1 1 560px", margin="0px", padding="0px"),
+            layout=widgets.Layout(
+                width="100%", flex="1 1 560px", margin="0px", padding="0px"
+            ),
         )
 
         self.content_wrapper = widgets.Box(
             [self.left_panel, self.sidebar_container],
             layout=widgets.Layout(
-                display="flex", flex_flow="row wrap", align_items="flex-start",
-                width="100%", gap="8px"
+                display="flex",
+                flex_flow="row wrap",
+                align_items="flex-start",
+                width="100%",
+                gap="8px",
             ),
         )
 
         # 4.5. Default print/output area (below the entire figure content)
-        self.print_header = widgets.HTML("<b>Output</b>", layout=widgets.Layout(margin="8px 0 4px 0"))
+        self.print_header = widgets.HTML(
+            "<b>Output</b>", layout=widgets.Layout(margin="8px 0 4px 0")
+        )
         self.print_output = widgets.Output(
             layout=widgets.Layout(
                 width="100%",
@@ -348,7 +375,7 @@ class FigureLayout:
         # 5. Root Widget
         self.root_widget = widgets.VBox(
             [self._titlebar, self.content_wrapper, self.print_area],
-            layout=widgets.Layout(width="100%", position="relative")
+            layout=widgets.Layout(width="100%", position="relative"),
         )
 
         # Wire up internal logic
@@ -420,10 +447,12 @@ class FigureLayout:
         """
         return self.title_html.value
 
-    def update_sidebar_visibility(self, has_params: bool, has_info: bool, has_legend: bool) -> None:
+    def update_sidebar_visibility(
+        self, has_params: bool, has_info: bool, has_legend: bool
+    ) -> None:
         """
         Updates visibility of headers and the sidebar itself based on content.
-        
+
         This prevents empty "Parameters" or "Info" headers from cluttering the UI.
 
         Parameters
@@ -451,7 +480,7 @@ class FigureLayout:
         """
         self.params_header.layout.display = "block" if has_params else "none"
         self.params_box.layout.display = "flex" if has_params else "none"
-        
+
         self.info_header.layout.display = "block" if has_info else "none"
         self.info_box.layout.display = "flex" if has_info else "none"
 
@@ -465,7 +494,7 @@ class FigureLayout:
         self,
         widget: widgets.Widget,
         *,
-        reflow_callback: Optional[Callable[[], None]] = None,
+        reflow_callback: Callable[[], None] | None = None,
     ) -> None:
         """Attach the plot widget to the layout and store a reflow callback.
 
@@ -493,14 +522,16 @@ class FigureLayout:
         """
         self.plot_container.children = (widget,)
         self._reflow_callback = reflow_callback
-        self._sync_plot_container_host(active_view_id=self._tab_view_ids[0] if self._tab_view_ids else None)
+        self._sync_plot_container_host(
+            active_view_id=self._tab_view_ids[0] if self._tab_view_ids else None
+        )
 
     def set_view_plot_widget(
         self,
         view_id: str,
         widget: widgets.Widget,
         *,
-        reflow_callback: Optional[Callable[[], None]] = None,
+        reflow_callback: Callable[[], None] | None = None,
     ) -> None:
         """Attach a plot widget to a specific view tab.
 
@@ -565,7 +596,7 @@ class FigureLayout:
         finally:
             self._suspend_tab_events = False
 
-    def _sync_plot_container_host(self, *, active_view_id: Optional[str]) -> None:
+    def _sync_plot_container_host(self, *, active_view_id: str | None) -> None:
         """Place plot widgets in the appropriate host (single-view vs tabbed)."""
         if len(self._tab_view_ids) <= 1:
             self.plot_container.layout.display = "flex"
@@ -586,7 +617,7 @@ class FigureLayout:
     def observe_tab_selection(self, callback: Callable[[str], None]) -> None:
         """Observe tab selection and call ``callback`` with the selected view id."""
 
-        def _on_tab_change(change: Dict[str, Any]) -> None:
+        def _on_tab_change(change: dict[str, Any]) -> None:
             if self._suspend_tab_events:
                 return
             index = change.get("new")
@@ -597,7 +628,7 @@ class FigureLayout:
 
         self.view_tabs.observe(_on_tab_change, names="selected_index")
 
-    def _on_full_width_change(self, change: Dict[str, Any]) -> None:
+    def _on_full_width_change(self, change: dict[str, Any]) -> None:
         """Toggle CSS flex properties for full-width mode.
 
         Parameters
@@ -632,7 +663,9 @@ class FigureLayout:
             sidebar_layout.padding = "0px 0px 0px 10px"
         if len(self._tab_view_ids) > 1 and self._tab_view_ids:
             active_idx = self.view_tabs.selected_index
-            if active_idx is not None and 0 <= int(active_idx) < len(self._tab_view_ids):
+            if active_idx is not None and 0 <= int(active_idx) < len(
+                self._tab_view_ids
+            ):
                 self.trigger_reflow_for_view(self._tab_view_ids[int(active_idx)])
                 return
         if self._reflow_callback is not None:

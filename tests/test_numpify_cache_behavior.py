@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import sympy as sp
 from importlib import import_module
+
+import sympy as sp
 
 numpify_module = import_module("gu_toolkit.numpify")
 

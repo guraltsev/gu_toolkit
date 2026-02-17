@@ -55,35 +55,37 @@ If you are extending behavior, inspect next:
 
 from __future__ import annotations
 
-
 import inspect
-import re
+import logging
 import time
 import warnings
-import logging
+from collections.abc import Callable, Hashable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
-from collections.abc import Mapping
-from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator, List, Literal, NamedTuple, TypeAlias
+from typing import (
+    Any,
+    Literal,
+    NamedTuple,
+    TypeAlias,
+)
 
 import ipywidgets as widgets
-import numpy as np
 import plotly.graph_objects as go
 import sympy as sp
 from IPython.display import display
 from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
+from .codegen import CodegenOptions
+from .debouncing import QueuedDebouncer
+from .FigureSnapshot import FigureSnapshot, ViewSnapshot
+
 # Internal imports (assumed to exist in the same package)
 from .InputConvert import InputConvert
-from .numpify import NumericFunction, numpify_cached, _normalize_vars
-from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
-from .Slider import FloatSlider
+from .numpify import NumericFunction, _normalize_vars
+from .ParameterSnapshot import ParameterSnapshot, ParameterValueSnapshot
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
-from .ParameterSnapshot import ParameterSnapshot, ParameterValueSnapshot
-from .FigureSnapshot import FigureSnapshot, ViewSnapshot
-from .debouncing import QueuedDebouncer
-
+from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
 
 # Module logger
 # - Uses a NullHandler so importing this module never configures global logging.
@@ -92,42 +94,37 @@ logger = logging.getLogger(__name__)
 if not logger.handlers:
     logger.addHandler(logging.NullHandler())
 
-_FIGURE_STACK: List["Figure"] = []
-
-
+_FIGURE_STACK: list[Figure] = []
 
 
 from .figure_context import (
-    FIGURE_DEFAULT,
-    _is_figure_default,
     _current_figure,
+    _FigureDefaultSentinel,
+    _is_figure_default,
     _pop_current_figure,
     _push_current_figure,
     _require_current_figure,
     _use_figure,
-    current_figure,
 )
-from .figure_layout import FigureLayout, OneShotOutput
-from .figure_parameters import ParameterManager
 from .figure_info import InfoPanelManager
+from .figure_layout import FigureLayout
 from .figure_legend import LegendPanelManager
+from .figure_parameters import ParameterManager
 from .figure_plot import Plot
 from .figure_view import View
 
 # -----------------------------
 # Small type aliases
 # -----------------------------
-NumberLike = Union[int, float]
-NumberLikeOrStr = Union[int, float, str]
-RangeLike = Tuple[NumberLikeOrStr, NumberLikeOrStr]
-VisibleSpec = Union[bool, str]  # Plotly uses True/False or the string "legendonly".
-PlotVarsSpec: TypeAlias = Union[
-    Symbol,
-    Sequence[Union[Symbol, Mapping[str, Symbol]]],
-    Mapping[Union[int, str], Symbol],
-]
+NumberLike = int | float
+NumberLikeOrStr = int | float | str
+RangeLike = tuple[NumberLikeOrStr, NumberLikeOrStr]
+VisibleSpec = bool | str  # Plotly uses True/False or the string "legendonly".
+PlotVarsSpec: TypeAlias = (
+    Symbol | Sequence[Symbol | Mapping[str, Symbol]] | Mapping[int | str, Symbol]
+)
 
-PLOT_STYLE_OPTIONS: Dict[str, str] = {
+PLOT_STYLE_OPTIONS: dict[str, str] = {
     "color": "Line color. Accepts CSS-like names (e.g., red), hex (#RRGGBB), or rgb()/rgba() strings.",
     "thickness": "Line width in pixels. Larger values draw thicker lines.",
     "width": "Alias for thickness.",
@@ -139,7 +136,13 @@ PLOT_STYLE_OPTIONS: Dict[str, str] = {
 }
 
 
-def _resolve_style_aliases(*, thickness: Optional[Union[int, float]], width: Optional[Union[int, float]], opacity: Optional[Union[int, float]], alpha: Optional[Union[int, float]]) -> tuple[Optional[Union[int, float]], Optional[Union[int, float]]]:
+def _resolve_style_aliases(
+    *,
+    thickness: int | float | None,
+    width: int | float | None,
+    opacity: int | float | None,
+    alpha: int | float | None,
+) -> tuple[int | float | None, int | float | None]:
     """Resolve plot style aliases into canonical values.
 
     Raises
@@ -149,30 +152,35 @@ def _resolve_style_aliases(*, thickness: Optional[Union[int, float]], width: Opt
     """
     if width is not None:
         if thickness is not None and width != thickness:
-            raise ValueError("plot() received both thickness= and width= with different values; use only one.")
+            raise ValueError(
+                "plot() received both thickness= and width= with different values; use only one."
+            )
         thickness = width if thickness is None else thickness
 
     if alpha is not None:
         if opacity is not None and alpha != opacity:
-            raise ValueError("plot() received both opacity= and alpha= with different values; use only one.")
+            raise ValueError(
+                "plot() received both opacity= and alpha= with different values; use only one."
+            )
         opacity = alpha if opacity is None else opacity
 
     return thickness, opacity
-
 
 
 def _coerce_symbol(value: Any, *, role: str) -> Symbol:
     """Return ``value`` as a SymPy symbol or raise a clear ``TypeError``."""
     if isinstance(value, Symbol):
         return value
-    raise TypeError(f"plot() expects {role} to be a sympy.Symbol, got {type(value).__name__}")
+    raise TypeError(
+        f"plot() expects {role} to be a sympy.Symbol, got {type(value).__name__}"
+    )
 
 
 def _rebind_numeric_function_vars(
     numeric_fn: NumericFunction,
     *,
     vars_spec: Any,
-    source_callable: Optional[Callable[..., Any]] = None,
+    source_callable: Callable[..., Any] | None = None,
 ) -> NumericFunction:
     """Return a ``NumericFunction`` rebound to ``bound_symbols`` order.
 
@@ -181,7 +189,7 @@ def _rebind_numeric_function_vars(
     ``plot(lambda t: t**2, x)``). Rebinding keeps the positional callable
     contract but aligns symbol identity with figure parameter/freeze semantics.
     """
-    fn = source_callable if source_callable is not None else getattr(numeric_fn, "_fn")
+    fn = source_callable if source_callable is not None else numeric_fn._fn
     return NumericFunction(
         fn,
         vars=vars_spec,
@@ -194,9 +202,9 @@ def _normalize_plot_inputs(
     first: Any,
     second: Any,
     *,
-    vars: Optional[PlotVarsSpec] = None,
-    id_hint: Optional[str] = None,
-) -> tuple[Symbol, Expr, Optional[NumericFunction], tuple[Symbol, ...]]:
+    vars: PlotVarsSpec | None = None,
+    id_hint: str | None = None,
+) -> tuple[Symbol, Expr, NumericFunction | None, tuple[Symbol, ...]]:
     """Normalize callable-first ``plot()`` inputs.
 
     Returns
@@ -217,8 +225,8 @@ def _normalize_plot_inputs(
     f = first
     var_or_range = second
 
-    numeric_fn: Optional[NumericFunction] = None
-    source_callable: Optional[Callable[..., Any]] = None
+    numeric_fn: NumericFunction | None = None
+    source_callable: Callable[..., Any] | None = None
     expr: Expr
     call_symbols: tuple[Symbol, ...]
 
@@ -227,7 +235,7 @@ def _normalize_plot_inputs(
         call_symbols = tuple(sorted(expr.free_symbols, key=lambda s: s.sort_key()))
     elif isinstance(f, NumericFunction):
         numeric_fn = f
-        source_callable = getattr(f, "_fn")
+        source_callable = f._fn
         call_symbols = tuple(f.free_vars)
         symbolic = f.symbolic
         if isinstance(symbolic, Expr):
@@ -239,13 +247,25 @@ def _normalize_plot_inputs(
         source_callable = f
         sig = inspect.signature(f)
         positional = [
-            p for p in sig.parameters.values()
-            if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            p
+            for p in sig.parameters.values()
+            if p.kind
+            in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
         ]
-        if any(p.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD) for p in sig.parameters.values()):
-            raise TypeError("plot() callable does not support *args/**kwargs signatures")
+        if any(
+            p.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            for p in sig.parameters.values()
+        ):
+            raise TypeError(
+                "plot() callable does not support *args/**kwargs signatures"
+            )
         call_symbols = tuple(sp.Symbol(p.name) for p in positional)
-        numeric_fn = NumericFunction(f, vars=vars_spec if vars_spec is not None else call_symbols)
+        numeric_fn = NumericFunction(
+            f, vars=vars_spec if vars_spec is not None else call_symbols
+        )
         if vars_spec is not None:
             call_symbols = tuple(numeric_fn.free_vars)
         expr = sp.Symbol(id_hint or getattr(f, "__name__", "f"))
@@ -300,6 +320,7 @@ def _normalize_plot_inputs(
     parameters = tuple(sym for sym in bound_symbols if sym != plot_var)
     return plot_var, expr, numeric_fn, parameters
 
+
 # SECTION: Figure (The Coordinator) [id: Figure]
 # =============================================================================
 
@@ -342,13 +363,27 @@ class Figure:
     >>> fig.plot(a*sp.sin(x), x, id="a_sin")
     >>> fig
     """
-    
+
     __slots__ = [
-        "_layout", "_params", "_info", "_legend", "_view_runtime", "_figure", "_pane", "plots",
-        "_views", "_active_view_id", "_default_view_id", "_sampling_points", "_debug",
+        "_layout",
+        "_params",
+        "_info",
+        "_legend",
+        "_view_runtime",
+        "_figure",
+        "_pane",
+        "plots",
+        "_views",
+        "_active_view_id",
+        "_default_view_id",
+        "_sampling_points",
+        "_debug",
         "_plotly_legend_mode",
-        "_render_info_last_log_t", "_render_debug_last_log_t", "_relayout_debouncers",
-        "_has_been_displayed", "_print_capture"
+        "_render_info_last_log_t",
+        "_render_debug_last_log_t",
+        "_relayout_debouncers",
+        "_has_been_displayed",
+        "_print_capture",
     ]
 
     def __init__(
@@ -397,16 +432,18 @@ class Figure:
         """
         self._debug = debug
         if plotly_legend_mode not in {"side_panel", "plotly"}:
-            raise ValueError("plotly_legend_mode must be either 'side_panel' or 'plotly'")
+            raise ValueError(
+                "plotly_legend_mode must be either 'side_panel' or 'plotly'"
+            )
         self._plotly_legend_mode = plotly_legend_mode
         self._sampling_points = sampling_points
-        self.plots: Dict[str, Plot] = {}
+        self.plots: dict[str, Plot] = {}
         self._has_been_displayed = False
-        self._print_capture: Optional[ExitStack] = None
+        self._print_capture: ExitStack | None = None
 
         # 1. Initialize Layout (View)
         self._layout = FigureLayout()
-        
+
         # 2. Initialize Managers
         # Note: we pass a callback for rendering so params can trigger updates
         self._params = ParameterManager(
@@ -419,13 +456,13 @@ class Figure:
         self._legend = LegendPanelManager(self._layout.legend_box)
 
         # 3. Initialize Per-View Plotly Runtime
-        self._view_runtime: Dict[str, _ViewRuntime] = {}
-        self._relayout_debouncers: Dict[str, QueuedDebouncer] = {}
+        self._view_runtime: dict[str, _ViewRuntime] = {}
+        self._relayout_debouncers: dict[str, QueuedDebouncer] = {}
         self._layout.observe_tab_selection(self.set_active_view)
 
         # 4. Set Initial State
         self._default_view_id = str(default_view_id)
-        self._views: Dict[str, View] = {}
+        self._views: dict[str, View] = {}
         self._active_view_id = self._default_view_id
         self.add_view(self._default_view_id, x_range=x_range, y_range=y_range)
         self._legend.set_active_view(self._active_view_id)
@@ -448,7 +485,7 @@ class Figure:
         return self._active_view_id
 
     @property
-    def views(self) -> Dict[str, View]:
+    def views(self) -> dict[str, View]:
         """Return the workspace view registry."""
         return self._views
 
@@ -456,57 +493,57 @@ class Figure:
         """Return the active view model."""
         return self._views[self._active_view_id]
 
-    def _default_figure_layout(self) -> Dict[str, Any]:
+    def _default_figure_layout(self) -> dict[str, Any]:
         """Return shared Plotly layout defaults copied into each view widget."""
         show_plotly_legend = self._plotly_legend_mode == "plotly"
-        return dict(
-            autosize=True,
-            template="plotly_white",
-            showlegend=show_plotly_legend,
-            margin=dict(l=48, r=28, t=48, b=44),
-            font=dict(
-                family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-                size=14,
-                color="#1f2933",
-            ),
-            paper_bgcolor="#ffffff",
-            plot_bgcolor="#f8fafc",
-            legend=dict(
-                bgcolor="rgba(255,255,255,0.7)",
-                bordercolor="rgba(15,23,42,0.08)",
-                borderwidth=1,
-            ),
-            xaxis=dict(
-                zeroline=True,
-                zerolinewidth=1.5,
-                zerolinecolor="#334155",
-                showline=True,
-                linecolor="#94a3b8",
-                linewidth=1,
-                mirror=True,
-                ticks="outside",
-                tickcolor="#94a3b8",
-                ticklen=6,
-                showgrid=True,
-                gridcolor="rgba(148,163,184,0.35)",
-                gridwidth=1,
-            ),
-            yaxis=dict(
-                zeroline=True,
-                zerolinewidth=1.5,
-                zerolinecolor="#334155",
-                showline=True,
-                linecolor="#94a3b8",
-                linewidth=1,
-                mirror=True,
-                ticks="outside",
-                tickcolor="#94a3b8",
-                ticklen=6,
-                showgrid=True,
-                gridcolor="rgba(148,163,184,0.35)",
-                gridwidth=1,
-            ),
-        )
+        return {
+            "autosize": True,
+            "template": "plotly_white",
+            "showlegend": show_plotly_legend,
+            "margin": {"l": 48, "r": 28, "t": 48, "b": 44},
+            "font": {
+                "family": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                "size": 14,
+                "color": "#1f2933",
+            },
+            "paper_bgcolor": "#ffffff",
+            "plot_bgcolor": "#f8fafc",
+            "legend": {
+                "bgcolor": "rgba(255,255,255,0.7)",
+                "bordercolor": "rgba(15,23,42,0.08)",
+                "borderwidth": 1,
+            },
+            "xaxis": {
+                "zeroline": True,
+                "zerolinewidth": 1.5,
+                "zerolinecolor": "#334155",
+                "showline": True,
+                "linecolor": "#94a3b8",
+                "linewidth": 1,
+                "mirror": True,
+                "ticks": "outside",
+                "tickcolor": "#94a3b8",
+                "ticklen": 6,
+                "showgrid": True,
+                "gridcolor": "rgba(148,163,184,0.35)",
+                "gridwidth": 1,
+            },
+            "yaxis": {
+                "zeroline": True,
+                "zerolinewidth": 1.5,
+                "zerolinecolor": "#334155",
+                "showline": True,
+                "linecolor": "#94a3b8",
+                "linewidth": 1,
+                "mirror": True,
+                "ticks": "outside",
+                "tickcolor": "#94a3b8",
+                "ticklen": 6,
+                "showgrid": True,
+                "gridcolor": "rgba(148,163,184,0.35)",
+                "gridwidth": 1,
+            },
+        }
 
     def _runtime_for_view(self, view_id: str) -> _ViewRuntime:
         """Return the per-view runtime bundle for ``view_id``."""
@@ -529,7 +566,9 @@ class Figure:
         )
         runtime = _ViewRuntime(figure_widget=figure_widget, pane=pane)
         self._view_runtime[view_id] = runtime
-        self._layout.set_view_plot_widget(view_id, pane.widget, reflow_callback=pane.reflow)
+        self._layout.set_view_plot_widget(
+            view_id, pane.widget, reflow_callback=pane.reflow
+        )
 
         debouncer = QueuedDebouncer(
             lambda *args: self._run_relayout(view_id=view_id, *args),
@@ -539,7 +578,8 @@ class Figure:
         self._relayout_debouncers[view_id] = debouncer
         figure_widget.layout.on_change(
             lambda *args: self._throttled_relayout(view_id, *args),
-            "xaxis.range", "yaxis.range",
+            "xaxis.range",
+            "yaxis.range",
         )
         return runtime
 
@@ -547,11 +587,11 @@ class Figure:
         self,
         id: str,
         *,
-        title: Optional[str] = None,
-        x_range: Optional[RangeLike] = None,
-        y_range: Optional[RangeLike] = None,
-        x_label: Optional[str] = None,
-        y_label: Optional[str] = None,
+        title: str | None = None,
+        x_range: RangeLike | None = None,
+        y_range: RangeLike | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
     ) -> View:
         """Add a view model to the workspace registry."""
         view_id = str(id)
@@ -564,8 +604,14 @@ class Figure:
             title=title or view_id,
             x_label=x_label or "",
             y_label=y_label or "",
-            default_x_range=(float(InputConvert(xr[0], float)), float(InputConvert(xr[1], float))),
-            default_y_range=(float(InputConvert(yr[0], float)), float(InputConvert(yr[1], float))),
+            default_x_range=(
+                float(InputConvert(xr[0], float)),
+                float(InputConvert(xr[1], float)),
+            ),
+            default_y_range=(
+                float(InputConvert(yr[0], float)),
+                float(InputConvert(yr[1], float)),
+            ),
             is_active=(not self._views),
         )
         self._views[view_id] = view
@@ -578,7 +624,9 @@ class Figure:
             self._legend.set_active_view(view_id)
             self._figure = runtime.figure_widget
             self._pane = runtime.pane
-        self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
+        self._layout.set_view_tabs(
+            tuple(self._views.keys()), active_view_id=self._active_view_id
+        )
         return view
 
     def set_active_view(self, id: str) -> None:
@@ -610,12 +658,14 @@ class Figure:
         if nxt.is_stale:
             nxt.is_stale = False
 
-        self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
+        self._layout.set_view_tabs(
+            tuple(self._views.keys()), active_view_id=self._active_view_id
+        )
         self._layout.trigger_reflow_for_view(self._active_view_id)
         self._sync_sidebar_visibility()
 
     @contextmanager
-    def view(self, id: str) -> Iterator["Figure"]:
+    def view(self, id: str) -> Iterator[Figure]:
         """Temporarily switch the active workspace view within a context."""
         previous = self.active_view_id
         self.set_active_view(id)
@@ -639,7 +689,9 @@ class Figure:
         del self._views[id]
         self._view_runtime.pop(id, None)
         self._relayout_debouncers.pop(id, None)
-        self._layout.set_view_tabs(tuple(self._views.keys()), active_view_id=self._active_view_id)
+        self._layout.set_view_tabs(
+            tuple(self._views.keys()), active_view_id=self._active_view_id
+        )
         self._sync_sidebar_visibility()
 
     def _sync_sidebar_visibility(self) -> None:
@@ -695,7 +747,7 @@ class Figure:
         title : Read the current title text.
         """
         self._layout.set_title(value)
-    
+
     @property
     def figure_widget(self) -> go.FigureWidget:
         """Access the active view's Plotly FigureWidget.
@@ -723,7 +775,7 @@ class Figure:
         if view_id not in self._views:
             raise KeyError(f"Unknown view: {view_id}")
         return self._runtime_for_view(view_id).figure_widget
-    
+
     @property
     def parameters(self) -> ParameterManager:
         """The figure ParameterManager (preferred name)."""
@@ -733,9 +785,9 @@ class Figure:
     def params(self) -> ParameterManager:
         """Alias for :attr:`parameters` for backward compatibility."""
         return self.parameters
-    
+
     @property
-    def info_output(self) -> Dict[Hashable, widgets.Output]:
+    def info_output(self) -> dict[Hashable, widgets.Output]:
         """Dictionary of Info Output widgets indexed by id.
 
         Returns
@@ -750,10 +802,10 @@ class Figure:
         True
 
         """
-        return self._info._outputs # Direct access for backward compat or advanced use
+        return self._info._outputs  # Direct access for backward compat or advanced use
 
     @property
-    def x_range(self) -> Tuple[float, float]:
+    def x_range(self) -> tuple[float, float]:
         """Return the default x-axis range.
 
         Returns
@@ -772,7 +824,7 @@ class Figure:
         y_range : The default y-axis range.
         """
         return self._active_view().default_x_range
-    
+
     @x_range.setter
     def x_range(self, value: RangeLike) -> None:
         """Set the default x-axis range.
@@ -795,12 +847,15 @@ class Figure:
         -----
         This updates the default Plotly axis range and the visible viewport immediately.
         """
-        rng = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        rng = (
+            float(InputConvert(value[0], float)),
+            float(InputConvert(value[1], float)),
+        )
         self._active_view().default_x_range = rng
         self._figure.update_xaxes(range=rng)
 
     @property
-    def y_range(self) -> Tuple[float, float]:
+    def y_range(self) -> tuple[float, float]:
         """Return the default y-axis range.
 
         Returns
@@ -819,7 +874,7 @@ class Figure:
         x_range : The default x-axis range.
         """
         return self._active_view().default_y_range
-    
+
     @y_range.setter
     def y_range(self, value: RangeLike) -> None:
         """Set the default y-axis range.
@@ -842,12 +897,15 @@ class Figure:
         -----
         This updates the default Plotly axis range and the visible viewport immediately.
         """
-        rng = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        rng = (
+            float(InputConvert(value[0], float)),
+            float(InputConvert(value[1], float)),
+        )
         self._active_view().default_y_range = rng
         self._figure.update_yaxes(range=rng)
 
     @property
-    def _viewport_x_range(self) -> Optional[Tuple[float, float]]:
+    def _viewport_x_range(self) -> tuple[float, float] | None:
         """Control for the current viewport x-range.
 
         Reading this property queries the live Plotly widget viewport.
@@ -861,18 +919,21 @@ class Figure:
         return result
 
     @_viewport_x_range.setter
-    def _viewport_x_range(self, value: Optional[RangeLike]) -> None:
+    def _viewport_x_range(self, value: RangeLike | None) -> None:
         if value is None:
             rng = self._active_view().default_x_range
             self._active_view().viewport_x_range = rng
             self._figure.update_xaxes(range=rng)
             return
-        rng = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        rng = (
+            float(InputConvert(value[0], float)),
+            float(InputConvert(value[1], float)),
+        )
         self._active_view().viewport_x_range = rng
         self._figure.update_xaxes(range=rng)
 
     @property
-    def _viewport_y_range(self) -> Optional[Tuple[float, float]]:
+    def _viewport_y_range(self) -> tuple[float, float] | None:
         """Control for the current viewport y-range.
 
         Reading this property queries the live Plotly widget viewport.
@@ -886,18 +947,21 @@ class Figure:
         return result
 
     @_viewport_y_range.setter
-    def _viewport_y_range(self, value: Optional[RangeLike]) -> None:
+    def _viewport_y_range(self, value: RangeLike | None) -> None:
         if value is None:
             rng = self._active_view().default_y_range
             self._active_view().viewport_y_range = rng
             self._figure.update_yaxes(range=rng)
             return
-        rng = (float(InputConvert(value[0], float)), float(InputConvert(value[1], float)))
+        rng = (
+            float(InputConvert(value[0], float)),
+            float(InputConvert(value[1], float)),
+        )
         self._active_view().viewport_y_range = rng
         self._figure.update_yaxes(range=rng)
 
     @property
-    def current_x_range(self) -> Optional[Tuple[float, float]]:
+    def current_x_range(self) -> tuple[float, float] | None:
         """Return the current viewport x-range.
 
         Returns
@@ -917,7 +981,7 @@ class Figure:
         return self._viewport_x_range
 
     @property
-    def current_y_range(self) -> Optional[Tuple[float, float]]:
+    def current_y_range(self) -> tuple[float, float] | None:
         """Return the current viewport y-range (read-only).
 
         Returns
@@ -935,9 +999,9 @@ class Figure:
         This reflects the Plotly widget state after panning or zooming.
         """
         return self._viewport_y_range
-    
+
     @property
-    def sampling_points(self) -> Optional[int]:
+    def sampling_points(self) -> int | None:
         """Return the default number of sampling points per plot.
 
         Returns
@@ -958,7 +1022,7 @@ class Figure:
         return self._sampling_points
 
     @sampling_points.setter
-    def sampling_points(self, val: Union[int, str, _FigureDefaultSentinel, None]) -> None:
+    def sampling_points(self, val: int | str | _FigureDefaultSentinel | None) -> None:
         """Set the default number of sampling points per plot.
 
         Parameters
@@ -981,12 +1045,16 @@ class Figure:
         Use ``None``/``"figure_default"``/``"FIGURE_DEFAULT"``/``FIGURE_DEFAULT``
         to clear the override.
         """
-        self._sampling_points = int(InputConvert(val, int)) if isinstance(val, (int, float, str)) and not _is_figure_default(val) else None
+        self._sampling_points = (
+            int(InputConvert(val, int))
+            if isinstance(val, (int, float, str)) and not _is_figure_default(val)
+            else None
+        )
 
     # --- Public API ---
 
     @staticmethod
-    def plot_style_options() -> Dict[str, str]:
+    def plot_style_options() -> dict[str, str]:
         """Return discoverable plot-style options supported by :meth:`plot`.
 
         Returns
@@ -1006,22 +1074,22 @@ class Figure:
         self,
         func: Any,
         var: Any,
-        parameters: Optional[Sequence[Symbol]] = None,
-        id: Optional[str] = None,
-        label: Optional[str] = None,
+        parameters: Sequence[Symbol] | None = None,
+        id: str | None = None,
+        label: str | None = None,
         visible: VisibleSpec = True,
-        x_domain: Optional[RangeLike] = None,
-        sampling_points: Optional[Union[int, str]] = None,
-        color: Optional[str] = None,
-        thickness: Optional[Union[int, float]] = None,
-        width: Optional[Union[int, float]] = None,
-        dash: Optional[str] = None,
-        line: Optional[Mapping[str, Any]] = None,
-        opacity: Optional[Union[int, float]] = None,
-        alpha: Optional[Union[int, float]] = None,
-        trace: Optional[Mapping[str, Any]] = None,
-        view: Optional[Union[str, Sequence[str]]] = None,
-        vars: Optional[PlotVarsSpec] = None,
+        x_domain: RangeLike | None = None,
+        sampling_points: int | str | None = None,
+        color: str | None = None,
+        thickness: int | float | None = None,
+        width: int | float | None = None,
+        dash: str | None = None,
+        line: Mapping[str, Any] | None = None,
+        opacity: int | float | None = None,
+        alpha: int | float | None = None,
+        trace: Mapping[str, Any] | None = None,
+        view: str | Sequence[str] | None = None,
+        vars: PlotVarsSpec | None = None,
     ) -> Plot:
         """
         Plot an expression/callable on the figure (and keep it “live”).
@@ -1038,7 +1106,7 @@ class Figure:
             the expression.
         x_domain : RangeLike or None, optional
             Domain of the independent variable (e.g. ``(-10, 10)``).
-            If "figure_default", the figure's range is used when plotting. 
+            If "figure_default", the figure's range is used when plotting.
             If None, it is the same as "figure_default" for new plots while no change for existing plots.
         id : str, optional
             Unique identifier. If exists, the existing plot is updated in-place.
@@ -1124,13 +1192,16 @@ class Figure:
                 if f"f_{i}" not in self.plots:
                     id = f"f_{i}"
                     break
-            if id is None: raise ValueError("Too many auto-generated IDs")
+            if id is None:
+                raise ValueError("Too many auto-generated IDs")
 
-        normalized_var, normalized_func, normalized_numeric_fn, inferred_parameters = _normalize_plot_inputs(
-            func,
-            var,
-            vars=vars,
-            id_hint=id,
+        normalized_var, normalized_func, normalized_numeric_fn, inferred_parameters = (
+            _normalize_plot_inputs(
+                func,
+                var,
+                vars=vars,
+                id_hint=id,
+            )
         )
 
         if isinstance(var, tuple) and len(var) == 3 and x_domain is not None:
@@ -1163,60 +1234,85 @@ class Figure:
         # Ensure Parameters Exist (Delegate to Manager)
         if parameters:
             self.parameter(parameters)
-        
+
         # Update UI visibility
         self._sync_sidebar_visibility()
 
         # Create or Update Plot
         if id in self.plots:
             update_dont_create = True
-        else: 
+        else:
             update_dont_create = False
 
-        initial_func = normalized_var if normalized_numeric_fn is not None else normalized_func
+        initial_func = (
+            normalized_var if normalized_numeric_fn is not None else normalized_func
+        )
 
         if update_dont_create:
-            update_kwargs: Dict[str, Any] = dict(
+            update_kwargs: dict[str, Any] = {
+                "var": normalized_var,
+                "func": initial_func,
+                "parameters": parameters,
+                "visible": visible,
+                "x_domain": x_domain,
+                "sampling_points": sampling_points,
+                "color": color,
+                "thickness": thickness,
+                "dash": dash,
+                "line": line,
+                "opacity": opacity,
+                "trace": trace,
+                "view": view,
+            }
+            if label is not None:
+                update_kwargs["label"] = label
+            self.plots[id].update(**update_kwargs)
+            plot = self.plots[id]
+            self._legend.on_plot_updated(plot)
+            self._sync_sidebar_visibility()
+        else:
+            view_ids = (
+                (view,)
+                if isinstance(view, str)
+                else (tuple(view) if view is not None else (self.active_view_id,))
+            )
+            plot = Plot(
                 var=normalized_var,
                 func=initial_func,
+                smart_figure=self,
                 parameters=parameters,
-                visible=visible,
                 x_domain=x_domain,
                 sampling_points=sampling_points,
+                label=(id if label is None else label),
+                visible=visible,
                 color=color,
                 thickness=thickness,
                 dash=dash,
                 line=line,
                 opacity=opacity,
                 trace=trace,
-                view=view,
-            )
-            if label is not None:
-                update_kwargs["label"] = label
-            self.plots[id].update(**update_kwargs)
-            plot = self.plots[id]    
-            self._legend.on_plot_updated(plot)
-            self._sync_sidebar_visibility()
-        else: 
-            view_ids = (view,) if isinstance(view, str) else (tuple(view) if view is not None else (self.active_view_id,))
-            plot = Plot(
-                var=normalized_var, func=initial_func, smart_figure=self, parameters=parameters,
-                x_domain=x_domain, sampling_points=sampling_points,
-                label=(id if label is None else label), visible=visible,
-                color=color, thickness=thickness, dash=dash, line=line, opacity=opacity, trace=trace,
-                plot_id=id, view_ids=view_ids,
+                plot_id=id,
+                view_ids=view_ids,
             )
             self.plots[id] = plot
             self._legend.on_plot_added(plot)
             self._sync_sidebar_visibility()
 
         if normalized_numeric_fn is not None:
-            plot.set_numeric_function(normalized_var, normalized_numeric_fn, parameters=parameters)
+            plot.set_numeric_function(
+                normalized_var, normalized_numeric_fn, parameters=parameters
+            )
             plot.render()
-        
+
         return plot
 
-    def parameter(self, symbols: Union[Symbol, Sequence[Symbol]], *, control: Optional[Any] = None, **control_kwargs: Any):
+    def parameter(
+        self,
+        symbols: Symbol | Sequence[Symbol],
+        *,
+        control: Any | None = None,
+        **control_kwargs: Any,
+    ):
         """
         Create or ensure parameters and return refs.
 
@@ -1247,9 +1343,8 @@ class Figure:
         result = self._params.parameter(symbols, control=control, **control_kwargs)
         self._sync_sidebar_visibility()
         return result
-        
 
-    def render(self, reason: str = "manual", trigger: Optional[ParamEvent] = None) -> None:
+    def render(self, reason: str = "manual", trigger: ParamEvent | None = None) -> None:
         """
         Render all plots on the figure.
 
@@ -1278,7 +1373,7 @@ class Figure:
         :meth:`add_param_change_hook` are invoked after plotting.
         """
         self._log_render(reason, trigger)
-        
+
         # 1. Update active-view plots
         for plot in self.plots.values():
             plot.render(view_id=self.active_view_id)
@@ -1298,7 +1393,7 @@ class Figure:
                 try:
                     callback(trigger)
                 except Exception as e:
-                    warnings.warn(f"Hook {h_id} failed: {e}")
+                    warnings.warn(f"Hook {h_id} failed: {e}", stacklevel=2)
 
         self._info.schedule_info_update(reason=reason, trigger=trigger)
 
@@ -1375,7 +1470,7 @@ class Figure:
             active_view_id=self.active_view_id,
         )
 
-    def to_code(self, *, options: "CodegenOptions | None" = None) -> str:
+    def to_code(self, *, options: CodegenOptions | None = None) -> str:
         """Generate a self-contained Python script that recreates this figure.
 
         Parameters
@@ -1422,7 +1517,7 @@ class Figure:
         """
         return self.to_code()
 
-    def get_code(self, options: "CodegenOptions | None" = None) -> str:
+    def get_code(self, options: CodegenOptions | None = None) -> str:
         """Return generated figure code with optional serialization settings.
 
         Parameters
@@ -1449,16 +1544,20 @@ class Figure:
 
     def info(
         self,
-        spec: Union[str, Callable[["Figure", Any], str], Sequence[Union[str, Callable[["Figure", Any], str]]]],
-        id: Optional[Hashable] = None,
+        spec: str
+        | Callable[[Figure, Any], str]
+        | Sequence[str | Callable[[Figure, Any], str]],
+        id: Hashable | None = None,
         *,
-        view: Optional[str] = None,
+        view: str | None = None,
     ) -> None:
         """Create or replace a simple info card in the Info sidebar."""
         self._info.set_simple_card(spec=spec, id=id, view=view)
         self._sync_sidebar_visibility()
 
-    def add_hook(self, callback: Callable[[Optional[ParamEvent]], Any], *, run_now: bool = True) -> Hashable:
+    def add_hook(
+        self, callback: Callable[[ParamEvent | None], Any], *, run_now: bool = True
+    ) -> Hashable:
         """Alias for :meth:`add_param_change_hook`.
 
         Parameters
@@ -1486,8 +1585,8 @@ class Figure:
 
     def add_param_change_hook(
         self,
-        callback: Callable[[Optional[ParamEvent]], Any],
-        hook_id: Optional[Hashable] = None,
+        callback: Callable[[ParamEvent | None], Any],
+        hook_id: Hashable | None = None,
         *,
         run_now: bool = True,
     ) -> Hashable:
@@ -1518,7 +1617,8 @@ class Figure:
         -----
         Hooks are executed after the figure re-renders in response to changes.
         """
-        def _wrapped(event: Optional[ParamEvent]) -> Any:
+
+        def _wrapped(event: ParamEvent | None) -> Any:
             with _use_figure(self):
                 return callback(event)
 
@@ -1529,13 +1629,13 @@ class Figure:
                 self.render(reason="manual", trigger=None)
                 _wrapped(None)
             except Exception as e:
-                warnings.warn(f"Hook failed on init: {e}")
+                warnings.warn(f"Hook failed on init: {e}", stacklevel=2)
 
         return hook_id
 
     # --- Internal / Plumbing ---
 
-    def _throttled_relayout(self, view_id: Optional[str] = None, *args: Any) -> None:
+    def _throttled_relayout(self, view_id: str | None = None, *args: Any) -> None:
         """Queue relayout events through the per-view debouncing wrapper.
 
         Parameters
@@ -1549,7 +1649,7 @@ class Figure:
         if debouncer is not None:
             debouncer(*args)
 
-    def _run_relayout(self, *_, view_id: Optional[str] = None) -> None:
+    def _run_relayout(self, *_, view_id: str | None = None) -> None:
         """Execute one relayout render from the queued debouncer.
 
         Parameters
@@ -1580,11 +1680,17 @@ class Figure:
         """
         # Simple rate-limited logging implementation
         now = time.monotonic()
-        if logger.isEnabledFor(logging.INFO) and (now - self._render_info_last_log_t) > 1.0:
+        if (
+            logger.isEnabledFor(logging.INFO)
+            and (now - self._render_info_last_log_t) > 1.0
+        ):
             self._render_info_last_log_t = now
             logger.info(f"render(reason={reason}) plots={len(self.plots)}")
-        
-        if logger.isEnabledFor(logging.DEBUG) and (now - self._render_debug_last_log_t) > 0.5:
+
+        if (
+            logger.isEnabledFor(logging.DEBUG)
+            and (now - self._render_debug_last_log_t) > 0.5
+        ):
             self._render_debug_last_log_t = now
             logger.debug(f"ranges x={self.x_range} y={self.y_range}")
 
@@ -1605,7 +1711,7 @@ class Figure:
         self._has_been_displayed = True
         display(self._layout.output_widget)
 
-    def __enter__(self) -> "Figure":
+    def __enter__(self) -> Figure:
         """Enter a context where this figure is the current target.
 
         Returns
@@ -1672,11 +1778,11 @@ class _CurrentParametersProxy(Mapping):
     ...     params[a].value = 5  # doctest: +SKIP
     """
 
-    def _fig(self) -> "Figure":
+    def _fig(self) -> Figure:
         """Return the current Figure from the module stack."""
         return _require_current_figure()
 
-    def _mgr(self) -> "ParameterManager":
+    def _mgr(self) -> ParameterManager:
         """Return the current figure's ParameterManager."""
         return self._fig().parameters
 
@@ -1702,15 +1808,17 @@ class _CurrentParametersProxy(Mapping):
 
     def parameter(
         self,
-        symbols: Union[Symbol, Sequence[Symbol]],
+        symbols: Symbol | Sequence[Symbol],
         *,
-        control: Optional[str] = None,
+        control: str | None = None,
         **kwargs: Any,
-    ) -> Union[ParamRef, Dict[Symbol, ParamRef]]:
+    ) -> ParamRef | dict[Symbol, ParamRef]:
         """Proxy to the current figure's :meth:`ParameterManager.parameter`."""
         return self._mgr().parameter(symbols, control=control, **kwargs)
 
-    def snapshot(self, *, full: bool = False) -> ParameterValueSnapshot | ParameterSnapshot:
+    def snapshot(
+        self, *, full: bool = False
+    ) -> ParameterValueSnapshot | ParameterSnapshot:
         """Return current-figure parameter values or full snapshot metadata."""
         return self._mgr().snapshot(full=full)
 
@@ -1729,7 +1837,7 @@ class _CurrentParametersProxy(Mapping):
 class _CurrentPlotsProxy(Mapping):
     """Module-level proxy to the current figure's plots mapping."""
 
-    def _fig(self) -> "Figure":
+    def _fig(self) -> Figure:
         return _require_current_figure()
 
     def __getitem__(self, key: Hashable) -> Plot:
@@ -1759,7 +1867,8 @@ def get_title() -> str:
     """Get the title of the current figure."""
     return _require_current_figure().title
 
-def render(reason: str = "manual", trigger: Optional[ParamEvent] = None) -> None:
+
+def render(reason: str = "manual", trigger: ParamEvent | None = None) -> None:
     """Render the current figure.
 
     Parameters
@@ -1773,10 +1882,12 @@ def render(reason: str = "manual", trigger: Optional[ParamEvent] = None) -> None
 
 
 def info(
-    spec: Union[str, Callable[[Figure, Any], str], Sequence[Union[str, Callable[[Figure, Any], str]]]],
-    id: Optional[Hashable] = None,
+    spec: str
+    | Callable[[Figure, Any], str]
+    | Sequence[str | Callable[[Figure, Any], str]],
+    id: Hashable | None = None,
     *,
-    view: Optional[str] = None,
+    view: str | None = None,
 ) -> None:
     """Create or replace a simplified info card on the current figure."""
     _require_current_figure().info(spec=spec, id=id, view=view)
@@ -1787,7 +1898,7 @@ def set_x_range(value: RangeLike) -> None:
     _require_current_figure().x_range = value
 
 
-def get_x_range() -> Tuple[float, float]:
+def get_x_range() -> tuple[float, float]:
     """Get x-axis range from the current figure."""
     return _require_current_figure().x_range
 
@@ -1797,22 +1908,22 @@ def set_y_range(value: RangeLike) -> None:
     _require_current_figure().y_range = value
 
 
-def get_y_range() -> Tuple[float, float]:
+def get_y_range() -> tuple[float, float]:
     """Get y-axis range from the current figure."""
     return _require_current_figure().y_range
 
 
-def set_sampling_points(value: Union[int, str, _FigureDefaultSentinel, None]) -> None:
+def set_sampling_points(value: int | str | _FigureDefaultSentinel | None) -> None:
     """Set default sampling points on the current figure."""
     _require_current_figure().sampling_points = value
 
 
-def get_sampling_points() -> Optional[int]:
+def get_sampling_points() -> int | None:
     """Get default sampling points from the current figure."""
     return _require_current_figure().sampling_points
 
 
-def plot_style_options() -> Dict[str, str]:
+def plot_style_options() -> dict[str, str]:
     """Return discoverable Figure plot-style options.
 
     Returns
@@ -1828,13 +1939,12 @@ def plot_style_options() -> Dict[str, str]:
     return Figure.plot_style_options()
 
 
-
 def parameter(
-    symbols: Union[Symbol, Sequence[Symbol]],
+    symbols: Symbol | Sequence[Symbol],
     *,
-    control: Optional[str] = None,
+    control: str | None = None,
     **kwargs: Any,
-) -> Union[ParamRef, Dict[Symbol, ParamRef]]:
+) -> ParamRef | dict[Symbol, ParamRef]:
     """Ensure parameter(s) exist on the current figure and return their refs.
 
     Parameters
@@ -1874,22 +1984,22 @@ def parameter(
 def plot(
     func: Any,
     var: Any,
-    parameters: Optional[Sequence[Symbol]] = None,
-    id: Optional[str] = None,
-    label: Optional[str] = None,
+    parameters: Sequence[Symbol] | None = None,
+    id: str | None = None,
+    label: str | None = None,
     visible: VisibleSpec = True,
-    x_domain: Optional[RangeLike] = None,
-    sampling_points: Optional[Union[int, str]] = None,
-    color: Optional[str] = None,
-    thickness: Optional[Union[int, float]] = None,
-    width: Optional[Union[int, float]] = None,
-    dash: Optional[str] = None,
-    opacity: Optional[Union[int, float]] = None,
-    alpha: Optional[Union[int, float]] = None,
-    line: Optional[Mapping[str, Any]] = None,
-    trace: Optional[Mapping[str, Any]] = None,
-    view: Optional[Union[str, Sequence[str]]] = None,
-    vars: Optional[PlotVarsSpec] = None,
+    x_domain: RangeLike | None = None,
+    sampling_points: int | str | None = None,
+    color: str | None = None,
+    thickness: int | float | None = None,
+    width: int | float | None = None,
+    dash: str | None = None,
+    opacity: int | float | None = None,
+    alpha: int | float | None = None,
+    line: Mapping[str, Any] | None = None,
+    trace: Mapping[str, Any] | None = None,
+    view: str | Sequence[str] | None = None,
+    vars: PlotVarsSpec | None = None,
 ) -> Plot:
     """
     Plot an expression/callable on the current figure, or create a new figure per call.

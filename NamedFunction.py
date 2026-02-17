@@ -97,10 +97,10 @@ from __future__ import annotations
 
 import inspect
 import textwrap
-from typing import Callable, Optional, Protocol, Tuple, Type, Union, cast
+from collections.abc import Callable
+from typing import Protocol, cast
 
 import sympy as sp
-
 
 __all__ = [
     # Public API
@@ -114,7 +114,7 @@ __all__ = [
 # === END SECTION: Types & protocols ===
 
 
-_SymbolicReturn = Union[sp.Basic, int, float, complex, str, None]
+_SymbolicReturn = sp.Basic | int | float | complex | str | None
 _SymbolicCallable = Callable[..., _SymbolicReturn]
 
 
@@ -144,10 +144,10 @@ class _SignedFunctionMeta(type(sp.Function)):
     """Metaclass that allows overriding ``__signature__`` on generated classes."""
 
     @property
-    def __signature__(cls) -> Optional[inspect.Signature]:  # noqa: D401
+    def __signature__(cls) -> inspect.Signature | None:  # noqa: D401
         """Expose generated call signatures for ``inspect.signature``."""
         # Invariant: we only set `_custom_signature` on classes created by this module.
-        return cast(Optional[inspect.Signature], getattr(cls, "_custom_signature", None))
+        return cast(inspect.Signature | None, getattr(cls, "_custom_signature", None))
 
 
 # === SECTION: LaTeX helpers [id: latex]===
@@ -290,7 +290,9 @@ def _validate_fixed_positional_signature(sig: inspect.Signature, *, what: str) -
     return len(params)
 
 
-def _sympify_for_docs(value: _SymbolicReturn, *, locals_map: dict[str, sp.Symbol]) -> Optional[sp.Basic]:
+def _sympify_for_docs(
+    value: _SymbolicReturn, *, locals_map: dict[str, sp.Symbol]
+) -> sp.Basic | None:
     """Try to coerce *value* into a SymPy expression (for docs and rewriting).
 
     Returns
@@ -324,10 +326,7 @@ def _sympify_for_docs(value: _SymbolicReturn, *, locals_map: dict[str, sp.Symbol
 
 
 def _generate_enhanced_docstring(
-    *,
-    original_doc: Optional[str],
-    definition_code: str,
-    definition_latex: str
+    *, original_doc: str | None, definition_code: str, definition_latex: str
 ) -> str:
     """Create a consistent docstring for the generated SymPy Function class."""
     doc: list[str] = []
@@ -348,7 +347,6 @@ def _generate_enhanced_docstring(
         doc.append("----")
         doc.append(f"$ {definition_latex} $")
 
-
     return "\n".join(doc).strip()
 
 
@@ -357,7 +355,7 @@ def _doc_placeholders_from_signature(
     *,
     nargs: int,
     skip_first: bool,
-) -> Tuple[sp.Symbol, ...]:
+) -> tuple[sp.Symbol, ...]:
     """Create placeholder symbols for doc generation, using parameter names if possible."""
     params = list(sig.parameters.values())
     start = 1 if skip_first else 0
@@ -377,7 +375,7 @@ def _build_definition_strings(
     nargs: int,
     call_symbolic: Callable[..., _SymbolicReturn],
     skip_first_arg: bool,
-) -> Tuple[str, str]:
+) -> tuple[str, str]:
     """Compute the code and LaTeX definition strings for documentation.
 
     This function is best-effort: failures must not prevent decoration.
@@ -386,7 +384,9 @@ def _build_definition_strings(
     locals_map = {s.name: s for s in syms}
 
     try:
-        raw_value = call_symbolic(*syms) if not skip_first_arg else call_symbolic(None, *syms)
+        raw_value = (
+            call_symbolic(*syms) if not skip_first_arg else call_symbolic(None, *syms)
+        )
     except Exception as e:
         return f"Could not expand definition automatically.\nError: {e}", ""
 
@@ -418,7 +418,9 @@ def _build_definition_strings(
 # === END SECTION: Public decorator ===
 
 
-def NamedFunction(obj: Union[_SymbolicCallable, Type[_NamedFunctionSpec]]) -> Type[sp.Function]:
+def NamedFunction(
+    obj: _SymbolicCallable | type[_NamedFunctionSpec],
+) -> type[sp.Function]:
     """Decorate a Python callable or spec class to produce a SymPy Function class.
 
     Two modes are supported.
@@ -458,10 +460,12 @@ def NamedFunction(obj: Union[_SymbolicCallable, Type[_NamedFunctionSpec]]) -> Ty
         If the decorated object does not meet the required signature constraints.
     """
     if inspect.isclass(obj):
-        return _handle_class_decoration(cast(Type[_NamedFunctionSpec], obj))
+        return _handle_class_decoration(cast(type[_NamedFunctionSpec], obj))
     if callable(obj):
         return _handle_function_decoration(cast(_SymbolicCallable, obj))
-    raise TypeError(f"@NamedFunction must decorate a function or a class, not {type(obj)}")
+    raise TypeError(
+        f"@NamedFunction must decorate a function or a class, not {type(obj)}"
+    )
 
 
 # === SECTION: Decoration implementations [id: impl]===
@@ -470,12 +474,14 @@ def NamedFunction(obj: Union[_SymbolicCallable, Type[_NamedFunctionSpec]]) -> Ty
 # === END SECTION: Decoration implementations ===
 
 
-def _handle_function_decoration(func: _SymbolicCallable) -> Type[sp.Function]:
+def _handle_function_decoration(func: _SymbolicCallable) -> type[sp.Function]:
     """Create a SymPy Function class from a plain function."""
     sig = inspect.signature(func)
-    nargs = _validate_fixed_positional_signature(sig, what=f"function {getattr(func, '__name__', '<callable>')}")
+    nargs = _validate_fixed_positional_signature(
+        sig, what=f"function {getattr(func, '__name__', '<callable>')}"
+    )
 
-    has_numpy = callable(getattr(func, "f_numpy", None))
+    callable(getattr(func, "f_numpy", None))
 
     definition_code, definition_latex = _build_definition_strings(
         func_name=func.__name__,
@@ -488,16 +494,20 @@ def _handle_function_decoration(func: _SymbolicCallable) -> Type[sp.Function]:
     new_doc = _generate_enhanced_docstring(
         original_doc=func.__doc__,
         definition_code=definition_code,
-        definition_latex=definition_latex
+        definition_latex=definition_latex,
     )
 
-    def _eval_rewrite_as_expand_definition(self: sp.Function, *args: object, **_kwargs: object) -> sp.Basic:
+    def _eval_rewrite_as_expand_definition(
+        self: sp.Function, *args: object, **_kwargs: object
+    ) -> sp.Basic:
         raw = func(*args)
         if raw is None or raw == self:
             return self
 
         # Best-effort coercion; if we can't make a SymPy object, keep opaque.
-        locals_map = {f"x_{i}": _get_smart_latex_symbol(f"x_{i}") for i in range(len(args))}
+        locals_map = {
+            f"x_{i}": _get_smart_latex_symbol(f"x_{i}") for i in range(len(args))
+        }
         expr = _sympify_for_docs(cast(_SymbolicReturn, raw), locals_map=locals_map)
         return self if expr is None else cast(sp.Basic, expr)
 
@@ -519,10 +529,10 @@ def _handle_function_decoration(func: _SymbolicCallable) -> Type[sp.Function]:
 
     NewClass = _SignedFunctionMeta(func.__name__, (sp.Function,), class_dict)
     NewClass._custom_signature = sig
-    return cast(Type[sp.Function], NewClass)
+    return cast(type[sp.Function], NewClass)
 
 
-def _handle_class_decoration(cls: Type[_NamedFunctionSpec]) -> Type[sp.Function]:
+def _handle_class_decoration(cls: type[_NamedFunctionSpec]) -> type[sp.Function]:
     """Create a SymPy Function class from a spec class (symbolic + numeric)."""
     if not hasattr(cls, "symbolic") or not hasattr(cls, "numeric"):
         raise ValueError(
@@ -530,14 +540,18 @@ def _handle_class_decoration(cls: Type[_NamedFunctionSpec]) -> Type[sp.Function]
             "'symbolic' and 'numeric' methods."
         )
 
-    symbolic_func = getattr(cls, "symbolic")
-    numeric_func = getattr(cls, "numeric")
+    symbolic_func = cls.symbolic
+    numeric_func = cls.numeric
 
     sig_sym = inspect.signature(symbolic_func)
     sig_num = inspect.signature(numeric_func)
 
-    nparams_sym = _validate_fixed_positional_signature(sig_sym, what=f"{cls.__name__}.symbolic")
-    nparams_num = _validate_fixed_positional_signature(sig_num, what=f"{cls.__name__}.numeric")
+    nparams_sym = _validate_fixed_positional_signature(
+        sig_sym, what=f"{cls.__name__}.symbolic"
+    )
+    nparams_num = _validate_fixed_positional_signature(
+        sig_num, what=f"{cls.__name__}.numeric"
+    )
 
     if nparams_sym != nparams_num:
         raise ValueError(
@@ -560,15 +574,19 @@ def _handle_class_decoration(cls: Type[_NamedFunctionSpec]) -> Type[sp.Function]
     new_doc = _generate_enhanced_docstring(
         original_doc=cls.__doc__,
         definition_code=definition_code,
-        definition_latex=definition_latex
+        definition_latex=definition_latex,
     )
 
-    def _eval_rewrite_as_expand_definition(self: sp.Function, *args: object, **_kwargs: object) -> sp.Basic:
+    def _eval_rewrite_as_expand_definition(
+        self: sp.Function, *args: object, **_kwargs: object
+    ) -> sp.Basic:
         raw = symbolic_func(None, *args)
         if raw is None or raw == self:
             return self
 
-        locals_map = {f"x_{i}": _get_smart_latex_symbol(f"x_{i}") for i in range(len(args))}
+        locals_map = {
+            f"x_{i}": _get_smart_latex_symbol(f"x_{i}") for i in range(len(args))
+        }
         expr = _sympify_for_docs(cast(_SymbolicReturn, raw), locals_map=locals_map)
         return self if expr is None else cast(sp.Basic, expr)
 
@@ -598,4 +616,4 @@ def _handle_class_decoration(cls: Type[_NamedFunctionSpec]) -> Type[sp.Function]
 
     NewClass = _SignedFunctionMeta(cls.__name__, (sp.Function,), class_dict)
     NewClass._custom_signature = public_sig
-    return cast(Type[sp.Function], NewClass)
+    return cast(type[sp.Function], NewClass)

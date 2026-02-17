@@ -108,9 +108,13 @@ def test_view_scoped_plots_use_per_view_traces_without_extra_handles() -> None:
     assert fig.plots["freq-only"].views == ("frequency",)
 
     fig.set_active_view("main")
-    visible_names = [trace.name for trace in fig.figure_widget.data if trace.visible is True]
+    visible_names = [
+        trace.name for trace in fig.figure_widget.data if trace.visible is True
+    ]
     assert visible_names == ["main-only"]
 
     fig.set_active_view("frequency")
-    visible_names = [trace.name for trace in fig.figure_widget.data if trace.visible is True]
+    visible_names = [
+        trace.name for trace in fig.figure_widget.data if trace.visible is True
+    ]
     assert visible_names == ["freq-only"]

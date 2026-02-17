@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import sympy as sp
 import pytest
+import sympy as sp
 
 from gu_toolkit import CodegenOptions, Figure, sympy_to_code
 
@@ -26,7 +26,9 @@ def _build_exportable_figure(*, include_dynamic_info: bool) -> Figure:
         opacity=0.6,
     )
     if include_dynamic_info:
-        fig.info(["<b>Static</b>", lambda _fig, ctx: f"<i>{ctx.reason}</i>"], id="status")
+        fig.info(
+            ["<b>Static</b>", lambda _fig, ctx: f"<i>{ctx.reason}</i>"], id="status"
+        )
     else:
         fig.info("<b>Static only</b>", id="status")
     return fig
@@ -150,6 +152,7 @@ def test_get_code_passes_codegen_options() -> None:
 
     assert "fig.parameter(" in code
     assert "with fig:" not in code
+
 
 def test_codegen_options_reject_invalid_interface_style() -> None:
     with pytest.raises(ValueError, match="interface_style"):

@@ -7,7 +7,7 @@ This module defines ``ParamEvent``, the immutable structure emitted by
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sympy.core.symbol import Symbol
 
@@ -46,8 +46,9 @@ class ParamEvent:
     >>> # A synthetic event for testing or documentation purposes:
     >>> ParamEvent(parameter=a, old=0, new=1, ref=None, raw=None)  # doctest: +SKIP
     """
+
     parameter: Symbol
     old: Any
     new: Any
-    ref: "ParamRef"
+    ref: ParamRef
     raw: Any = None

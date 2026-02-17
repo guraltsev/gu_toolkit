@@ -7,7 +7,7 @@ from gu_toolkit.debouncing import QueuedDebouncer
 
 
 class _FakeThreadTimer:
-    created: list["_FakeThreadTimer"] = []
+    created: list[_FakeThreadTimer] = []
 
     def __init__(self, delay: float, callback):
         self.delay = delay
@@ -38,7 +38,9 @@ class _FakeAsyncLoop:
         return handle
 
 
-def test_debouncer_logs_and_keeps_processing_after_callback_error_threading(caplog) -> None:
+def test_debouncer_logs_and_keeps_processing_after_callback_error_threading(
+    caplog,
+) -> None:
     state = {"n": 0}
 
     def _callback(_payload):
@@ -63,7 +65,9 @@ def test_debouncer_logs_and_keeps_processing_after_callback_error_threading(capl
     assert "QueuedDebouncer callback failed" in caplog.text
 
 
-def test_debouncer_logs_and_keeps_processing_after_callback_error_asyncio(caplog) -> None:
+def test_debouncer_logs_and_keeps_processing_after_callback_error_asyncio(
+    caplog,
+) -> None:
     state = {"n": 0}
 
     def _callback(_payload):
@@ -73,7 +77,9 @@ def test_debouncer_logs_and_keeps_processing_after_callback_error_asyncio(caplog
 
     fake_loop = _FakeAsyncLoop()
 
-    with patch("gu_toolkit.debouncing.asyncio.get_running_loop", return_value=fake_loop):
+    with patch(
+        "gu_toolkit.debouncing.asyncio.get_running_loop", return_value=fake_loop
+    ):
         debouncer = QueuedDebouncer(_callback, execute_every_ms=1, drop_overflow=False)
         with caplog.at_level(logging.ERROR, logger="gu_toolkit.debouncing"):
             debouncer("first")

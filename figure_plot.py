@@ -48,10 +48,12 @@ See next:
 
 from __future__ import annotations
 
-import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from collections.abc import Mapping
-from typing import Any, Dict, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .Figure import Figure
 
 import numpy as np
 import plotly.graph_objects as go
@@ -59,15 +61,15 @@ import sympy as sp
 from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
+from .figure_context import _FigureDefaultSentinel, _is_figure_default
 from .InputConvert import InputConvert
-from .PlotSnapshot import PlotSnapshot
-from .figure_context import FIGURE_DEFAULT, _is_figure_default
 from .numpify import DYNAMIC_PARAMETER, NumericFunction, numpify_cached
+from .PlotSnapshot import PlotSnapshot
 
-NumberLike = Union[int, float]
-NumberLikeOrStr = Union[int, float, str]
-RangeLike = Tuple[NumberLikeOrStr, NumberLikeOrStr]
-VisibleSpec = Union[bool, str]
+NumberLike = int | float
+NumberLikeOrStr = int | float | str
+RangeLike = tuple[NumberLikeOrStr, NumberLikeOrStr]
+VisibleSpec = bool | str
 
 
 @dataclass
@@ -76,12 +78,14 @@ class PlotHandle:
 
     plot_id: str
     view_id: str
-    trace_handle: Optional[go.Scatter]
-    cached_x: Optional[np.ndarray] = None
-    cached_y: Optional[np.ndarray] = None
+    trace_handle: go.Scatter | None
+    cached_x: np.ndarray | None = None
+    cached_y: np.ndarray | None = None
+
 
 # SECTION: Plot (The specific logic for one curve) [id: Plot]
 # =============================================================================
+
 
 class Plot:
     """
@@ -100,20 +104,20 @@ class Plot:
         self,
         var: Symbol,
         func: Expr,
-        smart_figure: "Figure",
+        smart_figure: Figure,
         parameters: Sequence[Symbol] = (),
-        x_domain: Optional[RangeLike] = None,
-        sampling_points: Optional[Union[int, str]] = None,
+        x_domain: RangeLike | None = None,
+        sampling_points: int | str | None = None,
         label: str = "",
         visible: VisibleSpec = True,
-        color: Optional[str] = None,
-        thickness: Optional[Union[int, float]] = None,
-        dash: Optional[str] = None,
-        line: Optional[Mapping[str, Any]] = None,
-        opacity: Optional[Union[int, float]] = None,
-        trace: Optional[Mapping[str, Any]] = None,
+        color: str | None = None,
+        thickness: int | float | None = None,
+        dash: str | None = None,
+        line: Mapping[str, Any] | None = None,
+        opacity: int | float | None = None,
+        trace: Mapping[str, Any] | None = None,
         plot_id: str = "",
-        view_ids: Optional[Sequence[str]] = None,
+        view_ids: Sequence[str] | None = None,
     ) -> None:
         """
         Create a new Plot instance. (Usually called by Figure.plot)
@@ -169,9 +173,9 @@ class Plot:
         """
         self._smart_figure = smart_figure
         self.id = plot_id or label or "plot"
-        self._x_data: Optional[np.ndarray] = None
-        self._y_data: Optional[np.ndarray] = None
-        self._handles: Dict[str, PlotHandle] = {}
+        self._x_data: np.ndarray | None = None
+        self._y_data: np.ndarray | None = None
+        self._handles: dict[str, PlotHandle] = {}
         self._view_ids = set(view_ids or (self._smart_figure.active_view_id,))
         self._visible: VisibleSpec = visible
 
@@ -187,13 +191,13 @@ class Plot:
                 trace_handle.update(**trace_update)
         self.set_func(var, func, parameters)
         self.x_domain = x_domain
-        
+
         if _is_figure_default(sampling_points):
             sampling_points = None
         self.sampling_points = sampling_points
 
         self._suspend_render = False
-        
+
         self.render()
 
     def _create_trace_handle(self, *, view_id: str, label: str) -> PlotHandle:
@@ -219,7 +223,7 @@ class Plot:
             if handle.trace_handle is not None
         )
 
-    def _reference_trace_handle(self) -> Optional[go.Scatter]:
+    def _reference_trace_handle(self) -> go.Scatter | None:
         """Return a representative trace handle for style/property reads."""
         active = self._handles.get(self._smart_figure.active_view_id)
         if active is not None and active.trace_handle is not None:
@@ -240,10 +244,14 @@ class Plot:
         if handle is None or handle.trace_handle is None:
             return
         figure_widget = self._smart_figure.figure_widget_for(view_id)
-        figure_widget.data = tuple(trace for trace in figure_widget.data if trace is not handle.trace_handle)
+        figure_widget.data = tuple(
+            trace for trace in figure_widget.data if trace is not handle.trace_handle
+        )
         handle.trace_handle = None
 
-    def set_func(self, var: Symbol, func: Expr, parameters: Sequence[Symbol] = ()) -> None:
+    def set_func(
+        self, var: Symbol, func: Expr, parameters: Sequence[Symbol] = ()
+    ) -> None:
         """
         Set the independent variable and symbolic function for this plot.
         Triggers recompilation via ``numpify_cached``.
@@ -272,7 +280,7 @@ class Plot:
         --------
         update : Update multiple plot attributes at once.
         """
-        parameters = list(parameters) 
+        parameters = list(parameters)
         # Compile
         self._numpified = numpify_cached(func, vars=[var] + parameters)
         # Store
@@ -309,7 +317,6 @@ class Plot:
         else:
             self._func = sp.Symbol("f_numeric")
 
-
     @property
     def symbolic_expression(self) -> Expr:
         """Return the current symbolic expression used by this plot."""
@@ -342,7 +349,7 @@ class Plot:
         self._remove_trace_handle(view_id=view_id)
         self._handles.pop(view_id, None)
 
-    def add_views(self, views: Union[str, Sequence[str]]) -> None:
+    def add_views(self, views: str | Sequence[str]) -> None:
         """Add one or more views to this plot."""
         if isinstance(views, str):
             self.add_to_view(views)
@@ -350,14 +357,13 @@ class Plot:
         for view_id in views:
             self.add_to_view(view_id)
 
-    def remove_views(self, views: Union[str, Sequence[str]]) -> None:
+    def remove_views(self, views: str | Sequence[str]) -> None:
         """Remove one or more views from this plot."""
         if isinstance(views, str):
             self.remove_from_view(views)
             return
         for view_id in views:
             self.remove_from_view(view_id)
-
 
     def snapshot(self, *, id: str = "") -> PlotSnapshot:
         """Return an immutable snapshot of this plot's reproducible state.
@@ -391,12 +397,18 @@ class Plot:
     @property
     def numeric_expression(self) -> NumericFunction:
         """Return a live :class:`NumericFunction` bound to the figure parameter context."""
-        return self._numpified.set_parameter_context(self._smart_figure.parameters.parameter_context).freeze({
-            sym: DYNAMIC_PARAMETER for sym in self._numpified.all_vars if sym != self._var
-        })
+        return self._numpified.set_parameter_context(
+            self._smart_figure.parameters.parameter_context
+        ).freeze(
+            {
+                sym: DYNAMIC_PARAMETER
+                for sym in self._numpified.all_vars
+                if sym != self._var
+            }
+        )
 
     @property
-    def x_data(self) -> Optional[np.ndarray]:
+    def x_data(self) -> np.ndarray | None:
         """
         Return the last rendered x samples.
 
@@ -414,7 +426,7 @@ class Plot:
         return x_values
 
     @property
-    def y_data(self) -> Optional[np.ndarray]:
+    def y_data(self) -> np.ndarray | None:
         """
         Return the last rendered y samples.
 
@@ -483,7 +495,7 @@ class Plot:
             trace_handle.name = value
 
     @property
-    def color(self) -> Optional[str]:
+    def color(self) -> str | None:
         """Return the current line color for this plot."""
         ref = self._reference_trace_handle()
         if ref is None or ref.line is None:
@@ -491,12 +503,12 @@ class Plot:
         return ref.line.color
 
     @color.setter
-    def color(self, value: Optional[str]) -> None:
+    def color(self, value: str | None) -> None:
         """Set the line color for this plot."""
         self._update_line_style(color=value)
 
     @property
-    def thickness(self) -> Optional[float]:
+    def thickness(self) -> float | None:
         """Return the current line thickness for this plot."""
         ref = self._reference_trace_handle()
         if ref is None or ref.line is None:
@@ -504,12 +516,12 @@ class Plot:
         return ref.line.width
 
     @thickness.setter
-    def thickness(self, value: Optional[Union[int, float]]) -> None:
+    def thickness(self, value: int | float | None) -> None:
         """Set the line thickness for this plot."""
         self._update_line_style(thickness=value)
 
     @property
-    def dash(self) -> Optional[str]:
+    def dash(self) -> str | None:
         """Return the current line dash style for this plot."""
         ref = self._reference_trace_handle()
         if ref is None or ref.line is None:
@@ -517,18 +529,18 @@ class Plot:
         return ref.line.dash
 
     @dash.setter
-    def dash(self, value: Optional[str]) -> None:
+    def dash(self, value: str | None) -> None:
         """Set the line dash style for this plot."""
         self._update_line_style(dash=value)
 
     @property
-    def opacity(self) -> Optional[float]:
+    def opacity(self) -> float | None:
         """Return the current trace opacity for this plot."""
         ref = self._reference_trace_handle()
         return None if ref is None else ref.opacity
 
     @opacity.setter
-    def opacity(self, value: Optional[Union[int, float]]) -> None:
+    def opacity(self, value: int | float | None) -> None:
         """Set the trace opacity for this plot (0.0 to 1.0)."""
         if value is None:
             for trace_handle in self._iter_trace_handles():
@@ -541,7 +553,7 @@ class Plot:
             trace_handle.opacity = opacity
 
     @property
-    def figure(self) -> "Figure":
+    def figure(self) -> Figure:
         """Return the Figure that owns this plot.
 
         Returns
@@ -564,7 +576,7 @@ class Plot:
         return self._smart_figure
 
     @property
-    def x_domain(self) -> Optional[Tuple[float, float]]:
+    def x_domain(self) -> tuple[float, float] | None:
         """Return the explicit x-domain override for this plot.
 
         Returns
@@ -588,7 +600,7 @@ class Plot:
         return self._x_domain
 
     @x_domain.setter
-    def x_domain(self, value: Optional[RangeLike]) -> None:
+    def x_domain(self, value: RangeLike | None) -> None:
         """Set the explicit x-domain for this plot.
 
         Parameters
@@ -612,20 +624,21 @@ class Plot:
         --------
         Figure.x_range : Update the figure-wide x-axis range.
         """
-        
-        if value is None:
-            self._x_domain = None
-        elif _is_figure_default(value):
+
+        if value is None or _is_figure_default(value):
             self._x_domain = None
         else:
             raw_min, raw_max = value
-            self._x_domain = (float(InputConvert(raw_min, float)), float(InputConvert(raw_max, float)))
+            self._x_domain = (
+                float(InputConvert(raw_min, float)),
+                float(InputConvert(raw_max, float)),
+            )
             if self._x_domain[0] > self._x_domain[1]:
                 raise ValueError("x_min must be <= x_max")
         self.render()
 
     @property
-    def sampling_points(self) -> Optional[int]:
+    def sampling_points(self) -> int | None:
         """Return the number of sampling points for this plot.
 
         Returns
@@ -648,7 +661,7 @@ class Plot:
         return self._sampling_points
 
     @sampling_points.setter
-    def sampling_points(self, value: Optional[Union[int, str, _FigureDefaultSentinel]]) -> None:
+    def sampling_points(self, value: int | str | _FigureDefaultSentinel | None) -> None:
         """Set the number of sampling points for this plot.
 
         Parameters
@@ -672,7 +685,11 @@ class Plot:
         --------
         sampling_points : Read the current sampling density.
         """
-        self._sampling_points = int(InputConvert(value, int)) if value is not None and not _is_figure_default(value) else None
+        self._sampling_points = (
+            int(InputConvert(value, int))
+            if value is not None and not _is_figure_default(value)
+            else None
+        )
         self.render()
 
     @property
@@ -728,7 +745,7 @@ class Plot:
         if value is True:
             self.render()
 
-    def render(self, view_id: Optional[str] = None) -> None:
+    def render(self, view_id: str | None = None) -> None:
         """
         Compute (x, y) samples and update the Plotly trace.
         Skips computation if the plot is hidden.
@@ -764,7 +781,7 @@ class Plot:
 
         # 1. Determine Range
         viewport = fig.current_x_range or fig.x_range
-        
+
         if self.x_domain is None:
             x_min, x_max = float(viewport[0]), float(viewport[1])
         else:
@@ -773,13 +790,13 @@ class Plot:
 
         # 2. Determine Sampling
         num = self.sampling_points or fig.sampling_points or 500
-        
+
         # 3. Compute
         x_values = np.linspace(x_min, x_max, num=int(num))
         y_values = np.asarray(self.numeric_expression(x_values))
         self._x_data = x_values.copy()
         self._y_data = y_values.copy()
-        
+
         # 4. Update Trace
         target_handle = self._handles[target_view].trace_handle
         if target_handle is None:
@@ -791,14 +808,14 @@ class Plot:
     def _update_line_style(
         self,
         *,
-        color: Optional[str] = None,
-        thickness: Optional[Union[int, float]] = None,
-        dash: Optional[str] = None,
-        line: Optional[Mapping[str, Any]] = None,
+        color: str | None = None,
+        thickness: int | float | None = None,
+        dash: str | None = None,
+        line: Mapping[str, Any] | None = None,
     ) -> None:
         """Apply incremental line-style updates to the backing Plotly trace."""
 
-        def _coerce_line_value(value: Any) -> Dict[str, Any]:
+        def _coerce_line_value(value: Any) -> dict[str, Any]:
             """Normalize Plotly line-like structures to mutable dictionaries."""
             if not value:
                 return {}
@@ -811,7 +828,7 @@ class Plot:
             except (TypeError, ValueError):
                 return {}
 
-        line_updates: Dict[str, Any] = {}
+        line_updates: dict[str, Any] = {}
         if line:
             line_updates.update(_coerce_line_value(line))
         if color is not None:
@@ -825,7 +842,7 @@ class Plot:
                 current_line = _coerce_line_value(trace_handle.line)
                 current_line.update(line_updates)
                 trace_handle.line = current_line
-    
+
     def update(self, **kwargs: Any) -> None:
         """Update multiple plot attributes at once.
 
@@ -852,14 +869,14 @@ class Plot:
         This method is used internally by :meth:`Figure.plot` when
         updating an existing plot.
         """
-        if 'label' in kwargs: 
-            self.label = kwargs['label']
+        if "label" in kwargs:
+            self.label = kwargs["label"]
 
-        if 'visible' in kwargs:
-            self.visible = kwargs['visible']
-        
-        if 'x_domain' in kwargs: 
-            val = kwargs['x_domain']
+        if "visible" in kwargs:
+            self.visible = kwargs["visible"]
+
+        if "x_domain" in kwargs:
+            val = kwargs["x_domain"]
             if val is None:
                 # None means "no change" during in-place updates.
                 pass
@@ -869,9 +886,9 @@ class Plot:
                 x_min = InputConvert(val[0], float)
                 x_max = InputConvert(val[1], float)
                 self.x_domain = (x_min, x_max)
-        
-        if 'sampling_points' in kwargs:
-            val = kwargs['sampling_points']
+
+        if "sampling_points" in kwargs:
+            val = kwargs["sampling_points"]
             if val is None:
                 # None means "no change" during in-place updates.
                 pass
@@ -880,10 +897,12 @@ class Plot:
             else:
                 self.sampling_points = InputConvert(val, int)
 
-        if 'view' in kwargs:
-            requested = kwargs['view']
+        if "view" in kwargs:
+            requested = kwargs["view"]
             if requested is not None:
-                requested_views = {requested} if isinstance(requested, str) else set(requested)
+                requested_views = (
+                    {requested} if isinstance(requested, str) else set(requested)
+                )
                 for view_id in tuple(self._view_ids):
                     if view_id not in requested_views:
                         self.remove_from_view(view_id)
@@ -893,13 +912,19 @@ class Plot:
         line_thickness = kwargs.get("thickness")
         if "width" in kwargs:
             if line_thickness is not None and kwargs["width"] != line_thickness:
-                raise ValueError("Plot.update() received both thickness= and width= with different values; use only one.")
-            line_thickness = kwargs["width"] if line_thickness is None else line_thickness
+                raise ValueError(
+                    "Plot.update() received both thickness= and width= with different values; use only one."
+                )
+            line_thickness = (
+                kwargs["width"] if line_thickness is None else line_thickness
+            )
 
         curve_opacity = kwargs.get("opacity")
         if "alpha" in kwargs:
             if curve_opacity is not None and kwargs["alpha"] != curve_opacity:
-                raise ValueError("Plot.update() received both opacity= and alpha= with different values; use only one.")
+                raise ValueError(
+                    "Plot.update() received both opacity= and alpha= with different values; use only one."
+                )
             curve_opacity = kwargs["alpha"] if curve_opacity is None else curve_opacity
 
         self._update_line_style(
@@ -914,12 +939,12 @@ class Plot:
             trace_update = dict(kwargs["trace"])
             for trace_handle in self._iter_trace_handles():
                 trace_handle.update(**trace_update)
-        
+
         # Function update
-        if any(k in kwargs for k in ('var', 'func', 'parameters')):
-            v = kwargs.get('var', self._var)
-            f = kwargs.get('func', self._func)
-            p = kwargs.get('parameters', self.parameters)
+        if any(k in kwargs for k in ("var", "func", "parameters")):
+            v = kwargs.get("var", self._var)
+            f = kwargs.get("func", self._func)
+            p = kwargs.get("parameters", self.parameters)
             self.set_func(v, f, p)
             self.render()
 

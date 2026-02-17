@@ -7,13 +7,14 @@ APIs that accept either Python numeric values or symbolic string expressions.
 # === SECTION: InputConvert [id: InputConvert]===
 from __future__ import annotations
 
-from typing import Any, Type, TypeVar
+from typing import Any, TypeVar
+
 import sympy as sp
 
 T = TypeVar("T", int, float, complex)
 
 
-def InputConvert(obj: Any, dest_type: Type[T] = float, truncate: bool = True) -> T:
+def InputConvert(obj: Any, dest_type: type[T] = float, truncate: bool = True) -> T:
     """
     Convert `obj` to `dest_type`.
 
@@ -65,7 +66,7 @@ def InputConvert(obj: Any, dest_type: Type[T] = float, truncate: bool = True) ->
                     f"Could not convert non-real {x!r} to {dest_type.__name__}: imaginary part is non-zero."
                 )
             # If truncate=True, we implicitly discard the imaginary part
-        
+
         r_val = x.real
 
         # 3. If target is float, we are done
@@ -74,13 +75,12 @@ def InputConvert(obj: Any, dest_type: Type[T] = float, truncate: bool = True) ->
 
         # 4. Handle Int Destination
         # We are now dealing with a real float 'r_val'
-        if not r_val.is_integer():
-            if not truncate:
-                raise ValueError(
-                    f"Could not convert {x!r} to int: value is not an exact integer."
-                )
+        if not r_val.is_integer() and not truncate:
+            raise ValueError(
+                f"Could not convert {x!r} to int: value is not an exact integer."
+            )
             # If truncate=True, int() truncates towards zero
-        
+
         return int(r_val)  # type: ignore[return-value]
 
     # Fast path: numeric types (exclude bool)
@@ -88,7 +88,9 @@ def InputConvert(obj: Any, dest_type: Type[T] = float, truncate: bool = True) ->
         try:
             return _coerce_numeric_value(complex(obj))
         except Exception as e:
-            raise ValueError(f"Could not convert {obj!r} to {dest_type.__name__}.") from e
+            raise ValueError(
+                f"Could not convert {obj!r} to {dest_type.__name__}."
+            ) from e
 
     # String path
     if isinstance(obj, str):
@@ -102,7 +104,7 @@ def InputConvert(obj: Any, dest_type: Type[T] = float, truncate: bool = True) ->
             return _coerce_numeric_value(complex(float(s)))
         except ValueError:
             pass
-            
+
         # Try complex string parsing (e.g. "1+2j")
         try:
             return _coerce_numeric_value(complex(s))
@@ -125,5 +127,6 @@ def InputConvert(obj: Any, dest_type: Type[T] = float, truncate: bool = True) ->
         return _coerce_numeric_value(complex(obj))
     except Exception as e:
         raise ValueError(f"Could not convert {obj!r} to {dest_type.__name__}.") from e
+
 
 # === END OF SECTION: InputConvert [id: InputConvert]===

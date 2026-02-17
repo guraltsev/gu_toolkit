@@ -4,9 +4,11 @@ Provides a synchronized slider/text control with advanced settings (min/max/
 step/default) and helper APIs for parameter-reference integration.
 """
 
+from collections.abc import Sequence
+from typing import Any, cast
+
 import ipywidgets as widgets
 import traitlets
-from typing import Any, Sequence, cast
 
 from .InputConvert import InputConvert
 
@@ -108,7 +110,7 @@ class FloatSlider(widgets.VBox):
             layout=widgets.Layout(width="60px"),
         )
 
-        #self._limit_style = widgets.HTML(
+        # self._limit_style = widgets.HTML(
         #    "<style>"
         #    ".smart-slider-limit input{"
         #    "font-size:10px;"
@@ -121,7 +123,7 @@ class FloatSlider(widgets.VBox):
         #   "text-align:center;"
         #    "}"
         #    "</style>"
-        #)
+        # )
 
         self._limit_style = widgets.HTML(r"""
 <style>
@@ -227,16 +229,16 @@ class FloatSlider(widgets.VBox):
             "layout": widgets.Layout(width="170px"),
         }
         self.set_min = widgets.Text(
-    value=f"{min:.4g}",
-    continuous_update=False,
-    layout=widgets.Layout(width="40px", height="16px"),
-)
+            value=f"{min:.4g}",
+            continuous_update=False,
+            layout=widgets.Layout(width="40px", height="16px"),
+        )
         self.set_min.add_class("smart-slider-limit")
         self.set_max = widgets.Text(
-    value=f"{max:.4g}",
-    continuous_update=False,
-    layout=widgets.Layout(width="40px", height="16px"),
-)
+            value=f"{max:.4g}",
+            continuous_update=False,
+            layout=widgets.Layout(width="40px", height="16px"),
+        )
         self.set_max.add_class("smart-slider-limit")
         self.set_step = widgets.FloatText(value=step, description="Step:", **style_args)
         self.set_live = widgets.Checkbox(
@@ -260,11 +262,17 @@ class FloatSlider(widgets.VBox):
         )
         settings_header = widgets.HBox(
             [self.settings_title, self.btn_close_settings],
-            layout=widgets.Layout(justify_content="space-between", align_items="center"),
+            layout=widgets.Layout(
+                justify_content="space-between", align_items="center"
+            ),
         )
 
         self.settings_panel = widgets.VBox(
-            [settings_header, widgets.HBox([self.set_step]), widgets.HBox([self.set_live])],
+            [
+                settings_header,
+                widgets.HBox([self.set_step]),
+                widgets.HBox([self.set_live]),
+            ],
             layout=widgets.Layout(
                 width="230px",
                 display="none",
@@ -533,7 +541,9 @@ class FloatSlider(widgets.VBox):
         -----
         Public callers should prefer :meth:`reset`.
         """
-        self.value = self._defaults["value"]  # slider sync + slider observer updates text
+        self.value = self._defaults[
+            "value"
+        ]  # slider sync + slider observer updates text
 
     @property
     def default_value(self) -> float:
@@ -750,6 +760,7 @@ class FloatSlider(widgets.VBox):
         if len(symbols) != 1:
             raise ValueError("FloatSlider only supports a single symbol.")
         from .ParamRef import ProxyParamRef
+
         symbol = symbols[0]
         return {symbol: ProxyParamRef(symbol, self)}
 
@@ -771,7 +782,9 @@ class FloatSlider(widgets.VBox):
 
         if self._modal_host is not None:
             self._modal_host.children = tuple(
-                child for child in self._modal_host.children if child is not self.settings_modal
+                child
+                for child in self._modal_host.children
+                if child is not self.settings_modal
             )
 
         modal_add_class = getattr(self.settings_modal, "add_class", None)
@@ -817,4 +830,3 @@ class FloatSlider(widgets.VBox):
         is_open = self.settings_modal.layout.display == "flex"
         self.settings_modal.layout.display = "none" if is_open else "flex"
         self.settings_panel.layout.display = "none" if is_open else "flex"
-

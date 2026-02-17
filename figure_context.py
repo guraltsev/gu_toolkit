@@ -2,20 +2,25 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 import threading
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .Figure import Figure
 
 _FIGURE_STACK_LOCAL = threading.local()
 
 
-def _figure_stack() -> List["Figure"]:
+def _figure_stack() -> list[Figure]:
     """Return a thread-local figure stack."""
     stack = getattr(_FIGURE_STACK_LOCAL, "stack", None)
     if stack is None:
         stack = []
         _FIGURE_STACK_LOCAL.stack = stack
     return stack
+
 
 class _FigureDefaultSentinel:
     """Sentinel value meaning "inherit from figure defaults"."""
@@ -32,9 +37,12 @@ FIGURE_DEFAULT = _FigureDefaultSentinel()
 
 def _is_figure_default(value: Any) -> bool:
     """Return True when *value* requests figure-default behavior."""
-    return value is FIGURE_DEFAULT or (isinstance(value, str) and value.lower() == "figure_default")
+    return value is FIGURE_DEFAULT or (
+        isinstance(value, str) and value.lower() == "figure_default"
+    )
 
-def _current_figure() -> Optional["Figure"]:
+
+def _current_figure() -> Figure | None:
     """Return the most recently pushed Figure, if any.
 
     Returns
@@ -48,7 +56,7 @@ def _current_figure() -> Optional["Figure"]:
     return stack[-1]
 
 
-def _require_current_figure() -> "Figure":
+def _require_current_figure() -> Figure:
     """Return the current Figure, or raise if none is active.
 
     Returns
@@ -67,7 +75,7 @@ def _require_current_figure() -> "Figure":
     return fig
 
 
-def current_figure(*, required: bool = True) -> Optional["Figure"]:
+def current_figure(*, required: bool = True) -> Figure | None:
     """Return the active Figure from the context stack.
 
     Parameters
@@ -89,7 +97,7 @@ def current_figure(*, required: bool = True) -> Optional["Figure"]:
     return fig
 
 
-def _push_current_figure(fig: "Figure") -> None:
+def _push_current_figure(fig: Figure) -> None:
     """Push a Figure onto the global stack.
 
     Parameters
@@ -104,7 +112,7 @@ def _push_current_figure(fig: "Figure") -> None:
     _figure_stack().append(fig)
 
 
-def _pop_current_figure(fig: "Figure") -> None:
+def _pop_current_figure(fig: Figure) -> None:
     """Remove a specific Figure from the global stack if present.
 
     Parameters
@@ -129,7 +137,7 @@ def _pop_current_figure(fig: "Figure") -> None:
 
 
 @contextmanager
-def _use_figure(fig: "Figure") -> Iterator["Figure"]:
+def _use_figure(fig: Figure) -> Iterator[Figure]:
     """Context manager that temporarily sets a Figure as current.
 
     Parameters
@@ -152,12 +160,12 @@ def _use_figure(fig: "Figure") -> Iterator["Figure"]:
 # -----------------------------
 # Small type aliases
 # -----------------------------
-NumberLike = Union[int, float]
-NumberLikeOrStr = Union[int, float, str]
-RangeLike = Tuple[NumberLikeOrStr, NumberLikeOrStr]
-VisibleSpec = Union[bool, str]  # Plotly uses True/False or the string "legendonly".
+NumberLike = int | float
+NumberLikeOrStr = int | float | str
+RangeLike = tuple[NumberLikeOrStr, NumberLikeOrStr]
+VisibleSpec = bool | str  # Plotly uses True/False or the string "legendonly".
 
-PLOT_STYLE_OPTIONS: Dict[str, str] = {
+PLOT_STYLE_OPTIONS: dict[str, str] = {
     "color": "Line color. Accepts CSS-like names (e.g., red), hex (#RRGGBB), or rgb()/rgba() strings.",
     "thickness": "Line width in pixels. Larger values draw thicker lines.",
     "dash": "Line pattern. Supported values: solid, dot, dash, longdash, dashdot, longdashdot.",

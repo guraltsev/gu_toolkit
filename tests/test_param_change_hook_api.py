@@ -46,7 +46,9 @@ def test_replacing_same_hook_id_overwrites_callback() -> None:
 def test_explicit_hook_namespace_id_bumps_auto_counter() -> None:
     fig, _ = _figure_with_parameter()
 
-    explicit = fig.add_param_change_hook(lambda _event: None, hook_id="hook:10", run_now=False)
+    explicit = fig.add_param_change_hook(
+        lambda _event: None, hook_id="hook:10", run_now=False
+    )
     auto = fig.add_param_change_hook(lambda _event: None, run_now=False)
 
     assert explicit == "hook:10"

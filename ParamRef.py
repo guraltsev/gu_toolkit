@@ -6,7 +6,8 @@ and a proxy implementation that wraps concrete controls.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Protocol, Sequence, runtime_checkable
+from collections.abc import Callable, Sequence
+from typing import Any, Protocol, runtime_checkable
 
 from sympy.core.symbol import Symbol
 
@@ -91,7 +92,9 @@ class ParamRef(Protocol):
             New value to set on the underlying widget.
         """
 
-    def observe(self, callback: Callable[[ParamEvent], None], *, fire: bool = False) -> None:
+    def observe(
+        self, callback: Callable[[ParamEvent], None], *, fire: bool = False
+    ) -> None:
         """Register a callback that receives :class:`ParamEvent` on changes.
 
         Parameters
@@ -316,7 +319,9 @@ class ProxyParamRef:
             raise AttributeError("default_value not supported for this control.")
         self._widget.default_value = v
 
-    def observe(self, callback: Callable[[ParamEvent], None], *, fire: bool = False) -> None:
+    def observe(
+        self, callback: Callable[[ParamEvent], None], *, fire: bool = False
+    ) -> None:
         """Register a callback for value changes.
 
         Parameters
@@ -343,11 +348,16 @@ class ProxyParamRef:
         >>> ref = ProxyParamRef(a, FloatSlider())  # doctest: +SKIP
         >>> ref.observe(lambda event: None, fire=False)  # doctest: +SKIP
         """
+
         def _handler(change: Any) -> None:
             event = ParamEvent(
                 parameter=self._parameter,
-                old=getattr(change, "old", None) if not isinstance(change, dict) else change.get("old"),
-                new=getattr(change, "new", None) if not isinstance(change, dict) else change.get("new"),
+                old=getattr(change, "old", None)
+                if not isinstance(change, dict)
+                else change.get("old"),
+                new=getattr(change, "new", None)
+                if not isinstance(change, dict)
+                else change.get("new"),
                 ref=self,
                 raw=change,
             )

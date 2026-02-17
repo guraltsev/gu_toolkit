@@ -71,8 +71,12 @@ def test_active_view_filtering_hides_non_member_plots() -> None:
     box = widgets.VBox()
     manager = LegendPanelManager(box)
 
-    manager.on_plot_added(_FakePlot(id="main_only", label="Main", visible=True, views=("main",)))
-    manager.on_plot_added(_FakePlot(id="alt_only", label="Alt", visible=True, views=("alt",)))
+    manager.on_plot_added(
+        _FakePlot(id="main_only", label="Main", visible=True, views=("main",))
+    )
+    manager.on_plot_added(
+        _FakePlot(id="alt_only", label="Alt", visible=True, views=("alt",))
+    )
 
     manager.set_active_view("main")
     assert [row.children[1].value for row in box.children] == ["Main"]

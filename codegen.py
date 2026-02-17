@@ -16,33 +16,24 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Literal, Sequence
+from typing import Literal
 
 import sympy as sp
 from sympy import Basic, Expr, Symbol
 from sympy.core.numbers import (
     Float,
-    Half,
-    ImaginaryUnit,
     Integer,
-    NegativeInfinity,
-    NegativeOne,
-    Number,
-    One,
-    Infinity,
     Rational,
-    Zero,
 )
 from sympy.printing.str import StrPrinter
 
 from .FigureSnapshot import FigureSnapshot, InfoCardSnapshot
 from .PlotSnapshot import PlotSnapshot
-from .ParameterSnapshot import ParameterSnapshot
-
 
 # ---------------------------------------------------------------------------
 # SymPy expression → Python source
 # ---------------------------------------------------------------------------
+
 
 class _SpPrefixedPrinter(StrPrinter):
     """StrPrinter variant that prefixes SymPy functions/constants with ``sp.``.
@@ -198,6 +189,7 @@ def sympy_to_code(expr: Expr) -> str:
 # Full figure → Python script
 # ---------------------------------------------------------------------------
 
+
 def _collect_symbols(snapshot: FigureSnapshot) -> list[Symbol]:
     """Return all unique symbols (params + plot vars) in a deterministic order."""
     seen: OrderedDict[str, Symbol] = OrderedDict()
@@ -236,7 +228,9 @@ def _symbol_definitions(symbols: list[Symbol]) -> str:
     return f'{names} = sp.symbols("{quoted}")'
 
 
-def _parameter_call(sym: Symbol, meta: dict, *, style: Literal["figure_methods", "context_manager"]) -> str:
+def _parameter_call(
+    sym: Symbol, meta: dict, *, style: Literal["figure_methods", "context_manager"]
+) -> str:
     """Emit one parameter registration call."""
     parts = [sym.name]
     for key in ("value", "min", "max", "step"):
@@ -247,7 +241,9 @@ def _parameter_call(sym: Symbol, meta: dict, *, style: Literal["figure_methods",
     return f"fig.parameter({', '.join(parts)})"
 
 
-def _plot_call(ps: PlotSnapshot, *, style: Literal["figure_methods", "context_manager"]) -> str:
+def _plot_call(
+    ps: PlotSnapshot, *, style: Literal["figure_methods", "context_manager"]
+) -> str:
     """Emit one plot call."""
     expr_code = sympy_to_code(ps.func)
 
@@ -262,7 +258,9 @@ def _plot_call(ps: PlotSnapshot, *, style: Literal["figure_methods", "context_ma
     if ps.visible is not True:
         args.append(f"visible={ps.visible!r}")
     if ps.x_domain is not None:
-        args.append(f"x_domain=({_fmt_float(ps.x_domain[0])}, {_fmt_float(ps.x_domain[1])})")
+        args.append(
+            f"x_domain=({_fmt_float(ps.x_domain[0])}, {_fmt_float(ps.x_domain[1])})"
+        )
     if ps.sampling_points is not None:
         args.append(f"sampling_points={ps.sampling_points}")
     if ps.color is not None:
@@ -308,7 +306,9 @@ def _info_card_lines(
         if not include_dynamic_comment_block:
             return ["# dynamic info omitted"]
 
-        static_spec = repr(static_parts[0]) if len(static_parts) == 1 else repr(static_parts)
+        static_spec = (
+            repr(static_parts[0]) if len(static_parts) == 1 else repr(static_parts)
+        )
         suffix = f", id={card.id!r}" if card.id is not None else ""
         suffix += view_suffix
         lines = [
@@ -337,7 +337,9 @@ def _info_card_lines(
     return [line]
 
 
-def figure_to_code(snapshot: FigureSnapshot, options: CodegenOptions | None = None) -> str:
+def figure_to_code(
+    snapshot: FigureSnapshot, options: CodegenOptions | None = None
+) -> str:
     """Generate a self-contained Python script from a :class:`FigureSnapshot`.
 
     The returned string, when executed in a Jupyter notebook or Python REPL
@@ -363,7 +365,9 @@ def figure_to_code(snapshot: FigureSnapshot, options: CodegenOptions | None = No
     if options.include_imports:
         lines.append("import sympy as sp")
         if options.interface_style == "context_manager":
-            lines.append("from gu_toolkit import Figure, parameter, plot, info, set_title")
+            lines.append(
+                "from gu_toolkit import Figure, parameter, plot, info, set_title"
+            )
         else:
             lines.append("from gu_toolkit import Figure")
         lines.append("from IPython.display import display")

@@ -23,7 +23,88 @@ By keeping source docstrings and this guide in sync, the toolkit remains approac
 
 ### Testing and verification
 
-This repository contains test scripts (see `tests/`) that cover individual components. All code MUST have comprehensive test coverage. Each bug fix MUST provide regression tests. When automatic testing is not feasable and GUI and user assessment is required, tests must be authored as interactive ipynb notebooks in \tests\ and they must be run manually. The notebook must contain instructions on what to focus on. 
+This repository contains test scripts (see `tests/`) that cover individual components. All code MUST have comprehensive test coverage. Each bug fix MUST provide regression tests. When automatic testing is not feasable and GUI and user assessment is required, tests must be authored as interactive ipynb notebooks in \tests\ and they must be run manually. The notebook must contain instructions on what to focus on.
+
+---
+
+### Code quality and static analysis
+
+This repository uses automated linting and type checking to maintain code quality:
+
+#### Tools
+
+- **ruff** - Fast Python linter and formatter (replaces flake8, isort, black)
+- **mypy** - Static type checker for Python
+
+#### Local development workflow
+
+Before committing changes, run the lint script to check for issues:
+
+```bash
+# Unix/Linux/Mac
+./lint.sh
+
+# Windows
+lint.cmd
+```
+
+To automatically fix formatting and some linting issues:
+
+```bash
+# Unix/Linux/Mac
+./format.sh
+
+# Windows
+format.cmd
+```
+
+#### Manual commands
+
+You can also run the tools individually:
+
+```bash
+# Format code
+ruff format .
+
+# Check formatting (without modifying files)
+ruff format --check .
+
+# Run linter
+ruff check .
+
+# Auto-fix linting issues
+ruff check --fix .
+
+# Run type checker (informational)
+mypy .
+```
+
+#### CI enforcement
+
+All PRs must pass the following checks in CI:
+
+- `ruff check` - No linting violations (147 acceptable exceptions are configured in pyproject.toml)
+- `ruff format --check` - Code is properly formatted
+- `mypy` - Type checking runs but is informational only (incremental cleanup in progress)
+
+#### Configuration
+
+All tool configuration is in `pyproject.toml`:
+
+- **ruff**: Configured with rules E, F, W, I, UP, B, C4, SIM. Line length: 88. Target: Python 3.10+
+- **mypy**: Configured for incremental strictness. Core modules use strict type checking. Third-party library stubs are ignored.
+
+#### Adding new code
+
+When adding new code:
+
+1. Write the code with type annotations
+2. Run `./format.sh` to auto-format
+3. Run `./lint.sh` to check for issues
+4. Fix any remaining issues
+5. Commit and push
+
+The CI will automatically run all checks on your PR.
 
 ---
 
