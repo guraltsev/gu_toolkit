@@ -63,7 +63,7 @@ import warnings
 import logging
 from contextlib import ExitStack, contextmanager
 from collections.abc import Mapping
-from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator, List, NamedTuple, TypeAlias
+from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator, List, Literal, NamedTuple, TypeAlias
 
 import ipywidgets as widgets
 import numpy as np
@@ -346,6 +346,7 @@ class Figure:
     __slots__ = [
         "_layout", "_params", "_info", "_legend", "_view_runtime", "_figure", "_pane", "plots",
         "_views", "_active_view_id", "_default_view_id", "_sampling_points", "_debug",
+        "_plotly_legend_mode",
         "_render_info_last_log_t", "_render_debug_last_log_t", "_relayout_debouncers",
         "_has_been_displayed", "_print_capture"
     ]
@@ -357,6 +358,7 @@ class Figure:
         y_range: RangeLike = (-3, 3),
         debug: bool = False,
         default_view_id: str = "main",
+        plotly_legend_mode: Literal["side_panel", "plotly"] = "side_panel",
     ) -> None:
         """Initialize a Figure instance with default ranges and sampling.
 
@@ -370,6 +372,13 @@ class Figure:
             Initial y-axis range.
         debug : bool, optional
             Enable debug logging for renders and ranges.
+        default_view_id : str, optional
+            Initial workspace view identifier.
+        plotly_legend_mode : {"side_panel", "plotly"}, optional
+            Legend migration mode. ``"side_panel"`` uses the dedicated
+            toolkit legend as the canonical control surface and disables
+            Plotly's built-in legend. ``"plotly"`` keeps Plotly legend
+            rendering enabled for compatibility.
 
         Returns
         -------
@@ -387,6 +396,9 @@ class Figure:
         :attr:`params`.
         """
         self._debug = debug
+        if plotly_legend_mode not in {"side_panel", "plotly"}:
+            raise ValueError("plotly_legend_mode must be either 'side_panel' or 'plotly'")
+        self._plotly_legend_mode = plotly_legend_mode
         self._sampling_points = sampling_points
         self.plots: Dict[str, Plot] = {}
         self._has_been_displayed = False
@@ -446,10 +458,11 @@ class Figure:
 
     def _default_figure_layout(self) -> Dict[str, Any]:
         """Return shared Plotly layout defaults copied into each view widget."""
+        show_plotly_legend = self._plotly_legend_mode == "plotly"
         return dict(
             autosize=True,
             template="plotly_white",
-            showlegend=True,
+            showlegend=show_plotly_legend,
             margin=dict(l=48, r=28, t=48, b=44),
             font=dict(
                 family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
