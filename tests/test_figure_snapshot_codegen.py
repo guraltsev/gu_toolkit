@@ -70,8 +70,12 @@ def test_to_code_default_is_context_manager_with_dynamic_info_comment_block() ->
     code = fig.to_code()
 
     assert "import sympy as sp" in code
-    assert "from gu_toolkit import Figure, parameter, plot, info" in code
+    assert "from gu_toolkit import Figure, parameter, plot, info, set_title" in code
+    assert "from IPython.display import display" in code
+    assert "fig = Figure(" in code
+    assert "display(fig)" in code
     assert "with fig:" in code
+    assert "set_title('Snapshot demo')" in code
     assert "parameter(a, value=0.75, min=-2.0, max=2.0, step=0.05)" in code
     assert "plot(" in code
     assert "# info('<b>Static</b>', id='status')" in code
@@ -130,6 +134,22 @@ def test_sympy_to_code_prefixes_sympy_functions_and_constants() -> None:
     assert "sp.sqrt(x)" in rendered
     assert "sp.Abs(sp.sin(x))" in rendered
 
+
+def test_code_property_is_read_only_and_matches_to_code() -> None:
+    fig = _build_exportable_figure(include_dynamic_info=False)
+
+    assert fig.code == fig.to_code()
+    with pytest.raises(AttributeError):
+        fig.code = "override"  # type: ignore[misc]
+
+
+def test_get_code_passes_codegen_options() -> None:
+    fig = _build_exportable_figure(include_dynamic_info=False)
+
+    code = fig.get_code(CodegenOptions(interface_style="figure_methods"))
+
+    assert "fig.parameter(" in code
+    assert "with fig:" not in code
 
 def test_codegen_options_reject_invalid_interface_style() -> None:
     with pytest.raises(ValueError, match="interface_style"):
