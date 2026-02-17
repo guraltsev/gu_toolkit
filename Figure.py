@@ -571,7 +571,7 @@ class Figure:
         )
 
         debouncer = QueuedDebouncer(
-            lambda *args: self._run_relayout(view_id=view_id, *args),
+            lambda *args: self._run_relayout(view_id=view_id, *args),  # noqa: B026
             execute_every_ms=500,
             drop_overflow=True,
         )

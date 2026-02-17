@@ -83,7 +83,7 @@ mypy .
 
 All PRs must pass the following checks in CI:
 
-- `ruff check` - No linting violations (147 acceptable exceptions are configured in pyproject.toml)
+- `ruff check` - No linting violations allowed (zero-error policy)
 - `ruff format --check` - Code is properly formatted
 - `mypy` - Type checking runs but is informational only (incremental cleanup in progress)
 
@@ -91,7 +91,7 @@ All PRs must pass the following checks in CI:
 
 All tool configuration is in `pyproject.toml`:
 
-- **ruff**: Configured with rules E, F, W, I, UP, B, C4, SIM. Line length: 88. Target: Python 3.10+
+- **ruff**: Configured with rules E, F, W, I, UP, B, C4, SIM. Line length: 88. Target: Python 3.10+. Per-file ignores configured for notebooks and intentional patterns.
 - **mypy**: Configured for incremental strictness. Core modules use strict type checking. Third-party library stubs are ignored.
 
 #### Adding new code

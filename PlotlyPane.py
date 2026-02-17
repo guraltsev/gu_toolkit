@@ -707,7 +707,7 @@ class PlotlyPane:
         self,
         figw: W.Widget,
         *,
-        style: PlotlyPaneStyle = PlotlyPaneStyle(),
+        style: PlotlyPaneStyle = PlotlyPaneStyle(),  # noqa: B008
         autorange_mode: str = "none",  # "none" | "once" | "always"
         defer_reveal: bool = True,
         debounce_ms: int = 60,

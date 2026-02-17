@@ -12,16 +12,11 @@ if errorlevel 1 (
 
 echo.
 echo === Running ruff check ===
-REM Note: Current baseline has 147 known issues (mostly in notebooks)
-REM This check allows up to 150 errors
 ruff check .
 if errorlevel 1 (
     echo.
-    echo Note: Some linting issues found, but within acceptable threshold.
-    echo Run 'ruff check --fix .' to auto-fix some of them if you introduced new violations.
-) else (
-    echo.
-    echo All linting checks passed!
+    echo ERROR: Linting issues found. Run 'ruff check --fix .' to auto-fix some of them.
+    exit /b 1
 )
 
 echo.

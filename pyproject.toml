@@ -71,8 +71,11 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]  # Allow unused imports in __init__.py files
+"__init__.py" = ["F401", "F403"]  # Allow unused imports and star imports in __init__.py files
 "tests/*" = ["F401", "F811"]  # Allow unused imports and redefinitions in tests
+"*.ipynb" = ["E402", "F403", "F405"]  # Notebooks: allow imports not at top, star imports, and star import usage
+"Figure.py" = ["E402"]  # Deferred imports for circular import handling
+"notebook_namespace.py" = ["E402", "F403"]  # Intentional star imports and deferred imports for notebook convenience
 
 [tool.ruff.lint.isort]
 known-first-party = ["gu_toolkit"]

@@ -11,26 +11,10 @@ fi
 
 echo ""
 echo "=== Running ruff check ==="
-# Run ruff check and capture output
-RUFF_OUTPUT=$(ruff check . 2>&1)
-RUFF_EXIT=$?
-echo "$RUFF_OUTPUT"
-
-# Extract error count from output
-ERROR_COUNT=$(echo "$RUFF_OUTPUT" | grep -oP 'Found \K\d+(?= errors)' || echo "0")
-
-# Allow up to 150 errors (current baseline is 147, mostly from notebooks)
-if [ "$ERROR_COUNT" -gt "150" ]; then
+if ! ruff check .; then
     echo ""
-    echo "ERROR: Too many linting issues ($ERROR_COUNT > 150 allowed)."
-    echo "Run 'ruff check --fix .' to auto-fix some of them."
+    echo "ERROR: Linting issues found. Run 'ruff check --fix .' to auto-fix some of them."
     exit 1
-elif [ "$RUFF_EXIT" -eq "0" ]; then
-    echo ""
-    echo "All linting checks passed!"
-else
-    echo ""
-    echo "Linting passed with $ERROR_COUNT known issues (within threshold of 150)."
 fi
 
 echo ""

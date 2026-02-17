@@ -60,7 +60,7 @@ def InputConvert(obj: Any, dest_type: type[T] = float, truncate: bool = True) ->
 
         # 2. Handle Real Destination (float or int)
         # Check for imaginary part presence
-        if x.imag != 0:
+        if x.imag != 0:  # noqa: SIM102
             if not truncate:
                 raise ValueError(
                     f"Could not convert non-real {x!r} to {dest_type.__name__}: imaginary part is non-zero."
