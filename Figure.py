@@ -39,7 +39,8 @@ Examples
 >>> from gu_toolkit.Figure import Figure
 >>> x, a = sp.symbols("x a")
 >>> fig = Figure()
->>> fig.plot(x, a * sp.sin(x), parameters=[a], id="wave")  # doctest: +SKIP
+>>> fig.parameter(a, min=-2, max=2)  # doctest: +SKIP
+>>> fig.plot(a * sp.sin(x), x, id="wave")  # doctest: +SKIP
 >>> fig  # doctest: +SKIP
 
 Discoverability
@@ -55,6 +56,7 @@ If you are extending behavior, inspect next:
 from __future__ import annotations
 
 
+import inspect
 import re
 import time
 import warnings
@@ -73,7 +75,7 @@ from sympy.core.symbol import Symbol
 
 # Internal imports (assumed to exist in the same package)
 from .InputConvert import InputConvert
-from .numpify import numpify_cached
+from .numpify import NumericFunction, numpify_cached
 from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
 from .Slider import FloatSlider
 from .ParamEvent import ParamEvent
@@ -128,6 +130,110 @@ PLOT_STYLE_OPTIONS: Dict[str, str] = {
     "trace": "Extra trace fields as a mapping (for advanced full-trace styling).",
 }
 
+
+
+def _coerce_symbol(value: Any, *, role: str) -> Symbol:
+    """Return ``value`` as a SymPy symbol or raise a clear ``TypeError``."""
+    if isinstance(value, Symbol):
+        return value
+    raise TypeError(f"plot() expects {role} to be a sympy.Symbol, got {type(value).__name__}")
+
+
+def _normalize_plot_inputs(
+    first: Any,
+    second: Any,
+    *,
+    vars: Optional[Union[Symbol, Sequence[Symbol]]] = None,
+    id_hint: Optional[str] = None,
+) -> tuple[Symbol, Expr, Optional[NumericFunction], tuple[Symbol, ...]]:
+    """Normalize callable-first ``plot()`` inputs.
+
+    Returns
+    -------
+    tuple
+        ``(plot_var, symbolic_expr, numeric_fn_or_none, parameter_symbols)``.
+    """
+    if vars is not None:
+        if isinstance(vars, Symbol):
+            vars_tuple = (vars,)
+        else:
+            vars_tuple = tuple(vars)
+        if not vars_tuple:
+            raise ValueError("plot() vars must not be empty when provided")
+        for sym in vars_tuple:
+            _coerce_symbol(sym, role="vars entries")
+    else:
+        vars_tuple = None
+
+    f = first
+    var_or_range = second
+
+    numeric_fn: Optional[NumericFunction] = None
+    expr: Expr
+    call_symbols: tuple[Symbol, ...]
+
+    if isinstance(f, Expr):
+        expr = f
+        call_symbols = tuple(sorted(expr.free_symbols, key=lambda s: s.sort_key()))
+    elif isinstance(f, NumericFunction):
+        numeric_fn = f
+        call_symbols = tuple(f.free_vars)
+        symbolic = f.symbolic
+        if isinstance(symbolic, Expr):
+            expr = symbolic
+        else:
+            fallback_name = id_hint or "f"
+            expr = sp.Symbol(f"{fallback_name}_numeric")
+    elif callable(f):
+        sig = inspect.signature(f)
+        positional = [
+            p for p in sig.parameters.values()
+            if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        ]
+        if any(p.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD) for p in sig.parameters.values()):
+            raise TypeError("plot() callable does not support *args/**kwargs signatures")
+        call_symbols = tuple(sp.Symbol(p.name) for p in positional)
+        numeric_fn = NumericFunction(f, vars=call_symbols)
+        expr = sp.Symbol(id_hint or getattr(f, "__name__", "f"))
+    else:
+        raise TypeError(
+            "plot() expects first argument to be a SymPy expression, NumericFunction, or callable."
+        )
+
+    if vars_tuple is not None:
+        bound_symbols = vars_tuple
+    else:
+        bound_symbols = call_symbols
+
+    if isinstance(var_or_range, tuple):
+        if len(var_or_range) != 3:
+            raise ValueError(
+                "plot() range tuple must have shape (var, min, max), e.g. (x, -4, 4)"
+            )
+        plot_var = _coerce_symbol(var_or_range[0], role="range tuple variable")
+    elif var_or_range is None:
+        if len(bound_symbols) == 1:
+            plot_var = bound_symbols[0]
+        else:
+            raise ValueError(
+                "plot() could not infer plotting variable for callable-first usage. "
+                "Pass an explicit symbol or range tuple, e.g. plot(f, x) or plot(f, (x, -4, 4))."
+            )
+    else:
+        plot_var = _coerce_symbol(var_or_range, role="plot variable")
+
+    if plot_var not in bound_symbols:
+        if len(bound_symbols) == 1:
+            bound_symbols = (plot_var,)
+        else:
+            raise ValueError(
+                f"plot() variable {plot_var!r} is not present in callable variables {bound_symbols!r}. "
+                "Use vars=... to declare callable variable order explicitly."
+            )
+
+    parameters = tuple(sym for sym in bound_symbols if sym != plot_var)
+    return plot_var, expr, numeric_fn, parameters
+
 # SECTION: Figure (The Coordinator) [id: Figure]
 # =============================================================================
 
@@ -166,7 +272,8 @@ class Figure:
     >>> import sympy as sp
     >>> x, a = sp.symbols("x a")
     >>> fig = Figure()
-    >>> fig.plot(x, a*sp.sin(x), parameters=[a], id="a_sin")
+    >>> fig.parameter(a, min=-2, max=2)
+    >>> fig.plot(a*sp.sin(x), x, id="a_sin")
     >>> fig
     """
     
@@ -802,8 +909,8 @@ class Figure:
 
     def plot(
         self,
-        var: Symbol,
-        func: Expr,
+        func: Any,
+        var: Any,
         parameters: Optional[Sequence[Symbol]] = None,
         id: Optional[str] = None,
         label: Optional[str] = None,
@@ -817,20 +924,21 @@ class Figure:
         opacity: Optional[Union[int, float]] = None,
         trace: Optional[Mapping[str, Any]] = None,
         view: Optional[Union[str, Sequence[str]]] = None,
+        vars: Optional[Union[Symbol, Sequence[Symbol]]] = None,
     ) -> Plot:
         """
-        Plot a SymPy expression on the figure (and keep it “live”).
+        Plot an expression/callable on the figure (and keep it “live”).
 
         Parameters
         ----------
-        var : sympy.Symbol
-            Independent variable (e.g. ``x``).
-        func : sympy.Expr
-            SymPy expression (e.g. ``sin(x)``).
+        func : callable or NumericFunction or sympy.Expr
+            Function/expression to plot.
+        var : sympy.Symbol or tuple
+            Plot variable ``x`` or ``(x, min, max)`` range tuple.
         parameters : list[sympy.Symbol] or None, optional
-            Parameter symbols. If None, they are inferred from the expression.
-            If [], that means explicitly no parameters. Parameter creation and
-            updates are delegated to :class:`ParameterManager` (refactored API).
+            Deprecated. Use :meth:`parameter` / :attr:`parameters` to create and
+            manage controls explicitly. If omitted, symbols are inferred from
+            the expression.
         x_domain : RangeLike or None, optional
             Domain of the independent variable (e.g. ``(-10, 10)``).
             If "figure_default", the figure's range is used when plotting. 
@@ -872,12 +980,14 @@ class Figure:
         --------
         >>> x, a = sp.symbols("x a")  # doctest: +SKIP
         >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.plot(x, a * sp.sin(x), parameters=[a], id="a_sin")  # doctest: +SKIP
+        >>> fig.parameter(a, min=-2, max=2)  # doctest: +SKIP
+        >>> fig.plot(a * sp.sin(x), x, id="a_sin")  # doctest: +SKIP
+        >>> fig.plot(sp.sin(x), x, id="sin")  # doctest: +SKIP
 
         Notes
         -----
-        Passing ``parameters=[]`` disables automatic parameter creation even if
-        the expression has free symbols other than ``var``.
+        Prefer explicit parameter setup with :meth:`parameter`/``parameters``
+        before plotting.
 
         All supported style options for this method are discoverable via
         :meth:`Figure.plot_style_options`.
@@ -896,9 +1006,32 @@ class Figure:
                     break
             if id is None: raise ValueError("Too many auto-generated IDs")
 
+        normalized_var, normalized_func, normalized_numeric_fn, inferred_parameters = _normalize_plot_inputs(
+            func,
+            var,
+            vars=vars,
+            id_hint=id,
+        )
+
+        if isinstance(var, tuple) and len(var) == 3 and x_domain is not None:
+            raise ValueError(
+                "plot() cannot combine a range tuple with x_domain=. "
+                "Use only one range source, e.g. plot(f, (x, -4, 4))."
+            )
+
+        if isinstance(var, tuple) and len(var) == 3:
+            x_domain = (var[1], var[2])
+
+        if parameters is not None:
+            warnings.warn(
+                "plot(..., parameters=...) is deprecated; use parameter()/parameters to register controls.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         # Parameter Autodetection
         if parameters is None:
-            parameters = sorted([s for s in func.free_symbols if s != var], key=lambda s: s.sort_key())
+            parameters = list(inferred_parameters)
 
         # Ensure Parameters Exist (Delegate to Manager)
         if parameters:
@@ -913,10 +1046,12 @@ class Figure:
         else: 
             update_dont_create = False
 
+        initial_func = normalized_var if normalized_numeric_fn is not None else normalized_func
+
         if update_dont_create:
             update_kwargs: Dict[str, Any] = dict(
-                var=var,
-                func=func,
+                var=normalized_var,
+                func=initial_func,
                 parameters=parameters,
                 visible=visible,
                 x_domain=x_domain,
@@ -936,13 +1071,17 @@ class Figure:
         else: 
             view_ids = (view,) if isinstance(view, str) else (tuple(view) if view is not None else (self.active_view_id,))
             plot = Plot(
-                var=var, func=func, smart_figure=self, parameters=parameters,
+                var=normalized_var, func=initial_func, smart_figure=self, parameters=parameters,
                 x_domain=x_domain, sampling_points=sampling_points,
                 label=(id if label is None else label), visible=visible,
                 color=color, thickness=thickness, dash=dash, line=line, opacity=opacity, trace=trace,
                 plot_id=id, view_ids=view_ids,
             )
             self.plots[id] = plot
+
+        if normalized_numeric_fn is not None:
+            plot.set_numeric_function(normalized_var, normalized_numeric_fn, parameters=parameters)
+            plot.render()
         
         return plot
 
@@ -1351,9 +1490,9 @@ class _CurrentParametersProxy(Mapping):
     >>> x, a = sp.symbols("x a")  # doctest: +SKIP
     >>> fig = Figure()  # doctest: +SKIP
     >>> with fig:  # doctest: +SKIP
-    ...     fig.plot(x, a * sp.sin(x), parameters=[a])  # doctest: +SKIP
-    ...     params[a].value = 5  # doctest: +SKIP
     ...     parameter(a, min=-10, max=10)  # doctest: +SKIP
+    ...     fig.plot(a * sp.sin(x), x)  # doctest: +SKIP
+    ...     params[a].value = 5  # doctest: +SKIP
     """
 
     def _fig(self) -> "Figure":
@@ -1556,8 +1695,8 @@ def parameter(
 
 
 def plot(
-    var: Symbol,
-    func: Expr,
+    func: Any,
+    var: Any,
     parameters: Optional[Sequence[Symbol]] = None,
     id: Optional[str] = None,
     label: Optional[str] = None,
@@ -1571,18 +1710,20 @@ def plot(
     line: Optional[Mapping[str, Any]] = None,
     trace: Optional[Mapping[str, Any]] = None,
     view: Optional[Union[str, Sequence[str]]] = None,
+    vars: Optional[Union[Symbol, Sequence[Symbol]]] = None,
 ) -> Plot:
     """
-    Plot a SymPy expression on the current figure, or create a new figure per call.
+    Plot an expression/callable on the current figure, or create a new figure per call.
 
     Parameters
     ----------
-    var : sympy.Symbol
-        Independent variable for the expression.
-    func : sympy.Expr
-        SymPy expression to plot.
+    func : callable or NumericFunction or sympy.Expr
+        Function/expression to plot.
+    var : sympy.Symbol or tuple
+        Plot variable ``x`` or ``(x, min, max)`` range tuple.
     parameters : sequence[sympy.Symbol], optional
-        Parameter symbols used in the expression. If ``None``, they are inferred.
+        Deprecated. Use :func:`parameter` / :data:`parameters` for explicit
+        control registration. If omitted, symbols are inferred.
     id : str, optional
         Plot identifier for update or creation.
     label : str, optional
@@ -1619,7 +1760,9 @@ def plot(
     Examples
     --------
     >>> x, a = sp.symbols("x a")  # doctest: +SKIP
-    >>> plot(x, a * sp.sin(x), parameters=[a], id="a_sin")  # doctest: +SKIP
+    >>> parameter(a, min=-1, max=1)  # doctest: +SKIP
+    >>> plot(a * sp.sin(x), x, id="a_sin")  # doctest: +SKIP
+    >>> plot(sp.sin(x), x, id="sin")  # doctest: +SKIP
 
     Notes
     -----
@@ -1640,8 +1783,8 @@ def plot(
         fig = Figure()
         display(fig)
     return fig.plot(
-        var,
         func,
+        var,
         parameters=parameters,
         id=id,
         label=label,
@@ -1655,4 +1798,5 @@ def plot(
         opacity=opacity,
         trace=trace,
         view=view,
+        vars=vars,
     )

@@ -13,9 +13,8 @@ def _build_exportable_figure(*, include_dynamic_info: bool) -> Figure:
     fig.parameter(a, min=-2, max=2, value=0.75, step=0.05)
     fig.parameter(b, min=-1, max=1, value=-0.25, step=0.05)
     fig.plot(
-        x,
         a * sp.sin(x) + b,
-        parameters=[a, b],
+        x,
         id="model",
         label="model(a,b)",
         visible="legendonly",

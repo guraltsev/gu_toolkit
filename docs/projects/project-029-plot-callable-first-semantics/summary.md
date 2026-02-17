@@ -1,7 +1,7 @@
 # Project 029: `plot()` Callable-First Semantics Alignment (Summary)
 
-**Status:** Active (Design)
-**Type:** Design-only project (no implementation in this project)
+**Status:** Implemented
+**Type:** Design + runtime implementation
 
 ## Objective
 
@@ -41,7 +41,7 @@ This must fail with a deterministic, actionable error. The design intentionally 
 ### 4) Variable/range precedence and conflict policy
 
 - `(var, min, max)` is a first-class range form.
-- Tuple range and legacy `min=`/`max=` style controls are **mutually exclusive**.
+- Tuple range and `x_domain=` controls are **mutually exclusive**.
 - If both are present, raise a meaningful error with exact rewrite guidance.
 
 ### 5) Callable arity/introspection policy
@@ -95,9 +95,8 @@ Dedicated error families:
 
 ## Compatibility and migration strategy
 
-1. **Compatibility phase:** accept legacy-compatible shapes where unambiguous; emit warnings for ambiguous/deprecated forms.
-2. **Documentation phase:** switch examples and docs to callable-first conventions.
-3. **Tightening phase:** retire ambiguous legacy signatures after a deprecation window.
+1. **Documentation phase:** switch examples and docs to callable-first conventions.
+2. **Tightening phase:** reject incompatible call shapes consistently.
 
 ## Non-goals (this project)
 
@@ -111,3 +110,10 @@ Dedicated error families:
 - Approved provider-mismatch error contract.
 - Approved canonical normalization schema.
 - Approved migration/deprecation plan and test blueprint.
+
+
+## Implementation notes
+
+- `Figure.plot(...)` and module-level `plot(...)` accept callable-first forms (`plot(f, x, ...)` and `plot(f, (x, xmin, xmax), ...)`).
+- Supported first arguments in runtime are: SymPy expressions, `NumericFunction`, and plain Python callables with fixed positional arguments.
+- For multi-variable callables/`NumericFunction`, users must provide `vars=...` when variable inference is ambiguous.
