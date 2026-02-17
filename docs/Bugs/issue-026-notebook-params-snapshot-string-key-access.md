@@ -4,27 +4,25 @@
 Open
 
 ## Summary
-The notebook diagnostics section requests improved `params.snapshot()` ergonomics:
-- allow lookup by symbol name string when unambiguous,
-- raise helpful errors when string lookup is ambiguous or invalid,
-- keep iteration and `keys()` symbol-based (do not mix in strings).
-
-Current behavior does not satisfy this contract, making notebook diagnostics code less ergonomic and potentially confusing.
+State-of-completion checklist:
+- [x] Baseline snapshot immutability and ordering tests exist.
+- [ ] String-key lookup ergonomics are not implemented for `ParameterSnapshot`.
+- [ ] Ambiguous/unknown string-key error messaging is not implemented.
+- [x] Iteration and `keys()` remain symbol-based only (current behavior matches requirement).
+- [ ] No targeted tests yet cover notebook-requested string access and ambiguity failure modes.
 
 ## Evidence
-- In the diagnostics info-card section of `docs/notebooks/Toolkit_overview.ipynb`, a BUG comment specifies required snapshot key semantics and error behavior.
+- `ParameterSnapshot.__getitem__` currently accepts only symbol keys.
+- Existing tests in `tests/test_parameter_snapshot_numeric_expression.py` cover order/immutability but not string lookups.
+- Notebook diagnostics section still carries BUG guidance requesting string-key behavior.
 
 ## TODO
 - [ ] Specify mapping semantics for snapshot key lookup (symbol keys + optional unambiguous string lookup).
-- [ ] Implement robust ambiguity handling and actionable error text.
-- [ ] Ensure iterators/`keys()` return only symbol objects.
-- [ ] Add focused unit tests for:
-  - unambiguous string key success,
-  - ambiguous string key failure,
-  - unknown string key failure,
-  - iterator/key type guarantees.
-- [ ] Add regression coverage for notebook diagnostics card workflows.
+- [ ] Implement ambiguity handling and actionable error text for invalid/ambiguous string names.
+- [x] Ensure iterators/`keys()` return only symbol objects.
+- [ ] Add focused unit tests for unambiguous success, ambiguous failure, unknown failure, and iterator/key type guarantees.
+- [ ] Add notebook regression coverage for diagnostics card workflows.
 
 ## Exit criteria
-- Snapshot lookup behavior is well-defined, consistent, and tested.
-- Notebook diagnostics examples can rely on documented key semantics without BUG notes.
+- [ ] Snapshot lookup behavior is well-defined, consistent, and tested.
+- [ ] Notebook diagnostics examples can rely on documented key semantics without BUG notes.

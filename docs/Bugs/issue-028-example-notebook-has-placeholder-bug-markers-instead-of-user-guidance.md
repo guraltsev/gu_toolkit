@@ -1,39 +1,26 @@
 # Issue 028: Example notebook contains placeholder BUG markers where user-facing guidance is expected
 
 ## Status
-Ready for external review
+Open
 
 ## Summary
-The example notebook previously contained placeholder BUG comments in key tutorial sections (info cards, callable walkthroughs, and debugging examples). This left end-user guidance incomplete and made the notebook appear unfinished.
+State-of-completion checklist:
+- [x] A notebook-quality guard test exists to detect placeholder `# BUG` markers.
+- [ ] Current notebook content still contains multiple placeholder `#BUG` markers in code and walkthrough sections.
+- [ ] Notebook quality guard is currently failing on published notebook content.
+- [ ] Tutorial guidance is still incomplete in affected sections (codegen notes, callable walkthrough, diagnostics, compendium notes).
 
 ## Evidence
-- `docs/notebooks/Toolkit_overview.ipynb` now replaces placeholder markers with concrete instructional guidance in the affected sections.
-- A regression test now fails if placeholder `# BUG` markers reappear in notebook cells.
-
-## Assessment of completion state
-- Before remediation: **Not complete** (multiple placeholder markers still present in published notebook content).
-- After remediation: **Implementation complete, pending external review**.
-
-## Remediation plan
-- [x] Replace placeholder BUG comments with concrete markdown explanations and usage guidance.
-- [x] Ensure command walkthrough sections include expected inputs/outputs and common pitfalls.
-- [x] Add doc-quality checks to notebook testing (assert no placeholder `# BUG` markers remain).
-- [x] Add a lightweight notebook QA regression test entry validating tutorial completeness markers.
+- `tests/test_notebook_documentation_quality.py` fails with offending notebook cells that still include `#BUG` placeholders.
+- `docs/notebooks/Toolkit_overview.ipynb` currently contains placeholder markers in several code cells.
 
 ## TODO
-- [x] Replace placeholder BUG comments with concrete markdown explanations and usage guidance.
-- [x] Ensure command walkthrough sections include expected inputs/outputs and common pitfalls.
-- [x] Add doc-quality checks to notebook testing (e.g., assertions that no `# BUG` placeholders remain in published examples).
-- [x] Add a lightweight notebook QA test suite entry that validates tutorial completeness markers.
-- [ ] External reviewer validates notebook narrative quality and signs off.
+- [ ] Replace placeholder BUG comments with concrete markdown explanations and usage guidance.
+- [ ] Remove captured traceback placeholder blocks that are no longer part of intended user flow.
+- [ ] Ensure walkthrough sections include expected inputs/outputs and practical notes.
+- [x] Keep the notebook QA regression test in place so placeholders cannot reappear unnoticed.
+- [ ] Re-run notebook quality tests and mark this issue closed only once they pass.
 
 ## Exit criteria
-- [x] Example notebook provides complete user-facing guidance in affected sections.
-- [x] Automated checks fail if placeholder BUG markers reappear in published notebook examples.
-- [ ] External review completed; issue can be moved to `docs/Bugs/_closed/`.
-
-## Implementation checklist
-- [x] Updated notebook tutorial cells to remove placeholder markers and replace them with actionable user guidance.
-- [x] Cleaned remaining placeholder stack-trace/comment artifacts from callable and debugging walkthrough cells.
-- [x] Added pytest regression coverage for placeholder marker detection.
-- [x] Ran targeted tests for the new regression check.
+- [ ] Example notebook provides complete user-facing guidance in affected sections.
+- [ ] Automated checks pass with zero placeholder BUG markers in published notebook examples.
