@@ -162,6 +162,28 @@ def _coerce_symbol(value: Any, *, role: str) -> Symbol:
     raise TypeError(f"plot() expects {role} to be a sympy.Symbol, got {type(value).__name__}")
 
 
+def _rebind_numeric_function_vars(
+    numeric_fn: NumericFunction,
+    *,
+    bound_symbols: tuple[Symbol, ...],
+    source_callable: Optional[Callable[..., Any]] = None,
+) -> NumericFunction:
+    """Return a ``NumericFunction`` rebound to ``bound_symbols`` order.
+
+    This is used by callable-first normalization when the user-provided plotting
+    variable should replace inferred callable argument symbols (for example,
+    ``plot(lambda t: t**2, x)``). Rebinding keeps the positional callable
+    contract but aligns symbol identity with figure parameter/freeze semantics.
+    """
+    fn = source_callable if source_callable is not None else getattr(numeric_fn, "_fn")
+    return NumericFunction(
+        fn,
+        vars=bound_symbols,
+        symbolic=numeric_fn.symbolic,
+        source=numeric_fn.source,
+    )
+
+
 def _normalize_plot_inputs(
     first: Any,
     second: Any,
@@ -192,6 +214,7 @@ def _normalize_plot_inputs(
     var_or_range = second
 
     numeric_fn: Optional[NumericFunction] = None
+    source_callable: Optional[Callable[..., Any]] = None
     expr: Expr
     call_symbols: tuple[Symbol, ...]
 
@@ -200,6 +223,7 @@ def _normalize_plot_inputs(
         call_symbols = tuple(sorted(expr.free_symbols, key=lambda s: s.sort_key()))
     elif isinstance(f, NumericFunction):
         numeric_fn = f
+        source_callable = getattr(f, "_fn")
         call_symbols = tuple(f.free_vars)
         symbolic = f.symbolic
         if isinstance(symbolic, Expr):
@@ -208,6 +232,7 @@ def _normalize_plot_inputs(
             fallback_name = id_hint or "f"
             expr = sp.Symbol(f"{fallback_name}_numeric")
     elif callable(f):
+        source_callable = f
         sig = inspect.signature(f)
         positional = [
             p for p in sig.parameters.values()
@@ -226,7 +251,11 @@ def _normalize_plot_inputs(
     if vars_tuple is not None:
         bound_symbols = vars_tuple
         if numeric_fn is not None:
-            numeric_fn = NumericFunction(f, vars=bound_symbols)
+            numeric_fn = _rebind_numeric_function_vars(
+                numeric_fn,
+                bound_symbols=bound_symbols,
+                source_callable=source_callable,
+            )
     else:
         bound_symbols = call_symbols
 
@@ -250,6 +279,12 @@ def _normalize_plot_inputs(
     if plot_var not in bound_symbols:
         if len(bound_symbols) == 1:
             bound_symbols = (plot_var,)
+            if numeric_fn is not None:
+                numeric_fn = _rebind_numeric_function_vars(
+                    numeric_fn,
+                    bound_symbols=bound_symbols,
+                    source_callable=source_callable,
+                )
         else:
             raise ValueError(
                 f"plot() variable {plot_var!r} is not present in callable variables {bound_symbols!r}. "
