@@ -1,6 +1,6 @@
 # Project 030: Dedicated Per-Tab Legend Side Panel (Summary)
 
-**Status:** Revised proposal (design validated against current codebase)
+**Status:** In progress (Phases 1-3 implemented)
 **Type:** Architecture and implementation plan
 
 ## Goal/Scope
@@ -86,14 +86,14 @@ And expand sidebar visibility API to include legend presence:
 
 - Codebase reviewed for current architecture and integration points.
 - Summary and plan rewritten for implementation-ready execution.
-- Implementation not started in this project record.
+- Phases 1-3 are now implemented in code and covered by project tests.
 
 ## TODO
 
-- [ ] Add `LegendPanelManager` module and wire into `Figure` lifecycle.
-- [ ] Extend `FigureLayout` sidebar model with legend section.
-- [ ] Add visibility/label synchronization tests.
-- [ ] Add active-view filtering tests.
+- [x] Add `LegendPanelManager` module and wire into `Figure` lifecycle.
+- [x] Extend `FigureLayout` sidebar model with legend section.
+- [x] Add visibility/label synchronization tests.
+- [x] Add active-view filtering tests.
 - [ ] Add migration tests for Plotly legend disablement.
 - [ ] Update docs/examples to show side-panel legend workflow.
 
