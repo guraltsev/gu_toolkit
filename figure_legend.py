@@ -47,6 +47,7 @@ See next:
 
 from __future__ import annotations
 
+import html
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -83,7 +84,7 @@ class LegendPanelManager:
 
     def on_plot_added(self, plot: Any) -> None:
         """Register a plot and create a row if needed."""
-        plot_id = str(plot.id)
+        plot_id = self._normalize_plot_id(getattr(plot, "id", None), fallback_prefix="plot")
         self._plots[plot_id] = plot
         if plot_id not in self._ordered_plot_ids:
             self._ordered_plot_ids.append(plot_id)
@@ -93,7 +94,7 @@ class LegendPanelManager:
 
     def on_plot_updated(self, plot: Any) -> None:
         """Refresh row contents for an existing plot or lazily add it."""
-        plot_id = str(plot.id)
+        plot_id = self._normalize_plot_id(getattr(plot, "id", None), fallback_prefix="plot")
         if plot_id not in self._rows:
             self.on_plot_added(plot)
             return
@@ -102,7 +103,7 @@ class LegendPanelManager:
 
     def on_plot_removed(self, plot_id: str) -> None:
         """Unregister a plot and remove its row from the layout."""
-        key = str(plot_id)
+        key = self._normalize_plot_id(plot_id, fallback_prefix="plot")
         self._plots.pop(key, None)
         self._ordered_plot_ids = [pid for pid in self._ordered_plot_ids if pid != key]
         removed = self._rows.pop(key, None)
@@ -157,7 +158,7 @@ class LegendPanelManager:
 
     def _sync_row_widgets(self, *, row: LegendRowModel, plot: Any) -> None:
         """Incrementally update label/toggle to mirror current plot state."""
-        label = str(getattr(plot, "label", "") or getattr(plot, "id", row.plot_id))
+        label = self._format_label_value(plot=plot, default_plot_id=row.plot_id)
         if row.label_widget.value != label:
             row.label_widget.value = label
 
@@ -184,3 +185,59 @@ class LegendPanelManager:
     def _coerce_visible_to_bool(value: Any) -> bool:
         """Map mixed visibility states to v1 legend checkbox semantics."""
         return value is True
+
+
+
+    @staticmethod
+    def _normalize_plot_id(raw_plot_id: Any, *, fallback_prefix: str) -> str:
+        """Return a stable plot-id string, even for malformed inputs."""
+        try:
+            value = "" if raw_plot_id is None else str(raw_plot_id)
+        except Exception:
+            value = ""
+        value = value.strip()
+        if value:
+            return value
+        return f"{fallback_prefix}-{id(raw_plot_id)}"
+
+    @classmethod
+    def _format_label_value(cls, *, plot: Any, default_plot_id: str) -> str:
+        """Return a safe label string suitable for ``widgets.HTMLMath``.
+
+        Label selection policy for Phase 5:
+
+        1. Use explicit ``plot.label`` when provided and non-empty.
+        2. Fall back to ``plot.id``.
+        3. Fall back to ``default_plot_id`` if plot attributes are unavailable.
+
+        The selected text is HTML-escaped so plain text and mixed text/math labels
+        render safely, while MathJax delimiters (for example ``$...$``) are
+        preserved as literal characters.
+        """
+        raw_label = cls._safe_attr_str(plot, "label")
+        if raw_label.strip() != "":
+            return html.escape(raw_label)
+
+        raw_plot_id = cls._safe_attr_str(plot, "id")
+        if raw_plot_id.strip() != "":
+            return html.escape(raw_plot_id)
+
+        return html.escape(default_plot_id)
+
+    @staticmethod
+    def _safe_attr_str(plot: Any, attr_name: str) -> str:
+        """Best-effort string conversion for plot attributes.
+
+        If attribute access or ``str()`` conversion fails, returns an empty string
+        so callers can apply fallback behavior without raising widget refresh
+        errors.
+        """
+        try:
+            value = getattr(plot, attr_name, "")
+        except Exception:
+            return ""
+
+        try:
+            return "" if value is None else str(value)
+        except Exception:
+            return ""
