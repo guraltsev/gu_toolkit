@@ -1,5 +1,33 @@
 # Figure Developer Guide
 
+## Developer discipline 
+
+### Documentation maintenance checklist (for contributors)
+
+When adding or modifying code in this toolkit, keep these standards:
+
+1. **Every module has a top-level docstring** describing purpose, design intent, and where it sits in the architecture.
+2. **Every public function/class/method includes thorough API docs**:
+   - parameter meanings,
+   - return values,
+   - expected error conditions,
+   - examples/doctests (use `# doctest: +SKIP` for notebook/UI-heavy paths),
+   - “See Also” links to related APIs where appropriate.
+3. **Every private helper gets at least a brief behavior docstring** to reduce maintenance friction and simplify refactors.
+4. **Class docs describe role and collaboration boundaries** (what state they own, what they delegate, and what triggers side effects).
+5. **Discoverability first**: module docstrings should point to neighboring modules/classes and mention likely extension points.
+
+By keeping source docstrings and this guide in sync, the toolkit remains approachable for both notebook users and maintainers.
+
+---
+
+### Testing and verification
+
+This repository contains test scripts (see `tests/`) that cover individual components. All code MUST have comprehensive test coverage. Each bug fix MUST provide regression tests. When automatic testing is not feasable and GUI and user assessment is required, tests must be authored as interactive ipynb notebooks in \tests\ and they must be run manually. The notebook must contain instructions on what to focus on. 
+
+---
+
+
 ## Purpose and scope
 
 Figure is a Jupyter-first plotting toolkit that connects SymPy expressions to Plotly’s interactive `FigureWidget` while layering in UI affordances (parameter sliders, an info panel, and layout controls). The system is designed for *interactive mathematical exploration* rather than batch plotting, with a heavy emphasis on notebook ergonomics and fast re-rendering.【F:Figure.py†L1-L1687】
@@ -212,15 +240,6 @@ Figure uses Python’s standard logging library and installs a `NullHandler` by 
 
 ---
 
-## Testing and verification
-
-This repository contains test scripts (see `tests/`) that cover individual components such as `NamedFunction`. When making changes to the math compilation or widget system, prefer targeted tests that exercise:
-- SymPy → NumPy compilation on common expressions.
-- Slider updates and parameter propagation.
-- Plotly resizing in a Jupyter environment (manual or notebook-based smoke tests).
-
----
-
 ## Summary
 
 Figure’s architecture is intentionally modular:
@@ -283,19 +302,3 @@ This section is a maintenance-oriented index to keep all Python source files dis
 
 - `NamedFunction.py` provides the `@NamedFunction` API for creating SymPy function classes with symbolic definitions and numeric implementations while preserving inspectable signatures and generated docs.【F:NamedFunction.py†L1-L689】
 
-### Documentation maintenance checklist (for contributors)
-
-When adding or modifying code in this toolkit, keep these standards:
-
-1. **Every module has a top-level docstring** describing purpose, design intent, and where it sits in the architecture.
-2. **Every public function/class/method includes thorough API docs**:
-   - parameter meanings,
-   - return values,
-   - expected error conditions,
-   - examples/doctests (use `# doctest: +SKIP` for notebook/UI-heavy paths),
-   - “See Also” links to related APIs where appropriate.
-3. **Every private helper gets at least a brief behavior docstring** to reduce maintenance friction and simplify refactors.
-4. **Class docs describe role and collaboration boundaries** (what state they own, what they delegate, and what triggers side effects).
-5. **Discoverability first**: module docstrings should point to neighboring modules/classes and mention likely extension points.
-
-By keeping source docstrings and this guide in sync, the toolkit remains approachable for both notebook users and maintainers.
