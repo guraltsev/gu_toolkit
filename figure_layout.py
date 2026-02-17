@@ -264,7 +264,7 @@ class FigureLayout:
         )
 
         # 3. Controls Sidebar (The "Right" Panel)
-        #    Initially hidden (display="none") until parameters or info widgets are added.
+        #    Initially hidden (display="none") until parameters/info/legend widgets are added.
         self.params_header = widgets.HTML("<b>Parameters</b>", layout=widgets.Layout(display="none", margin="0"))
         self.params_box = widgets.VBox(
             layout=widgets.Layout(
@@ -287,8 +287,26 @@ class FigureLayout:
             )
         )
 
+        self.legend_header = widgets.HTML("<b>Legend</b>", layout=widgets.Layout(display="none", margin="10px 0 0 0"))
+        self.legend_box = widgets.VBox(
+            layout=widgets.Layout(
+                width="100%",
+                display="none",
+                padding="8px",
+                border="1px solid rgba(15,23,42,0.08)",
+                border_radius="10px",
+            )
+        )
+
         self.sidebar_container = widgets.VBox(
-            [self.params_header, self.params_box, self.info_header, self.info_box],
+            [
+                self.params_header,
+                self.params_box,
+                self.info_header,
+                self.info_box,
+                self.legend_header,
+                self.legend_box,
+            ],
             layout=widgets.Layout(
                 margin="0px", padding="0px 0px 0px 10px", flex="0 1 380px",
                 min_width="300px", max_width="400px", display="none"
@@ -402,7 +420,7 @@ class FigureLayout:
         """
         return self.title_html.value
 
-    def update_sidebar_visibility(self, has_params: bool, has_info: bool) -> None:
+    def update_sidebar_visibility(self, has_params: bool, has_info: bool, has_legend: bool) -> None:
         """
         Updates visibility of headers and the sidebar itself based on content.
         
@@ -414,6 +432,8 @@ class FigureLayout:
             Whether parameter sliders exist.
         has_info : bool
             Whether info outputs exist.
+        has_legend : bool
+            Whether legend rows exist.
 
         Returns
         -------
@@ -422,7 +442,7 @@ class FigureLayout:
         Examples
         --------
         >>> layout = FigureLayout()  # doctest: +SKIP
-        >>> layout.update_sidebar_visibility(has_params=True, has_info=False)  # doctest: +SKIP
+        >>> layout.update_sidebar_visibility(has_params=True, has_info=False, has_legend=False)  # doctest: +SKIP
 
         Notes
         -----
@@ -435,7 +455,10 @@ class FigureLayout:
         self.info_header.layout.display = "block" if has_info else "none"
         self.info_box.layout.display = "flex" if has_info else "none"
 
-        show_sidebar = has_params or has_info
+        self.legend_header.layout.display = "block" if has_legend else "none"
+        self.legend_box.layout.display = "flex" if has_legend else "none"
+
+        show_sidebar = has_params or has_info or has_legend
         self.sidebar_container.layout.display = "flex" if show_sidebar else "none"
 
     def set_plot_widget(
