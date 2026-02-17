@@ -4,6 +4,8 @@
 Open
 
 ## Summary
+Assessment (2026-02-17): implementation is partially complete; coverage and/or documentation gaps listed below keep this issue open.
+
 State-of-completion checklist:
 - [ ] Toolkit overview still contains a placeholder BUG note indicating the compendium/documentation section is insufficiently explicit.
 - [ ] Users do not currently get a concise, notebook-local quick reference of core functionality and common options.

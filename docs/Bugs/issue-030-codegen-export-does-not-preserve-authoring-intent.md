@@ -4,6 +4,8 @@
 Open
 
 ## Summary
+Assessment (2026-02-17): implementation is partially complete; coverage and/or documentation gaps listed below keep this issue open.
+
 State-of-completion checklist:
 - [ ] The Toolkit overview codegen section still documents unresolved mismatches between authored notebook code and emitted export code.
 - [ ] Exported snippets are not yet validated to preserve intentional minimal imports and symbol-family authoring style.

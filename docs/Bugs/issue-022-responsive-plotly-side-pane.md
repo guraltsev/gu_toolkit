@@ -4,6 +4,8 @@
 Open
 
 ## Summary
+Assessment (2026-02-17): implementation is partially complete; coverage and/or documentation gaps listed below keep this issue open.
+
 State-of-completion checklist:
 - [x] `PlotlyPane`/`PlotlyResizeDriver` implementation includes resize observers, clip-ancestor handling, debounce, and follow-up reflow hooks.
 - [x] Basic automated tests exist for `PlotlyPane` wrapper behavior (`reflow` delegation and style wiring).

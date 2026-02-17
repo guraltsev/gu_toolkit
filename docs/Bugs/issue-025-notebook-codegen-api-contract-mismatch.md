@@ -4,6 +4,8 @@
 Open
 
 ## Summary
+Assessment (2026-02-17): implementation is partially complete; coverage and/or documentation gaps listed below keep this issue open.
+
 State-of-completion checklist:
 - [x] `Figure.code` read-only property is implemented and tested.
 - [x] `Figure.get_code(options)` API path is implemented and tested.
@@ -14,7 +16,7 @@ State-of-completion checklist:
 ## Evidence
 - `tests/test_figure_snapshot_codegen.py` covers read-only `code`, `get_code(options)`, and output structure.
 - `docs/notebooks/Toolkit_overview.ipynb` still includes `#BUG` comments in the code-generation cell.
-- Notebook documentation quality test fails while these placeholders remain.
+- No dedicated notebook-documentation quality test currently enforces codegen placeholder removal; placeholders remain visible in the notebook source.
 
 ## TODO
 - [x] Review current `to_code`/code property behaviors and document current-vs-intended API.
