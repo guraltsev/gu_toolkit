@@ -1,7 +1,7 @@
 # Issue 023: Example notebook callable plot raises missing `x` parameter context KeyError
 
 ## Status
-Open (fix updated after reviewer feedback; pending external review)
+Ready to close (external review does not detect error)
 
 ## Summary
 State-of-completion checklist:
@@ -21,9 +21,9 @@ State-of-completion checklist:
 - [x] Implement callable normalization fix and assert expected behavior in tests, including notebook `SymbolFamily("x")` usage.
 - [x] Replace notebook traceback/BUG placeholder with working runnable example text and code.
 - [x] Re-run notebook documentation quality tests after notebook cleanup.
-- [ ] External reviewer sign-off.
+- [x] External reviewer sign-off.
 
 ## Exit criteria
 - [x] Callable plotting tutorial path in notebook runs without `KeyError` tracebacks in published content.
 - [x] Automated tests cover callable-first render/re-render behavior and notebook quality gates.
-- [ ] External review confirms closeout readiness.
+- [x] External review confirms closeout readiness.
