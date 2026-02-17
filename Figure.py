@@ -63,7 +63,7 @@ import warnings
 import logging
 from contextlib import ExitStack, contextmanager
 from collections.abc import Mapping
-from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator, List, NamedTuple
+from typing import Any, Callable, Hashable, Optional, Sequence, Tuple, Union, Dict, Iterator, List, NamedTuple, TypeAlias
 
 import ipywidgets as widgets
 import numpy as np
@@ -75,7 +75,7 @@ from sympy.core.symbol import Symbol
 
 # Internal imports (assumed to exist in the same package)
 from .InputConvert import InputConvert
-from .numpify import NumericFunction, numpify_cached
+from .numpify import NumericFunction, numpify_cached, _normalize_vars
 from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
 from .Slider import FloatSlider
 from .ParamEvent import ParamEvent
@@ -120,6 +120,11 @@ NumberLike = Union[int, float]
 NumberLikeOrStr = Union[int, float, str]
 RangeLike = Tuple[NumberLikeOrStr, NumberLikeOrStr]
 VisibleSpec = Union[bool, str]  # Plotly uses True/False or the string "legendonly".
+PlotVarsSpec: TypeAlias = Union[
+    Symbol,
+    Sequence[Union[Symbol, Mapping[str, Symbol]]],
+    Mapping[Union[int, str], Symbol],
+]
 
 PLOT_STYLE_OPTIONS: Dict[str, str] = {
     "color": "Line color. Accepts CSS-like names (e.g., red), hex (#RRGGBB), or rgb()/rgba() strings.",
@@ -165,7 +170,7 @@ def _coerce_symbol(value: Any, *, role: str) -> Symbol:
 def _rebind_numeric_function_vars(
     numeric_fn: NumericFunction,
     *,
-    bound_symbols: tuple[Symbol, ...],
+    vars_spec: Any,
     source_callable: Optional[Callable[..., Any]] = None,
 ) -> NumericFunction:
     """Return a ``NumericFunction`` rebound to ``bound_symbols`` order.
@@ -178,7 +183,7 @@ def _rebind_numeric_function_vars(
     fn = source_callable if source_callable is not None else getattr(numeric_fn, "_fn")
     return NumericFunction(
         fn,
-        vars=bound_symbols,
+        vars=vars_spec,
         symbolic=numeric_fn.symbolic,
         source=numeric_fn.source,
     )
@@ -188,7 +193,7 @@ def _normalize_plot_inputs(
     first: Any,
     second: Any,
     *,
-    vars: Optional[Union[Symbol, Sequence[Symbol]]] = None,
+    vars: Optional[PlotVarsSpec] = None,
     id_hint: Optional[str] = None,
 ) -> tuple[Symbol, Expr, Optional[NumericFunction], tuple[Symbol, ...]]:
     """Normalize callable-first ``plot()`` inputs.
@@ -198,15 +203,13 @@ def _normalize_plot_inputs(
     tuple
         ``(plot_var, symbolic_expr, numeric_fn_or_none, parameter_symbols)``.
     """
+    vars_spec: Any = None
     if vars is not None:
-        if isinstance(vars, Symbol):
-            vars_tuple = (vars,)
-        else:
-            vars_tuple = tuple(vars)
+        normalized = _normalize_vars(sp.Integer(0), vars)
+        vars_tuple = tuple(normalized["all"])
         if not vars_tuple:
             raise ValueError("plot() vars must not be empty when provided")
-        for sym in vars_tuple:
-            _coerce_symbol(sym, role="vars entries")
+        vars_spec = normalized["spec"]
     else:
         vars_tuple = None
 
@@ -241,7 +244,9 @@ def _normalize_plot_inputs(
         if any(p.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD) for p in sig.parameters.values()):
             raise TypeError("plot() callable does not support *args/**kwargs signatures")
         call_symbols = tuple(sp.Symbol(p.name) for p in positional)
-        numeric_fn = NumericFunction(f, vars=call_symbols)
+        numeric_fn = NumericFunction(f, vars=vars_spec if vars_spec is not None else call_symbols)
+        if vars_spec is not None:
+            call_symbols = tuple(numeric_fn.free_vars)
         expr = sp.Symbol(id_hint or getattr(f, "__name__", "f"))
     else:
         raise TypeError(
@@ -253,7 +258,7 @@ def _normalize_plot_inputs(
         if numeric_fn is not None:
             numeric_fn = _rebind_numeric_function_vars(
                 numeric_fn,
-                bound_symbols=bound_symbols,
+                vars_spec=vars_spec if vars_spec is not None else bound_symbols,
                 source_callable=source_callable,
             )
     else:
@@ -282,7 +287,7 @@ def _normalize_plot_inputs(
             if numeric_fn is not None:
                 numeric_fn = _rebind_numeric_function_vars(
                     numeric_fn,
-                    bound_symbols=bound_symbols,
+                    vars_spec=bound_symbols,
                     source_callable=source_callable,
                 )
         else:
@@ -986,7 +991,7 @@ class Figure:
         alpha: Optional[Union[int, float]] = None,
         trace: Optional[Mapping[str, Any]] = None,
         view: Optional[Union[str, Sequence[str]]] = None,
-        vars: Optional[Union[Symbol, Sequence[Symbol]]] = None,
+        vars: Optional[PlotVarsSpec] = None,
     ) -> Plot:
         """
         Plot an expression/callable on the figure (and keep it “live”).
@@ -1831,7 +1836,7 @@ def plot(
     line: Optional[Mapping[str, Any]] = None,
     trace: Optional[Mapping[str, Any]] = None,
     view: Optional[Union[str, Sequence[str]]] = None,
-    vars: Optional[Union[Symbol, Sequence[Symbol]]] = None,
+    vars: Optional[PlotVarsSpec] = None,
 ) -> Plot:
     """
     Plot an expression/callable on the current figure, or create a new figure per call.

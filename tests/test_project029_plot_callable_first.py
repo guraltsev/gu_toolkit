@@ -138,3 +138,54 @@ def test_plot_callable_first_supports_symbolfamily_plot_variable() -> None:
 
     assert xs is not None and ys is not None
     assert np.allclose(ys, np.exp(-0.15 * xs**2) * np.cos(3 * xs))
+
+
+def test_plot_callable_first_supports_string_keyed_vars_mapping() -> None:
+    """Callable-first ``plot`` should accept string-keyed vars mappings.
+
+    Regression coverage for notebook issue-031 path:
+    ``vars={'x': x, 'A': A, 'k': k[1]}`` must map callable argument names to
+    explicit symbols used by plot variable and parameter sliders.
+    """
+    x = sp.Symbol("x")
+    A = sp.Symbol("A")
+    k = sp.Symbol("k_1")
+    fig = Figure()
+
+    plot = fig.plot(lambda x, A, k: A + k * x, x, vars={"x": x, "A": A, "k": k}, id="mapped")
+    fig.parameters[A].value = 2.0
+    fig.parameters[k].value = 3.0
+    plot.render()
+
+    xs = plot.x_data
+    ys = plot.y_data
+    assert xs is not None and ys is not None
+    assert np.allclose(ys, 2.0 + 3.0 * xs)
+
+
+def test_plot_callable_first_supports_mixed_index_and_string_vars_mapping() -> None:
+    """Callable-first ``plot`` should accept mixed positional+keyed vars mappings."""
+    x, a = sp.symbols("x a")
+    fig = Figure()
+
+    plot = fig.plot(lambda t, a: a * t, x, vars={0: x, "a": a}, id="mixed_map")
+    fig.parameters[a].value = 2.5
+    plot.render()
+
+    xs = plot.x_data
+    ys = plot.y_data
+    assert xs is not None and ys is not None
+    assert np.allclose(ys, 2.5 * xs)
+
+
+def test_plot_callable_first_rejects_non_contiguous_integer_vars_mapping_keys() -> None:
+    """Integer mapping keys must stay contiguous and start at ``0`` like numpify."""
+    x, a = sp.symbols("x a")
+    fig = Figure()
+
+    try:
+        fig.plot(lambda x, a: a * x, x, vars={0: x, 2: a}, id="bad_map")
+    except ValueError as exc:
+        assert "contiguous and start at 0" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("Expected vars mapping validation failure")
