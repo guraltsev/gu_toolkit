@@ -5,32 +5,12 @@
 
 ## Goal/Scope
 
-Design and document a migration path away from Plotly's built-in legend (`layout.showlegend`) toward a dedicated, notebook-native side panel legend that is rendered next to each plot tab/view.
-
-The proposal must support, at minimum:
+Migrate away from Plotly's built-in legend (`layout.showlegend`) toward a dedicated, notebook-native side panel legend that is rendered next to each plot tab/view.
 
 1. **Show/Hide per plot row** (replacement for Plotly legend click behavior).
 2. **LaTeX-capable labels** in legend rows.
 3. **One legend panel per view tab** (same tab model already used by `Figure` view switching).
 
-And define a long-term architecture for:
-
-1. Opening per-plot properties (cogwheel) and editing style/runtime attributes:
-   - opacity,
-   - color,
-   - line style (dash),
-   - width (thickness),
-   - sampling points.
-2. Editing defining equations through pipeline:
-   - MathLive -> SymPy -> numpify.
-3. Adding new plots through the same pipeline:
-   - MathLive -> SymPy -> numpify.
-
-Non-goals for this documentation project:
-
-- No runtime code changes.
-- No public API behavior changes yet.
-- No deprecation warnings yet.
 
 ## Summary of design
 
@@ -52,34 +32,25 @@ Non-goals for this documentation project:
 
 **Implication:** A legend panel manager can follow the same architecture style as parameters/info and likely be integrated as a third section in the sidebar stack.
 
+Now that Figure supports tabs, the legend should live inside the per-tab area, not outside of it like the Parameters and InfoPanel.
+
 #### C. Plot-level state and style mutation APIs already exist
 
-`Plot` currently exposes mutable properties and an update path that cover most requested “future cogwheel” controls:
+Plots already carry their relation to views. A view should have only plots in it as legend entries.
 
-- visibility (`plot.visible`, including Plotly `True/False/"legendonly"` semantics),
-- label (`plot.label`),
-- color (`plot.color`),
-- dash (`plot.dash`),
-- thickness (`plot.thickness`),
-- opacity (`plot.opacity`),
-- sampling points (`plot.sampling_points`),
-- combined update (`plot.update(...)`).
+The properties should be common for all views. 
 
-**Implication:** The side-panel legend should initially be a thin UI layer over existing `Plot` setters; no immediate core math/render refactor is required to unlock toggles and style edits.
+Visibility (`plot.visible`, including Plotly `True/False` semantics),
+	Replace "legendonly" with False. Plots should ALWAYS be visible in legend (greyed out). They should vanish only if the plot is removed from a view.
 
-#### D. Equation parsing/compilation pieces already exist, but not as an editor flow
-
-- SymPy LaTeX parsing wrapper exists (`parse_latex`) with fallback behavior.
-- Symbolic-to-numeric compilation path exists (`numpify`, `numpify_cached`).
-- `Figure.plot(...)` already supports expression/callable/`NumericFunction` input normalization.
-
-**Gap:** There is no existing widget-level MathLive integration, no expression-editor modal contract, and no explicit transactional update path for “edit equation then replace plot expression.”
 
 #### E. Plotly internal legend is currently enabled globally
 
 - Default figure layout sets `showlegend=True` and configures `layout.legend` styling.
 
-**Implication:** migration requires a controlled step to disable Plotly legend and ensure replacement UI parity before permanent removal.
+**Implication:** Disable Plotly legend.
+
+WARNING: Plotly dies and stops working with labels containing latex. use "id" as label in the plotly legend. Use label= as data for this new custom legend. 
 
 ### 2) Proposed target architecture
 
@@ -91,7 +62,6 @@ Introduce a manager analogous to `InfoPanelManager`/`ParameterManager` that:
 - maps rows to `Plot` IDs,
 - understands per-view membership (`plot.view_ids`),
 - updates row visibility when active view changes,
-- can operate in read-only (v1) and editable (future cogwheel) modes.
 
 Proposed primary responsibilities:
 
@@ -100,7 +70,6 @@ Proposed primary responsibilities:
    - UI toggle -> `plot.visible`.
    - Programmatic plot updates -> row state refresh.
 3. **Label rendering** with `HTMLMath` to support LaTeX labels.
-4. **Action slot** per row for future cogwheel/properties popover.
 
 #### B. Layout extension in `FigureLayout`
 
@@ -113,9 +82,12 @@ And extend sidebar visibility logic to include `has_legend` as a third contribut
 
 Design constraint: the new legend block should not break existing full-width behavior or responsive wrapping controlled by `content_wrapper` and `PlotlyPane` reflow callbacks.
 
+### B2. 
+Expose view-based control of whether legend is visible or not. 
+
 #### C. Runtime source of truth
 
-Keep **`Plot` object state** as source of truth for visibility/style/label. The legend panel is a presentation/editor layer only.
+Keep **`Plot` object state** as source of truth for visibility/style/label. The legend panel is a presentation/layer only.
 
 This avoids dual state systems and leverages existing trace fan-out logic across per-view handles.
 
@@ -123,50 +95,20 @@ This avoids dual state systems and leverages existing trace fan-out logic across
 
 Phase migration:
 
-1. **Dual mode (temporary):** Internal Plotly legend can remain enabled behind an internal flag while panel behavior is validated.
 2. **Panel-default mode:** Dedicated legend panel enabled and Plotly legend disabled by default (`showlegend=False`).
 3. **Removal mode:** Remove fallback internal legend path once acceptance and regression coverage are complete.
-
-### 3) Long-term extensibility path
-
-#### A. Cogwheel / properties editor
-
-Define row-level “properties” action that opens either:
-
-- inline expandable row section, or
-- modal anchored in `FigureLayout.root_widget` (similar host concept already used in parameter controls).
-
-Property edits should map to existing `Plot` setters and `plot.update(...)` where possible.
-
-#### B. Equation editor (MathLive -> SymPy -> numpify)
-
-Planned flow per selected plot:
-
-1. Open math editor pre-populated from current symbolic expression/label.
-2. Convert MathLive output to LaTeX string.
-3. Parse with `parse_latex`.
-4. Resolve plotting variable and parameters (via existing normalization conventions).
-5. Update plot function (`set_func` / equivalent `plot.update(var=..., func=..., parameters=...)`).
-6. Re-render and refresh legend row metadata.
-
-#### C. Add-plot UX via same pipeline
-
-Planned flow:
-
-1. “+ Plot” action in legend panel.
-2. MathLive authoring.
-3. Parse/normalize/compile.
-4. Create `Figure.plot(...)` entry with generated id.
-5. Attach to active view by default (optional future multi-view targeting).
 
 ## Open questions
 
 1. **Legend row ordering**: insertion order, alphabetical by id, or explicit user-reorder?
+ANSWER: insertion order for now. Store in sequence so that reordering can be implemeneted later.
+
 2. **Per-view vs global label/style overrides**: should style edits be global to a plot object or scoped by view?
+ANSWER: Global.
 3. **Visibility semantics**: keep supporting `"legendonly"` internally, or collapse to boolean in panel UI?
-4. **Equation variable inference UX**: when ambiguous callable/symbol sets occur, should UI force explicit variable selection before commit?
-5. **Failure UX for parsing/compilation**: inline row error vs modal error box vs info panel broadcast?
+ANSWER: Boolean, False means grayed out in legend but invisible in plot view. Plot retains view
 6. **Persistence/snapshot format**: should legend/editor UI state be part of `FigureSnapshot` now or later?
+ANSWER: Yes. After all it is a per/view boolean. Not hard. 
 
 ## Challenges and mitigations
 
@@ -181,9 +123,6 @@ Planned flow:
 
 4. **Gradual migration risk** from Plotly legend interactions users may rely on.  
    *Mitigation:* staged rollout with temporary fallback flag and clear docs migration notes.
-
-5. **MathLive integration surface area** (frontend comms, packaging, notebook compatibility).  
-   *Mitigation:* isolate MathLive adapter behind a dedicated small widget bridge and keep parser/compile pipeline Python-owned.
 
 ## Status
 
