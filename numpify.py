@@ -360,6 +360,23 @@ class NumericFunction:
         return tuple(name for _, name in self.call_signature)
 
     def freeze(self, bindings: Mapping[sp.Symbol | str, Any] | Iterable[tuple[sp.Symbol | str, Any]] | None = None, /, **kwargs: Any) -> "NumericFunction":
+        """Return a clone with updated frozen/dynamic variable bindings.
+
+        Parameters
+        ----------
+        bindings:
+            Mapping or iterable of ``(key, value)`` entries. Keys resolve using
+            the same aliasing contract as plotting variable specs:
+
+            - ``Symbol`` keys target that exact symbol.
+            - ``str`` keys resolve first against keyed vars from ``vars=``
+              mapping inputs, then against generated call parameter names.
+
+            Values may be concrete values, :data:`DYNAMIC_PARAMETER`, or
+            :data:`UNFREEZE`.
+        **kwargs:
+            Convenience alias for string-keyed ``bindings`` entries.
+        """
         updates = self._normalize_bindings(bindings, kwargs)
         out = self._clone()
         for sym, value in updates.items():
@@ -375,6 +392,14 @@ class NumericFunction:
         return out
 
     def unfreeze(self, *keys: sp.Symbol | str) -> "NumericFunction":
+        """Return a clone with selected frozen/dynamic bindings removed.
+
+        Parameters
+        ----------
+        *keys:
+            Optional symbol/string keys resolved with the same contract as
+            :meth:`freeze`. If omitted, all frozen/dynamic bindings are cleared.
+        """
         if not keys:
             bound_symbols = tuple(sym for sym in self.all_vars if sym in self._frozen or sym in self._dynamic)
             return self.freeze({sym: UNFREEZE for sym in bound_symbols})
@@ -686,7 +711,31 @@ def _thaw_vars_spec(spec_key: Any) -> Any:
 
 
 def _normalize_vars(expr: sp.Basic, vars: _VarsInput | None) -> dict[str, Any]:
-    """Normalize vars into positional/keyed symbols and a round-trip spec."""
+    """Normalize supported variable-spec forms into canonical call metadata.
+
+    This helper is the shared variable-spec grammar used by :func:`numpify`
+    and callable-first plotting in :meth:`Figure.plot`.
+
+    Accepted ``vars`` forms
+    -----------------------
+    ``None``
+        Use all free symbols from ``expr`` sorted by ``sympy.default_sort_key``.
+    ``Symbol``
+        Single positional variable.
+    ``Iterable[Symbol]``
+        Positional variables in iterable order.
+    ``Mapping[int | str, Symbol]``
+        Mixed positional + keyed mapping. Integer keys define positional
+        entries and must be contiguous from ``0``. String keys define keyed
+        argument names.
+    ``(*symbols, mapping[str, Symbol])``
+        Positional prefix plus trailing keyed mapping.
+
+    Returns
+    -------
+    dict[str, Any]
+        Canonical fields ``all``, ``keyed``, ``spec``, and ``spec_key``.
+    """
     if vars is None:
         vars_tuple: Tuple[sp.Symbol, ...] = tuple(sorted(expr.free_symbols, key=sp.default_sort_key))
         return {"all": vars_tuple, "keyed": tuple(), "spec": vars_tuple, "spec_key": _freeze_vars_spec(vars_tuple)}

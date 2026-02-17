@@ -1041,6 +1041,17 @@ class Figure:
             Alias for ``opacity``.
         trace : mapping or None, optional
             Extra full-trace style fields as a mapping (advanced usage).
+        vars : Symbol or sequence or mapping, optional
+            Optional callable-variable specification shared with
+            :func:`numpify` normalization.
+
+            Supported forms:
+            - ``x`` (single symbol),
+            - ``(x, a, b)`` (ordered positional symbols),
+            - ``{0: x, 1: a, "b": b}`` (mixed positional+keyed mapping),
+            - ``(x, a, {"b": b})`` (tuple positional prefix + keyed mapping).
+
+            Integer mapping keys must be contiguous starting at ``0``.
 
         Returns
         -------
@@ -1059,6 +1070,14 @@ class Figure:
         -----
         Prefer explicit parameter setup with :meth:`parameter`/``parameters``
         before plotting.
+
+        The ``vars=`` grammar is normalized by :func:`numpify._normalize_vars`
+        so callable plotting and numeric helpers share one variable-resolution
+        contract.
+
+        String-keyed aliases from ``vars=`` mappings are the same keys accepted
+        by :meth:`numpify.NumericFunction.freeze` and
+        :meth:`numpify.NumericFunction.unfreeze`.
 
         All supported style options for this method are discoverable via
         :meth:`Figure.plot_style_options`.
