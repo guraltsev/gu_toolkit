@@ -14,11 +14,18 @@ This breaks a core tutorial path and makes the callable API appear unusable in b
 - The same notebook marks the follow-up callable-with-params cell as `# BUG same as above`, indicating the failure pattern is not isolated.
 
 ## TODO
-- [ ] Reproduce the failure with a deterministic regression test in `tests/` (preferably a focused unit/integration test around `Figure.plot` + callable input).
-- [ ] Define expected behavior for callable-first usage where `x` is the independent variable and must not be treated as missing dynamic parameter context.
-- [ ] Implement the fix in numeric function binding/render pipeline.
-- [ ] Add a notebook-oriented regression test suite entry (e.g., converting the failing notebook logic into executable pytest checks).
+- [x] Reproduce the failure with a deterministic regression test in `tests/` (focused on `Figure.plot` + callable input with mismatched callable arg name vs plot symbol).
+- [x] Define expected behavior for callable-first usage where `x` is the independent variable and must not be treated as missing dynamic parameter context.
+- [x] Implement the fix in callable normalization so explicit `vars=(...)` rebinding is respected for Python callables.
+- [x] Add a notebook-oriented regression test suite entry by encoding the failing notebook behavior in pytest.
 - [ ] Update the example notebook once fixed to remove stale BUG comments and keep the example runnable.
+
+## Implementation checklist
+- [x] Assessed completion state and confirmed regression still reproducible from notebook traceback.
+- [x] Planned remediation: rebind callable variable signature to explicit `vars=` symbols during plot input normalization.
+- [x] Implemented fix in `Figure._normalize_plot_inputs`.
+- [x] Added regression test coverage for callable argument-name mismatch (`lambda t, a: ...` with `vars=(x, a)`).
+- [ ] External review and manual notebook validation pending before closure.
 
 ## Exit criteria
 - Callable plotting in notebook-style flows executes without `KeyError` for `x`.

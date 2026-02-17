@@ -63,6 +63,27 @@ def test_plot_supports_callable_first_multivariable_with_explicit_vars() -> None
     assert np.allclose(ys, 3.0 * xs)
 
 
+def test_plot_callable_first_explicit_vars_rebinds_callable_order_to_plot_variable() -> None:
+    """Regression test for issue-023 notebook callable/x context mismatch.
+
+    When a callable argument name (e.g. ``t``) differs from the symbol used as
+    plot variable (e.g. ``x``), ``plot(..., vars=(x, ...))`` should treat
+    ``x`` as the positional sample variable and only mark the remaining symbols
+    as dynamic figure parameters.
+    """
+    x, a = sp.symbols("x a")
+    fig = Figure()
+
+    plot = fig.plot(lambda t, a: a * t, x, vars=(x, a), id="ax_rebound")
+    fig.parameters[a].value = 4.0
+    plot.render()
+
+    xs = plot.x_data
+    ys = plot.y_data
+    assert xs is not None and ys is not None
+    assert np.allclose(ys, 4.0 * xs)
+
+
 def test_plot_callable_first_multivariable_requires_var_or_vars() -> None:
     fig = Figure()
 
