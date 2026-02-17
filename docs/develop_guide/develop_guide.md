@@ -84,6 +84,7 @@ Key responsibilities:
 - Owns the layout manager (`FigureLayout`).
 - Owns the parameter manager (`ParameterManager`).
 - Owns the info panel manager (`InfoPanelManager`).
+- Owns the legend panel manager (`LegendPanelManager`).
 - Provides the public `.plot(...)` API (through `Plot` instances).
 - Triggers re-rendering on parameter changes or relayout events.【F:Figure.py†L1503-L1687】
 
@@ -130,7 +131,17 @@ Key behaviors:
 - IDs are versioned (`info:1`, `info:2`, ...) to avoid collisions and allow stable re-access.
 - Components can be registered by ID for retrieval or coordinated updates.【F:Figure.py†L963-L1101】
 
-### 5. `Plot` (One curve = one trace)
+### 5. `LegendPanelManager` (Per-view legend sidebar)
+
+`LegendPanelManager` controls the dedicated legend side panel. It owns legend row widget lifecycle, keeps deterministic row ordering, filters rows by active view membership, and synchronizes row checkbox state with each plot's visibility state.
+
+Key behaviors:
+- Rows are keyed by stable plot IDs.
+- Labels render through `HTMLMath` and support plain text plus LaTeX-style math markup.
+- Toggle state writes visibility back to the underlying plot model (`plot.visible`).
+- Refresh operations are incremental and idempotent so view switches and plot updates do not require rebuilding the entire sidebar tree.
+
+### 6. `Plot` (One curve = one trace)
 
 Each plotted expression is represented as a `Plot`. It converts a SymPy expression into a compiled NumPy function via `numpify_cached`, samples the domain, evaluates with the current parameter values, and updates a Plotly trace. This keeps the math/rendering logic scoped to a single curve, rather than mixing it into the figure class itself.【F:Figure.py†L1102-L1460】
 
@@ -141,7 +152,7 @@ Key behaviors:
 - Calls `render()` to update its trace based on the latest parameters and ranges.【F:Figure.py†L1102-L1460】
 - Plot-style kwargs are explicitly discoverable via `Figure.plot_style_options()` and module-level `plot_style_options()`, which enumerate all supported style shortcuts (`color`, `thickness`, `dash`, `opacity`, `line`, `trace`).【F:Figure.py†L2431-L2443】
 
-### 6. `PlotlyPane` (Resilient Plotly sizing)
+### 7. `PlotlyPane` (Resilient Plotly sizing)
 
 Plotly `FigureWidget` sizing can be unreliable in dynamic Jupyter layouts. `PlotlyPane` adds a hidden `anywidget` driver (`PlotlyResizeDriver`) with a front-end JS layer that monitors container size changes and forces Plotly to resize accordingly. This is essential when embedding plots in flex layouts, sidebars, or dynamic panels.【F:PlotlyPane.py†L1-L157】
 
@@ -230,7 +241,9 @@ Plotly’s `FigureWidget` requires a concrete pixel height to render correctly. 
 
 ### Sidebar visibility
 
-The right-side controls panel is hidden until it contains content. This helps keep the layout compact for simple plots and is toggled automatically when parameters or info widgets are added.【F:Figure.py†L430-L506】
+The right-side controls panel is hidden until it contains content. This helps keep the layout compact for simple plots and is toggled automatically when parameters, info widgets, or legend rows are present.
+
+Legend interactions are now centered in the toolkit-owned side panel instead of Plotly's in-chart legend. Users toggle visibility from legend row checkboxes; rows are filtered to the active view tab.
 
 ---
 
@@ -247,6 +260,7 @@ Figure’s architecture is intentionally modular:
 - **FigureLayout** owns the widget tree and layout behavior.
 - **ParameterManager** manages slider state and hooks.
 - **InfoPanelManager** manages the info sidebar and stateful components.
+- **LegendPanelManager** manages legend rows and visibility synchronization for the sidebar legend.
 - **Plot** isolates math → trace rendering.
 - **PlotlyPane** solves Plotly sizing issues in dynamic Jupyter layouts.
 
