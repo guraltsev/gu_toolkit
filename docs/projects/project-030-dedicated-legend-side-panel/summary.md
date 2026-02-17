@@ -1,6 +1,6 @@
 # Project 030: Dedicated Per-Tab Legend Side Panel (Summary)
 
-**Status:** In progress (Phases 1-5 implemented)
+**Status:** In progress (Phases 1-5 and 7 implemented; Phase 6 deferred)
 **Type:** Architecture and implementation plan
 
 ## Goal/Scope
@@ -87,6 +87,8 @@ And expand sidebar visibility API to include legend presence:
 - Codebase reviewed for current architecture and integration points.
 - Summary and plan rewritten for implementation-ready execution.
 - Phases 1-5 are now implemented in code and covered by project tests.
+- Phase 7 documentation and migration notes are now updated in the docs tracker and developer guide.
+- Phase 6 remains intentionally deferred for a follow-up v1.1 track.
 
 ## TODO
 
@@ -95,7 +97,7 @@ And expand sidebar visibility API to include legend presence:
 - [x] Add visibility/label synchronization tests.
 - [x] Add active-view filtering tests.
 - [x] Add migration tests for Plotly legend disablement.
-- [ ] Update docs/examples to show side-panel legend workflow.
+- [x] Update docs/examples to show side-panel legend workflow.
 - [x] Harden legend label rendering with safe fallback/escaping behavior.
 
 ## Exit criteria

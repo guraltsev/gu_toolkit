@@ -84,3 +84,21 @@ For plotting examples in docs and notebooks, use the callable-first API style:
 
 Use callable-first examples consistently in documentation and notebooks.
 
+## Legend workflow and migration notes
+
+The toolkit now treats the **sidebar legend panel** as the primary legend UI for notebook workflows.
+
+- Use the per-row legend checkbox in the sidebar to show/hide plots.
+- Legend rows are filtered by the **active view tab**.
+- Plot labels support plain text and LaTeX-style math markup through the panel renderer.
+
+### Mapping from old Plotly legend behavior
+
+- Old: click Plotly legend entries in-chart to toggle traces.
+- New: use the legend side-panel checkbox next to each plot label.
+
+- Old: rely on `"legendonly"` visibility as a user-facing state.
+- New: prefer boolean visibility (`True`/`False`) controlled by the side panel; legacy `"legendonly"` is compatibility-only.
+
+- Old: `showlegend=True` as the default interactive legend surface.
+- New: toolkit-owned side panel is the canonical legend interaction path; Plotly legend is no longer required for normal usage.
