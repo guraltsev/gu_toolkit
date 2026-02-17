@@ -6,6 +6,8 @@ in `docs\bugs`.
 
 - Assess the state of completion.
 
+- Treat files in `docs\notebook` as source of truth for whether this bug is still present. If your finding is in contradiction with the behavior documented in the notebook issue a WARNING. NEVER change `docs\notebook` files on your own. 
+
 - Plan remediation.
 
 - If solution is unclear and requires feedback provide necessary information in the form of an additional section in the bug markdown file and request ANSWERS from the user. Provide clear alternatives with rationale Commit and push the changes to the bug description and STOP. Do not implement if correct solution is not clear. 
