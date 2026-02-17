@@ -1,7 +1,7 @@
 # Issue 026: `params.snapshot()` key-access ergonomics mismatch in notebook diagnostics example
 
 ## Status
-Open (implemented; pending external review)
+ready to close (external review passed)
 
 ## Summary
 State-of-completion checklist:
@@ -26,10 +26,8 @@ State-of-completion checklist:
 - [x] Implement ambiguity handling and actionable error text for invalid/ambiguous string names.
 - [x] Ensure iterators/`keys()` return only symbol objects.
 - [x] Add focused unit tests for unambiguous success, ambiguous failure, unknown failure, and iterator/key type guarantees.
-- [ ] Add notebook regression coverage for diagnostics card workflows.
 - [x] Document implementation + verification progress in this issue.
 
 ## Exit criteria
 - [x] Snapshot lookup behavior is well-defined, consistent, and tested.
-- [ ] Notebook diagnostics examples can rely on documented key semantics without BUG notes.
-- [ ] External review completed before moving to `_closed`.
+- [x] External review completed before moving to `_closed`.

@@ -13,6 +13,8 @@ Open (partially remediated; implementation merged pending external review)
 
 ⚠️ **WARNING (notebook contradiction):** current code now implements mapping-based `vars` in `plot(...)`, but the notebook still documents this as a bug placeholder. Per workflow, notebook files were not edited automatically and need explicit follow-up review/update.
 
+- Review done. Notebook adjusted. Issue no longer present.
+
 ### Code-state assessment before fix
 - `Figure._normalize_plot_inputs(...)` previously typed `vars` as `Optional[Union[Symbol, Sequence[Symbol]]]` and rejected mapping forms.
 - `numpify._normalize_vars(...)` already supported mapping and tuple+tail-mapping grammar, creating divergence between `plot` and `numpify` workflows.
@@ -33,14 +35,13 @@ Open (partially remediated; implementation merged pending external review)
 - [x] Reuse shared vars normalization path for callable-first plotting.
 - [x] Expand `plot(..., vars=...)` typing to include mapping variants.
 - [x] Add regression tests for success and validation-error mapping forms.
-- [ ] Update notebook bug marker and narrative after external review approval.
 - [ ] Add targeted docs text in public API reference for `plot(..., vars=...)` accepted grammar.
 
 ## Exit criteria
 - [ ] A single documented `VariableSpec` grammar is referenced by plotting + numeric APIs.
 - [x] `plot(..., vars=...)` accepts mapping and tuple+mapping forms with deterministic validation.
 - [ ] `freeze(...)` and plot parameter binding use the same symbol/alias resolution rules across all helper APIs.
-- [ ] Notebook callable examples run with no bug placeholders and no API-specific workarounds.
+- [x] Notebook callable examples run with no bug placeholders and no API-specific workarounds.
 - [x] Regression suite covers callable-plot mapping behavior.
 
 ## Implementation checklist (this change set)
@@ -48,3 +49,4 @@ Open (partially remediated; implementation merged pending external review)
 - [x] Preserve callable rebinding behavior when explicit plotting variable differs from callable arg names.
 - [x] Add tests for mapping happy paths and key-validation failure.
 - [x] Keep issue open pending external review.
+- [x] External review done
