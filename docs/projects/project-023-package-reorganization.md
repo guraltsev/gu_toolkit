@@ -1,47 +1,131 @@
 # Project 023: Package Reorganization
 
-**Status:** Backlog  
-**Priority:** Low
-
-## Status
-Backlog
+**Status:** Backlog
+**Priority:** Medium
 
 ## Goal/Scope
-Reorganize the flat module layout into focused subpackages to improve long-term maintainability.
 
-## Proposed Areas
-- `figure/` for figure orchestration and rendering.
-- `widgets/` for widget implementations.
-- `math/` for symbolic/numeric helpers.
-- `core/` for protocols, events, snapshots, and utilities.
+Reorganize the flat 29-module layout into focused subpackages that codify
+the layered architecture already present by convention. The public API
+(`from gu_toolkit import ...`) must remain unchanged throughout migration.
+
+## Context
+
+The codebase has a clear conceptual layering (math engine → parameter
+management → plot orchestration → UI widgets → public API → serialization)
+but all 29 modules live in a single flat directory. This makes it
+difficult for new contributors to build a mental model, clutters IDE
+navigation, and prevents enforcing boundaries between layers.
+
+Additionally, 4 backward-compatibility shims (`prelude.py`,
+`prelude_extensions.py`, `prelude_support.py`, `numeric_callable.py`)
+exist as pure re-export modules and should be consolidated with
+deprecation warnings.
+
+File naming is inconsistent: most modules use `snake_case` but 7 use
+`PascalCase` (`Figure.py`, `Slider.py`, `NamedFunction.py`, `ParamRef.py`,
+`ParseLaTeX.py`, `InputConvert.py`, `PlotlyPane.py`).
+
+## Proposed subpackage structure
+
+```
+gu_toolkit/
+├── core/                    # Protocols, events, state, utilities
+│   ├── param_event.py       # ParamEvent
+│   ├── param_ref.py         # ParamRef, ProxyParamRef
+│   ├── parameter_snapshot.py
+│   ├── context.py           # figure_context → context
+│   ├── input_convert.py     # InputConvert → input_convert
+│   └── debouncing.py
+│
+├── figure/                  # Figure orchestration and components
+│   ├── core.py              # Figure class
+│   ├── api.py               # Module-level helpers (from project-022)
+│   ├── layout.py            # FigureLayout, OneShotOutput
+│   ├── parameters.py        # ParameterManager
+│   ├── info.py              # InfoPanelManager
+│   ├── legend.py            # LegendPanelManager
+│   ├── plot.py              # Plot, PlotHandle
+│   └── view.py              # View dataclass
+│
+├── math/                    # Symbolic and numeric engine
+│   ├── numpify.py           # numpify, NumericFunction
+│   ├── named_function.py    # NamedFunction
+│   ├── operations.py        # NIntegrate, Fourier, play
+│   ├── latex.py             # parse_latex, LatexParseError
+│   └── extensions.py        # SymbolFamily, FunctionFamily, Infix
+│
+├── widgets/                 # UI components
+│   ├── slider.py            # FloatSlider
+│   └── plotly_pane.py       # PlotlyPane
+│
+├── snapshot/                # Serialization and reproducibility
+│   ├── figure_snapshot.py   # FigureSnapshot
+│   ├── plot_snapshot.py     # PlotSnapshot
+│   └── codegen.py           # Code generation
+│
+├── notebook_namespace.py    # Star-import convenience namespace
+└── __init__.py              # Unchanged public API re-exports
+```
+
+## Migration strategy
+
+1. **Migrate lowest-risk modules first:** `math/` and `widgets/` are
+   self-contained with minimal internal dependents.
+2. **Then `core/`:** Protocols and events are imported widely but have no
+   circular dependencies.
+3. **Then `snapshot/`:** Serialization layer depends on core but not on
+   figure.
+4. **Then `figure/`:** Depends on project-022 completing the Figure
+   decomposition first.
+5. **At each step:** Move module, update internal imports, add re-export in
+   `__init__.py`, run full test suite.
+6. **Normalize to snake_case** during each move (e.g., `ParseLaTeX.py` →
+   `math/latex.py`).
+7. **Deprecate shims:** Add `DeprecationWarning` to `prelude.py`,
+   `prelude_extensions.py`, `prelude_support.py`, and
+   `numeric_callable.py`. Remove after one release cycle.
 
 ## TODO checklist
-- [ ] Draft a no-break public API compatibility matrix.
-- [ ] Define migration sequence (small moves with tests after each step).
-- [ ] Add compatibility shims for legacy internal imports where necessary.
-- [ ] Perform snake_case cleanup as part of module moves.
+
+- [ ] Draft no-break public API compatibility matrix.
+- [ ] Migrate `math/` subpackage (lowest risk, self-contained).
+- [ ] Migrate `widgets/` subpackage.
+- [ ] Migrate `core/` subpackage.
+- [ ] Migrate `snapshot/` subpackage.
+- [ ] Migrate `figure/` subpackage (after project-022).
+- [ ] Normalize all module names to snake_case during moves.
+- [ ] Add deprecation warnings to backward-compatibility shims.
+- [ ] Update test imports to use new paths.
+- [ ] Verify `__init__.py` re-exports preserve public API.
 
 ## Exit criteria
-- [ ] Public API remains stable.
-- [ ] Internal structure is grouped by responsibility.
-- [ ] Test suite passes during and after migration.
 
-## Summary of design
-The implementation/design details for this project are captured in the existing project-specific sections above (for example, context, proposed areas, implementation plan, or architecture notes). This section exists to keep the project format consistent across active project records.
+- [ ] All modules are organized into subpackages by responsibility.
+- [ ] Public API (`from gu_toolkit import ...`) is unchanged.
+- [ ] All module names follow snake_case convention.
+- [ ] Backward-compatibility shims emit deprecation warnings.
+- [ ] Test suite passes throughout and after migration.
 
-## Open questions
-- None currently beyond items already tracked in the TODO checklist.
+## Dependencies
+
+- **project-022 (Figure Decomposition):** The `figure/` subpackage
+  migration is cleanest after Figure.py is decomposed. Other subpackages
+  can proceed independently.
+- **project-021 (Packaging Hardening):** The flat-vs-`src/` layout
+  decision should be resolved here; project-021 documents the convention.
 
 ## Challenges and mitigations
-- **Challenge:** Scope drift as related cleanup and modernization work is discovered.
-  **Mitigation:** Keep TODO items explicit and only add new work after triage.
-- **Challenge:** Regressions while refactoring existing behavior.
-  **Mitigation:** Require targeted tests and keep delivery phased so the toolkit remains usable between milestones.
 
-## Completion Assessment (2026-02-17)
+- **Challenge:** Internal imports between modules change during migration.
+  **Mitigation:** Move one subpackage at a time; run full test suite after
+  each move; use `__init__.py` re-exports as a safety net.
 
-- [ ] Planned subpackage reorganization (`figure/`, `widgets/`, `math/`, `core/`) has not been implemented.
-- [ ] No-break API compatibility matrix and staged migration plan are still pending.
-- [ ] Compatibility shims and snake_case cleanup tasks are still open.
-- [ ] Therefore, this project remains **open**.
+- **Challenge:** External users may import internal paths.
+  **Mitigation:** Only the `__init__.py` re-exports are the public API.
+  Document this clearly.
 
+- **Challenge:** PascalCase → snake_case rename may break existing
+  references in notebooks and documentation.
+  **Mitigation:** Re-export old names during transition; search and update
+  all notebooks and docs.

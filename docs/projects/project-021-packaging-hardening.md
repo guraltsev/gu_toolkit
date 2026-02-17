@@ -1,51 +1,59 @@
 # Project 021: Packaging Hardening
 
-**Status:** Active  
+**Status:** Active
 **Priority:** Medium
 
+## Goal/Scope
+
+Harden the packaging, versioning, and release infrastructure so that
+installs are reproducible, artifacts are clean, and the project is ready
+for a public versioning scheme.
+
 ## Context
-Packaging is now in place (`pyproject.toml`, `requirements.txt`, `tox.ini`, pytest/coverage config), so the original refactor proposal is no longer accurate. This project tracks only remaining hardening work.
+
+Baseline packaging is in place (`pyproject.toml`, `requirements.txt`,
+`tox.ini`, optional dependency groups). This project tracks the remaining
+hardening work: `.gitignore` expansion, versioning policy, release workflow
+documentation, and resolving the flat-vs-`src/` layout question.
+
+The layout decision is intentionally deferred until project-023 (Package
+Reorganization) is planned, as the two are coupled.
 
 ## Completed
-- [x] Add `pyproject.toml` build and project metadata.
-- [x] Add runtime dependency manifest (`requirements.txt`).
-- [x] Add local test tooling (`tox.ini`, pytest config).
 
-## Goal/Scope
-See existing context and scope sections below for detailed boundaries.
+- [x] `pyproject.toml` with PEP 621 build and project metadata.
+- [x] Runtime dependency manifest (`requirements.txt`).
+- [x] Local test tooling (`tox.ini`, pytest/coverage config).
+- [x] Optional dependency groups (`[dev]`, `[pandas]`) in package metadata.
 
 ## TODO checklist
-- [ ] Expand `.gitignore` to include common Python build/test artifacts.
-- [ ] Decide whether to keep flat package layout or migrate to `src/` layout.
-- [ ] Add versioning/release policy notes (tagging + publish process).
-- [ ] Verify optional dependency groups are documented for contributors.
+
+- [ ] Expand `.gitignore` to cover standard Python build/test artifacts
+      (`*.egg-info/`, `dist/`, `build/`, `.tox/`, `.coverage`, `htmlcov/`,
+      `.env`, `.venv/`).
+- [ ] Define versioning scheme (CalVer or SemVer) and document in
+      `develop_guide/`.
+- [ ] Add release checklist or GitHub Actions release-on-tag workflow.
+- [ ] Document install and test commands for contributors in the developer
+      guide.
+- [ ] Coordinate with project-023 on the flat-vs-`src/` layout decision
+      (layout migration is project-023 scope; this project documents the
+      chosen convention).
 
 ## Exit criteria
-- [ ] Packaging/release docs reflect actual workflow.
-- [ ] Local/dev install and test commands are documented and reproducible.
 
-
-## Status
-Active
-
-## Summary of design
-The implementation/design details for this project are captured in the existing project-specific sections above (for example, context, proposed areas, implementation plan, or architecture notes). This section exists to keep the project format consistent across active project records.
-
-## Open questions
-- None currently beyond items already tracked in the TODO checklist.
+- [ ] `.gitignore` covers all standard Python artifacts.
+- [ ] Versioning policy is documented and the version field in
+      `pyproject.toml` follows it.
+- [ ] A contributor can install, test, and build by following documented
+      commands.
 
 ## Challenges and mitigations
-- **Challenge:** Scope drift as related cleanup and modernization work is discovered.
-  **Mitigation:** Keep TODO items explicit and only add new work after triage.
-- **Challenge:** Regressions while refactoring existing behavior.
-  **Mitigation:** Require targeted tests and keep delivery phased so the toolkit remains usable between milestones.
 
-## Completion Assessment (2026-02-17)
+- **Challenge:** Layout decision is coupled to package reorganization.
+  **Mitigation:** Defer layout migration to project-023; this project
+  documents the convention once decided.
 
-- [x] Baseline packaging/test scaffolding is in place (`pyproject.toml`, `requirements.txt`, `tox.ini`).
-- [x] Optional dependency groups are present in package metadata.
-- [ ] `.gitignore` hardening for broader Python build/test artifacts is still pending.
-- [ ] Packaging/release workflow documentation is still incomplete.
-- [ ] Layout decision (`flat` vs `src/`) is still open.
-- [ ] Therefore, this project remains **open**.
-
+- **Challenge:** Choosing a versioning scheme for a pre-1.0 library.
+  **Mitigation:** Start with `0.x.y` SemVer; upgrade to CalVer or `1.0`
+  only when the public API is stable.

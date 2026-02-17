@@ -1,45 +1,85 @@
 # Project 022: Figure Module Decomposition
 
-**Status:** Backlog  
-**Priority:** Medium
-
-## Status
-Backlog
+**Status:** Backlog
+**Priority:** High
 
 ## Goal/Scope
-Reduce `Figure.py` complexity by separating core class logic from module-level convenience helpers and proxies.
 
-## Scope
-- Move module-level helper functions (`plot`, `parameter`, `render`, etc.) to a dedicated API module.
-- Keep public imports stable via `__init__.py` re-exports.
-- Remove stale comments/doc duplication while splitting.
+Reduce `Figure.py` from its current 67 KB / ~1,987 lines to a manageable
+coordinator by extracting self-contained subsystems into dedicated modules.
+The public API (`from gu_toolkit import Figure, plot, parameter, ...`) must
+remain unchanged.
+
+## Context
+
+`Figure.py` is the largest module by a wide margin. It contains 49 methods
+across 4 classes plus 17 module-level helper functions. The delegation
+pattern to managers (`ParameterManager`, `InfoPanelManager`,
+`LegendPanelManager`, `FigureLayout`) is sound, but the coordinator itself
+has accumulated too many orchestration responsibilities.
+
+Key complexity hotspots identified in the code review:
+
+- **`plot()` method (214 lines):** Mixes input normalization, parameter
+  auto-detection, style resolution, create-vs-update branching, and numeric
+  function setup.
+- **`_normalize_plot_inputs()` (110 lines):** Handles 5+ input formats
+  with deep if-elif chains.
+- **Module-level helpers (17 functions, lines 1753–1987):** Procedural
+  wrappers that route through `_require_current_figure()`.
+- **View management methods:** `add_view()`, `set_active_view()`,
+  `remove_view()`, `view()` and associated stale-marking logic.
+- **Backward-compatibility aliases:** `self._figure` and `self._pane`
+  mirror active view runtime and can go stale.
+
+## Proposed extraction targets
+
+1. **`figure_api.py`** — Move the 17 module-level helper functions (`plot`,
+   `parameter`, `render`, `set_title`, `get_title`, `set_x_range`, etc.)
+   to a dedicated module. These functions only delegate to
+   `_require_current_figure()` and carry no state.
+
+2. **`PlotInputNormalizer`** — Extract `_normalize_plot_inputs()`,
+   `_coerce_symbol()`, `_rebind_numeric_function_vars()` into a stateless
+   normalizer. This makes plot input contracts independently testable and
+   isolates the most complex logic in `plot()`.
+
+3. **`ViewManager`** — Extract `add_view()`, `set_active_view()`,
+   `remove_view()`, `view()`, `_active_view()`, and view stale-marking
+   into a dedicated manager following the established manager pattern.
+
+4. **Deprecation of `self._figure` / `self._pane`** — Replace with
+   explicit `figure_widget_for(view_id)` access.
 
 ## TODO checklist
-- [ ] Define target module split (`Figure` class vs helper API).
-- [ ] Implement move with compatibility re-exports.
-- [ ] Add regression tests for helper import paths.
-- [ ] Remove stale/duplicate module comments after split.
+
+- [ ] Extract module-level helpers to `figure_api.py` with re-exports.
+- [ ] Extract plot input normalization to a testable unit.
+- [ ] Extract view management to a `ViewManager`.
+- [ ] Deprecate `self._figure` / `self._pane` aliases.
+- [ ] Add regression tests for all public import paths.
+- [ ] Verify `Figure.py` is reduced to coordinator-only responsibilities.
 
 ## Exit criteria
-- [ ] `Figure` core class file is materially smaller and easier to navigate.
-- [ ] Existing user-facing imports remain valid.
 
-## Summary of design
-The implementation/design details for this project are captured in the existing project-specific sections above (for example, context, proposed areas, implementation plan, or architecture notes). This section exists to keep the project format consistent across active project records.
-
-## Open questions
-- None currently beyond items already tracked in the TODO checklist.
+- [ ] `Figure.py` is materially smaller (target: under 800 lines).
+- [ ] Each extracted module has focused unit tests.
+- [ ] All existing user-facing imports remain valid via `__init__.py`
+      re-exports.
+- [ ] Test suite passes with no regressions.
 
 ## Challenges and mitigations
-- **Challenge:** Scope drift as related cleanup and modernization work is discovered.
-  **Mitigation:** Keep TODO items explicit and only add new work after triage.
-- **Challenge:** Regressions while refactoring existing behavior.
-  **Mitigation:** Require targeted tests and keep delivery phased so the toolkit remains usable between milestones.
 
-## Completion Assessment (2026-02-17)
+- **Challenge:** Extracting `PlotInputNormalizer` requires careful
+  handling of closures that reference `self` (Figure instance).
+  **Mitigation:** Pass required state as explicit parameters to the
+  normalizer; avoid capturing `self`.
 
-- [ ] `Figure.py` decomposition has not been executed; helper APIs are still co-located with core figure internals.
-- [ ] Compatibility re-export migration and corresponding regression tests are not complete.
-- [ ] Target split design remains to be finalized.
-- [ ] Therefore, this project remains **open**.
+- **Challenge:** View stale-marking logic is scattered across `render()`,
+  `_run_relayout()`, and parameter change hooks.
+  **Mitigation:** Centralize stale-marking in `ViewManager` with a single
+  `mark_stale()` entry point.
 
+- **Challenge:** Module-level helpers are the most-imported API surface.
+  **Mitigation:** Keep `from gu_toolkit import plot, parameter, render`
+  working via `__init__.py` re-exports; never break the public path.

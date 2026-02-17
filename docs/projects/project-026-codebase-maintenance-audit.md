@@ -1,43 +1,41 @@
 # Project 026: Codebase Maintenance Audit Follow-through
 
-**Status:** Active  
-**Priority:** Medium
-
-## Status
-Active
+**Status:** Active
+**Priority:** Low
 
 ## Goal/Scope
-Track follow-up actions from the code-analysis report after removing the legacy `refactor/` bucket.
 
-## Completed Since Audit
-- [x] Figure context stack moved to thread-local storage (`figure_context.py`), resolving the prior thread-safety concern.
+Track follow-up actions from the original code-analysis report after
+removing the legacy `refactor/` bucket. This project is now largely
+superseded by project-032 (Codebase Streamlining), which provides a
+structured umbrella for the improvement work identified by the
+comprehensive code review.
+
+## Completed
+
+- [x] Figure context stack moved to thread-local storage
+      (`figure_context.py`), resolving the prior thread-safety concern.
+- [x] Comprehensive code review conducted and documented in
+      `docs/Discussions/code-review-strengths-weaknesses.md`.
+- [x] Improvement areas organized into specific projects (005, 021, 022,
+      023, 031, 033) under umbrella project-032.
 
 ## TODO checklist
-- [ ] Close open bug tickets raised from the audit (see active issues 018-020).
-- [ ] Re-run structural audit after those bugs are resolved.
-- [ ] Re-prioritize decomposition/reorganization projects with fresh code metrics.
-- [ ] Archive this project to `_completed/` once follow-through items are closed.
 
+- [ ] Close open bug tickets raised from the original audit (see active
+      issues in `docs/Bugs/`).
+- [ ] Archive this project to `_completed/` once remaining bug tickets
+      are resolved.
 
 ## Exit criteria
-- [ ] Planned deliverables are implemented and validated by tests.
 
-## Summary of design
-The implementation/design details for this project are captured in the existing project-specific sections above (for example, context, proposed areas, implementation plan, or architecture notes). This section exists to keep the project format consistent across active project records.
-
-## Open questions
-- None currently beyond items already tracked in the TODO checklist.
+- [ ] All audit-related bug tickets are closed or migrated to specific
+      projects.
+- [ ] This project is archived.
 
 ## Challenges and mitigations
-- **Challenge:** Scope drift as related cleanup and modernization work is discovered.
-  **Mitigation:** Keep TODO items explicit and only add new work after triage.
-- **Challenge:** Regressions while refactoring existing behavior.
-  **Mitigation:** Require targeted tests and keep delivery phased so the toolkit remains usable between milestones.
 
-## Completion Assessment (2026-02-17)
-
-- [x] One key audit follow-through item is complete (thread-local figure context stack).
-- [ ] Audit-related open bugs are not all closed yet (active bug tickets remain in `docs/Bugs/`).
-- [ ] Structural re-audit and reprioritization pass have not yet been completed.
-- [ ] Therefore, this project remains **open**.
-
+- **Challenge:** Some original audit items have been absorbed into
+  project-032 subprojects.
+  **Mitigation:** Verify no items are lost; cross-reference project-032
+  TODO list against original audit findings.
