@@ -363,9 +363,10 @@ def figure_to_code(snapshot: FigureSnapshot, options: CodegenOptions | None = No
     if options.include_imports:
         lines.append("import sympy as sp")
         if options.interface_style == "context_manager":
-            lines.append("from gu_toolkit import Figure, parameter, plot, info")
+            lines.append("from gu_toolkit import Figure, parameter, plot, info, set_title")
         else:
             lines.append("from gu_toolkit import Figure")
+        lines.append("from IPython.display import display")
         lines.append("")
 
     # -- symbols ------------------------------------------------------------
@@ -383,7 +384,7 @@ def figure_to_code(snapshot: FigureSnapshot, options: CodegenOptions | None = No
         f"y_range=({_fmt_float(snapshot.y_range[0])}, {_fmt_float(snapshot.y_range[1])}), "
         f"sampling_points={snapshot.sampling_points})"
     )
-    if snapshot.title:
+    if snapshot.title and options.interface_style == "figure_methods":
         lines.append(f"fig.title = {snapshot.title!r}")
     if getattr(snapshot, "views", ()):
         for view in snapshot.views:
@@ -397,6 +398,7 @@ def figure_to_code(snapshot: FigureSnapshot, options: CodegenOptions | None = No
             )
         if snapshot.active_view_id != "main":
             lines.append(f"fig.set_active_view({snapshot.active_view_id!r})")
+    lines.append("display(fig)")
     lines.append("")
 
     # -- operation body -----------------------------------------------------
@@ -431,6 +433,8 @@ def figure_to_code(snapshot: FigureSnapshot, options: CodegenOptions | None = No
 
     if options.interface_style == "context_manager":
         lines.append("with fig:")
+        if snapshot.title:
+            lines.append(f"    set_title({snapshot.title!r})")
         if not body_lines:
             lines.append("    pass")
             lines.append("")
@@ -442,9 +446,5 @@ def figure_to_code(snapshot: FigureSnapshot, options: CodegenOptions | None = No
                     lines.append(f"    {line}")
     else:
         lines.extend(body_lines)
-
-    # -- display ------------------------------------------------------------
-    lines.append("fig")
-    lines.append("")
 
     return "\n".join(lines)

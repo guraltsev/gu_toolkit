@@ -1272,6 +1272,52 @@ class Figure:
 
         return figure_to_code(self.snapshot(), options=options)
 
+    @property
+    def code(self) -> str:
+        """Read-only shorthand for :meth:`to_code`.
+
+        Returns
+        -------
+        str
+            Generated Python source that recreates the current figure state.
+
+        Examples
+        --------
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> print(fig.code)  # doctest: +SKIP
+
+        See Also
+        --------
+        get_code : Configurable code generation helper.
+        to_code : Underlying serializer implementation.
+        """
+        return self.to_code()
+
+    def get_code(self, options: "CodegenOptions | None" = None) -> str:
+        """Return generated figure code with optional serialization settings.
+
+        Parameters
+        ----------
+        options : CodegenOptions | None, optional
+            Optional code-generation configuration.
+
+        Returns
+        -------
+        str
+            Generated Python source code for the current figure state.
+
+        Examples
+        --------
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> print(fig.get_code())  # doctest: +SKIP
+
+        See Also
+        --------
+        code : Read-only default code serialization.
+        to_code : Keyword-only variant used internally.
+        """
+        return self.to_code(options=options)
+
     def info(
         self,
         spec: Union[str, Callable[["Figure", Any], str], Sequence[Union[str, Callable[["Figure", Any], str]]]],
