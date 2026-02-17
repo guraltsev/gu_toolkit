@@ -117,3 +117,12 @@ Dedicated error families:
 - `Figure.plot(...)` and module-level `plot(...)` accept callable-first forms (`plot(f, x, ...)` and `plot(f, (x, xmin, xmax), ...)`).
 - Supported first arguments in runtime are: SymPy expressions, `NumericFunction`, and plain Python callables with fixed positional arguments.
 - For multi-variable callables/`NumericFunction`, users must provide `vars=...` when variable inference is ambiguous.
+
+## Completion Assessment (2026-02-17)
+
+- [x] Runtime callable-first behavior is implemented (`Figure.plot(...)` and module-level `plot(...)`).
+- [x] Regression/acceptance tests for callable-first semantics are present and passing (`tests/test_project029_plot_callable_first.py`).
+- [x] Documentation and design notes are updated with callable-first conventions (project summary/plan and docs policy references).
+- [x] Exit criteria for this project are satisfied.
+- [x] This project is **complete** and can be moved to `docs/projects/_completed/`.
+
