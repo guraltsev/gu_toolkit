@@ -1,4 +1,5 @@
-The example notebooks in `\docs\notebooks` have some bugs.
+Analyze ALL notebooks in `\docs\notebooks`. They described some bugs.
+
 - Analyze them, analyze the code. 
 
 - For each one (or multiple if related) create an issue in `docs\bugs` as per standards of this repo. 
