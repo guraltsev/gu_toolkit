@@ -83,3 +83,13 @@ Key complexity hotspots identified in the code review:
 - **Challenge:** Module-level helpers are the most-imported API surface.
   **Mitigation:** Keep `from gu_toolkit import plot, parameter, render`
   working via `__init__.py` re-exports; never break the public path.
+
+## Completion Assessment (2026-02-18)
+
+- [ ] `Figure.py` is still monolithic (currently ~2,098 lines), above the under-800 target.
+- [ ] Module-level helper API has not been extracted to `figure_api.py`; helper wrappers remain in `Figure.py`.
+- [ ] Plot input normalization remains embedded in `Figure.py` (`_normalize_plot_inputs`).
+- [ ] View management extraction to a dedicated `ViewManager` is not complete.
+- [ ] Legacy aliases (`self._figure` / `self._pane`) are still present.
+
+**Result:** Project remains **open**. Scope is largely unstarted in code, so no completion move is appropriate.

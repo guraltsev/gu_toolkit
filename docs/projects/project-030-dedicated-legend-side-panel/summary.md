@@ -107,3 +107,12 @@ And expand sidebar visibility API to include legend presence:
 - LaTeX labels render correctly in legend rows.
 - Plotly internal legend is no longer required for normal workflows.
 - Tests cover manager lifecycle, view switching, and regressions.
+
+## Completion Assessment (2026-02-18)
+
+- [x] Dedicated legend side-panel manager architecture is implemented and wired into figure lifecycle.
+- [x] Project phase tests exist for layout, manager behavior, visibility sync, and label rendering (`tests/test_project030_phase*.py`).
+- [x] Developer documentation has been updated to describe legend panel behavior.
+- [ ] Project status still includes a deferred Phase 6 item, so full scope closure has not been declared in this record.
+
+**Result:** Project remains **open** (near-complete) until the deferred scope is explicitly closed or re-scoped.

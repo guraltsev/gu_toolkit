@@ -129,3 +129,12 @@ gu_toolkit/
   references in notebooks and documentation.
   **Mitigation:** Re-export old names during transition; search and update
   all notebooks and docs.
+
+## Completion Assessment (2026-02-18)
+
+- [ ] Repository still uses a flat module layout at package root; proposed `core/`, `figure/`, `math/`, `widgets/`, and `snapshot/` subpackages are not yet migrated.
+- [ ] PascalCase module filenames are still present (`Figure.py`, `Slider.py`, `NamedFunction.py`, etc.).
+- [ ] Backward-compatibility shim deprecation warnings have not been introduced for re-export modules.
+- [ ] Import-path migration and compatibility-matrix work have not yet started.
+
+**Result:** Project remains **open**. This reorganization has not yet been implemented.

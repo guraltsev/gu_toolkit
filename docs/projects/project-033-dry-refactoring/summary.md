@@ -71,3 +71,12 @@ The code review identified several concrete duplication sites:
   **Mitigation:** Keep the two accepted forms (sequence and dict)
   broad enough to cover real usage; add deprecation warnings for
   exotic forms if any exist.
+
+## Completion Assessment (2026-02-18)
+
+- [ ] `_resolve_symbol` logic still exists in multiple locations (`ParameterSnapshot.py` and `numpify.py`).
+- [ ] Greek-letter constant data is still local to `NamedFunction.py` and not extracted to a shared utility module.
+- [ ] `_normalize_vars()` remains a large multi-form normalizer in `numpify.py` and has not been simplified per project target.
+- [x] Focused tests exist for some normalization behavior (`tests/test_numpify_refactor.py`), but the extraction/simplification scope is incomplete.
+
+**Result:** Project remains **open**.
