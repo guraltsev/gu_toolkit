@@ -72,8 +72,8 @@ and impact. Projects earlier in the sequence unblock or de-risk later ones.
 ## TODO checklist
 
 ### Phase 1: Safety net
-- [ ] **Project 031:** ruff + mypy configured and passing in CI.
-- [ ] **Project 031:** Pre-commit hooks documented.
+- [x] **Project 031:** ruff + mypy configured and passing in CI.
+- [x] **Project 031:** Pre-commit hooks documented.
 - [ ] **Project 005:** Coverage threshold raised to 70%.
 - [ ] **Project 005:** Notebook tests integrated into CI.
 - [ ] **Project 021:** `.gitignore` expanded.
@@ -123,3 +123,12 @@ and impact. Projects earlier in the sequence unblock or de-risk later ones.
   **Mitigation:** Phase 1 projects are small and independently
   completable, providing early wins and building confidence for the
   larger structural changes.
+
+## Completion Assessment (2026-02-18)
+
+- [x] Phase-1 static-analysis subproject (031) is complete and can be treated as closed.
+- [ ] Remaining Phase-1 gates are still open (`005` notebook CI/coverage outcomes, `021` packaging hardening).
+- [ ] Phase-2 (`022`, `033`) and Phase-3 (`023`) restructuring objectives remain open.
+- [ ] Umbrella exit criteria are not yet met because multiple dependent projects are incomplete.
+
+**Result:** Umbrella project remains **open**.
