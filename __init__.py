@@ -26,14 +26,18 @@ from .Figure import (
     parameter,
     parameters,
     params,
-    plot,
-    plot_style_options,
     plots,
     render,
     set_sampling_points,
     set_title,
     set_x_range,
     set_y_range,
+)
+from .Figure import (
+    plot as toolkit_plot,
+)
+from .Figure import (
+    plot_style_options as toolkit_plot_style_options,
 )
 from .FigureSnapshot import FigureSnapshot, InfoCardSnapshot, ViewSnapshot
 from .NamedFunction import NamedFunction as NamedFunction
@@ -52,3 +56,10 @@ from .ParamRef import ParamRef
 from .ParseLaTeX import parse_latex
 from .PlotSnapshot import PlotSnapshot
 from .Slider import FloatSlider
+
+# Keep toolkit helpers authoritative after notebook namespace wildcard imports.
+# ``notebook_namespace`` intentionally exports SymPy's ``plot`` helper via
+# ``from sympy import *`` for convenience, but package-level ``plot`` should
+# resolve to gu_toolkit's module helper for notebook examples and docs.
+plot = toolkit_plot
+plot_style_options = toolkit_plot_style_options
