@@ -1,22 +1,36 @@
 # Issue 034: Notebook `Figure` display lifecycle contract is ambiguous (`display(fig)` vs constructor autodisplay)
 
 ## Status
-Open
+Ready for external review
 
 ## Summary
-Notebook examples currently rely on an implicit display contract that is not fully documented: whether users should always call `display(fig)` explicitly, or whether `Figure(...)` should autodisplay by default in notebook contexts.
-
-Users can encounter inconsistent behavior and confusion if notebook display expectations are not explicit and test-covered.
+The display lifecycle contract is now explicit and test-enforced:
+- `Figure(...)` remains side-effect free by default.
+- `Figure(..., display=True)` is supported to force immediate display at construction time.
+- Explicit display (`display(fig)` or notebook rich display as last expression) continues to work.
 
 ## Evidence
-- There is no dedicated contract test that locks down notebook display behavior for `Figure` creation and first render.
+- `Figure.__init__` now accepts `display: bool = False` and invokes `_ipython_display_()` when `True`.
+- `_ipython_display_` remains the canonical display hook that toggles lifecycle state and displays the widget output.
+- Regression tests cover constructor default behavior, constructor `display=True` behavior, and display-hook behavior.
+- **WARNING:** notebook source of truth still contains a TODO requesting default autodisplay-on-construction; current implementation adds an explicit opt-in (`display=True`) rather than changing the default behavior.
+
+## Remediation plan
+- Keep default construction side-effect free to avoid surprising display side effects.
+- Provide explicit constructor opt-in (`display=True`) for users wanting immediate display.
+- Enforce the contract with focused regression tests.
+- Keep notebook files unchanged in this bugfix and flag the remaining TODO mismatch for a follow-up documentation alignment pass.
 
 ## TODO
-- [ ] Document that the constructor does not display by default displays.  
-- [ ] If autodisplay is supported, and is enabled using the display=True parameter.
-- [ ] Add tests that verify first-render/display lifecycle under the documented contract.
+- [x] Assess current completion state against notebook source of truth.
+- [x] Document constructor/display lifecycle contract directly in code docstrings.
+- [x] Add regression tests for constructor non-display behavior and `_ipython_display_` lifecycle behavior.
+- [x] Add constructor `display=True` option and regression test.
+- [x] Record WARNING about notebook TODO contradiction with implemented default behavior.
+- [ ] External review confirms whether notebook TODO should be removed, revised, or implemented as default behavior.
 
 ## Exit criteria
-- [ ] Notebook display lifecycle behavior is explicitly documented in toolkit docs/notebooks.
-- [ ] A regression test (or small suite) enforces the chosen display contract.
-- [ ] User-facing examples / documentation are consistent with tested behavior and do not rely on ambiguous implicit display semantics.
+- [x] Notebook display lifecycle behavior is explicitly documented in toolkit docs/code docs.
+- [x] Regression tests enforce both default and opt-in constructor display behavior.
+- [x] User-facing guidance in this issue is consistent with tested behavior and highlights outstanding notebook mismatch.
+- [ ] Issue is closed only after external review.

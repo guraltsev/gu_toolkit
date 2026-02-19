@@ -349,6 +349,8 @@ class Figure:
     Key features
     ------------
     - Uses Plotly ``FigureWidget`` so it is interactive inside notebooks.
+    - Construction is side-effect free by default; pass ``display=True``
+      to force immediate notebook display, or call ``display(fig)`` explicitly.
     - Uses a right-side controls panel for parameter sliders.
     - Supports plotting multiple curves identified by an ``id``.
     - Re-renders curves on:
@@ -395,6 +397,7 @@ class Figure:
         debug: bool = False,
         default_view_id: str = "main",
         plotly_legend_mode: Literal["side_panel", "plotly"] = "side_panel",
+        display: bool = False,
     ) -> None:
         """Initialize a Figure instance with default ranges and sampling.
 
@@ -415,6 +418,9 @@ class Figure:
             toolkit legend as the canonical control surface and disables
             Plotly's built-in legend. ``"plotly"`` keeps Plotly legend
             rendering enabled for compatibility.
+        display : bool, optional
+            If ``True``, trigger immediate notebook display after
+            initialization by invoking :meth:`_ipython_display_`.
 
         Returns
         -------
@@ -429,7 +435,8 @@ class Figure:
         Notes
         -----
         Parameters are managed by :class:`ParameterManager` and exposed through
-        :attr:`params`.
+        :attr:`params`. Figure construction is side-effect free by default
+        and does not trigger notebook display unless ``display=True`` is passed.
         """
         self._debug = debug
         if plotly_legend_mode not in {"side_panel", "plotly"}:
@@ -477,6 +484,9 @@ class Figure:
         # 5. Bind Events
         self._render_info_last_log_t = 0.0
         self._render_debug_last_log_t = 0.0
+
+        if display:
+            self._ipython_display_()
 
     # --- Properties ---
 
@@ -1708,6 +1718,12 @@ class Figure:
         Returns
         -------
         None
+
+        Notes
+        -----
+        This method defines the display lifecycle contract used in notebooks:
+        explicit display (for example ``display(fig)``) drives first render.
+        ``Figure(...)`` construction itself is intentionally side-effect free.
         """
         self._has_been_displayed = True
         display(self._layout.output_widget)
