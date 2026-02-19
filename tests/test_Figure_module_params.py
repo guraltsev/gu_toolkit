@@ -12,7 +12,7 @@ import pytest
 import sympy as sp
 
 import gu_toolkit.debouncing as debouncing_module
-from gu_toolkit import Figure, parameter, params, plot_style_options
+from gu_toolkit import Figure, parameter, params, plot, plot_style_options
 
 
 class _FakeTimer:
@@ -132,6 +132,18 @@ def test_plot_cached_samples_none_before_first_render() -> None:
 
     assert plot.x_data is None
     assert plot.y_data is None
+
+
+def test_context_plot_autodetects_expression_parameters_for_module_helper() -> None:
+    x, a, b = sp.symbols("x a b")
+    fig = Figure(x_range=(-8, 8))
+
+    with fig:
+        wave = plot(a * sp.sin(b * x), x, id="wave")
+
+    assert wave.parameters == (a, b)
+    assert a in fig.parameters
+    assert b in fig.parameters
 
 
 def test_plot_update_accepts_visible_kwarg() -> None:
