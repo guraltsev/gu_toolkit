@@ -26,8 +26,6 @@ from .Figure import (
     parameter,
     parameters,
     params,
-    plot,
-    plot_style_options,
     plots,
     render,
     set_sampling_points,
@@ -35,8 +33,12 @@ from .Figure import (
     set_x_range,
     set_y_range,
 )
-from .Figure import plot as toolkit_plot
-from .Figure import plot_style_options as toolkit_plot_style_options
+from .Figure import (
+    plot as toolkit_plot,
+)
+from .Figure import (
+    plot_style_options as toolkit_plot_style_options,
+)
 from .FigureSnapshot import FigureSnapshot, InfoCardSnapshot, ViewSnapshot
 from .NamedFunction import NamedFunction as NamedFunction
 from .notebook_namespace import *
