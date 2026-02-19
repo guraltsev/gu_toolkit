@@ -1,7 +1,7 @@
 # Issue 033: Top-level `gu_toolkit.plot` is shadowed by SymPy `plot` in package import order
 
 ## Status
-Open (root cause fixed in code; retained open for follow-up notebook behavior and broader import-contract coverage)
+Open (root cause fixed in code; retained open until import-surface contract coverage is complete)
 
 ## Summary
 A notebook snippet that should call toolkit plotting helpers:
@@ -30,11 +30,9 @@ This happens when users import `plot` from `gu_toolkit` (directly or indirectly)
 ## TODO
 - [x] Ensure top-level package `plot` resolves to toolkit helper after wildcard namespace import.
 - [x] Add regression test for expression parameter autodetection through `from gu_toolkit import plot` + context-managed `Figure`.
-- [ ] Decide and document whether `Figure(...)` should autodisplay by default, and if so define opt-out keyword naming (`DoNotDisplay` vs a more idiomatic option).
 - [ ] Add dedicated notebook import-surface contract tests that assert toolkit helper names are not shadowed by convenience wildcard imports.
 
 ## Exit criteria
 - [x] `from gu_toolkit import plot` resolves to toolkit `Figure.plot` helper semantics, not SymPy plotting module semantics.
 - [x] The quickstart `with fig: plot(a*sin(b*x), x, ...)` path auto-detects `a`/`b` as parameters without raising SymPy free-symbol errors.
-- [ ] Notebook display lifecycle contract (`display(fig)` vs constructor autodisplay) is explicitly documented and tested.
 - [ ] Import-surface tests guard against future helper shadowing regressions.
