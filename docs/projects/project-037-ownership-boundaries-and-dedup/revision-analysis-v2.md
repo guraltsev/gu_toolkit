@@ -31,7 +31,7 @@ Primary inputs:
 
 | Area | Desired owner | Desired boundary |
 | --- | --- | --- |
-| Range and viewport state | `View` + `ViewManager` | `Figure` remains façade only; all range/viewport semantics unified into explicit view model contract (home/default vs live viewport). |
+| Range and viewport state | `View` + `ViewManager` | `Figure` remains façade only that delegates to `current_view` data; all range/viewport semantics unified into explicit view model contract (home/default vs live viewport). |
 | Sampling policy | `View` (default) + `Plot` (override) | Figure-level global default becomes compatibility façade mapped to active-view policy. |
 | Plot registration and style normalization | Plot registry component (+ `Plot` runtime) | `Figure.plot()` remains API, delegates create/update/normalize pipeline to registry service. |
 | Render orchestration | `Figure` + extracted render coordinator utility | `Figure` keeps top-level coordination; stale-marking and per-reason policy become composable strategy/helper to reduce God-method pressure. |
@@ -58,7 +58,7 @@ This table refines BR-01..BR-10 into implementation-checkable directionality.
 | BR-01 | `Figure` -> `FigureLayout`/`ParameterManager`/`InfoPanelManager`/`LegendPanelManager`/`ViewManager`/`Plot` | Allowed | Implemented as intended. |
 | BR-02 | `FigureLayout` -> `Figure` | Forbidden | No direct dependency observed. |
 | BR-03 | `ParameterManager` -> `Figure` | Forbidden | Enforced: manager only uses render callback contract. |
-| BR-04 | `Plot` -> parameter context protocol (not concrete manager type) | Allowed (contract-only) | **Partially met**: plot consumes `self._smart_figure.parameters.parameter_context`; still figure-coupled. |
+| BR-04 | `Plot` -> parameter context protocol (not concrete manager type) | Allowed (contract-only) | **Partially met**: plot consumes `self._smart_figure.parameters.parameter_context`; still figure-coupled. **Desired state** parameter context provider is specifcied at the momement of creating and semi-private api allows redefining provider (should generally not be needed). Functionality exprosed by `PlotManager`. `Figure` worries about updates if some signifcant reorganization of parameterManager occurs. |
 | BR-05 | `Plot` -> `FigureLayout` | Forbidden | Enforced: no layout import/use in plot runtime. |
 | BR-06 | `InfoPanelManager`/`LegendPanelManager` -> parameter read/observe contract | Allowed (read + observe) | Appears aligned; should keep contract boundary explicit. |
 | BR-07 | `ViewManager` -> plot/parameter internals | Forbidden | Enforced in current manager implementation. |
