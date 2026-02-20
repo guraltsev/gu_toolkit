@@ -37,22 +37,20 @@ Adopt a **workflow-first modularization** that is intentionally concrete and Pyt
    - business decisions move into focused collaborators, but without introducing a heavy orchestration framework.
 
 2. **Extract three concrete collaborators, aligned with existing code paths**
-   - **`PlotRegistry`**: owns plot create/update/remove, id/overwrite behavior, and parameter registration decisions.
-    COMMENT RESOLUTION: `Plot` remains the per-plot runtime object; `PlotRegistry` is a lifecycle coordinator for the *collection* (lookup, overwrite semantics, creation/update routing, and delegation to parsing/parameter policy helpers).
+   - **`PlotRegistry`**: owns plot create/update/remove, id/overwrite behavior, and parameter registration decisions. `Plot` remains the per-plot runtime object; `PlotRegistry` is a lifecycle coordinator for the *collection* (lookup, overwrite semantics, creation/update routing, and delegation to parsing/parameter policy helpers).
+COMMENT: I think that delegation to parsing/parameter policy helpers should not be in the plot registry. Plot registry should be thinner and only organize plots assuming that there exists a provider for parameter value. Ensuring all parameters have been initialized is not the job of the PlotRegistry.
    - **`RenderEngine`**: owns stale tracking, sampling/trace refresh, and relayout/range application.
-   - **`ViewRuntime`**: owns view add/switch/remove state and runtime handles for active view widgets.
-     COMMENT RESOLUTION: this is a reorganization of existing `figure_view_manager` behavior rather than a parallel concept. Prefer extending/renaming existing view-manager code paths over introducing duplicate abstractions.
+   - **`ViewRuntime`**: owns view add/switch/remove state and runtime handles for active view widgets. This is a reorganization of existing `figure_view_manager` behavior rather than a parallel concept. Prefer extending/renaming existing view-manager code paths over introducing duplicate abstractions.
 
 3. **Keep UI behavior in a thin adapter layer**
-   - a `FigureUIAdapter` handles sidebar/legend/info visibility and widget-only updates;
-   COMMENT RESOLUTION: accepted. This project should align with project-035 by isolating notebook/widget-facing synchronization code in one module.
+   - a `FigureUIAdapter` handles sidebar/legend/info visibility and widget-only updates. This project should align with project-035 by isolating notebook/widget-facing synchronization code in one module.
    - adapter consumes plain snapshots (`dict`/dataclass), not internal mutable objects.
 
 4. **Use direct method calls and small return values, not command buses**
    - inputs are regular method parameters with clear names;
    - outputs are simple booleans/enums/dataclasses only where needed for clarity;
-   - no `PlotCommand`/`RenderCommand` style indirection unless a concrete complexity need emerges later.
-   COMMENT RESOLUTION: accepted as an explicit architecture rule for this project. Avoid command/event-bus abstractions unless a concrete future bottleneck proves necessity.
+   - no `PlotCommand`/`RenderCommand` style indirection.
+   COMMENT: Incorporate into this design document the following philosophy (if deemed good) or express criticism (if it has significant shortcomings). We avoid Object based "Command" inderection to avoid hidden coupling and opaque module interaction. Interaction should be well defined. For this reason we expose semantics of interaction by exposing public functions in the relevant classes. Calling other classes' private methods should be strongly discouraged. Furthermore, public methods should be relatively thin: they should organize and delegate heavy logic to private methods of the corresponding class.
 
 ### Contract shape (pragmatic)
 
@@ -83,6 +81,7 @@ This approach aligns with current module trajectory (`figure_plot_normalization.
 ANSWER: separate concerns. Introduce/standardize a parsing-focused helper/module that detects parameters (and optionally returns metadata later), while lifecycle code performs registration with defaults.
 3. Should render pipeline expose synchronous-only API, or also an explicit queued/debounced execution abstraction?
 ANSWER: first separate render responsibilities into a dedicated manager with clearly defined synchronous entry points; preserve existing debounced triggers as adapter/orchestrator wiring around that manager.
+COMMENT: NO, debouncing should be a service module that gets pulled in by the logic of the renderer. This makes debouncing useful for other functionality like info panels, etc. 
 5. How strict should service encapsulation be (hard module boundaries with import checks vs convention-only)?
 ANSWER: use convention-first boundaries in this phase (clear ownership + code review discipline), and defer import-lint enforcement to a later hardening project if needed.
 
