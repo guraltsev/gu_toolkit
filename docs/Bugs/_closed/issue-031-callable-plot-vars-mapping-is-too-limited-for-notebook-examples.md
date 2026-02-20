@@ -1,7 +1,7 @@
 # Issue 031: Variable/parameter convention convergence across `plot()`, `NumericFunction`, and numerical helpers
 
 ## Status
-Open (implementation and documentation convergence completed; pending external review)
+Closed (2026-02-20)
 
 ## Summary
 State-of-completion checklist:
@@ -11,6 +11,15 @@ State-of-completion checklist:
 - [x] Notebook callable example using mapping-based `vars` is now runnable.
 - [x] Public API docs now include a single explicit grammar reference shared across plotting and numeric helpers.
 - [x] Cross-helper documentation for alias/symbol resolution rules (including `freeze(...)`) is now documented.
+
+
+
+## Closure summary
+Completion was re-validated against implementation, tests, and docs:
+- [x] Shared vars-grammar normalization is implemented in runtime code paths used by callable-first `plot(...)`.
+- [x] Regression coverage is comprehensive for accepted mapping variants and invalid mapping forms.
+- [x] Notebook documentation reflects the supported mapping-based callable examples and no longer requires workarounds.
+- [x] Public API documentation/docstrings were updated to describe the unified vars grammar and alias/symbol resolution contract.
 
 ## Evidence
 - `Figure._normalize_plot_inputs(...)` routes plotting `vars` through shared normalization logic.
@@ -46,4 +55,4 @@ State-of-completion checklist:
 ## Implementation checklist
 - [x] Updated docs in code for variable-spec grammar and alias resolution contract.
 - [x] Verified issue-031 regression tests pass.
-- [x] Updated issue tracking checklist and status (kept open for external review).
+- [x] Updated issue tracking checklist and status (closed after verification).
