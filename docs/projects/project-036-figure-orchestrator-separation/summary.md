@@ -201,3 +201,149 @@ Contracts should stay minimal and implementation-friendly:
 - [ ] Public helper facade remains stable while internal policy logic is removed from wrappers.
 - [ ] Documentation maps each concern to exactly one owning module.
 - [ ] Regression tests cover key behavior equivalence during extraction.
+
+---
+
+## Review: Codebase Reality Check and Concerns
+
+> Added 2026-02-20 — assessment of proposal against actual codebase state.
+
+### Current-state inventory (measured from source)
+
+Before evaluating the proposed extractions, it is essential to ground them against what `Figure.py` and its existing collaborators actually contain today:
+
+| Module | Lines | Role |
+|--------|-------|------|
+| `Figure.py` | 1,564 | Orchestrator + public facade |
+| `figure_plot.py` | 952 | Per-curve math/trace logic |
+| `figure_layout.py` | 675 | Widget tree/layout composition |
+| `figure_parameters.py` | 614 | Parameter management + controls |
+| `figure_info.py` | 403 | Info panel manager |
+| `figure_legend.py` | 257 | Legend panel manager |
+| `figure_api.py` | 246 | Module-level convenience helpers |
+| `figure_plot_normalization.py` | 199 | Stateless input normalization |
+| `figure_context.py` | 175 | Figure context stack |
+| `figure_view_manager.py` | 145 | `ViewManager`: view lifecycle + stale state |
+| `debouncing.py` | 129 | `QueuedDebouncer`: reusable service |
+| `figure_view.py` | 58 | `View` dataclass |
+| `figure_plot_style.py` | 55 | Style alias resolution |
+
+**Total figure ecosystem: ~5,472 lines across 13 modules.**
+
+The decomposition from project-022 already extracted normalization, style resolution, view management, module-level API helpers, and the context stack. What remains in `Figure.py` at 1,564 lines breaks down roughly as:
+
+- ~500 lines: docstrings, type annotations, parameter docs (not extractable logic)
+- ~80 lines: constructor wiring (composing existing managers)
+- ~120 lines: `plot()` method (orchestration of normalization → create/update → legend → render)
+- ~80 lines: view lifecycle methods (delegating to `ViewManager` + runtime wiring)
+- ~50 lines: relayout debouncing plumbing
+- ~22 lines: `render()` method (loop + hooks + info scheduling)
+- ~200 lines: property accessors/facades (x_range, y_range, viewport, sampling_points, etc.)
+- ~100 lines: hooks, snapshot, codegen, info delegates
+- ~50 lines: display lifecycle and context manager
+- ~60 lines: imports, type aliases, `_ViewRuntime` NamedTuple, module-level re-exports
+
+The actual extractable logic is substantially smaller than 1,564 lines. The proposal's framing of "too many responsibilities centralized" is directionally correct but overstates the density of remaining logic.
+
+### Strengths
+
+1. **Workflow-first over CQRS is the right call.** Rejecting command/event architecture avoids gratuitous indirection for a notebook toolkit. Direct method calls to collaborators are debuggable and reviewable.
+
+2. **Ownership matrix requirement is excellent.** Forcing a per-method classification before implementation prevents speculative extraction. This should be done first and may reveal that several proposed modules are unnecessary.
+
+3. **Interaction philosophy (section 8) is sound.** Discouraging cross-class private access and keeping public methods thin is a good convention that costs nothing to adopt immediately.
+
+4. **Contract shape requirements are appropriately minimal.** Simple return values and explicit exceptions fit the codebase's style.
+
+5. **One-way dependency direction is the single most important structural rule.** Enforcing that collaborators never call back into the orchestrator or each other's internals prevents the cycle/coupling problems that killed prior decomposition attempts in other projects.
+
+### Concerns
+
+#### Concern 1: Several proposed modules duplicate existing infrastructure
+
+The plan proposes five new collaborators. Cross-referencing against the codebase:
+
+| Proposed | Already exists as | Gap |
+|----------|-------------------|-----|
+| `ViewRuntime` | `ViewManager` in `figure_view_manager.py` (state transitions, active view, stale marking) + `_ViewRuntime` NamedTuple in `Figure.py` (widget handles) | Only the `_ViewRuntime` NamedTuple and its creation (~30 lines) would move. `ViewManager` already owns the state logic the proposal describes. |
+| Debouncing service | `QueuedDebouncer` in `debouncing.py` (already reusable, already used by both render and info flows) | **None.** The proposal says "Introduce/standardize a generic debouncing service module" — this already exists and is already generic. |
+| Parameter/parsing policy collaborator | `figure_plot_normalization.py` (stateless input normalization, parameter inference) + `figure_parameters.py` (parameter registration/control lifecycle) | The detection of parameter dependencies from plot inputs is already one function call (`normalize_plot_inputs` returning `inferred_parameters`). What additional "policy" would a new module own? |
+
+**Risk:** Creating new modules that wrap existing ones adds indirection without new capability. The plan should explicitly state which existing modules get extended versus replaced, and what new behavior each proposed module contributes that does not already exist.
+
+#### Concern 2: `PlotRegistry` wraps a thin dict with tightly coupled orchestration
+
+The `self.plots` dict is currently a plain `dict[str, Plot]`. The create-vs-update branching in `plot()` (~65 lines) is not pure collection logic — it is interleaved with:
+- parameter autodetection and registration (`self.parameter(parameters)`),
+- legend wiring (`self._legend.on_plot_added/on_plot_updated`),
+- sidebar visibility sync,
+- numeric function binding and initial render.
+
+A `PlotRegistry` that only owns add/update/remove/lookup becomes a trivial wrapper around `dict` operations. A `PlotRegistry` that also owns parameter wiring and legend notification becomes a second orchestrator competing with `Figure`.
+
+**Recommendation:** Consider whether `plot()` is better understood as an orchestrator sequence that stays in `Figure` (per section 1's own pattern: normalize → delegate → side-effects → UI sync → return). Extracting only the ID-generation and overwrite-detection into a small helper function (not a class) may be sufficient.
+
+#### Concern 3: `RenderEngine` has very little to extract
+
+`Figure.render()` is 22 lines:
+1. Log the render reason (rate-limited).
+2. Loop over `self.plots` calling `plot.render(view_id=...)`.
+3. Mark inactive views stale on parameter changes.
+4. Dispatch hooks.
+5. Schedule info panel update.
+
+The actual rendering logic (sampling, trace generation, stale detection per-plot) lives in `figure_plot.py` (952 lines). A `RenderEngine` that wraps the 22-line loop and hook dispatch adds a module and an indirection layer without meaningfully reducing `Figure.py` complexity or clarifying ownership — the plot-level render policy is already in `Plot`.
+
+**Recommendation:** If render orchestration grows (e.g., batched rendering, cross-plot dependency ordering, diagnostic aggregation), a `RenderEngine` becomes justified. Currently, it is premature. Pin it as a future extraction trigger rather than an immediate deliverable.
+
+#### Concern 4: `FigureUIAdapter` risks double-indirection
+
+UI synchronization is currently:
+- `_sync_sidebar_visibility()` — 5 lines delegating to `FigureLayout`.
+- Scattered calls to `self._legend.set_active_view()`, `self._info.set_active_view()`, `self._layout.set_view_tabs()`.
+
+These are already one-liner delegations. Adding `FigureUIAdapter` as an intermediary creates: `Figure` → `FigureUIAdapter` → `FigureLayout` / `LegendPanelManager` / `InfoPanelManager`. The adapter would contain the same delegation calls that `Figure` currently has, just relocated.
+
+**Recommendation:** The adapter pattern is warranted if the UI transport changes (e.g., from ipywidgets to a web-socket protocol). For now, the existing direct delegation to specialized managers is clean. Defer `FigureUIAdapter` until project-035 WS-D (frontend/backend contract) actually introduces a new transport layer.
+
+#### Concern 5: `ViewRuntime` naming collision with existing `_ViewRuntime`
+
+`Figure.py` already defines `_ViewRuntime(NamedTuple)` holding `figure_widget` and `pane` per view. The proposal uses "ViewRuntime" to describe a class owning state transitions, active view identity, and runtime handles. But `ViewManager` already owns state transitions and active view identity. The widget-handle storage (`_ViewRuntime` dict) is ~30 lines of setup code.
+
+**Risk:** Implementing a new `ViewRuntime` class alongside the existing `_ViewRuntime` NamedTuple and `ViewManager` creates three overlapping abstractions for view lifecycle.
+
+**Recommendation:** The plan should clarify whether `ViewRuntime` merges `ViewManager` + `_ViewRuntime` into one class, or extends `ViewManager`. If merging, say so explicitly. If extending, specify what new responsibilities `ViewRuntime` has that `ViewManager` lacks.
+
+#### Concern 6: No quantitative extraction targets or LOC analysis
+
+The proposal frames `Figure.py` as having "too many responsibilities" but does not quantify what percentage is logic versus documentation, or which specific methods exceed a complexity threshold. Of the ~1,564 lines:
+- ~500 lines are docstrings and parameter documentation (necessary for a user-facing API).
+- ~200 lines are property accessors that are 1-3 lines of delegation each.
+
+The remaining ~850 lines of logic-bearing code is not trivial, but it is also not extreme for a top-level orchestrator class. The plan should establish a concrete target (e.g., "reduce Figure.py logic lines below 400") to avoid open-ended refactoring with diminishing returns.
+
+#### Concern 7: Overlap with project-035 workstreams
+
+Project-035 already defines:
+- **WS-A:** Figure decomposition (extends project-022).
+- **WS-D:** Frontend/backend contract (typed state snapshots, interaction intents).
+
+Project-036 overlaps significantly with WS-A and partially with WS-D (the `FigureUIAdapter` concept). The relationship between these projects is not documented. Is project-036 meant to replace WS-A? Subsume it? Run in parallel?
+
+**Recommendation:** Explicitly position project-036 relative to project-035. If 036 supersedes WS-A, update the 035 summary accordingly. If they are the same workstream, consolidate into one document.
+
+### Revised recommendation: a focused extraction plan
+
+Based on codebase analysis, the highest-value extractions (justified by actual complexity, not speculative cleanliness) are:
+
+1. **Extract `plot()` create-vs-update routing into a helper** (not a full `PlotRegistry` class). This removes the densest orchestration logic from `Figure` while keeping parameter/legend wiring in the orchestrator where it belongs.
+
+2. **Merge `_ViewRuntime` NamedTuple and its creation into `ViewManager`** (rename to `ViewRuntime` if desired). This consolidates view state and widget-handle ownership in one place instead of splitting across `ViewManager`, `_ViewRuntime`, and `Figure._create_view_runtime`.
+
+3. **Acknowledge that `debouncing.py` already satisfies decision 5.** Mark it as done or identify specific gaps.
+
+4. **Defer `RenderEngine` and `FigureUIAdapter`** until concrete triggers justify them (batched rendering, new UI transport, respectively). Document these as future extraction triggers with clear criteria.
+
+5. **Adopt section 8 (interaction philosophy) immediately** as a code-review convention. This costs nothing and prevents new coupling from forming regardless of whether further extraction happens.
+
+6. **Produce the ownership matrix first** (TODO item 1). This will objectively determine which extractions are justified and which are premature.
