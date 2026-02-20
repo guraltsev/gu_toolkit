@@ -138,3 +138,9 @@ gu_toolkit/
 - [ ] Import-path migration and compatibility-matrix work have not yet started.
 
 **Result:** Project remains **open**. This reorganization has not yet been implemented.
+
+## Scope boundary clarification (2026-02-20)
+
+- Project-023 owns **physical package topology migration** and import-path stabilization.
+- Project-033 owns duplicate-logic consolidation details and behavior-parity tests.
+- Project-037 owns ownership/boundary decision records that should be consumed during 023 migrations to avoid reintroducing cross-layer coupling.

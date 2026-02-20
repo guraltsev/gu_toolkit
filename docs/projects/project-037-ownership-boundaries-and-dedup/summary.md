@@ -2,110 +2,70 @@
 
 ## Status
 
-**Planning (new execution-focused successor to selected Project-036 goals)**
+**Planning (execution-focused architecture track)**
 
 ## Goal/Scope
 
-Execute the highest-value architecture work that is currently under-defined or incomplete, without forcing premature extractions from `Figure.py` that have diminishing returns.
+Provide the execution control plane for architecture streamlining by turning high-level intent into actionable ownership and boundary artifacts.
 
-This project focuses on:
-- establishing a concrete **ownership matrix** for Figure ecosystem responsibilities,
-- removing **duplicate implementations** that address the same functionality,
-- clarifying and codifying **domain boundaries and interaction rules** between orchestration, plot semantics, parameters, view runtime, and UI adapters,
-- sequencing this work against related active projects so overlap is explicit.
+Project-037 owns:
+- method-level ownership matrix for `Figure` ecosystem responsibilities,
+- concrete boundary-contract documentation and allowed dependency directions,
+- duplicate-cluster execution tracking and dispositions,
+- phased implementation plan slices that stay repository-safe.
 
-This project does **not** include speculative new module creation where equivalent infrastructure already exists.
+## Explicit boundaries (to prevent overlap)
 
-## Summary of design
+- **Does not replace project-032:** 032 remains umbrella sequencing authority.
+- **Does not redefine project-035:** 035 remains architecture north-star/invariants authority.
+- **Does not absorb project-023 or 033 implementation scope:** it coordinates and records ownership/disposition; those projects perform the migrations/refactors.
+- **Consumes project-036 as input only:** 036 is analysis context and triage rationale.
 
-### 1) Ownership matrix first (authoritative responsibility map)
+## Core deliverables
 
-Create and maintain a method-level ownership matrix for `Figure.py` and its collaborators. Every responsibility should map to exactly one owner category:
-- facade-only forwarding,
-- orchestrator sequencing,
-- service-owned logic (existing modules first, not new wrappers),
-- deferred extraction (with explicit trigger criteria).
+1. **Ownership matrix artifact**
+   - method/responsibility,
+   - current owner,
+   - target owner,
+   - action (`retain`, `move`, `merge`, `defer`, `abandon`),
+   - rationale and confidence.
 
-The matrix must include present owner, target owner, confidence level, migration action (retain/move/merge/delete), and rationale.
+2. **Boundary contract artifact**
+   - allowed module dependency directions,
+   - forbidden dependency patterns,
+   - orchestration interaction rules.
 
-### 2) Duplicate-functionality elimination as an explicit track
+3. **Duplicate cluster ledger**
+   - cluster id and canonical owner,
+   - compatibility/error-semantics notes,
+   - implementation project link (033/023),
+   - test coverage mapping.
 
-Treat duplication as first-class architecture debt, not incidental cleanup. Immediate candidate scope (aligned with project-033 findings):
-- symbol/key resolution duplication,
-- duplicated constant datasets (e.g., Greek-letter metadata),
-- overlapping normalization utilities with partially divergent behavior.
+4. **Phased plan (`plan.md`)**
+   - small, executable, stable slices,
+   - acceptance checks per slice.
 
-For each duplicate cluster:
-- define canonical owner module,
-- define compatibility behavior and error semantics,
-- replace secondary implementations,
-- add targeted regression tests.
+## Sequencing role (under project-032)
 
-### 3) Boundary contracts over abstraction proliferation
-
-Codify boundaries and allowed interactions between modules that already exist:
-- `Figure.py` as orchestration + public facade sequencing,
-- `figure_plot.py` for per-plot render/math policy,
-- `figure_parameters.py` for parameter state/control lifecycle,
-- `figure_view_manager.py` for view state transitions,
-- `figure_layout.py`/`figure_legend.py`/`figure_info.py` for UI manager responsibilities,
-- `debouncing.py` for reusable debounce behavior.
-
-Primary rule: no new mediator class unless it owns novel behavior that cannot be cleanly placed in existing owners.
-
-### 4) Merge/align overlapping planning across projects
-
-Document explicit relationships with:
-- project-035 (umbrella architecture program),
-- project-033 (DRY refactoring),
-- project-032 (legacy umbrella sequencing),
-- project-036 (concern review and extraction triage).
-
-Project-037 becomes the execution-focused vehicle for ownership/boundary/dedup outcomes that were previously spread across those documents.
-
-### 5) Deliverables
-
-- ownership matrix artifact (doc table, updated as code changes),
-- boundary contract/spec section with allowed dependency directions,
-- duplicate-cluster inventory with disposition and test mapping,
-- implementation `plan.md` with phased milestones that keep repository functional at each step.
-
-## Open questions
-
-1. Where should the ownership matrix live long-term (Project-037 summary vs standalone architecture policy file)?
-2. Should duplicate elimination land as one focused PR stream or be folded into feature-adjacent refactors?
-3. Should boundary-rule enforcement begin with documentation + review checklist only, or add automated import-boundary checks immediately?
-4. Which `Figure.py` methods are explicitly accepted as permanent orchestrator logic (not extraction candidates)?
-
-## Challenges and mitigations
-
-- **Challenge:** Ownership decisions can drift as refactors land.
-  - **Mitigation:** require matrix updates in any PR touching mapped methods.
-
-- **Challenge:** Deduplication can cause subtle behavior regressions.
-  - **Mitigation:** characterize existing behavior with focused tests before consolidating implementations.
-
-- **Challenge:** Boundary rules may be documented but ignored.
-  - **Mitigation:** add architecture review checklist items and optional lint/import-policy guardrails.
-
-- **Challenge:** Cross-project overlap creates planning ambiguity.
-  - **Mitigation:** include explicit “supersedes/depends-on/informs” mapping for related projects in this project and reciprocal references in those project summaries.
+- Use 035 invariants as constraints.
+- Feed canonical-owner decisions into 033.
+- Feed physical-placement decisions into 023.
+- Keep 036 concerns explicitly triaged and dispositioned.
 
 ## TODO
 
-- [ ] Build and publish a method-level ownership matrix for `Figure.py` + key collaborators.
-- [ ] Classify each `Figure.py` method as retain-in-orchestrator, move, merge, or defer-with-trigger.
-- [ ] Define and document canonical owners for known duplicate-functionality clusters.
-- [ ] Execute deduplication for one high-confidence cluster as pilot (with tests).
-- [ ] Document domain boundary contracts and forbidden dependency directions.
-- [ ] Produce `plan.md` with phased implementation slices and acceptance checks.
-- [ ] Add cross-links and disposition notes in related projects (032/033/035/036).
+- [ ] Publish first ownership matrix revision for `Figure.py` + key collaborators.
+- [ ] Publish boundary-rule table with allowed/forbidden directions.
+- [ ] Publish duplicate-cluster ledger with canonical-owner proposals.
+- [ ] Land at least one pilot dedup cluster through project-033 with regression tests.
+- [ ] Create `plan.md` with phased milestones and repository-safety checks.
+- [ ] Add reciprocal scope-link notes in 032/033/035/036/023.
 
 ## Exit criteria
 
-- [ ] Ownership matrix exists and covers all public `Figure` methods plus major internal orchestration helpers.
-- [ ] Every tracked duplicate-functionality cluster has a documented canonical owner and disposition.
-- [ ] At least one duplicate cluster is fully consolidated with regression tests.
-- [ ] Boundary contracts are documented and referenced by active architecture projects.
-- [ ] Project-036 extraction proposals are explicitly triaged into abandoned/deferred/moved categories.
-- [ ] A concrete implementation plan exists (`plan.md`) and is executable in stable phases.
+- [ ] Ownership matrix is complete for all public `Figure` methods and major orchestration helpers.
+- [ ] Boundary contracts are documented and referenced by execution projects.
+- [ ] Duplicate clusters have canonical-owner dispositions and linked implementation tracks.
+- [ ] At least one dedup cluster is implemented end-to-end with tests.
+- [ ] Project-036 proposals are fully dispositioned as moved/deferred/abandoned/done.
+- [ ] Ongoing updates show no scope overlap drift with 032/035/033/023.

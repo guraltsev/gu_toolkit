@@ -2,7 +2,11 @@
 
 ## Status
 
-**Planning (requirements clarified with comments/answers incorporated)**
+**Superseded for execution (analysis retained as reference)**
+
+
+> Note (2026-02-20): Project-036 is maintained as an analysis and triage record only.
+> Active execution scope for ownership/boundary/dedup moved to project-037 under umbrella project-032.
 
 ## Goal/Scope
 
