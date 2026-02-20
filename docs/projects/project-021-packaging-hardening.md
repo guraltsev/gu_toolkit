@@ -67,3 +67,10 @@ Reorganization) is planned, as the two are coupled.
 - [ ] Release workflow/checklist is not yet defined.
 
 **Result:** Project remains **open**. Foundational packaging exists, but hardening deliverables are incomplete.
+
+## Scope boundary (under umbrella project-032, Phase 0)
+
+- **021 owns:** Versioning/release workflow, packaging hygiene (`.gitignore`, build artifact cleanup), contributor install/build documentation, layout convention documentation.
+- **021 does not own:** Internal module decomposition, ownership matrix, or architecture decisions (those belong to 035/037).
+- **023 coordination:** The flat-vs-`src/` layout decision is documented by 021 but implemented by 023. Layout migration is 023's scope.
+- **Gate role:** Phase 2 project-023 (package reorganization) depends on 021's packaging gates being clean before moving modules into subpackages.

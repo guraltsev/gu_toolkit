@@ -15,13 +15,13 @@ Project-035 owns:
 
 Project-035 does **not** own method-level implementation tracking; that is delegated to project-037.
 
-## Relationship to other projects (non-overlap)
+## Scope boundary (under umbrella project-032, Phase 1)
 
-- **Project-032:** Portfolio umbrella and ordering authority.
-- **Project-037:** Execution owner for ownership matrix, boundary contract artifacts, and dedup execution slices.
-- **Project-033:** Implements duplicate-logic consolidation decisions.
-- **Project-023:** Executes physical package migration decisions.
-- **Project-036:** Historical concern-analysis input only.
+- **032 (Umbrella):** Portfolio sequencing authority. 035 does not set implementation order.
+- **037 (Execution):** Ownership matrix, boundary contracts, dedup tracking. 037 operationalizes 035's direction; 035 does not duplicate execution artifacts.
+- **033 (DRY):** Implements duplicate-logic consolidation. 035 provides invariants that constrain where canonical owners land.
+- **023 (Package Reorg):** Executes physical migration. 035 provides layer definitions that constrain subpackage boundaries.
+- **036 (Archived):** Historical concern-analysis record in `_completed/`. Consumed by 037 for triage; no longer an active project.
 
 ## Architecture direction (authoritative)
 
@@ -53,8 +53,9 @@ Project-035 does **not** own method-level implementation tracking; that is deleg
 - [ ] Contract-direction decisions are documented and stable enough for implementation.
 - [ ] Scope boundary with 037 is clear and maintained (no duplicate execution tracking here).
 
----
+## Coordination notes
 
-## Coordination update (2026-02-20)
-
-Project-035 remains the architecture-definition layer. Execution-oriented ownership matrix, boundary contracts, and dedup implementation tracking are intentionally centralized in project-037, under umbrella sequencing in project-032.
+- Project-035 is Phase 1 under umbrella project-032.
+- 035 defines architecture intent; 037 operationalizes it into concrete artifacts.
+- Project-036 is archived in `_completed/` as an analysis reference; its execution scope moved to 037.
+- Feature project 034 (Legend Panel UX Refresh) touches the backend/UI contract direction via `Plot.effective_style()` and typed state protocols. 035 owns the general architectural stance; 034 implements it in the legend domain.

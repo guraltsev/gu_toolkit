@@ -14,12 +14,13 @@ Project-037 owns:
 - duplicate-cluster execution tracking and dispositions,
 - phased implementation plan slices that stay repository-safe.
 
-## Explicit boundaries (to prevent overlap)
+## Scope boundary (under umbrella project-032, Phase 1)
 
-- **Does not replace project-032:** 032 remains umbrella sequencing authority.
-- **Does not redefine project-035:** 035 remains architecture north-star/invariants authority.
-- **Does not absorb project-023 or 033 implementation scope:** it coordinates and records ownership/disposition; those projects perform the migrations/refactors.
-- **Consumes project-036 as input only:** 036 is analysis context and triage rationale.
+- **032 (Umbrella):** Sequencing authority. 037 does not set portfolio order.
+- **035 (Architecture):** North-star and invariants authority. 037 operationalizes 035's direction; it must not redefine it.
+- **033 (DRY):** Implements duplicate-logic consolidation. 037 records canonical-owner decisions that 033 executes.
+- **023 (Package Reorg):** Implements physical migration. 037 records placement decisions that 023 executes.
+- **036 (Archived):** Historical analysis in `_completed/project-036-figure-orchestrator-separation/`. 037 consumes it for triage context; disposition categories (abandoned/moved/deferred) are documented in the archived file.
 
 ## Core deliverables
 
@@ -50,7 +51,7 @@ Project-037 owns:
 - Use 035 invariants as constraints.
 - Feed canonical-owner decisions into 033.
 - Feed physical-placement decisions into 023.
-- Keep 036 concerns explicitly triaged and dispositioned.
+- Keep archived-036 concerns explicitly triaged and dispositioned.
 
 ## TODO
 
@@ -59,7 +60,7 @@ Project-037 owns:
 - [ ] Publish duplicate-cluster ledger with canonical-owner proposals.
 - [ ] Land at least one pilot dedup cluster through project-033 with regression tests.
 - [ ] Create `plan.md` with phased milestones and repository-safety checks.
-- [ ] Add reciprocal scope-link notes in 032/033/035/036/023.
+- [x] Add reciprocal scope-link notes in 032/033/035/023 (036 archived).
 
 ## Exit criteria
 
@@ -67,5 +68,5 @@ Project-037 owns:
 - [ ] Boundary contracts are documented and referenced by execution projects.
 - [ ] Duplicate clusters have canonical-owner dispositions and linked implementation tracks.
 - [ ] At least one dedup cluster is implemented end-to-end with tests.
-- [ ] Project-036 proposals are fully dispositioned as moved/deferred/abandoned/done.
+- [ ] Archived project-036 proposals are fully dispositioned as moved/deferred/abandoned/done.
 - [ ] Ongoing updates show no scope overlap drift with 032/035/033/023.

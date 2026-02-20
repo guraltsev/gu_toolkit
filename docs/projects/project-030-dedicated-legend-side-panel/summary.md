@@ -1,6 +1,6 @@
 # Project 030: Dedicated Per-Tab Legend Side Panel (Summary)
 
-**Status:** In progress (Phases 1-5 and 7 implemented; Phase 6 deferred)
+**Status:** Complete (Phase 6 deferred to project-034)
 **Type:** Architecture and implementation plan
 
 ## Goal/Scope
@@ -88,7 +88,7 @@ And expand sidebar visibility API to include legend presence:
 - Summary and plan rewritten for implementation-ready execution.
 - Phases 1-5 are now implemented in code and covered by project tests.
 - Phase 7 documentation and migration notes are now updated in the docs tracker and developer guide.
-- Phase 6 remains intentionally deferred for a follow-up v1.1 track.
+- Phase 6 (row actions / UX enhancements) is absorbed by project-034 (Legend Panel UX Refresh).
 
 ## TODO
 
@@ -108,11 +108,11 @@ And expand sidebar visibility API to include legend presence:
 - Plotly internal legend is no longer required for normal workflows.
 - Tests cover manager lifecycle, view switching, and regressions.
 
-## Completion Assessment (2026-02-18)
+## Completion Assessment (2026-02-20)
 
 - [x] Dedicated legend side-panel manager architecture is implemented and wired into figure lifecycle.
 - [x] Project phase tests exist for layout, manager behavior, visibility sync, and label rendering (`tests/test_project030_phase*.py`).
 - [x] Developer documentation has been updated to describe legend panel behavior.
-- [ ] Project status still includes a deferred Phase 6 item, so full scope closure has not been declared in this record.
+- [x] Deferred Phase 6 (row actions, UX enhancements) is absorbed by project-034 (Legend Panel UX Refresh), which covers tile-based rows, style indicators, hover interactions, and responsive layout as a dedicated follow-on project.
 
-**Result:** Project remains **open** (near-complete) until the deferred scope is explicitly closed or re-scoped.
+**Result:** Project is **complete**. All v1 scope (Phases 1-5, 7) is implemented and tested. Phase 6 UX enhancements are tracked in project-034.
