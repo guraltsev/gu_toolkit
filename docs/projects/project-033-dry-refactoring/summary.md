@@ -80,3 +80,9 @@ The code review identified several concrete duplication sites:
 - [x] Focused tests exist for some normalization behavior (`tests/test_numpify_refactor.py`), but the extraction/simplification scope is incomplete.
 
 **Result:** Project remains **open**.
+
+---
+
+## Coordination update (2026-02-20)
+
+Duplicate-functionality consolidation remains owned by project-033 scope, with execution sequencing and architecture-boundary alignment coordinated through project-037 (`docs/projects/project-037-ownership-boundaries-and-dedup/summary.md`).

@@ -132,3 +132,9 @@ and impact. Projects earlier in the sequence unblock or de-risk later ones.
 - [ ] Umbrella exit criteria are not yet met because multiple dependent projects are incomplete.
 
 **Result:** Umbrella project remains **open**.
+
+---
+
+## Coordination update (2026-02-20)
+
+Ownership-matrix and boundary-contract execution details are now tracked in project-037 (`docs/projects/project-037-ownership-boundaries-and-dedup/summary.md`) to reduce overlap between umbrella planning artifacts.
