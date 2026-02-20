@@ -76,8 +76,8 @@ gu_toolkit/
    circular dependencies.
 3. **Then `snapshot/`:** Serialization layer depends on core but not on
    figure.
-4. **Then `figure/`:** Depends on project-022 completing the Figure
-   decomposition first.
+4. **Then `figure/`:** Project-022 (Figure decomposition) is complete;
+   `figure/` migration can proceed.
 5. **At each step:** Move module, update internal imports, add re-export in
    `__init__.py`, run full test suite.
 6. **Normalize to snake_case** during each move (e.g., `ParseLaTeX.py` →
@@ -93,7 +93,7 @@ gu_toolkit/
 - [ ] Migrate `widgets/` subpackage.
 - [ ] Migrate `core/` subpackage.
 - [ ] Migrate `snapshot/` subpackage.
-- [ ] Migrate `figure/` subpackage (after project-022).
+- [ ] Migrate `figure/` subpackage (project-022 prerequisite is satisfied).
 - [ ] Normalize all module names to snake_case during moves.
 - [ ] Add deprecation warnings to backward-compatibility shims.
 - [ ] Update test imports to use new paths.
@@ -109,11 +109,15 @@ gu_toolkit/
 
 ## Dependencies
 
-- **project-022 (Figure Decomposition):** The `figure/` subpackage
-  migration is cleanest after Figure.py is decomposed. Other subpackages
-  can proceed independently.
+- **project-022 (Figure Decomposition):** **Satisfied** — project-022 is
+  completed and archived. The Figure module is decomposed into
+  `figure_plot.py`, `figure_layout.py`, `figure_parameters.py`, etc.,
+  so the `figure/` subpackage migration can proceed.
 - **project-021 (Packaging Hardening):** The flat-vs-`src/` layout
   decision should be resolved here; project-021 documents the convention.
+- **project-037 (Ownership/Boundary/Dedup):** Physical-placement decisions
+  from 037's ownership matrix should be consumed during migration to avoid
+  reintroducing cross-layer coupling.
 
 ## Challenges and mitigations
 
@@ -139,8 +143,10 @@ gu_toolkit/
 
 **Result:** Project remains **open**. This reorganization has not yet been implemented.
 
-## Scope boundary clarification (2026-02-20)
+## Scope boundary (under umbrella project-032)
 
-- Project-023 owns **physical package topology migration** and import-path stabilization.
-- Project-033 owns duplicate-logic consolidation details and behavior-parity tests.
-- Project-037 owns ownership/boundary decision records that should be consumed during 023 migrations to avoid reintroducing cross-layer coupling.
+- **023 owns:** Physical package topology migration, snake_case normalization, import-path stabilization, `__init__.py` re-export compatibility.
+- **033 owns:** Duplicate-logic consolidation and behavior-parity tests. 023 should not bundle dedup decisions; it places already-consolidated code in its final location.
+- **037 owns:** Ownership/boundary decision records. 023 consumes 037's placement decisions to ensure moves respect architecture boundaries.
+- **021 owns:** Packaging convention (flat vs `src/`). 023 implements the chosen layout.
+- **035 owns:** Architecture invariants that constrain which modules belong in which layer.
