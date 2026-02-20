@@ -38,17 +38,21 @@ Adopt a **workflow-first modularization** that is intentionally concrete and Pyt
 
 2. **Extract three concrete collaborators, aligned with existing code paths**
    - **`PlotRegistry`**: owns plot create/update/remove, id/overwrite behavior, and parameter registration decisions.
+     QUESTION: We already have Plot? What does this add? Is it just a container for multiple plots? If so, that does seem reasonable 
    - **`RenderEngine`**: owns stale tracking, sampling/trace refresh, and relayout/range application.
    - **`ViewRuntime`**: owns view add/switch/remove state and runtime handles for active view widgets.
+     QUESTION: We already have ViewManager? Does this overlap with that? Should the functionality just be moved there and reorganized? Discuss!
 
 3. **Keep UI behavior in a thin adapter layer**
    - a `FigureUIAdapter` handles sidebar/legend/info visibility and widget-only updates;
+   COMMENT: given project-035-architecture-modularization-program I think isolating all UI related python code is a very good idea. 
    - adapter consumes plain snapshots (`dict`/dataclass), not internal mutable objects.
 
 4. **Use direct method calls and small return values, not command buses**
    - inputs are regular method parameters with clear names;
    - outputs are simple booleans/enums/dataclasses only where needed for clarity;
    - no `PlotCommand`/`RenderCommand` style indirection unless a concrete complexity need emerges later.
+   COMMENT: FORBID complex commands. The strength of this toolkit is that it provides natural pythonic functions that can be used to delegate functionality to different managers and objects. Complex internal logic should be in private methods and internal private methods should try to avoid cross manager calls. Public methods should contain the "orchestration logic" or delegate functionality to private methods. 
 
 ### Contract shape (pragmatic)
 
@@ -63,7 +67,7 @@ This keeps the decomposition understandable for maintainers who work directly in
 
 This approach aligns with current module trajectory (`figure_plot_normalization.py`, `figure_view_manager.py`, `figure_plot_style.py`) while avoiding architecture overhead that would make normal debugging and incremental refactoring harder. It minimizes risk by removing policy from `Figure.py` in small slices, with concrete modules and straightforward call flows.
 
-## Alternatives considered
+## Alternatives considered and rejected
 
 1. **Alternative A: split `Figure.py` by method-count only**
    - Fast but shallow; risks moving complexity without defining ownership contracts.
@@ -72,12 +76,15 @@ This approach aligns with current module trajectory (`figure_plot_normalization.
 2. **Alternative B: complete rewrite around command/event messaging (or CQRS/event sourcing)**
    - Maximum conceptual purity, but disproportionate migration risk and scope for current toolkit needs.
    - Rejected as primary strategy.
-
+  
 ## Open questions
 
 1. Should plot parameter auto-registration stay in plot lifecycle service, or become a standalone parameter-policy service?
-2. Should render pipeline expose synchronous-only API, or also an explicit queued/debounced execution abstraction?
-3. How strict should service encapsulation be (hard module boundaries with import checks vs convention-only)?
+ANSWER: given an input to plot, there should be a separate module concerned with expression/function parsing that does parameter detection. It returns the parameters. Then plot just calls the parameter registration method with sane defaults. This is a good approach as it allows sofisticated logic later on. For example, the parsing module can later decide to analyze whether parameters are additive (appear close to a +- sign) or multiplicative (*/) and then hint that the default should be 0 in the former case or 1 in the latter. This is out of scope for now but clear organization will allow for this. One will just have to redefine the return value to provide a dictionary of "additional metadata". 
+3. Should render pipeline expose synchronous-only API, or also an explicit queued/debounced execution abstraction?
+ANSWER: the render pipeline is subtle. It is a high performance codepath that later may need careful optimization. The functionality of the render piplene should be separated into a separate module/manager. Work hard to define its boundaries.
+5. How strict should service encapsulation be (hard module boundaries with import checks vs convention-only)?
+ANSWER: I do not fully understand the question. What are import checks?
 
 ## Challenges and mitigations
 
