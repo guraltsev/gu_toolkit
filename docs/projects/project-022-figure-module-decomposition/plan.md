@@ -235,13 +235,13 @@ The acceptance suite should combine existing tests with targeted additions:
 
 ## Deliverables checklist (project-level)
 
-- [ ] Phase 0 baseline characterization completed.
+- [x] Phase 0 baseline characterization completed.
 - [x] Module-level API wrappers extracted from `Figure.py`.
 - [x] Plot input normalization extracted and fully delegated.
 - [x] View lifecycle + stale-state centralized in `ViewManager`.
 - [x] Legacy `_figure` / `_pane` aliases removed.
-- [ ] `Figure.py` reduced to coordinator-focused responsibilities.
-- [ ] Acceptance suite green across all decomposition milestones.
+- [x] `Figure.py` reduced to coordinator-focused responsibilities.
+- [x] Acceptance suite green across all decomposition milestones.
 - [ ] Project 022 completion note added; Project 023 dependency unblocked.
 
 
@@ -252,4 +252,6 @@ The acceptance suite should combine existing tests with targeted additions:
 - [x] Added decomposition regression tests for package helper compatibility and normalizer contracts.
 - [x] Phase 3 (ViewManager extraction) completed via `figure_view_manager.py` and Figure delegation.
 - [x] Phase 4 (`_figure` / `_pane` alias removal) completed using explicit runtime accessors.
-- [ ] Phase 5 coordinator slimming/hardening pending.
+- [x] Phase 5 coordinator slimming/hardening completed via style-contract extraction + delegation conformance tests.
+
+- [x] Phase 6 decomposition acceptance hardening completed (phase suites 1-5 executed together).
