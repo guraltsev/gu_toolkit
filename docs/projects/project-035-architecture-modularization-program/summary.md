@@ -125,3 +125,9 @@ ANSWER: INCREMENTALLY
 - [ ] Duplication targets (symbol resolution/constants/normalization helpers) are consolidated.
 - [ ] Test/type/lint gates protect the new architecture and prevent regression to cross-layer coupling.
 - [ ] Project-022 and project-023 are either completed under this umbrella or explicitly superseded with completion notes.
+
+---
+
+## Coordination update (2026-02-20)
+
+For the ownership-matrix, deduplication, and boundary-contract execution slice of WS-A/WS-C, see project-037 (`docs/projects/project-037-ownership-boundaries-and-dedup/summary.md`). Project-036 remains concern analysis; project-037 tracks concrete execution artifacts.

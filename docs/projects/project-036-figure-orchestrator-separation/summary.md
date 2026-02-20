@@ -347,3 +347,39 @@ Based on codebase analysis, the highest-value extractions (justified by actual c
 5. **Adopt section 8 (interaction philosophy) immediately** as a code-review convention. This costs nothing and prevents new coupling from forming regardless of whether further extraction happens.
 
 6. **Produce the ownership matrix first** (TODO item 1). This will objectively determine which extractions are justified and which are premature.
+
+---
+
+## Disposition Update (2026-02-20)
+
+Following review of concerns and overlap with active architecture work, this project is narrowed and partially superseded.
+
+### Abandoned in Project-036
+
+The following items are abandoned as immediate deliverables for this project because they are currently premature or duplicative of existing infrastructure:
+
+- Introduce a new `RenderEngine` module as a near-term extraction target.
+- Introduce a new `FigureUIAdapter` layer as a near-term extraction target.
+- Introduce a new debouncing service module (already satisfied by `debouncing.py`/`QueuedDebouncer`).
+- Treat `PlotRegistry` as a mandatory class-level extraction independent of demonstrated net value.
+
+### Moved to Project-037
+
+The following outcomes are moved to **Project-037: Ownership Matrix, Boundary Contracts, and Duplication Elimination**:
+
+- Method-level ownership matrix as the first required artifact.
+- Duplicate-functionality consolidation track (in coordination with project-033).
+- Domain-boundary and interaction-contract documentation across Figure ecosystem modules.
+- Cross-project alignment/disposition mapping across projects 032/033/035/036.
+
+### Deferred in Project-036 (trigger-based)
+
+The following remain explicitly deferred and only become active if trigger conditions are met:
+
+- `RenderEngine` extraction (trigger: cross-plot scheduling/diagnostics complexity materially increases).
+- `FigureUIAdapter` extraction (trigger: transport abstraction needs beyond current notebook/widget managers).
+- View runtime consolidation (trigger: measurable overlap between `ViewManager` and `_ViewRuntime` ownership causes recurring maintenance cost).
+
+### Updated status note
+
+Project-036 remains a design/concern-analysis record, while implementation-oriented ownership, boundary, and deduplication execution is tracked in project-037.
