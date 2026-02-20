@@ -24,6 +24,15 @@ except ModuleNotFoundError:  # pragma: no cover - environment-specific fallback
 
 
 FINITE_FLOATS = st.floats(allow_nan=False, allow_infinity=False, width=64)
+# Keep numpify parity checks away from IEEE-754 overflow boundaries so failures
+# indicate semantic mismatches rather than backend-dependent overflow behavior.
+SAFE_NUMPIFY_FLOATS = st.floats(
+    min_value=-1e150,
+    max_value=1e150,
+    allow_nan=False,
+    allow_infinity=False,
+    width=64,
+)
 NONZERO_FINITE_FLOATS = st.floats(
     allow_nan=False,
     allow_infinity=False,
@@ -57,7 +66,7 @@ def test_inputconvert_complex_truncates_to_real_projection(
     assert result == pytest.approx(real)
 
 
-@given(x_value=FINITE_FLOATS, y_value=FINITE_FLOATS)
+@given(x_value=SAFE_NUMPIFY_FLOATS, y_value=SAFE_NUMPIFY_FLOATS)
 def test_numpify_matches_symbolic_expression_for_scalar_inputs(
     x_value: float, y_value: float
 ) -> None:
@@ -72,7 +81,7 @@ def test_numpify_matches_symbolic_expression_for_scalar_inputs(
     assert observed == pytest.approx(expected)
 
 
-@given(values=st.lists(FINITE_FLOATS, min_size=1, max_size=20))
+@given(values=st.lists(SAFE_NUMPIFY_FLOATS, min_size=1, max_size=20))
 def test_numpify_vectorized_callable_tracks_numpy_baseline(values: list[float]) -> None:
     """Vectorized single-variable callables should agree with NumPy baselines."""
     x = sp.Symbol("x")

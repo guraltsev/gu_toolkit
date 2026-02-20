@@ -92,6 +92,9 @@ widget-level behavior.
   **Mitigation:** Raise the floor incrementally and focus new tests on
   behavioral contracts, not line coverage.
 
+- **Challenge:** Property-based numeric tests can fail due to IEEE-754 overflow boundary artifacts rather than true semantic regressions.
+  **Mitigation:** Constrain Hypothesis domains for numeric parity tests to safe finite ranges and keep explicit overflow behavior testing as a separate concern.
+
 ## Completion Assessment (2026-02-18)
 
 - [x] Core automated pytest + coverage infrastructure is implemented and running in CI (`pytest --cov` on Python 3.10–3.12).
