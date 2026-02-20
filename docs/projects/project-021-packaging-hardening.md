@@ -28,7 +28,7 @@ Reorganization) is planned, as the two are coupled.
 
 ## TODO checklist
 
-- [ ] Expand `.gitignore` to cover standard Python build/test artifacts
+- [x] Expand `.gitignore` to cover standard Python build/test artifacts
       (`*.egg-info/`, `dist/`, `build/`, `.tox/`, `.coverage`, `htmlcov/`,
       `.env`, `.venv/`).
 - [ ] Define versioning scheme (CalVer or SemVer) and document in
@@ -42,7 +42,7 @@ Reorganization) is planned, as the two are coupled.
 
 ## Exit criteria
 
-- [ ] `.gitignore` covers all standard Python artifacts.
+- [x] `.gitignore` covers all standard Python artifacts.
 - [ ] Versioning policy is documented and the version field in
       `pyproject.toml` follows it.
 - [ ] A contributor can install, test, and build by following documented
@@ -57,6 +57,13 @@ Reorganization) is planned, as the two are coupled.
 - **Challenge:** Choosing a versioning scheme for a pre-1.0 library.
   **Mitigation:** Start with `0.x.y` SemVer; upgrade to CalVer or `1.0`
   only when the public API is stable.
+
+
+## Implementation Update (2026-02-20)
+
+- [x] Expanded repository `.gitignore` with missing packaging/test/virtualenv artifacts:
+  `dist/`, `build/`, `.tox/`, `htmlcov/`, `.env`, `.venv/`, `venv/`, `ENV/`, and expanded coverage patterns.
+- [x] Re-assessed project status: `.gitignore` hardening objective is now complete; remaining open items are versioning policy and release workflow documentation.
 
 ## Completion Assessment (2026-02-18)
 
