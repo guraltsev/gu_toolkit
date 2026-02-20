@@ -112,3 +112,64 @@ Key complexity hotspots identified in the code review:
 - ✅ Recorded measurable decomposition metric: `Figure.py` is now **1,564 lines** (down from ~2,098 baseline; ~25.5% reduction).
 - ✅ Completed **Phase 6 acceptance hardening pass** for decomposition milestones by running phase 1-5 regression suites together.
 - ⏳ Project remains **open** pending external review and under-800 stretch target reassessment in follow-on work.
+
+## Findings: Why `Figure.py` is still large after Project 022 phases
+
+Project 022 delivered the planned extractions (API wrappers, normalization,
+view manager, style normalization), but the file is still large because the
+remaining surface area is broad and still centered in the coordinator class.
+
+### 1) The remaining class still carries a wide public API by design
+
+- `Figure` currently contains **51 methods/properties**. Even with helper
+  extraction complete, the coordinator still owns many user-facing accessors
+  (`title`, axis/viewport ranges, sampling points, view controls, hooks,
+  snapshots/codegen, context manager protocol, notebook display protocol).
+- This shape is functionally correct, but line count remains high because the
+  API breadth itself is large.
+
+### 2) The largest single method (`plot`) is still orchestration-heavy
+
+- `Figure.plot()` is still the biggest method (~235 lines). It now delegates
+  normalization and style aliases, but it still has to orchestrate:
+  create-vs-update flow, plot registry mutation, legend wiring, parameter
+  auto-registration, and render/stale interactions.
+- This means complexity moved out of specific helper logic, but not all of the
+  orchestration can be removed without introducing a higher-level plot service.
+
+### 3) Constructor + runtime wiring remain substantial
+
+- `__init__` and runtime construction helpers are still significant because
+  they compose and connect layout, parameter manager, info manager, legend
+  manager, view manager, debouncers, and per-view widget/pane runtime objects.
+- This integration responsibility is central to `Figure`, so those lines are
+  not eliminated by phase 1-6 extraction work.
+
+### 4) Render and hook lifecycle are still coordinated in this file
+
+- `render`, relayout throttling, hook registration (`add_hook`,
+  `add_param_change_hook`), logging helpers, and notebook display/context
+  protocol methods remain in `Figure.py`.
+- These are cross-cutting lifecycle concerns that currently have no separate
+  coordinator module, so they keep `Figure.py` above the under-800 target.
+
+### 5) Documentation and explicit contracts increase line count (intentionally)
+
+- The repository standards require comprehensive public/private docstrings and
+  examples. `Figure.py` includes extensive module and method documentation.
+- This is valuable and intentional, but it contributes non-trivial LOC that
+  are not “dead weight” and should not be treated as decomposition failure.
+
+## Recommended follow-on scope (if under-800 remains mandatory)
+
+To move below the original stretch target, a follow-on project is needed with
+new extraction seams beyond Project 022's completed scope:
+
+1. Extract plot orchestration workflow from `Figure.plot()` into a dedicated
+   plot service/coordinator (distinct from input normalization already done).
+2. Extract render lifecycle + relayout throttling into a render pipeline
+   component.
+3. Extract notebook display/context protocol helpers to a thin mixin/module if
+   acceptable for readability.
+4. Reassess whether under-800 is still a useful target versus a more realistic
+   “bounded complexity + clear ownership” target.
