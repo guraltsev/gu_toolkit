@@ -86,3 +86,9 @@ The code review identified several concrete duplication sites:
 ## Coordination update (2026-02-20)
 
 Duplicate-functionality consolidation remains owned by project-033 scope, with execution sequencing and architecture-boundary alignment coordinated through project-037 (`docs/projects/project-037-ownership-boundaries-and-dedup/summary.md`).
+
+## Scope boundary clarification (2026-02-20)
+
+- Project-033 owns duplicate-logic implementation and tests.
+- Project-037 owns the cross-module ownership matrix and canonical-owner ledger used to sequence these refactors.
+- Project-023 owns physical module relocation; 033 should avoid bundling large path-migration changes unless required for a specific dedup landing.

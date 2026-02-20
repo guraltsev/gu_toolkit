@@ -2,139 +2,102 @@
 
 **Status:** Active
 **Priority:** High
-**Type:** Umbrella project
+**Type:** Umbrella project (portfolio coordination)
 
 ## Goal/Scope
 
-Coordinate the set of improvement projects that collectively streamline
-and organize the codebase for long-term maintainability. This umbrella
-tracks sequencing, dependencies, and overall progress across the
-constituent subprojects.
+Coordinate and sequence the maintainability/architecture streamlining portfolio so active projects have:
+- non-overlapping ownership,
+- explicit dependency order,
+- and shared completion gates.
 
-This project was created based on the comprehensive code review documented
-in `docs/Discussions/code-review-strengths-weaknesses.md`.
+Project-032 is a planning-and-governance umbrella. It does not carry implementation tasks that belong to a child project.
 
-## Motivation
+## Portfolio boundaries (source of truth)
 
-The codebase has strong architectural foundations — composition-based
-delegation, Protocol-driven extensibility, immutable snapshot design,
-and exceptional documentation. The primary maintainability risks are:
+This umbrella coordinates the projects below and defines strict ownership boundaries.
 
-1. `Figure.py` has grown into an over-leveraged coordinator (67 KB).
-2. 29 modules in a flat namespace with no subpackage structure.
-3. Type annotations exist but are not verified by any static analysis tool.
-4. Code duplication in symbol resolution and constant data.
-5. Conservative test coverage floor (50%) with no notebook test automation.
-6. Packaging artifacts and release workflow not fully hardened.
+| Project | Scope owner for | Out of scope for that project |
+|---|---|---|
+| **005** Testing Infrastructure | CI test breadth/depth, coverage progression, notebook/browser test posture | Architecture decomposition decisions |
+| **021** Packaging Hardening | Versioning/release workflow, packaging hygiene, contributor install/build documentation | Internal module decomposition or ownership matrix work |
+| **023** Package Reorganization | Physical module topology, snake_case normalization, import migration | Behavior-changing refactors and duplicate-logic policy |
+| **033** DRY Refactoring | Duplicate-functionality consolidation (`resolve_symbol`, constants, normalization helpers) | Topology moves unless required by canonical-owner placement |
+| **035** Architecture Modularization Program | Target architecture and program-level invariants (north-star design) | Detailed method-level execution bookkeeping |
+| **036** Figure Concern Analysis | Historical analysis record and extraction-triage rationale | New implementation execution (moved to 037) |
+| **037** Ownership/Boundary/Dedup Execution | Method-level ownership matrix, boundary contracts, execution tracking of dedup/boundary slices | Replacing the umbrella or redefining program north-star |
 
-## Subprojects and sequencing
+## Implementation order and interdependencies
 
-The subprojects are ordered by a combination of dependency relationships
-and impact. Projects earlier in the sequence unblock or de-risk later ones.
+### Phase 0 — Baseline safety and release hygiene
+1. **005** (testing reliability and confidence floor)
+2. **021** (packaging/versioning/release readiness)
 
-### Phase 1: Safety net (can start immediately, in parallel)
+These can run in parallel and should stay ahead of heavy refactors.
 
-| Project | Title | Priority | Rationale |
-|---------|-------|----------|-----------|
-| **031** | Static Analysis Tooling | High | Lowest effort, immediate value. Catches regressions and makes subsequent refactoring safer. |
-| **005** | Testing Infrastructure | Medium | Raise coverage floor and integrate notebook tests. Provides regression safety for all later work. |
-| **021** | Packaging Hardening | Medium | `.gitignore`, versioning, release docs. Low-risk, independently completable. |
+### Phase 1 — Architecture direction and execution scaffolding
+3. **035** (confirm architecture invariants and modernization target)
+4. **037** (convert architecture intent into ownership matrix + boundary contracts + dedup execution slices)
 
-### Phase 2: Core decomposition (after Phase 1 tooling is in place)
+Project-037 operationalizes 035. It must not redefine 035’s north-star; it implements it.
 
-| Project | Title | Priority | Rationale |
-|---------|-------|----------|-----------|
-| **022** | Figure Module Decomposition | High | Highest daily-maintainability impact. Reduces the largest module to a focused coordinator. |
-| **033** | DRY Refactoring | Medium | Extract shared utilities (symbol resolution, Greek constants). Can proceed in parallel with 022 or be folded into 023. |
+### Phase 2 — Code movement and consolidation
+5. **033** (consolidate duplicate logic into canonical owners)
+6. **023** (move modules into subpackages with normalized names/imports)
 
-### Phase 3: Structural reorganization (after Phase 2)
+033 and 023 are coordinated:
+- 033 decides *canonical owner* for duplicates.
+- 023 decides *final physical location* and import topology.
 
-| Project | Title | Priority | Rationale |
-|---------|-------|----------|-----------|
-| **023** | Package Reorganization | Medium | Codifies the layered architecture into subpackages. The `figure/` subpackage migration is cleanest after 022 completes; other subpackages (`math/`, `widgets/`, `core/`, `snapshot/`) can proceed independently. |
+Where needed, small 033 slices can land before or during 023, but ownership decisions must be recorded in 037 to avoid drift.
 
-### Dependency graph
+### Phase 3 — Closeout
+7. Reconcile remaining 036 concerns as **deferred/abandoned/done** in 037.
+8. Archive completed projects and mark umbrella exit criteria complete.
 
+## Dependency graph (updated)
+
+```text
+005 (Testing)  ───────────────┐
+021 (Packaging) ──────────────┤
+                              ├──→ 035 (Architecture target)
+                              │            │
+                              │            └──→ 037 (Ownership/boundary execution)
+                              │                      │
+                              │                      ├──→ 033 (Dedup implementation)
+                              │                      └──→ 023 (Package migration)
+                              │
+036 (Concern analysis record) ─────────────→ informs 037 triage only
 ```
-031 (Static Analysis) ──┐
-005 (Testing)     ──────┼──→ 022 (Figure Decomp) ──→ 023 (Package Reorg)
-021 (Packaging)   ──────┘         ↑                        ↑
-                            033 (DRY Refactoring) ─────────┘
-```
 
-- **031, 005, 021** have no inter-dependencies and can proceed in parallel.
-- **022** benefits from 031 (type checker catches refactoring errors) and
-  005 (higher coverage catches regressions).
-- **033** can proceed in parallel with 022 or be folded into 023.
-- **023** depends on 022 for the `figure/` subpackage; other subpackages
-  are independent. The layout decision from 021 feeds into 023.
+## Current status snapshot (2026-02-20)
 
-## TODO checklist
+- **Completed:** 031 (static analysis) is archived and no longer a scheduling gate.
+- **Active foundational:** 005 and 021 remain open but materially progressed.
+- **Active architecture coordination:** 035 (north-star) and 037 (execution vehicle) are the primary architecture tracks.
+- **Execution work:** 033 and 023 remain open and should be sequenced through 037 ownership/boundary decisions.
+- **Analysis-only:** 036 is maintained as reference/triage context, not as an implementation project.
 
-### Phase 1: Safety net
-- [x] **Project 031:** ruff + mypy configured and passing in CI.
-- [x] **Project 031:** Pre-commit hooks documented.
-- [ ] **Project 005:** Coverage threshold raised to 70%.
-- [ ] **Project 005:** Notebook tests integrated into CI.
-- [ ] **Project 021:** `.gitignore` expanded.
-- [ ] **Project 021:** Versioning scheme documented.
+## Umbrella TODO checklist (coordination only)
 
-### Phase 2: Core decomposition
-- [ ] **Project 022:** Module-level helpers extracted to `figure_api.py`.
-- [ ] **Project 022:** Plot input normalization extracted.
-- [ ] **Project 022:** View management extracted to `ViewManager`.
-- [ ] **Project 022:** `Figure.py` reduced to under 800 lines.
-- [ ] **Project 033:** Shared `resolve_symbol` utility extracted.
-- [ ] **Project 033:** `_normalize_vars()` simplified.
+- [ ] Maintain a single cross-project dependency table in this document.
+- [ ] Ensure each coordinated project has explicit “in scope / out of scope” text and reciprocal links.
+- [ ] Ensure project-037 contains the active ownership matrix and boundary-contract artifact references.
+- [ ] Ensure project-033 and project-023 do not duplicate each other’s responsibilities (owner selection vs physical migration).
+- [ ] Reconcile project-036 items into 037 disposition categories (moved/deferred/abandoned/done).
+- [ ] Re-check 005 and 021 closure status before authorizing broad package migration in 023.
 
-### Phase 3: Structural reorganization
-- [ ] **Project 023:** `math/` subpackage migrated.
-- [ ] **Project 023:** `widgets/` subpackage migrated.
-- [ ] **Project 023:** `core/` subpackage migrated.
-- [ ] **Project 023:** `snapshot/` subpackage migrated.
-- [ ] **Project 023:** `figure/` subpackage migrated.
-- [ ] **Project 023:** Backward-compatibility shims deprecated.
-- [ ] **Project 023:** All module names normalized to snake_case.
+## Umbrella exit criteria
 
-## Exit criteria
+- [ ] All coordinated child projects are either completed or explicitly superseded/archived.
+- [ ] No unresolved scope overlap exists among 023/033/035/037.
+- [ ] Ownership/boundary decisions are recorded once (037) and referenced, not copied, by related projects.
+- [ ] Package topology and dedup outcomes are complete and consistent with architecture invariants.
+- [ ] Testing and packaging gates are strong enough to preserve refactor safety.
 
-- [ ] All subprojects are completed and archived.
-- [ ] `Figure.py` is under 800 lines.
-- [ ] Modules are organized into subpackages by responsibility.
-- [ ] Static analysis (ruff + mypy) passes in CI.
-- [ ] Coverage threshold is at or above 70%.
-- [ ] Public API (`from gu_toolkit import ...`) is unchanged throughout.
-- [ ] Code duplication targets are eliminated.
+## Coordination notes
 
-## Challenges and mitigations
-
-- **Challenge:** The subprojects span multiple work sessions and may
-  interact in unexpected ways.
-  **Mitigation:** Phase gating ensures each layer stabilizes before the
-  next begins. The test suite and static analysis provide regression
-  safety.
-
-- **Challenge:** Reorganization may disrupt ongoing feature work.
-  **Mitigation:** Public API is frozen throughout. Feature branches that
-  depend on internal paths should be rebased after each subpackage
-  migration.
-
-- **Challenge:** Maintaining momentum across 6 subprojects.
-  **Mitigation:** Phase 1 projects are small and independently
-  completable, providing early wins and building confidence for the
-  larger structural changes.
-
-## Completion Assessment (2026-02-18)
-
-- [x] Phase-1 static-analysis subproject (031) is complete and can be treated as closed.
-- [ ] Remaining Phase-1 gates are still open (`005` notebook CI/coverage outcomes, `021` packaging hardening).
-- [ ] Phase-2 (`022`, `033`) and Phase-3 (`023`) restructuring objectives remain open.
-- [ ] Umbrella exit criteria are not yet met because multiple dependent projects are incomplete.
-
-**Result:** Umbrella project remains **open**.
-
----
-
-## Coordination update (2026-02-20)
-
-Ownership-matrix and boundary-contract execution details are now tracked in project-037 (`docs/projects/project-037-ownership-boundaries-and-dedup/summary.md`) to reduce overlap between umbrella planning artifacts.
+- Project-032 remains the umbrella portfolio index.
+- Project-035 defines architecture intent.
+- Project-037 tracks execution-grade ownership/boundary/dedup artifacts.
+- Project-036 is retained as context and rationale, not parallel execution scope.
