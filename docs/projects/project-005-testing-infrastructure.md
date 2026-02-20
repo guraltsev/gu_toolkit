@@ -56,7 +56,7 @@ widget-level behavior.
 - [x] Integrate notebook tests into CI using `nbval` or `pytest-notebook`.
 - [x] Add unit tests for currently-indirect-only utility functions
       (`_resolve_symbol`, `_normalize_vars`, `InputConvert` edge cases).
-- [ ] Add property-based tests (Hypothesis) for `InputConvert` and `numpify`
+- [x] Add property-based tests (Hypothesis) for `InputConvert` and `numpify`
       numeric edge cases.
 - [ ] Evaluate browser-level widget testing (Playwright or similar) for
       `PlotlyPane` and `Slider` rendering verification.
@@ -66,13 +66,14 @@ widget-level behavior.
 - [x] Coverage threshold is at or above 70%.
 - [x] Notebook-based tests run in CI without manual intervention.
 - [ ] All test files use standard pytest patterns.
-- [ ] Priority coverage gaps (utilities, numeric edge cases) are addressed.
+- [x] Priority coverage gaps (utilities, numeric edge cases) are addressed.
 
 
 ## Implementation progress checklist
 
 - [x] Added direct regression tests for utility resolution and vars normalization helpers.
 - [x] Added direct regression tests for `InputConvert` edge-case truncation semantics.
+- [x] Added property-based tests (`Hypothesis`) for `InputConvert` conversion contracts and `numpify` scalar/vectorized numeric parity.
 - [x] Added CI notebook execution job (`notebook-tests`) for `tests/*.ipynb` using `pytest --nbval-lax`.
 - [x] Added local `tox -e nb` parity command for notebook CI behavior.
 - [x] Fixed notebook regression in `tests/test_SmartFigure-param_change_hooks.ipynb` by avoiding `VBox([fig, ...])` now that `Figure` is no longer an ipywidget child.
@@ -91,6 +92,9 @@ widget-level behavior.
   **Mitigation:** Raise the floor incrementally and focus new tests on
   behavioral contracts, not line coverage.
 
+- **Challenge:** Property-based numeric tests can fail due to IEEE-754 overflow boundary artifacts rather than true semantic regressions.
+  **Mitigation:** Constrain Hypothesis domains for numeric parity tests to safe finite ranges and keep explicit overflow behavior testing as a separate concern.
+
 ## Completion Assessment (2026-02-18)
 
 - [x] Core automated pytest + coverage infrastructure is implemented and running in CI (`pytest --cov` on Python 3.10–3.12).
@@ -99,4 +103,4 @@ widget-level behavior.
 - [x] Notebook-based tests are now executed in CI through a dedicated `notebook-tests` workflow job using `nbval` in lax mode.
 - [x] Documentation for lint/test workflows is present in `docs/develop_guide/develop_guide.md`.
 
-**Result:** Project remains **open** pending external review. Core infrastructure objectives (coverage gate + notebook CI automation) are now implemented, and remaining work focuses on broader depth targets (property-based tests and widget/browser verification).
+**Result:** Project remains **open** pending external review. Core infrastructure objectives (coverage gate + notebook CI automation) are implemented, and remaining work now focuses on coverage-threshold progression, pytest-pattern consistency, and widget/browser verification depth.
