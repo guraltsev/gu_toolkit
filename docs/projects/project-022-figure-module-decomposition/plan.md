@@ -251,5 +251,5 @@ The acceptance suite should combine existing tests with targeted additions:
 - [x] Phase 2 implemented via `figure_plot_normalization.py` extraction and `Figure.plot()` delegation.
 - [x] Added decomposition regression tests for package helper compatibility and normalizer contracts.
 - [x] Phase 3 (ViewManager extraction) completed via `figure_view_manager.py` and Figure delegation.
-- [x] Phase 4 (`_figure` / `_pane` alias removal) completed using explicit runtime accessors.
+- [x] Phase 4 (`_figure` / `_pane` mutable alias-state removal) completed using explicit runtime accessors.
 - [ ] Phase 5 coordinator slimming/hardening pending.

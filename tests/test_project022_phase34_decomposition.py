@@ -38,16 +38,15 @@ def test_phase3_view_manager_add_switch_remove_and_stale_policy() -> None:
     assert "alt" not in manager.views
 
 
-def test_phase4_figure_uses_explicit_runtime_accessors_without_private_aliases() -> None:
+def test_phase4_figure_uses_explicit_runtime_accessors_without_mutable_private_aliases() -> None:
     fig = Figure()
-
-    assert not hasattr(fig, "_figure")
-    assert not hasattr(fig, "_pane")
 
     main_widget = fig.figure_widget_for("main")
     main_pane = fig.pane_for("main")
     assert fig.figure_widget is main_widget
     assert fig.pane is main_pane
+    assert fig._figure is main_widget
+    assert fig._pane is main_pane
 
 
 def test_phase4_param_change_marks_inactive_view_stale_via_manager() -> None:

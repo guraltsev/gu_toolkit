@@ -591,6 +591,36 @@ class Figure:
         return self._runtime_for_view(view_id).pane
 
     @property
+    def _figure(self) -> go.FigureWidget:
+        """Compatibility shim for legacy private runtime access.
+
+        Returns the active view figure widget without storing mutable alias
+        state. Prefer :attr:`figure_widget` / :meth:`figure_widget_for`.
+        """
+        warnings.warn(
+            "Figure._figure is deprecated; use Figure.figure_widget or "
+            "Figure.figure_widget_for(view_id).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.figure_widget
+
+    @property
+    def _pane(self) -> PlotlyPane:
+        """Compatibility shim for legacy private pane access.
+
+        Returns the active view pane without storing mutable alias state.
+        Prefer :attr:`pane` / :meth:`pane_for`.
+        """
+        warnings.warn(
+            "Figure._pane is deprecated; use Figure.pane or "
+            "Figure.pane_for(view_id).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.pane
+
+    @property
     def parameters(self) -> ParameterManager:
         """The figure ParameterManager (preferred name)."""
         return self._params
