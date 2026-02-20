@@ -1,6 +1,6 @@
 # Project 022: Figure Module Decomposition
 
-**Status:** Backlog
+**Status:** In Progress
 **Priority:** High
 
 ## Goal/Scope
@@ -53,8 +53,8 @@ Key complexity hotspots identified in the code review:
 
 ## TODO checklist
 
-- [ ] Extract module-level helpers to `figure_api.py` with re-exports.
-- [ ] Extract plot input normalization to a testable unit.
+- [x] Extract module-level helpers to `figure_api.py` with re-exports.
+- [x] Extract plot input normalization to a testable unit.
 - [ ] Extract view management to a `ViewManager`.
 - [ ] Deprecate `self._figure` / `self._pane` aliases.
 - [ ] Add regression tests for all public import paths.
@@ -93,3 +93,11 @@ Key complexity hotspots identified in the code review:
 - [ ] Legacy aliases (`self._figure` / `self._pane`) are still present.
 
 **Result:** Project remains **open**. Scope is largely unstarted in code, so no completion move is appropriate.
+
+
+## Phase Implementation Update (2026-02-20)
+
+- ✅ Completed **Phase 1**: module-level helper API extracted from `Figure.py` into `figure_api.py` and re-exported through `Figure.py`/package namespace without user-facing import changes.
+- ✅ Completed **Phase 2**: callable/expr normalization extracted into `figure_plot_normalization.py`; `Figure.plot()` now delegates to `normalize_plot_inputs(...)`.
+- ✅ Added targeted regression tests for phase 1 + phase 2 behavior (`tests/test_project022_phase12_decomposition.py`).
+- ⏳ Remaining phases (3-5) are still open and tracked in the project TODO/exit criteria.
