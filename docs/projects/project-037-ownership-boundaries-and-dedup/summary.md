@@ -55,12 +55,18 @@ Project-037 owns:
 
 ## TODO
 
-- [ ] Publish first ownership matrix revision for `Figure.py` + key collaborators.
-- [ ] Publish boundary-rule table with allowed/forbidden directions.
+- [x] Publish first ownership matrix revision for `Figure.py` + key collaborators.
+- [x] Publish boundary-rule table with allowed/forbidden directions.
 - [ ] Publish duplicate-cluster ledger with canonical-owner proposals.
 - [ ] Land at least one pilot dedup cluster through project-033 with regression tests.
 - [ ] Create `plan.md` with phased milestones and repository-safety checks.
 - [x] Add reciprocal scope-link notes in 032/033/035/023 (036 archived).
+
+## Progress checklist
+
+- [x] Added ownership matrix artifact (`ownership-boundary-matrix-v1.md`) for `Figure.py` orchestration methods and collaborator ownership boundaries.
+- [x] Added boundary rule table with explicit allowed/forbidden dependency directions and enforcement notes.
+- [ ] External architecture review of matrix and boundary table before moving project status beyond planning.
 
 ## Exit criteria
 
