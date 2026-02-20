@@ -83,11 +83,15 @@ Because this is private and backward compatibility is not required:
    - **Option A (lighter):** Python `@dataclass` + type hints + docstrings only.
    - **Option B (stricter):** A formal schema (for example JSON Schema or equivalent) in addition to Python types.
    - **Decision needed:** choose whether we optimize for speed/simplicity (A) or stronger cross-runtime validation and tooling (B).
+ANSWER: OPTION A
 3. **What should we standardize first: legend-only or whole-figure UI protocol?**
    - **Option A (narrow first):** define protocol v1 only for legend interactions/state.
    - **Option B (broad first):** define one unified protocol for legend + plot/view/parameter UI interactions.
    - **Decision needed:** choose whether we reduce risk with a focused legend slice (A) or invest early in a wider contract (B).
+ANSWER: OPTION B
+
 4. **Module naming policy:** whether to complete full snake_case normalization in one pass or incrementally per workstream.
+ANSWER: INCREMENTALLY
 
 ## Challenges and mitigations
 
