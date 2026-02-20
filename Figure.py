@@ -35,8 +35,7 @@ Important gotchas
 
 Examples
 --------
->>> import sympy as sp
->>> from gu_toolkit.Figure import Figure
+>>> >>> from gu_toolkit.Figure import Figure
 >>> x, a = sp.symbols("x a")
 >>> fig = Figure()
 >>> fig.parameter(a, min=-2, max=2)  # doctest: +SKIP
@@ -55,34 +54,25 @@ If you are extending behavior, inspect next:
 
 from __future__ import annotations
 
-import inspect
 import logging
 import time
 import warnings
 from collections.abc import Callable, Hashable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
-from typing import (
-    Any,
-    Literal,
-    NamedTuple,
-    TypeAlias,
-)
+from typing import Any, Literal, NamedTuple
 
 import ipywidgets as widgets
 import plotly.graph_objects as go
-import sympy as sp
 from IPython.display import display
-from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
 from .codegen import CodegenOptions
 from .debouncing import QueuedDebouncer
+from .figure_plot_normalization import PlotVarsSpec, normalize_plot_inputs
 from .FigureSnapshot import FigureSnapshot, ViewSnapshot
 
 # Internal imports (assumed to exist in the same package)
 from .InputConvert import InputConvert
-from .numpify import NumericFunction, _normalize_vars
-from .ParameterSnapshot import ParameterSnapshot, ParameterValueSnapshot
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
@@ -98,12 +88,10 @@ _FIGURE_STACK: list[Figure] = []
 
 
 from .figure_context import (
-    _current_figure,
     _FigureDefaultSentinel,
     _is_figure_default,
     _pop_current_figure,
     _push_current_figure,
-    _require_current_figure,
     _use_figure,
     current_figure,  # noqa: F401 - re-exported for __init__.py
 )
@@ -121,10 +109,6 @@ NumberLike = int | float
 NumberLikeOrStr = int | float | str
 RangeLike = tuple[NumberLikeOrStr, NumberLikeOrStr]
 VisibleSpec = bool | str  # Plotly uses True/False or the string "legendonly".
-PlotVarsSpec: TypeAlias = (
-    Symbol | Sequence[Symbol | Mapping[str, Symbol]] | Mapping[int | str, Symbol]
-)
-
 PLOT_STYLE_OPTIONS: dict[str, str] = {
     "color": "Line color. Accepts CSS-like names (e.g., red), hex (#RRGGBB), or rgb()/rgba() strings.",
     "thickness": "Line width in pixels. Larger values draw thicker lines.",
@@ -168,160 +152,6 @@ def _resolve_style_aliases(
     return thickness, opacity
 
 
-def _coerce_symbol(value: Any, *, role: str) -> Symbol:
-    """Return ``value`` as a SymPy symbol or raise a clear ``TypeError``."""
-    if isinstance(value, Symbol):
-        return value
-    raise TypeError(
-        f"plot() expects {role} to be a sympy.Symbol, got {type(value).__name__}"
-    )
-
-
-def _rebind_numeric_function_vars(
-    numeric_fn: NumericFunction,
-    *,
-    vars_spec: Any,
-    source_callable: Callable[..., Any] | None = None,
-) -> NumericFunction:
-    """Return a ``NumericFunction`` rebound to ``bound_symbols`` order.
-
-    This is used by callable-first normalization when the user-provided plotting
-    variable should replace inferred callable argument symbols (for example,
-    ``plot(lambda t: t**2, x)``). Rebinding keeps the positional callable
-    contract but aligns symbol identity with figure parameter/freeze semantics.
-    """
-    fn = source_callable if source_callable is not None else numeric_fn._fn
-    return NumericFunction(
-        fn,
-        vars=vars_spec,
-        symbolic=numeric_fn.symbolic,
-        source=numeric_fn.source,
-    )
-
-
-def _normalize_plot_inputs(
-    first: Any,
-    second: Any,
-    *,
-    vars: PlotVarsSpec | None = None,
-    id_hint: str | None = None,
-) -> tuple[Symbol, Expr, NumericFunction | None, tuple[Symbol, ...]]:
-    """Normalize callable-first ``plot()`` inputs.
-
-    Returns
-    -------
-    tuple
-        ``(plot_var, symbolic_expr, numeric_fn_or_none, parameter_symbols)``.
-    """
-    vars_spec: Any = None
-    if vars is not None:
-        normalized = _normalize_vars(sp.Integer(0), vars)
-        vars_tuple = tuple(normalized["all"])
-        if not vars_tuple:
-            raise ValueError("plot() vars must not be empty when provided")
-        vars_spec = normalized["spec"]
-    else:
-        vars_tuple = None
-
-    f = first
-    var_or_range = second
-
-    numeric_fn: NumericFunction | None = None
-    source_callable: Callable[..., Any] | None = None
-    expr: Expr
-    call_symbols: tuple[Symbol, ...]
-
-    if isinstance(f, Expr):
-        expr = f
-        call_symbols = tuple(sorted(expr.free_symbols, key=lambda s: s.sort_key()))
-    elif isinstance(f, NumericFunction):
-        numeric_fn = f
-        source_callable = f._fn
-        call_symbols = tuple(f.free_vars)
-        symbolic = f.symbolic
-        if isinstance(symbolic, Expr):
-            expr = symbolic
-        else:
-            fallback_name = id_hint or "f"
-            expr = sp.Symbol(f"{fallback_name}_numeric")
-    elif callable(f):
-        source_callable = f
-        sig = inspect.signature(f)
-        positional = [
-            p
-            for p in sig.parameters.values()
-            if p.kind
-            in (
-                inspect.Parameter.POSITIONAL_ONLY,
-                inspect.Parameter.POSITIONAL_OR_KEYWORD,
-            )
-        ]
-        if any(
-            p.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
-            for p in sig.parameters.values()
-        ):
-            raise TypeError(
-                "plot() callable does not support *args/**kwargs signatures"
-            )
-        call_symbols = tuple(sp.Symbol(p.name) for p in positional)
-        numeric_fn = NumericFunction(
-            f, vars=vars_spec if vars_spec is not None else call_symbols
-        )
-        if vars_spec is not None:
-            call_symbols = tuple(numeric_fn.free_vars)
-        expr = sp.Symbol(id_hint or getattr(f, "__name__", "f"))
-    else:
-        raise TypeError(
-            "plot() expects first argument to be a SymPy expression, NumericFunction, or callable."
-        )
-
-    if vars_tuple is not None:
-        bound_symbols = vars_tuple
-        if numeric_fn is not None:
-            numeric_fn = _rebind_numeric_function_vars(
-                numeric_fn,
-                vars_spec=vars_spec if vars_spec is not None else bound_symbols,
-                source_callable=source_callable,
-            )
-    else:
-        bound_symbols = call_symbols
-
-    if isinstance(var_or_range, tuple):
-        if len(var_or_range) != 3:
-            raise ValueError(
-                "plot() range tuple must have shape (var, min, max), e.g. (x, -4, 4)"
-            )
-        plot_var = _coerce_symbol(var_or_range[0], role="range tuple variable")
-    elif var_or_range is None:
-        if len(bound_symbols) == 1:
-            plot_var = bound_symbols[0]
-        else:
-            raise ValueError(
-                "plot() could not infer plotting variable for callable-first usage. "
-                "Pass an explicit symbol or range tuple, e.g. plot(f, x) or plot(f, (x, -4, 4))."
-            )
-    else:
-        plot_var = _coerce_symbol(var_or_range, role="plot variable")
-
-    if plot_var not in bound_symbols:
-        if len(bound_symbols) == 1:
-            bound_symbols = (plot_var,)
-            if numeric_fn is not None:
-                numeric_fn = _rebind_numeric_function_vars(
-                    numeric_fn,
-                    vars_spec=bound_symbols,
-                    source_callable=source_callable,
-                )
-        else:
-            raise ValueError(
-                f"plot() variable {plot_var!r} is not present in callable variables {bound_symbols!r}. "
-                "Use vars=... to declare callable variable order explicitly."
-            )
-
-    parameters = tuple(sym for sym in bound_symbols if sym != plot_var)
-    return plot_var, expr, numeric_fn, parameters
-
-
 # SECTION: Figure (The Coordinator) [id: Figure]
 # =============================================================================
 
@@ -359,8 +189,7 @@ class Figure:
 
     Examples
     --------
-    >>> import sympy as sp
-    >>> x, a = sp.symbols("x a")
+    >>>     >>> x, a = sp.symbols("x a")
     >>> fig = Figure()
     >>> fig.parameter(a, min=-2, max=2)
     >>> fig.plot(a*sp.sin(x), x, id="a_sin")
@@ -1207,7 +1036,7 @@ class Figure:
                 raise ValueError("Too many auto-generated IDs")
 
         normalized_var, normalized_func, normalized_numeric_fn, inferred_parameters = (
-            _normalize_plot_inputs(
+            normalize_plot_inputs(
                 func,
                 var,
                 vars=vars,
@@ -1782,333 +1611,21 @@ class Figure:
                 self._print_capture = None
 
 
-class _CurrentParametersProxy(Mapping):
-    """Module-level proxy to the current figure's ParameterManager.
+from . import figure_api as _figure_api
 
-    Examples
-    --------
-    >>> x, a = sp.symbols("x a")  # doctest: +SKIP
-    >>> fig = Figure()  # doctest: +SKIP
-    >>> with fig:  # doctest: +SKIP
-    ...     parameter(a, min=-10, max=10)  # doctest: +SKIP
-    ...     fig.plot(a * sp.sin(x), x)  # doctest: +SKIP
-    ...     params[a].value = 5  # doctest: +SKIP
-    """
-
-    def _fig(self) -> Figure:
-        """Return the current Figure from the module stack."""
-        return _require_current_figure()
-
-    def _mgr(self) -> ParameterManager:
-        """Return the current figure's ParameterManager."""
-        return self._fig().parameters
-
-    def __getitem__(self, key: Hashable) -> ParamRef:
-        """Return the current figure's parameter reference for ``key``."""
-        return self._mgr()[key]
-
-    def __iter__(self) -> Iterator[Hashable]:
-        """Iterate parameter symbols from the active figure manager."""
-        return iter(self._mgr())
-
-    def __len__(self) -> int:
-        """Return number of parameters on the active figure."""
-        return len(self._mgr())
-
-    def __contains__(self, key: object) -> bool:
-        """Return whether ``key`` is present on the active figure."""
-        return key in self._mgr()
-
-    def __setitem__(self, key: Hashable, value: Any) -> None:
-        """Set the active figure parameter value via mapping syntax."""
-        self[key].value = value
-
-    def parameter(
-        self,
-        symbols: Symbol | Sequence[Symbol],
-        *,
-        control: str | None = None,
-        **kwargs: Any,
-    ) -> ParamRef | dict[Symbol, ParamRef]:
-        """Proxy to the current figure's :meth:`ParameterManager.parameter`."""
-        return self._mgr().parameter(symbols, control=control, **kwargs)
-
-    def snapshot(
-        self, *, full: bool = False
-    ) -> ParameterValueSnapshot | ParameterSnapshot:
-        """Return current-figure parameter values or full snapshot metadata."""
-        return self._mgr().snapshot(full=full)
-
-    def __getattr__(self, name: str) -> Any:
-        """Forward unknown attributes/methods to active figure parameters."""
-        return getattr(self._mgr(), name)
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        """Forward attribute assignment to active figure parameters."""
-        if name.startswith("_"):
-            object.__setattr__(self, name, value)
-            return
-        setattr(self._mgr(), name, value)
-
-
-class _CurrentPlotsProxy(Mapping):
-    """Module-level proxy to the current figure's plots mapping."""
-
-    def _fig(self) -> Figure:
-        return _require_current_figure()
-
-    def __getitem__(self, key: Hashable) -> Plot:
-        return self._fig().plots[key]
-
-    def __iter__(self) -> Iterator[Hashable]:
-        return iter(self._fig().plots)
-
-    def __len__(self) -> int:
-        return len(self._fig().plots)
-
-    def __contains__(self, key: object) -> bool:
-        return key in self._fig().plots
-
-
-parameters = _CurrentParametersProxy()
-params = parameters
-plots = _CurrentPlotsProxy()
-
-
-def set_title(text: str) -> None:
-    """Set the title of the current figure."""
-    _require_current_figure().title = text
-
-
-def get_title() -> str:
-    """Get the title of the current figure."""
-    return _require_current_figure().title
-
-
-def render(reason: str = "manual", trigger: ParamEvent | None = None) -> None:
-    """Render the current figure.
-
-    Parameters
-    ----------
-    reason : str, optional
-        Render reason string for logging/debugging.
-    trigger : ParamEvent or None, optional
-        Optional event payload forwarded to :meth:`Figure.render`.
-    """
-    _require_current_figure().render(reason=reason, trigger=trigger)
-
-
-def info(
-    spec: str
-    | Callable[[Figure, Any], str]
-    | Sequence[str | Callable[[Figure, Any], str]],
-    id: Hashable | None = None,
-    *,
-    view: str | None = None,
-) -> None:
-    """Create or replace a simplified info card on the current figure."""
-    _require_current_figure().info(spec=spec, id=id, view=view)
-
-
-def set_x_range(value: RangeLike) -> None:
-    """Set x-axis range on the current figure."""
-    _require_current_figure().x_range = value
-
-
-def get_x_range() -> tuple[float, float]:
-    """Get x-axis range from the current figure."""
-    return _require_current_figure().x_range
-
-
-def set_y_range(value: RangeLike) -> None:
-    """Set y-axis range on the current figure."""
-    _require_current_figure().y_range = value
-
-
-def get_y_range() -> tuple[float, float]:
-    """Get y-axis range from the current figure."""
-    return _require_current_figure().y_range
-
-
-def set_sampling_points(value: int | str | _FigureDefaultSentinel | None) -> None:
-    """Set default sampling points on the current figure."""
-    _require_current_figure().sampling_points = value
-
-
-def get_sampling_points() -> int | None:
-    """Get default sampling points from the current figure."""
-    return _require_current_figure().sampling_points
-
-
-def plot_style_options() -> dict[str, str]:
-    """Return discoverable Figure plot-style options.
-
-    Returns
-    -------
-    dict[str, str]
-        Mapping of style keyword names to descriptions.
-
-    Notes
-    -----
-    Current supported shortcut keys are: ``color``, ``thickness``/``width``, ``dash``,
-    ``opacity``/``alpha``, ``line``, and ``trace``.
-    """
-    return Figure.plot_style_options()
-
-
-def parameter(
-    symbols: Symbol | Sequence[Symbol],
-    *,
-    control: str | None = None,
-    **kwargs: Any,
-) -> ParamRef | dict[Symbol, ParamRef]:
-    """Ensure parameter(s) exist on the current figure and return their refs.
-
-    Parameters
-    ----------
-    symbols : sympy.Symbol or sequence[sympy.Symbol]
-        Parameter symbol(s) to create or reuse.
-    control : str or None, optional
-        Optional control identifier passed to the underlying manager.
-    **kwargs : Any
-        Control configuration (min, max, value, step).
-
-    Returns
-    -------
-    ParamRef or dict[Symbol, ParamRef]
-        Parameter reference(s) for the requested symbol(s).
-
-    Examples
-    --------
-    >>> import sympy as sp  # doctest: +SKIP
-    >>> x, a = sp.symbols("x a")  # doctest: +SKIP
-    >>> fig = Figure()  # doctest: +SKIP
-    >>> with fig:  # doctest: +SKIP
-    ...     parameter(a, min=-1, max=1)  # doctest: +SKIP
-
-    Notes
-    -----
-    This helper requires an active figure context (see :meth:`Figure.__enter__`).
-
-    See Also
-    --------
-    Figure.parameter : Instance method for parameter creation.
-    """
-    fig = _require_current_figure()
-    return fig.parameters.parameter(symbols, control=control, **kwargs)
-
-
-def plot(
-    func: Any,
-    var: Any,
-    parameters: Sequence[Symbol] | None = None,
-    id: str | None = None,
-    label: str | None = None,
-    visible: VisibleSpec = True,
-    x_domain: RangeLike | None = None,
-    sampling_points: int | str | None = None,
-    color: str | None = None,
-    thickness: int | float | None = None,
-    width: int | float | None = None,
-    dash: str | None = None,
-    opacity: int | float | None = None,
-    alpha: int | float | None = None,
-    line: Mapping[str, Any] | None = None,
-    trace: Mapping[str, Any] | None = None,
-    view: str | Sequence[str] | None = None,
-    vars: PlotVarsSpec | None = None,
-) -> Plot:
-    """
-    Plot an expression/callable on the current figure, or create a new figure per call.
-
-    Parameters
-    ----------
-    func : callable or NumericFunction or sympy.Expr
-        Function/expression to plot.
-    var : sympy.Symbol or tuple
-        Plot variable ``x`` or ``(x, min, max)`` range tuple.
-    parameters : sequence[sympy.Symbol], optional
-        Deprecated. Use :func:`parameter` / :data:`parameters` for explicit
-        control registration. If omitted, symbols are inferred.
-    id : str, optional
-        Plot identifier for update or creation.
-    label : str, optional
-        Legend label for the trace. If omitted, new plots default to ``id``;
-        existing plots keep their current label.
-    visible : bool or "legendonly", optional
-        Plotly visibility state for the trace. Hidden traces skip sampling
-        until shown.
-    x_domain : RangeLike or None, optional
-        Explicit x-domain override.
-    sampling_points : int or str, optional
-        Number of samples, or ``"figure_default"`` to inherit from the figure.
-    color : str or None, optional
-        Line color. Common formats include named colors (e.g., ``"red"``),
-        hex values (e.g., ``"#ff0000"``), and ``rgb(...)``/``rgba(...)``.
-    thickness : int or float, optional
-        Line width in pixels. ``1`` is thin; larger values produce thicker lines.
-    width : int or float, optional
-        Alias for ``thickness``.
-    dash : str or None, optional
-        Line pattern. Supported values: ``"solid"``, ``"dot"``, ``"dash"``,
-        ``"longdash"``, ``"dashdot"``, ``"longdashdot"``.
-    line : mapping or None, optional
-        Extra per-line style fields as a mapping (advanced usage).
-    opacity : int or float, optional
-        Overall curve opacity between ``0.0`` (fully transparent) and
-        ``1.0`` (fully opaque).
-    alpha : int or float, optional
-        Alias for ``opacity``.
-    trace : mapping or None, optional
-        Extra full-trace style fields as a mapping (advanced usage).
-
-    Returns
-    -------
-    Plot
-        The created or updated plot instance.
-
-    Examples
-    --------
-    >>> x, a = sp.symbols("x a")  # doctest: +SKIP
-    >>> parameter(a, min=-1, max=1)  # doctest: +SKIP
-    >>> plot(a * sp.sin(x), x, id="a_sin")  # doctest: +SKIP
-    >>> plot(sp.sin(x), x, id="sin")  # doctest: +SKIP
-
-    Notes
-    -----
-    If no current figure is active, this function creates and displays a new
-    :class:`Figure`.
-
-    All supported style options for this helper are discoverable via
-    :func:`plot_style_options`.
-
-    See Also
-    --------
-    Figure.plot : Instance method with the same signature.
-    plot_style_options : List supported style kwargs and meanings
-        (`color`, `thickness`, `width`, `dash`, `opacity`, `alpha`, `line`, `trace`).
-    """
-    fig = _current_figure()
-    if fig is None:
-        fig = Figure()
-        display(fig)
-    return fig.plot(
-        func,
-        var,
-        parameters=parameters,
-        id=id,
-        label=label,
-        visible=visible,
-        x_domain=x_domain,
-        sampling_points=sampling_points,
-        color=color,
-        thickness=thickness,
-        width=width,
-        dash=dash,
-        line=line,
-        opacity=opacity,
-        alpha=alpha,
-        trace=trace,
-        view=view,
-        vars=vars,
-    )
+get_sampling_points = _figure_api.get_sampling_points
+get_title = _figure_api.get_title
+get_x_range = _figure_api.get_x_range
+get_y_range = _figure_api.get_y_range
+info = _figure_api.info
+parameter = _figure_api.parameter
+parameters = _figure_api.parameters
+params = _figure_api.params
+plot = _figure_api.plot
+plots = _figure_api.plots
+plot_style_options = _figure_api.plot_style_options
+render = _figure_api.render
+set_sampling_points = _figure_api.set_sampling_points
+set_title = _figure_api.set_title
+set_x_range = _figure_api.set_x_range
+set_y_range = _figure_api.set_y_range
