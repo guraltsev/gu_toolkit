@@ -55,8 +55,8 @@ Key complexity hotspots identified in the code review:
 
 - [x] Extract module-level helpers to `figure_api.py` with re-exports.
 - [x] Extract plot input normalization to a testable unit.
-- [ ] Extract view management to a `ViewManager`.
-- [ ] Deprecate `self._figure` / `self._pane` aliases.
+- [x] Extract view management to a `ViewManager`.
+- [x] Deprecate `self._figure` / `self._pane` aliases.
 - [ ] Add regression tests for all public import paths.
 - [ ] Verify `Figure.py` is reduced to coordinator-only responsibilities.
 
@@ -99,5 +99,7 @@ Key complexity hotspots identified in the code review:
 
 - ✅ Completed **Phase 1**: module-level helper API extracted from `Figure.py` into `figure_api.py` and re-exported through `Figure.py`/package namespace without user-facing import changes.
 - ✅ Completed **Phase 2**: callable/expr normalization extracted into `figure_plot_normalization.py`; `Figure.plot()` now delegates to `normalize_plot_inputs(...)`.
-- ✅ Added targeted regression tests for phase 1 + phase 2 behavior (`tests/test_project022_phase12_decomposition.py`).
-- ⏳ Remaining phases (3-5) are still open and tracked in the project TODO/exit criteria.
+- ✅ Completed **Phase 3**: view lifecycle + stale-state policy centralized in `figure_view_manager.py`; `Figure` now delegates view add/switch/remove and stale tracking to `ViewManager`.
+- ✅ Completed **Phase 4**: removed legacy mutable aliases (`self._figure` / `self._pane`) and replaced usage with explicit accessors (`figure_widget`, `figure_widget_for`, `pane`, `pane_for`).
+- ✅ Added targeted regression tests for phase 1-4 behavior (`tests/test_project022_phase12_decomposition.py`, `tests/test_project022_phase34_decomposition.py`).
+- ⏳ Remaining phase (5) is still open and tracked in the project TODO/exit criteria.
