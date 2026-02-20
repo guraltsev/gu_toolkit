@@ -1,7 +1,12 @@
 # Project 022: Figure Module Decomposition
 
-**Status:** In Progress
+**Status:** Closed (Completed with unmet primary goal)
 **Priority:** High
+
+
+## Closure disposition (2026-02-20)
+
+Project 022 is being closed administratively because its scoped decomposition phases were delivered, but the primary success target was **not** met: `Figure.py` remains above the under-800-line objective. Follow-up architecture work is tracked in a new project focused on stricter separation of concerns and coordinator-only responsibilities.
 
 ## Goal/Scope
 
