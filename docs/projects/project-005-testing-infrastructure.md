@@ -32,6 +32,15 @@ widget-level behavior.
   explicit TODO checklist in this document because the next step was
   unambiguous.
 
+## Plan review (2026-02-20)
+
+- This legacy project still does not have a dedicated `plan.md`; work proceeded via the
+  in-file TODO list because the next milestone (CI notebook execution) was direct and
+  unambiguous.
+- Critical check: the existing plan did not define a concrete CI execution strategy for
+  notebooks. This was a simple gap, so it was overridden by adopting a dedicated `notebook-tests`
+  job in GitHub Actions using `pytest --nbval-lax tests/*.ipynb` and matching local tox support.
+
 ## Completed
 
 - [x] `tox.ini` with `py310`, `py311`, `py312` environments.
@@ -44,7 +53,7 @@ widget-level behavior.
 ## TODO checklist
 
 - [ ] Raise coverage threshold incrementally (60% → 70% → 80%) as tests are added.
-- [ ] Integrate notebook tests into CI using `nbval` or `pytest-notebook`.
+- [x] Integrate notebook tests into CI using `nbval` or `pytest-notebook`.
 - [x] Add unit tests for currently-indirect-only utility functions
       (`_resolve_symbol`, `_normalize_vars`, `InputConvert` edge cases).
 - [ ] Add property-based tests (Hypothesis) for `InputConvert` and `numpify`
@@ -54,8 +63,8 @@ widget-level behavior.
 
 ## Exit criteria
 
-- [ ] Coverage threshold is at or above 70%.
-- [ ] Notebook-based tests run in CI without manual intervention.
+- [x] Coverage threshold is at or above 70%.
+- [x] Notebook-based tests run in CI without manual intervention.
 - [ ] All test files use standard pytest patterns.
 - [ ] Priority coverage gaps (utilities, numeric edge cases) are addressed.
 
@@ -64,6 +73,9 @@ widget-level behavior.
 
 - [x] Added direct regression tests for utility resolution and vars normalization helpers.
 - [x] Added direct regression tests for `InputConvert` edge-case truncation semantics.
+- [x] Added CI notebook execution job (`notebook-tests`) for `tests/*.ipynb` using `pytest --nbval-lax`.
+- [x] Added local `tox -e nb` parity command for notebook CI behavior.
+- [x] Fixed notebook regression in `tests/test_SmartFigure-param_change_hooks.ipynb` by avoiding `VBox([fig, ...])` now that `Figure` is no longer an ipywidget child.
 - [ ] External review of Project 005 updates (required before closure).
 
 ## Challenges and mitigations
@@ -83,8 +95,8 @@ widget-level behavior.
 
 - [x] Core automated pytest + coverage infrastructure is implemented and running in CI (`pytest --cov` on Python 3.10–3.12).
 - [x] Regression/unit tests for utility normalization and conversion helpers are present (`tests/test_project005_testing_infra.py`).
-- [ ] Comprehensive coverage objective is not fully met at project-definition level (target is 70%+ measured completion and notebook CI integration).
-- [ ] Notebook-based tests are still not executed in CI, so test coverage across notebook UX paths is incomplete.
+- [x] Baseline coverage gate remains above the minimum project threshold (`fail_under = 75` in configuration).
+- [x] Notebook-based tests are now executed in CI through a dedicated `notebook-tests` workflow job using `nbval` in lax mode.
 - [x] Documentation for lint/test workflows is present in `docs/develop_guide/develop_guide.md`.
 
-**Result:** Project remains **open**. Core infrastructure is complete, but notebook CI automation and final coverage objectives remain outstanding.
+**Result:** Project remains **open** pending external review. Core infrastructure objectives (coverage gate + notebook CI automation) are now implemented, and remaining work focuses on broader depth targets (property-based tests and widget/browser verification).

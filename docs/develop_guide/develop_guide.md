@@ -27,6 +27,16 @@ This repository contains test scripts (see `tests/`) that cover individual compo
 
 ---
 
+
+### Notebook test execution
+
+Notebook-based regression tests are validated with `nbval` in CI and can be run locally with:
+
+- `pytest --nbval-lax tests/*.ipynb`
+- `tox -e nb`
+
+Use `--nbval-lax` to keep notebook output assertions robust across environments while still executing all notebook cells.
+
 ### Code quality and static analysis
 
 This repository uses automated linting and type checking to maintain code quality:
