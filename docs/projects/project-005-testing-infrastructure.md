@@ -75,6 +75,7 @@ widget-level behavior.
 - [x] Added direct regression tests for `InputConvert` edge-case truncation semantics.
 - [x] Added CI notebook execution job (`notebook-tests`) for `tests/*.ipynb` using `pytest --nbval-lax`.
 - [x] Added local `tox -e nb` parity command for notebook CI behavior.
+- [x] Fixed notebook regression in `tests/test_SmartFigure-param_change_hooks.ipynb` by avoiding `VBox([fig, ...])` now that `Figure` is no longer an ipywidget child.
 - [ ] External review of Project 005 updates (required before closure).
 
 ## Challenges and mitigations
