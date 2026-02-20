@@ -27,53 +27,41 @@ Observed concentration points in the current module:
 - **View/runtime ownership mixed with UI sync:** add/switch/remove view methods and `_sync_sidebar_visibility()` blend domain state transitions with widget/UI behavior.
 - **Facade surface mixed with subsystem internals:** many getters/setters and convenience methods are implemented directly in `Figure` instead of through a grouped facade contract.
 
-### Preferred target organization (chosen)
+### Preferred target organization (rethought)
 
-Adopt a **ports-and-services coordinator model** centered on `Figure` as composition root:
+Adopt a **workflow-first modularization** that is intentionally concrete and Pythonic, avoiding a command/event object architecture.
 
-1. **`Figure` (orchestrator only)**
-   - owns service wiring, lifecycle entrypoints, and transaction boundaries;
-   - contains no business-policy branches for plotting/rendering internals;
-   - delegates all non-trivial behavior to dedicated services.
+1. **`Figure` remains the workflow hub, not a policy hub**
+   - `Figure` keeps user-facing method signatures and call ordering;
+   - each public method runs a short, readable sequence (`normalize -> mutate state -> request render -> sync ui`);
+   - business decisions move into focused collaborators, but without introducing a heavy orchestration framework.
 
-2. **Plot lifecycle service**
-   - create/update/delete plot records,
-   - enforce plot identity and overwrite policy,
-   - own parameter auto-detection/registration policy,
-   - produce immutable "plot change" events for downstream render service.
+2. **Extract three concrete collaborators, aligned with existing code paths**
+   - **`PlotRegistry`**: owns plot create/update/remove, id/overwrite behavior, and parameter registration decisions.
+   - **`RenderEngine`**: owns stale tracking, sampling/trace refresh, and relayout/range application.
+   - **`ViewRuntime`**: owns view add/switch/remove state and runtime handles for active view widgets.
 
-3. **Render pipeline service**
-   - own stale detection, rerender planning, sampling execution, and trace patching,
-   - isolate relayout/range synchronization policy,
-   - expose explicit operations (`render_all`, `render_view`, `mark_stale`, `sync_viewport`).
+3. **Keep UI behavior in a thin adapter layer**
+   - a `FigureUIAdapter` handles sidebar/legend/info visibility and widget-only updates;
+   - adapter consumes plain snapshots (`dict`/dataclass), not internal mutable objects.
 
-4. **View runtime service**
-   - own view registry, active view transitions, per-view widget runtime handles,
-   - enforce validity invariants (active view must exist, runtime must be attached),
-   - emit state changes consumed by UI synchronization service.
+4. **Use direct method calls and small return values, not command buses**
+   - inputs are regular method parameters with clear names;
+   - outputs are simple booleans/enums/dataclasses only where needed for clarity;
+   - no `PlotCommand`/`RenderCommand` style indirection unless a concrete complexity need emerges later.
 
-5. **UI synchronization adapter**
-   - own sidebar/legend/info visibility sync and widget-only concerns,
-   - remain replaceable for notebook-vs-other frontends,
-   - consume typed state snapshots rather than mutating core services directly.
+### Contract shape (pragmatic)
 
-6. **Public API facade module(s)**
-   - keep notebook-friendly surface (`plot`, `parameter`, range/title helpers) thin,
-   - route to orchestrator APIs only,
-   - avoid embedding behavior policy in helper wrappers.
+Contracts should stay minimal and implementation-friendly:
+- **Calls:** explicit methods (`plot_registry.upsert_plot(...)`, `render_engine.render_view(...)`).
+- **Returns:** lightweight values (`RenderResult`, `changed: bool`, `active_view_id: str`).
+- **Shared state:** immutable snapshots only at UI boundaries where mutation safety matters.
 
-### Contract shape
-
-The target contracts between services should be explicit and typed:
-- input command objects (e.g., `PlotCommand`, `RenderCommand`),
-- output result/event objects (e.g., `PlotChanged`, `RenderReport`, `ViewStateChanged`),
-- immutable snapshots for UI (`FigureStateSnapshot`, `ViewStateSnapshot`).
-
-This keeps `Figure` readable as a workflow graph instead of a mixed policy implementation.
+This keeps the decomposition understandable for maintainers who work directly in `Figure.py`, while still enforcing clear ownership boundaries.
 
 ### Why this is the preferred approach
 
-This approach aligns with current module trajectory (`figure_plot_normalization.py`, `figure_view_manager.py`, `figure_plot_style.py`) while fixing the remaining issue: too much decision logic still sits in `Figure.py`. It minimizes risk by evolving existing boundaries rather than introducing an entirely new framework.
+This approach aligns with current module trajectory (`figure_plot_normalization.py`, `figure_view_manager.py`, `figure_plot_style.py`) while avoiding architecture overhead that would make normal debugging and incremental refactoring harder. It minimizes risk by removing policy from `Figure.py` in small slices, with concrete modules and straightforward call flows.
 
 ## Alternatives considered
 
@@ -81,7 +69,7 @@ This approach aligns with current module trajectory (`figure_plot_normalization.
    - Fast but shallow; risks moving complexity without defining ownership contracts.
    - Rejected as primary strategy.
 
-2. **Alternative B: complete rewrite around event sourcing/CQRS**
+2. **Alternative B: complete rewrite around command/event messaging (or CQRS/event sourcing)**
    - Maximum conceptual purity, but disproportionate migration risk and scope for current toolkit needs.
    - Rejected as primary strategy.
 
@@ -106,7 +94,7 @@ This approach aligns with current module trajectory (`figure_plot_normalization.
 
 - [ ] Define explicit service boundaries and ownership matrix for every current `Figure` method.
 - [ ] Classify each `Figure` method as orchestrator/facade/service-owned and identify extraction destination.
-- [ ] Draft typed command/event/snapshot contract primitives for plot/render/view/ui interactions.
+- [ ] Define concrete collaborator APIs (`PlotRegistry`, `RenderEngine`, `ViewRuntime`, `FigureUIAdapter`) with minimal return types.
 - [ ] Produce acceptance criteria that verify "orchestrator-only" responsibilities in `Figure.py`.
 - [ ] Prepare implementation blueprint in `plan.md` after boundary decisions are finalized.
 
