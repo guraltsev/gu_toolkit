@@ -1,7 +1,7 @@
 # Issue 034: Notebook `Figure` display lifecycle contract is ambiguous (`display(fig)` vs constructor autodisplay)
 
 ## Status
-Ready for external review
+External review passed. Make sure the behavior is fully documented and close. 
 
 ## Summary
 Assessment (2026-02-20): implementation and regression coverage are largely complete, but documentation alignment is not fully closed due to notebook TODO mismatch and pending review.
@@ -36,10 +36,10 @@ The display lifecycle contract is now explicit and test-enforced:
 - [x] Add regression tests for constructor non-display behavior and `_ipython_display_` lifecycle behavior.
 - [x] Add constructor `display=True` option and regression test.
 - [x] Record WARNING about notebook TODO contradiction with implemented default behavior.
-- [ ] External review confirms whether notebook TODO should be removed, revised, or implemented as default behavior.
+- [x] External review confirms whether notebook TODO should be removed, revised, or implemented as default behavior.
 
 ## Exit criteria
 - [x] Notebook display lifecycle behavior is explicitly documented in toolkit docs/code docs.
 - [x] Regression tests enforce both default and opt-in constructor display behavior.
 - [x] User-facing guidance in this issue is consistent with tested behavior and highlights outstanding notebook mismatch.
-- [ ] Issue is closed only after external review.
+- [x] Issue is closed only after external review.
