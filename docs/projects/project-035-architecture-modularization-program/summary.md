@@ -79,8 +79,14 @@ Because this is private and backward compatibility is not required:
 ## Open questions
 
 1. **Cutover strategy:** big-bang branch merge vs phased merges with temporary adapters.
-2. **Contract representation:** dataclasses + typing only vs schema-backed protocol artifacts for cross-runtime validation.
-3. **Adapter surface priority:** stabilize legend contract first (high leverage, project-034 alignment) or define a broader figure-wide UI protocol first.
+2. **How should we define the frontend/backend contract artifact?**
+   - **Option A (lighter):** Python `@dataclass` + type hints + docstrings only.
+   - **Option B (stricter):** A formal schema (for example JSON Schema or equivalent) in addition to Python types.
+   - **Decision needed:** choose whether we optimize for speed/simplicity (A) or stronger cross-runtime validation and tooling (B).
+3. **What should we standardize first: legend-only or whole-figure UI protocol?**
+   - **Option A (narrow first):** define protocol v1 only for legend interactions/state.
+   - **Option B (broad first):** define one unified protocol for legend + plot/view/parameter UI interactions.
+   - **Decision needed:** choose whether we reduce risk with a focused legend slice (A) or invest early in a wider contract (B).
 4. **Module naming policy:** whether to complete full snake_case normalization in one pass or incrementally per workstream.
 
 ## Challenges and mitigations
