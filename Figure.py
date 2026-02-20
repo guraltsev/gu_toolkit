@@ -101,6 +101,7 @@ from .figure_legend import LegendPanelManager
 from .figure_parameters import ParameterManager
 from .figure_plot import Plot
 from .figure_view import View
+from .figure_view_manager import ViewManager
 
 # -----------------------------
 # Small type aliases
@@ -201,13 +202,9 @@ class Figure:
         "_params",
         "_info",
         "_legend",
+        "_view_manager",
         "_view_runtime",
-        "_figure",
-        "_pane",
         "plots",
-        "_views",
-        "_active_view_id",
-        "_default_view_id",
         "_sampling_points",
         "_debug",
         "_plotly_legend_mode",
@@ -298,17 +295,10 @@ class Figure:
         self._layout.observe_tab_selection(self.set_active_view)
 
         # 4. Set Initial State
-        self._default_view_id = str(default_view_id)
-        self._views: dict[str, View] = {}
-        self._active_view_id = self._default_view_id
-        self.add_view(self._default_view_id, x_range=x_range, y_range=y_range)
-        self._legend.set_active_view(self._active_view_id)
+        self._view_manager = ViewManager(default_view_id=str(default_view_id))
+        self.add_view(self._view_manager.default_view_id, x_range=x_range, y_range=y_range)
+        self._legend.set_active_view(self.active_view_id)
         self._sync_sidebar_visibility()
-
-        # Backward-compat convenience aliases mirror the active view runtime.
-        active_runtime = self._runtime_for_view(self._active_view_id)
-        self._figure = active_runtime.figure_widget
-        self._pane = active_runtime.pane
 
         # 5. Bind Events
         self._render_info_last_log_t = 0.0
@@ -322,16 +312,16 @@ class Figure:
     @property
     def active_view_id(self) -> str:
         """Return the currently active view identifier."""
-        return self._active_view_id
+        return self._view_manager.active_view_id
 
     @property
     def views(self) -> dict[str, View]:
         """Return the workspace view registry."""
-        return self._views
+        return self._view_manager.views
 
     def _active_view(self) -> View:
         """Return the active view model."""
-        return self._views[self._active_view_id]
+        return self._view_manager.active_view()
 
     def _default_figure_layout(self) -> dict[str, Any]:
         """Return shared Plotly layout defaults copied into each view widget."""
@@ -435,73 +425,50 @@ class Figure:
     ) -> View:
         """Add a view model to the workspace registry."""
         view_id = str(id)
-        if view_id in self._views:
-            raise ValueError(f"View '{view_id}' already exists")
-        xr = x_range if x_range is not None else (-4.0, 4.0)
-        yr = y_range if y_range is not None else (-3.0, 3.0)
-        view = View(
-            id=view_id,
-            title=title or view_id,
-            x_label=x_label or "",
-            y_label=y_label or "",
-            default_x_range=(
-                float(InputConvert(xr[0], float)),
-                float(InputConvert(xr[1], float)),
-            ),
-            default_y_range=(
-                float(InputConvert(yr[0], float)),
-                float(InputConvert(yr[1], float)),
-            ),
-            is_active=(not self._views),
+        view = self._view_manager.add_view(
+            view_id,
+            title=title,
+            x_range=x_range,
+            y_range=y_range,
+            x_label=x_label,
+            y_label=y_label,
         )
-        self._views[view_id] = view
         runtime = self._create_view_runtime(view_id=view_id)
         runtime.figure_widget.update_xaxes(range=view.default_x_range)
         runtime.figure_widget.update_yaxes(range=view.default_y_range)
         if view.is_active:
-            self._active_view_id = view_id
             self._info.set_active_view(view_id)
             self._legend.set_active_view(view_id)
-            self._figure = runtime.figure_widget
-            self._pane = runtime.pane
         self._layout.set_view_tabs(
-            tuple(self._views.keys()), active_view_id=self._active_view_id
+            tuple(self._view_manager.views.keys()), active_view_id=self.active_view_id
         )
         return view
 
     def set_active_view(self, id: str) -> None:
         """Set the active view id and synchronize widget ranges."""
-        if id not in self._views:
-            raise KeyError(f"Unknown view: {id}")
-        if id == self._active_view_id:
+        transition = self._view_manager.set_active_view(
+            id,
+            current_viewport_x=self._viewport_x_range,
+            current_viewport_y=self._viewport_y_range,
+        )
+        if transition is None:
             return
-
-        current = self._active_view()
-        current.viewport_x_range = self._viewport_x_range
-        current.viewport_y_range = self._viewport_y_range
-        current.is_active = False
-
-        self._active_view_id = id
-        nxt = self._active_view()
-        nxt.is_active = True
+        _, nxt = transition
         self._info.set_active_view(id)
         self._legend.set_active_view(id)
 
-        runtime = self._runtime_for_view(id)
-        self._figure = runtime.figure_widget
-        self._pane = runtime.pane
-        self._figure.update_xaxes(range=nxt.viewport_x_range or nxt.default_x_range)
-        self._figure.update_yaxes(range=nxt.viewport_y_range or nxt.default_y_range)
+        self.figure_widget.update_xaxes(range=nxt.viewport_x_range or nxt.default_x_range)
+        self.figure_widget.update_yaxes(range=nxt.viewport_y_range or nxt.default_y_range)
 
         for plot in self.plots.values():
-            plot.render(view_id=self._active_view_id)
+            plot.render(view_id=self.active_view_id)
         if nxt.is_stale:
-            nxt.is_stale = False
+            self._view_manager.clear_stale(self.active_view_id)
 
         self._layout.set_view_tabs(
-            tuple(self._views.keys()), active_view_id=self._active_view_id
+            tuple(self._view_manager.views.keys()), active_view_id=self.active_view_id
         )
-        self._layout.trigger_reflow_for_view(self._active_view_id)
+        self._layout.trigger_reflow_for_view(self.active_view_id)
         self._sync_sidebar_visibility()
 
     @contextmanager
@@ -512,25 +479,21 @@ class Figure:
         try:
             yield self
         finally:
-            if previous in self._views:
+            if previous in self._view_manager.views:
                 self.set_active_view(previous)
 
     def remove_view(self, id: str) -> None:
         """Remove a view and drop plot memberships to it."""
-        if id == self._active_view_id:
-            raise ValueError("Cannot remove active view")
-        if id == self._default_view_id:
-            raise ValueError("Cannot remove default view")
-        if id not in self._views:
+        if id not in self._view_manager.views:
             return
         for plot in self.plots.values():
             plot.remove_from_view(id)
             self._legend.on_plot_updated(plot)
-        del self._views[id]
+        self._view_manager.remove_view(id)
         self._view_runtime.pop(id, None)
         self._relayout_debouncers.pop(id, None)
         self._layout.set_view_tabs(
-            tuple(self._views.keys()), active_view_id=self._active_view_id
+            tuple(self._view_manager.views.keys()), active_view_id=self.active_view_id
         )
         self._sync_sidebar_visibility()
 
@@ -597,7 +560,7 @@ class Figure:
         plotly.graph_objects.FigureWidget
             The interactive Plotly widget for :attr:`active_view_id`.
         """
-        return self._runtime_for_view(self._active_view_id).figure_widget
+        return self._runtime_for_view(self.active_view_id).figure_widget
 
     def figure_widget_for(self, view_id: str) -> go.FigureWidget:
         """Return the Plotly FigureWidget backing ``view_id``.
@@ -612,9 +575,20 @@ class Figure:
         plotly.graph_objects.FigureWidget
             The widget owned by that view.
         """
-        if view_id not in self._views:
+        if view_id not in self._view_manager.views:
             raise KeyError(f"Unknown view: {view_id}")
         return self._runtime_for_view(view_id).figure_widget
+
+    @property
+    def pane(self) -> PlotlyPane:
+        """Access the active view's :class:`PlotlyPane`."""
+        return self._runtime_for_view(self.active_view_id).pane
+
+    def pane_for(self, view_id: str) -> PlotlyPane:
+        """Return the :class:`PlotlyPane` backing ``view_id``."""
+        if view_id not in self._view_manager.views:
+            raise KeyError(f"Unknown view: {view_id}")
+        return self._runtime_for_view(view_id).pane
 
     @property
     def parameters(self) -> ParameterManager:
@@ -692,7 +666,7 @@ class Figure:
             float(InputConvert(value[1], float)),
         )
         self._active_view().default_x_range = rng
-        self._figure.update_xaxes(range=rng)
+        self.figure_widget.update_xaxes(range=rng)
 
     @property
     def y_range(self) -> tuple[float, float]:
@@ -742,7 +716,7 @@ class Figure:
             float(InputConvert(value[1], float)),
         )
         self._active_view().default_y_range = rng
-        self._figure.update_yaxes(range=rng)
+        self.figure_widget.update_yaxes(range=rng)
 
     @property
     def _viewport_x_range(self) -> tuple[float, float] | None:
@@ -751,7 +725,7 @@ class Figure:
         Reading this property queries the live Plotly widget viewport.
         Setting it pans/zooms the visible x-range without changing ``x_range``.
         """
-        rng = self._figure.layout.xaxis.range
+        rng = self.figure_widget.layout.xaxis.range
         if rng is None:
             return None
         result = (float(rng[0]), float(rng[1]))
@@ -763,14 +737,14 @@ class Figure:
         if value is None:
             rng = self._active_view().default_x_range
             self._active_view().viewport_x_range = rng
-            self._figure.update_xaxes(range=rng)
+            self.figure_widget.update_xaxes(range=rng)
             return
         rng = (
             float(InputConvert(value[0], float)),
             float(InputConvert(value[1], float)),
         )
         self._active_view().viewport_x_range = rng
-        self._figure.update_xaxes(range=rng)
+        self.figure_widget.update_xaxes(range=rng)
 
     @property
     def _viewport_y_range(self) -> tuple[float, float] | None:
@@ -779,7 +753,7 @@ class Figure:
         Reading this property queries the live Plotly widget viewport.
         Setting it pans/zooms the visible y-range without changing ``y_range``.
         """
-        rng = self._figure.layout.yaxis.range
+        rng = self.figure_widget.layout.yaxis.range
         if rng is None:
             return None
         result = (float(rng[0]), float(rng[1]))
@@ -791,14 +765,14 @@ class Figure:
         if value is None:
             rng = self._active_view().default_y_range
             self._active_view().viewport_y_range = rng
-            self._figure.update_yaxes(range=rng)
+            self.figure_widget.update_yaxes(range=rng)
             return
         rng = (
             float(InputConvert(value[0], float)),
             float(InputConvert(value[1], float)),
         )
         self._active_view().viewport_y_range = rng
-        self._figure.update_yaxes(range=rng)
+        self.figure_widget.update_yaxes(range=rng)
 
     @property
     def current_x_range(self) -> tuple[float, float] | None:
@@ -1223,7 +1197,7 @@ class Figure:
             for plot in self.plots.values():
                 for view_id in plot.views:
                     if view_id != self.active_view_id:
-                        self._views[view_id].is_stale = True
+                        self._view_manager.mark_stale(view_id=view_id)
 
         # 2. Run hooks (if triggered by parameter change)
         # Note: ParameterManager triggers this render, then we run hooks.
@@ -1305,7 +1279,7 @@ class Figure:
                     viewport_x_range=view.viewport_x_range,
                     viewport_y_range=view.viewport_y_range,
                 )
-                for view in self._views.values()
+                for view in self.views.values()
             ),
             active_view_id=self.active_view_id,
         )
@@ -1501,8 +1475,8 @@ class Figure:
         target_view = self.active_view_id if view_id is None else str(view_id)
         if target_view == self.active_view_id:
             self.render(reason="relayout")
-        elif target_view in self._views:
-            self._views[target_view].is_stale = True
+        elif target_view in self.views:
+            self._view_manager.mark_stale(view_id=target_view)
 
     def _log_render(self, reason: str, trigger: Any) -> None:
         """Log render information with rate-limiting.

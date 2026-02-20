@@ -238,8 +238,8 @@ The acceptance suite should combine existing tests with targeted additions:
 - [ ] Phase 0 baseline characterization completed.
 - [x] Module-level API wrappers extracted from `Figure.py`.
 - [x] Plot input normalization extracted and fully delegated.
-- [ ] View lifecycle + stale-state centralized in `ViewManager`.
-- [ ] Legacy `_figure` / `_pane` alias state removed.
+- [x] View lifecycle + stale-state centralized in `ViewManager`.
+- [x] Legacy `_figure` / `_pane` aliases removed.
 - [ ] `Figure.py` reduced to coordinator-focused responsibilities.
 - [ ] Acceptance suite green across all decomposition milestones.
 - [ ] Project 022 completion note added; Project 023 dependency unblocked.
@@ -250,6 +250,6 @@ The acceptance suite should combine existing tests with targeted additions:
 - [x] Phase 1 implemented via `figure_api.py` extraction and re-export wiring.
 - [x] Phase 2 implemented via `figure_plot_normalization.py` extraction and `Figure.plot()` delegation.
 - [x] Added decomposition regression tests for package helper compatibility and normalizer contracts.
-- [ ] Phase 3 (ViewManager extraction) pending.
-- [ ] Phase 4 (`_figure` / `_pane` alias removal) pending.
+- [x] Phase 3 (ViewManager extraction) completed via `figure_view_manager.py` and Figure delegation.
+- [x] Phase 4 (`_figure` / `_pane` alias removal) completed using explicit runtime accessors.
 - [ ] Phase 5 coordinator slimming/hardening pending.
