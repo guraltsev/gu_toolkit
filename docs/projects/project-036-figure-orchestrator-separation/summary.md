@@ -2,7 +2,7 @@
 
 ## Status
 
-**Discovery**
+**Planning (post-discovery)**
 
 ## Goal/Scope
 
@@ -37,22 +37,20 @@ Adopt a **workflow-first modularization** that is intentionally concrete and Pyt
    - business decisions move into focused collaborators, but without introducing a heavy orchestration framework.
 
 2. **Extract three concrete collaborators, aligned with existing code paths**
-   - **`PlotRegistry`**: owns plot create/update/remove, id/overwrite behavior, and parameter registration decisions.
-     QUESTION: We already have Plot? What does this add? Is it just a container for multiple plots? If so, that does seem reasonable 
+   - **`PlotRegistry`**: owns plot create/update/remove, id/overwrite behavior, and parameter registration decisions. `Plot` remains the per-plot runtime object; `PlotRegistry` is a lifecycle coordinator for the *collection* (lookup, overwrite semantics, creation/update routing, and delegation to parsing/parameter policy helpers).
+COMMENT: I think that delegation to parsing/parameter policy helpers should not be in the plot registry. Plot registry should be thinner and only organize plots assuming that there exists a provider for parameter value. Ensuring all parameters have been initialized is not the job of the PlotRegistry.
    - **`RenderEngine`**: owns stale tracking, sampling/trace refresh, and relayout/range application.
-   - **`ViewRuntime`**: owns view add/switch/remove state and runtime handles for active view widgets.
-     QUESTION: We already have ViewManager? Does this overlap with that? Should the functionality just be moved there and reorganized? Discuss!
+   - **`ViewRuntime`**: owns view add/switch/remove state and runtime handles for active view widgets. This is a reorganization of existing `figure_view_manager` behavior rather than a parallel concept. Prefer extending/renaming existing view-manager code paths over introducing duplicate abstractions.
 
 3. **Keep UI behavior in a thin adapter layer**
-   - a `FigureUIAdapter` handles sidebar/legend/info visibility and widget-only updates;
-   COMMENT: given project-035-architecture-modularization-program I think isolating all UI related python code is a very good idea. 
+   - a `FigureUIAdapter` handles sidebar/legend/info visibility and widget-only updates. This project should align with project-035 by isolating notebook/widget-facing synchronization code in one module.
    - adapter consumes plain snapshots (`dict`/dataclass), not internal mutable objects.
 
 4. **Use direct method calls and small return values, not command buses**
    - inputs are regular method parameters with clear names;
    - outputs are simple booleans/enums/dataclasses only where needed for clarity;
-   - no `PlotCommand`/`RenderCommand` style indirection unless a concrete complexity need emerges later.
-   COMMENT: FORBID complex commands. The strength of this toolkit is that it provides natural pythonic functions that can be used to delegate functionality to different managers and objects. Complex internal logic should be in private methods and internal private methods should try to avoid cross manager calls. Public methods should contain the "orchestration logic" or delegate functionality to private methods. 
+   - no `PlotCommand`/`RenderCommand` style indirection.
+   COMMENT: Incorporate into this design document the following philosophy (if deemed good) or express criticism (if it has significant shortcomings). We avoid Object based "Command" inderection to avoid hidden coupling and opaque module interaction. Interaction should be well defined. For this reason we expose semantics of interaction by exposing public functions in the relevant classes. Calling other classes' private methods should be strongly discouraged. Furthermore, public methods should be relatively thin: they should organize and delegate heavy logic to private methods of the corresponding class.
 
 ### Contract shape (pragmatic)
 
@@ -80,11 +78,12 @@ This approach aligns with current module trajectory (`figure_plot_normalization.
 ## Open questions
 
 1. Should plot parameter auto-registration stay in plot lifecycle service, or become a standalone parameter-policy service?
-ANSWER: given an input to plot, there should be a separate module concerned with expression/function parsing that does parameter detection. It returns the parameters. Then plot just calls the parameter registration method with sane defaults. This is a good approach as it allows sofisticated logic later on. For example, the parsing module can later decide to analyze whether parameters are additive (appear close to a +- sign) or multiplicative (*/) and then hint that the default should be 0 in the former case or 1 in the latter. This is out of scope for now but clear organization will allow for this. One will just have to redefine the return value to provide a dictionary of "additional metadata". 
+ANSWER: separate concerns. Introduce/standardize a parsing-focused helper/module that detects parameters (and optionally returns metadata later), while lifecycle code performs registration with defaults.
 3. Should render pipeline expose synchronous-only API, or also an explicit queued/debounced execution abstraction?
-ANSWER: the render pipeline is subtle. It is a high performance codepath that later may need careful optimization. The functionality of the render piplene should be separated into a separate module/manager. Work hard to define its boundaries.
+ANSWER: first separate render responsibilities into a dedicated manager with clearly defined synchronous entry points; preserve existing debounced triggers as adapter/orchestrator wiring around that manager.
+COMMENT: NO, debouncing should be a service module that gets pulled in by the logic of the renderer. This makes debouncing useful for other functionality like info panels, etc. 
 5. How strict should service encapsulation be (hard module boundaries with import checks vs convention-only)?
-ANSWER: I do not fully understand the question. What are import checks?
+ANSWER: use convention-first boundaries in this phase (clear ownership + code review discipline), and defer import-lint enforcement to a later hardening project if needed.
 
 ## Challenges and mitigations
 
@@ -92,7 +91,7 @@ ANSWER: I do not fully understand the question. What are import checks?
   - **Mitigation:** characterize existing behavior with focused regression tests before moving logic.
 
 - **Challenge:** Circular dependencies between services (`view` <-> `render` <-> `ui`).
-  - **Mitigation:** enforce one-way contracts through typed events/snapshots and dependency injection at the `Figure` composition root.
+  - **Mitigation:** enforce one-way direct method contracts and dependency injection at the `Figure` composition root; allow immutable snapshots specifically at UI boundaries.
 
 - **Challenge:** Maintaining notebook UX while separating UI adapter concerns.
   - **Mitigation:** preserve current facade signatures and validate with existing notebook-facing tests.
@@ -101,7 +100,8 @@ ANSWER: I do not fully understand the question. What are import checks?
 
 - [ ] Define explicit service boundaries and ownership matrix for every current `Figure` method.
 - [ ] Classify each `Figure` method as orchestrator/facade/service-owned and identify extraction destination.
-- [ ] Define concrete collaborator APIs (`PlotRegistry`, `RenderEngine`, `ViewRuntime`, `FigureUIAdapter`) with minimal return types.
+- [ ] Define concrete collaborator APIs (`PlotRegistry`, `RenderEngine`, `ViewRuntime`, `FigureUIAdapter`) with minimal return types and no command-bus indirection.
+- [ ] Define interface between plot parsing/parameter detection and registration policy (including reserved shape for future metadata hints).
 - [ ] Produce acceptance criteria that verify "orchestrator-only" responsibilities in `Figure.py`.
 - [ ] Prepare implementation blueprint in `plan.md` after boundary decisions are finalized.
 
