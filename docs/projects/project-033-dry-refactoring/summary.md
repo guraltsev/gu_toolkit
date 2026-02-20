@@ -53,10 +53,14 @@ The code review identified several concrete duplication sites:
 
 ## Dependencies
 
-- Best executed during or after project-023 (Package Reorganization),
-  since shared utilities will have a natural home in `core/`.
-- Can proceed independently if needed; just place utilities in the
-  current flat layout and move them during reorganization.
+- **project-037 (Ownership/Boundary/Dedup):** Canonical-owner decisions from
+  037's duplicate-cluster ledger determine where consolidated utilities land.
+- **project-023 (Package Reorganization):** Shared utilities will have a
+  natural home in `core/` once 023 creates subpackages. 033 can proceed
+  independently in the flat layout; 023 will move the files to their final
+  location.
+- **project-005 (Testing):** Test confidence must be sufficient to validate
+  behavior-preserving refactors.
 
 ## Challenges and mitigations
 
@@ -81,14 +85,9 @@ The code review identified several concrete duplication sites:
 
 **Result:** Project remains **open**.
 
----
+## Scope boundary (under umbrella project-032, Phase 2)
 
-## Coordination update (2026-02-20)
-
-Duplicate-functionality consolidation remains owned by project-033 scope, with execution sequencing and architecture-boundary alignment coordinated through project-037 (`docs/projects/project-037-ownership-boundaries-and-dedup/summary.md`).
-
-## Scope boundary clarification (2026-02-20)
-
-- Project-033 owns duplicate-logic implementation and tests.
-- Project-037 owns the cross-module ownership matrix and canonical-owner ledger used to sequence these refactors.
-- Project-023 owns physical module relocation; 033 should avoid bundling large path-migration changes unless required for a specific dedup landing.
+- **033 owns:** Duplicate-logic consolidation implementation and behavior-parity tests. Extracting shared utilities, replacing call sites, simplifying internal contracts.
+- **037 owns:** Canonical-owner decisions (which module should own the consolidated logic). 033 consumes these decisions; it does not make architectural ownership calls independently.
+- **023 owns:** Physical module relocation. 033 should not bundle large path-migration changes; it places utilities in the current layout and 023 moves them to final subpackage locations.
+- **035 owns:** Architecture invariants that constrain which layer a utility belongs to.

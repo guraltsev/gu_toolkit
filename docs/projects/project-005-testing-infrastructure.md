@@ -104,3 +104,9 @@ widget-level behavior.
 - [x] Documentation for lint/test workflows is present in `docs/develop_guide/develop_guide.md`.
 
 **Result:** Project remains **open** pending external review. Core infrastructure objectives (coverage gate + notebook CI automation) are implemented, and remaining work now focuses on coverage-threshold progression, pytest-pattern consistency, and widget/browser verification depth.
+
+## Scope boundary (under umbrella project-032, Phase 0)
+
+- **005 owns:** CI test breadth/depth, coverage progression, notebook/browser test posture, pytest infrastructure.
+- **005 does not own:** Architecture decomposition decisions, module topology, or duplicate-logic policy (those belong to 035/037/033/023).
+- **Gate role:** Phase 2 projects (033, 023) depend on test confidence from 005 to validate behavior-preserving refactors. 005 must be mature before heavy code movement begins.
