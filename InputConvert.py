@@ -87,6 +87,8 @@ def InputConvert(obj: Any, dest_type: type[T] = float, truncate: bool = True) ->
     if isinstance(obj, (int, float, complex)) and not isinstance(obj, bool):
         try:
             return _coerce_numeric_value(complex(obj))
+        except ValueError:
+            raise
         except Exception as e:
             raise ValueError(
                 f"Could not convert {obj!r} to {dest_type.__name__}."
@@ -125,6 +127,8 @@ def InputConvert(obj: Any, dest_type: type[T] = float, truncate: bool = True) ->
     # Fallback: try converting to complex generically
     try:
         return _coerce_numeric_value(complex(obj))
+    except ValueError:
+        raise
     except Exception as e:
         raise ValueError(f"Could not convert {obj!r} to {dest_type.__name__}.") from e
 
