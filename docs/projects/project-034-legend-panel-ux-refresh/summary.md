@@ -41,7 +41,7 @@ Current implementation is intentionally minimal:
 
 ### Preferred approach
 
-Use a **custom legend-row composition with explicit CSS classing + frontend event wiring**, while keeping `LegendPanelManager` as the single lifecycle coordinator.
+Use a **custom legend-row composition with Python-side event handling + CSS classing first**, while keeping `LegendPanelManager` as the lifecycle coordinator and avoiding new JS infrastructure unless proven necessary.
 
 Key design points:
 1. **Sidebar order update**
@@ -50,41 +50,65 @@ Key design points:
    - Replace `Checkbox` control with a row container that contains:
      - a circular style-indicator element,
      - a dedicated label element (`HTMLMath`) with a protected click zone.
-   - Row click toggles visibility unless event target is inside the label zone.
+   - Use two explicit hit areas (indicator toggles visibility; label is reserved/inert for future editing) to avoid fragile JS target inspection.
 3. **Style-derived indicator**
    - Fill color: lower-opacity variant of trace color/opacity.
    - Border style/width: derived from trace line dash + width.
 4. **Disabled visual cue**
    - Add row-level disabled class (e.g., lowered opacity + muted indicator).
-5. **Hover coupling with traces**
-   - On row hover enter/leave, call figure/plot update path to apply temporary +15% line width scale and revert on leave.
+5. **Hover affordance (phase-gated)**
+   - Phase 1: CSS-only hover emphasis on legend rows (no trace mutation).
+   - Phase 2 (optional): add formal `Plot.set_transient_emphasis(active)` only if trace-level coupling is still required after validation.
 6. **Responsive tiles**
    - Make legend container wrap (`flex-flow: row wrap`) with tile min/max widths.
-7. **Label fit behavior**
-   - Measure rendered label container width and apply staged behavior:
-     1) scale down up to 0.8;
-     2) if still overflow, apply right fade mask.
-   - Attach delayed tooltip to show full label after hover timeout.
+7. **Label fit behavior (CSS-first)**
+   - Apply container constraints + overflow handling (`overflow: hidden`, fade/ellipsis strategy) without runtime measurement.
+   - Use native delayed tooltip behavior (`title`) for full-label reveal in phase 1.
 
-This is preferred because it preserves existing manager architecture while enabling the UI/event fidelity needed for the requested behavior.
+This is preferred because it preserves existing architecture, keeps behavior testable in Python-first CI, and creates reusable contracts for future sidebar/UI customization work.
+
+
+
+## Convergence and extensibility guardrails
+
+To ensure this effort converges with future UI customization work (editable labels, style pickers, richer info cards, and additional sidebar tiles), implementation should adopt the following guardrails:
+
+1. **Widget-level encapsulation over manager sprawl**
+   - Introduce `LegendRowWidget` (or equivalent) as a reusable component boundary.
+   - Keep row construction, state synchronization, and interaction wiring inside the row component.
+
+2. **Shared style-readback contract**
+   - Add a resolved style API (`Plot.effective_style()`) and treat it as a cross-feature contract, not a legend-only helper.
+   - Reuse this contract anywhere UI must mirror rendered trace styles.
+
+3. **Interaction policy hierarchy**
+   - Prefer CSS-only and Python-side handlers first.
+   - Escalate to custom JS/`anywidget` only when a requirement is impossible to satisfy reliably otherwise.
+
+4. **Design-token-like CSS classes**
+   - Use stable semantic classes (`.legend-row`, `.is-hidden`, `.is-hovered`, `.legend-indicator`) rather than one-off inline styling.
+   - This allows other UI surfaces to share visual language and reduces duplicated styling logic.
+
+5. **Phase gates for risky features**
+   - Defer high-coupling behaviors (trace mutation on hover, measurement-driven typography) behind explicit follow-up checkpoints.
+   - Ship durable baseline behavior first; add complexity only with targeted validation.
 
 ## Open questions
 
-- No blocking design decision is required for project creation; defaults can be specified in implementation planning for:
-  - tooltip delay duration,
-  - exact disabled styling thresholds,
-  - per-trace-type hover-width handling when a trace has no line width concept.
+- Confirm whether hover-to-trace-width amplification remains a hard requirement for v1 of this refresh, or is explicitly deferred to a follow-up after CSS-only hover validation.
+- Confirm naming + location of shared style-readback API (`Plot.effective_style()` or equivalent) so future UI elements can reuse it.
+- Define whether semantic legend CSS classes should live in a centralized stylesheet section to encourage reuse across upcoming sidebar components.
 
 ## Challenges and mitigations
 
 1. **Challenge: ipywidgets native controls are limited for rich hit-testing and hover micro-interactions.**
-   - Mitigation: use explicit DOM structure/classes and JS event hooks attached to row elements, while retaining Python-side authoritative state.
+   - Mitigation: use explicit widget composition with distinct click surfaces plus semantic CSS classes; keep interaction logic in Python handlers first.
 
-2. **Challenge: temporary hover width changes must not corrupt persisted plot styling.**
-   - Mitigation: store base width in row/plot metadata and apply reversible transient updates only during hover.
+2. **Challenge: temporary hover width changes can corrupt persisted plot styling.**
+   - Mitigation: ship CSS-only row emphasis in v1 and gate trace mutation behind a dedicated `Plot` transient-emphasis API if later required.
 
 3. **Challenge: LaTeX fit measurement can be asynchronous due to MathJax rendering timing.**
-   - Mitigation: run measurement after render ticks with debounce/retry, then apply scale/fade classes deterministically.
+   - Mitigation: start with measurement-free CSS overflow/fade handling and native tooltip behavior; only add JS measurement if validated as necessary.
 
 4. **Challenge: test stability for UI behavior that depends on frontend interactions.**
    - Mitigation: split tests into deterministic Python state tests plus narrowly scoped frontend-contract tests for class/state wiring.
@@ -94,23 +118,23 @@ This is preferred because it preserves existing manager architecture while enabl
 - [ ] Update project-030-era assumptions to new legend-first sidebar ordering.
 - [ ] Redesign legend row widget model from checkbox row to tile row.
 - [ ] Add style-indicator rendering contract from plot style metadata.
-- [ ] Add row-click visibility toggle with label-zone click exclusion.
+- [ ] Add row-click visibility toggle via explicit indicator click surface; keep label zone inert/reserved for future edit actions.
 - [ ] Add disabled visual-state classes and synchronization.
-- [ ] Add hover-driven temporary trace width amplification (+15%) and rollback.
+- [ ] Add CSS-only legend-row hover emphasis in v1; evaluate trace-width amplification as a gated follow-up.
 - [ ] Add responsive tile layout constraints (min/max widths, wrap behavior).
-- [ ] Add label fit pipeline: scale-down (max 20%), fade truncation, delayed full-label tooltip.
+- [ ] Add CSS-first label fit behavior (overflow constraints + fade/ellipsis + native delayed tooltip).
 - [ ] Add/adjust tests for layout order, interaction behavior, and visibility synchronization.
 - [ ] Update docs/developer guide to reflect new legend interaction model.
 
 ## Exit criteria
 
 - [ ] Sidebar renders legend section above parameters.
-- [ ] Legend visibility toggles work via tile click (excluding label region).
+- [ ] Legend visibility toggles work via explicit toggle surface; label region remains non-toggling and reserved for future edit interactions.
 - [ ] Checkbox is fully replaced by style-indicator circle derived from trace style.
 - [ ] Hidden traces have a clear, persistent visual cue in legend rows.
-- [ ] Hovering legend row increases matching trace width by ~15% and reverts on hover end.
+- [ ] Hovering legend row provides clear emphasis in v1 without mutating trace style state.
 - [ ] Legend rows wrap responsively with defined min/max tile widths.
-- [ ] Label overflow behavior follows scale-then-fade policy, with delayed full-label tooltip.
+- [ ] Label overflow behavior follows CSS-first truncation/fade policy with delayed full-label tooltip via native browser behavior.
 - [ ] Updated tests pass and verify the new behavior.
 - [ ] Documentation reflects the updated legend workflow.
 
