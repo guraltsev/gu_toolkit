@@ -100,6 +100,6 @@ Key complexity hotspots identified in the code review:
 - ✅ Completed **Phase 1**: module-level helper API extracted from `Figure.py` into `figure_api.py` and re-exported through `Figure.py`/package namespace without user-facing import changes.
 - ✅ Completed **Phase 2**: callable/expr normalization extracted into `figure_plot_normalization.py`; `Figure.plot()` now delegates to `normalize_plot_inputs(...)`.
 - ✅ Completed **Phase 3**: view lifecycle + stale-state policy centralized in `figure_view_manager.py`; `Figure` now delegates view add/switch/remove and stale tracking to `ViewManager`.
-- ✅ Completed **Phase 4**: removed legacy mutable alias *state* (`self._figure` / `self._pane`) and replaced internal usage with explicit accessors (`figure_widget`, `figure_widget_for`, `pane`, `pane_for`), while keeping deprecation-shim properties for backward-compatible tests.
+- ✅ Completed **Phase 4**: removed legacy mutable alias *state* (`self._figure` / `self._pane`) and replaced internal usage with explicit accessors (`figure_widget`, `figure_widget_for`, `pane`, `pane_for`), with no backward-compatibility shim properties retained.
 - ✅ Added targeted regression tests for phase 1-4 behavior (`tests/test_project022_phase12_decomposition.py`, `tests/test_project022_phase34_decomposition.py`).
 - ⏳ Remaining phase (5) is still open and tracked in the project TODO/exit criteria.

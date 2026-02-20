@@ -91,7 +91,7 @@ def test_multi_view_layout_embeds_plot_widget_inside_active_tab() -> None:
     active_idx = fig._layout.view_tabs.selected_index
     assert active_idx is not None
     assert fig._layout.plot_container.layout.display == "none"
-    assert fig._layout.view_tabs.children[active_idx].children[0] is fig._pane.widget
+    assert fig._layout.view_tabs.children[active_idx].children[0] is fig.pane.widget
 
 
 def test_view_scoped_plots_use_per_view_traces_without_extra_handles() -> None:
