@@ -2,114 +2,202 @@
 
 ## Status
 
-**Planning (post-discovery)**
+**Planning (requirements clarified with comments/answers incorporated)**
 
 ## Goal/Scope
 
-Restructure the `Figure` architecture so `Figure.py` is a thin orchestrator with explicit, stable boundaries. The target is not primarily line-count reduction; the target is **separation of concerns** and maintainability.
+Restructure the `Figure` architecture so `Figure.py` is a thin orchestrator with explicit, stable boundaries. The primary objective is not line-count reduction; it is durable **separation of concerns**, clearer ownership, and lower regression risk during future feature work.
 
-This project covers:
-- decomposition of mixed responsibilities currently still living in `Figure.py`,
-- definition of clear subsystem ownership (render pipeline, view lifecycle, plot lifecycle, UI synchronization, and public facade),
-- introduction of explicit contracts between orchestration and subsystem services.
+This project includes:
+- decomposition of mixed responsibilities still living in `Figure.py`,
+- definition of explicit ownership boundaries for plot lifecycle, render lifecycle, view lifecycle, UI synchronization, and facade ergonomics,
+- explicit collaborator contracts that the orchestrator composes,
+- requirement-level guidance that can be converted into a concrete implementation `plan.md`.
 
-This project does **not** include implementation yet, and does **not** include a detailed blueprint (`plan.md`) yet.
+This project does **not** include implementation in this document.
 
 ## Summary of design
 
-## Request and code analysis
+### Current-state analysis (problem statement)
 
-The improvement request is correct: current `Figure.py` remains behaviorally crowded even after previous extractions. The file currently contains ~1,564 lines and 51 methods on `Figure`, with several large multi-purpose methods (`plot`, `render`, `snapshot`, `__init__`, relayout handlers) and many direct coordinator+policy+adapter responsibilities interleaved.
+The request to separate concerns is valid. Current `Figure.py` still centralizes too many responsibilities in one class:
+- API normalization and policy decisions are interleaved with lifecycle mutation.
+- Rendering policy, scheduling/debouncing triggers, relayout handling, and diagnostics are coupled.
+- View state transitions and widget-facing UI synchronization are blended.
+- Facade helpers often contain logic rather than forwarding to subsystem owners.
 
-Observed concentration points in the current module:
-- **Plot lifecycle orchestration mixed with policy:** `plot()` still performs API normalization handoff, parameter auto-registration policy, create/update routing, style decisions, trace wiring, and side effects.
-- **Render pipeline mixed with event handling:** `render()`, `_throttled_relayout()`, `_run_relayout()`, `_log_render()` combine scheduling, range updates, rerender policy, and diagnostics.
-- **View/runtime ownership mixed with UI sync:** add/switch/remove view methods and `_sync_sidebar_visibility()` blend domain state transitions with widget/UI behavior.
-- **Facade surface mixed with subsystem internals:** many getters/setters and convenience methods are implemented directly in `Figure` instead of through a grouped facade contract.
+The practical result is high cognitive load for maintenance and change review: even targeted adjustments (e.g., plot behavior, relayout policy, legend visibility) require editing heavily shared methods and understanding unrelated concerns.
 
-### Preferred target organization (rethought)
+### Architectural direction
 
-Adopt a **workflow-first modularization** that is intentionally concrete and Pythonic, avoiding a command/event object architecture.
+Adopt a **workflow-first modularization** that remains concrete and Pythonic:
+- `Figure` stays as the call-sequence orchestrator and public facade root.
+- Domain logic moves into focused collaborators.
+- Interactions use explicit public methods and small return values.
+- Avoid command/event object indirection for core flows.
 
-1. **`Figure` remains the workflow hub, not a policy hub**
-   - `Figure` keeps user-facing method signatures and call ordering;
-   - each public method runs a short, readable sequence (`normalize -> mutate state -> request render -> sync ui`);
-   - business decisions move into focused collaborators, but without introducing a heavy orchestration framework.
+This preserves readability/debuggability while creating maintainable boundaries.
 
-2. **Extract three concrete collaborators, aligned with existing code paths**
-   - **`PlotRegistry`**: owns plot create/update/remove, id/overwrite behavior, and parameter registration decisions. `Plot` remains the per-plot runtime object; `PlotRegistry` is a lifecycle coordinator for the *collection* (lookup, overwrite semantics, creation/update routing, and delegation to parsing/parameter policy helpers).
-COMMENT: I think that delegation to parsing/parameter policy helpers should not be in the plot registry. Plot registry should be thinner and only organize plots assuming that there exists a provider for parameter value. Ensuring all parameters have been initialized is not the job of the PlotRegistry.
-   - **`RenderEngine`**: owns stale tracking, sampling/trace refresh, and relayout/range application.
-   - **`ViewRuntime`**: owns view add/switch/remove state and runtime handles for active view widgets. This is a reorganization of existing `figure_view_manager` behavior rather than a parallel concept. Prefer extending/renaming existing view-manager code paths over introducing duplicate abstractions.
+---
 
-3. **Keep UI behavior in a thin adapter layer**
-   - a `FigureUIAdapter` handles sidebar/legend/info visibility and widget-only updates. This project should align with project-035 by isolating notebook/widget-facing synchronization code in one module.
-   - adapter consumes plain snapshots (`dict`/dataclass), not internal mutable objects.
+## Design decisions (updated with comments/answers)
 
-4. **Use direct method calls and small return values, not command buses**
-   - inputs are regular method parameters with clear names;
-   - outputs are simple booleans/enums/dataclasses only where needed for clarity;
-   - no `PlotCommand`/`RenderCommand` style indirection.
-   COMMENT: Incorporate into this design document the following philosophy (if deemed good) or express criticism (if it has significant shortcomings). We avoid Object based "Command" inderection to avoid hidden coupling and opaque module interaction. Interaction should be well defined. For this reason we expose semantics of interaction by exposing public functions in the relevant classes. Calling other classes' private methods should be strongly discouraged. Furthermore, public methods should be relatively thin: they should organize and delegate heavy logic to private methods of the corresponding class.
+### 1) `Figure` remains orchestrator-first, not policy-first
 
-### Contract shape (pragmatic)
+`Figure` should keep public signatures and end-to-end call order, but each public method should become a short orchestration script, typically:
+1. normalize input,
+2. delegate to owning service,
+3. request render/update side effects,
+4. invoke UI sync adapter if needed,
+5. return facade-level result.
+
+`Figure` should not own heavy policy logic where a collaborator can own it.
+
+### 2) `PlotRegistry` is intentionally thin (comment integrated)
+
+`PlotRegistry` owns **collection lifecycle** for plots, including:
+- add/update/remove semantics,
+- id generation/lookup,
+- overwrite behavior,
+- routing to create/update paths,
+- bookkeeping of plot membership within the figure.
+
+`PlotRegistry` should **not** own parsing policy or parameter-initialization policy.
+
+### 3) Introduce a dedicated parameter/parsing policy collaborator
+
+To enforce separation of concerns:
+- a parsing-focused helper/service detects parameter dependencies from plot inputs,
+- lifecycle code performs registration/application using explicit defaults and rules,
+- parameter detection output should leave room for future metadata enrichment (e.g., source hints, recommended default strategy).
+
+This resolves ambiguity from prior drafts and keeps lifecycle and detection concerns decoupled.
+
+### 4) `RenderEngine` owns render policy and synchronous render operations
+
+`RenderEngine` should own:
+- stale detection,
+- sample/trace refresh decisions,
+- relayout/range application,
+- render result semantics (`changed`, `rerendered`, optional diagnostics payload).
+
+Its core API should be synchronous and explicit.
+
+### 5) Debouncing is a reusable service (comment integrated)
+
+Debouncing should not be embedded as ad-hoc logic in orchestrator flows.
+- Introduce/standardize a generic debouncing service module that can be reused by rendering, info panels, and other UI-adjacent flows.
+- `RenderEngine` should expose deterministic synchronous operations.
+- `Figure` (or adapters) can opt into debounced invocation by composing the shared debounce service.
+
+This keeps render policy deterministic while preserving UX-friendly throttling behavior.
+
+### 6) `ViewRuntime` owns runtime view lifecycle
+
+`ViewRuntime` should own:
+- add/switch/remove view state transitions,
+- active view identity,
+- runtime handles and per-view registration data,
+- invariant checks for active/inactive transitions.
+
+This should build on existing `figure_view_manager` direction rather than duplicating parallel abstractions.
+
+### 7) `FigureUIAdapter` isolates widget/notebook synchronization
+
+A thin adapter should own:
+- sidebar/legend/info-visibility synchronization,
+- widget-specific updates,
+- translation between internal state snapshots and UI mutation calls.
+
+UI adapter inputs should be immutable snapshots (dataclass/dict) at boundary crossings.
+
+### 8) Interaction philosophy and encapsulation rules (comment integrated)
+
+Adopt explicit interaction semantics:
+- avoid object-based command indirection for core service interaction,
+- prefer direct calls to **public methods** on collaborators,
+- strongly discourage cross-class calls into private methods,
+- keep public methods thin and make heavy logic private to the owning class.
+
+This makes coupling visible and reviewable, and reduces “hidden protocol” drift between modules.
+
+---
+
+## Required ownership matrix (for implementation planning)
+
+The implementation plan should classify every current `Figure` method into one of the following buckets:
+- **Facade-only:** stable convenience wrapper, minimal delegation.
+- **Orchestrator sequence:** call ordering and subsystem composition only.
+- **Service-owned logic:** logic must move to one of `PlotRegistry`, parameter/parsing policy helper, `RenderEngine`, `ViewRuntime`, or `FigureUIAdapter`.
+- **Deprecated/merge candidates:** methods to collapse or remove after extraction.
+
+For each method, plan must list:
+- current responsibility,
+- target owner,
+- migration strategy (direct extraction vs adapter shim),
+- required regression tests.
+
+## Contract shape requirements
 
 Contracts should stay minimal and implementation-friendly:
-- **Calls:** explicit methods (`plot_registry.upsert_plot(...)`, `render_engine.render_view(...)`).
-- **Returns:** lightweight values (`RenderResult`, `changed: bool`, `active_view_id: str`).
-- **Shared state:** immutable snapshots only at UI boundaries where mutation safety matters.
-
-This keeps the decomposition understandable for maintainers who work directly in `Figure.py`, while still enforcing clear ownership boundaries.
-
-### Why this is the preferred approach
-
-This approach aligns with current module trajectory (`figure_plot_normalization.py`, `figure_view_manager.py`, `figure_plot_style.py`) while avoiding architecture overhead that would make normal debugging and incremental refactoring harder. It minimizes risk by removing policy from `Figure.py` in small slices, with concrete modules and straightforward call flows.
+- **Call style:** explicit named methods (`plot_registry.upsert_plot`, `render_engine.render_active_view`, etc.).
+- **Return style:** simple values (`bool`, enum, dataclass) only when clarity requires it.
+- **Boundary data:** immutable snapshots only at adapter boundaries.
+- **Error model:** explicit exceptions or typed failure results; no silent policy fallthrough.
 
 ## Alternatives considered and rejected
 
-1. **Alternative A: split `Figure.py` by method-count only**
-   - Fast but shallow; risks moving complexity without defining ownership contracts.
+1. **Method-count-only split of `Figure.py`**
+   - Too shallow; moves code without clarifying ownership.
    - Rejected as primary strategy.
 
-2. **Alternative B: complete rewrite around command/event messaging (or CQRS/event sourcing)**
-   - Maximum conceptual purity, but disproportionate migration risk and scope for current toolkit needs.
+2. **Full command/event architecture (CQRS/event-sourcing style)**
+   - Adds abstraction overhead and opaque interaction pathways for this toolkit stage.
    - Rejected as primary strategy.
-  
+
 ## Open questions
 
-1. Should plot parameter auto-registration stay in plot lifecycle service, or become a standalone parameter-policy service?
-ANSWER: separate concerns. Introduce/standardize a parsing-focused helper/module that detects parameters (and optionally returns metadata later), while lifecycle code performs registration with defaults.
-3. Should render pipeline expose synchronous-only API, or also an explicit queued/debounced execution abstraction?
-ANSWER: first separate render responsibilities into a dedicated manager with clearly defined synchronous entry points; preserve existing debounced triggers as adapter/orchestrator wiring around that manager.
-COMMENT: NO, debouncing should be a service module that gets pulled in by the logic of the renderer. This makes debouncing useful for other functionality like info panels, etc. 
-5. How strict should service encapsulation be (hard module boundaries with import checks vs convention-only)?
-ANSWER: use convention-first boundaries in this phase (clear ownership + code review discipline), and defer import-lint enforcement to a later hardening project if needed.
+1. **How strict should boundary enforcement be in this phase?**
+   - Current direction: convention-first boundaries (ownership + review discipline) now; import-lint/hard guards can follow in a hardening project.
+
+2. **How much metadata should parameter detection return in phase 1?**
+   - Proposed: start with required detection outputs plus optional extension points; avoid over-design.
+
+3. **Should render diagnostics be standardized across services now or later?**
+   - Proposed: define minimal shared diagnostics payload now for testability and observability; postpone richer telemetry.
 
 ## Challenges and mitigations
 
-- **Challenge:** Behavior drift during decomposition of `plot()` and render paths.
-  - **Mitigation:** characterize existing behavior with focused regression tests before moving logic.
+- **Challenge:** behavior drift while extracting `plot()` and render paths.
+  - **Mitigation:** characterize existing behavior with focused regression tests before and during extraction.
 
-- **Challenge:** Circular dependencies between services (`view` <-> `render` <-> `ui`).
-  - **Mitigation:** enforce one-way direct method contracts and dependency injection at the `Figure` composition root; allow immutable snapshots specifically at UI boundaries.
+- **Challenge:** accidental cycles between render/view/ui modules.
+  - **Mitigation:** enforce one-way dependency direction from orchestrator composition; collaborators do not call each other’s private internals.
 
-- **Challenge:** Maintaining notebook UX while separating UI adapter concerns.
-  - **Mitigation:** preserve current facade signatures and validate with existing notebook-facing tests.
+- **Challenge:** preserving notebook UX while moving UI synchronization.
+  - **Mitigation:** preserve facade signatures and validate with notebook-facing tests and targeted integration checks.
+
+- **Challenge:** hidden coupling introduced by convenience wrappers.
+  - **Mitigation:** require method-level ownership mapping and private/public boundary checks in code review.
 
 ## TODO
 
-- [ ] Define explicit service boundaries and ownership matrix for every current `Figure` method.
-- [ ] Classify each `Figure` method as orchestrator/facade/service-owned and identify extraction destination.
-- [ ] Define concrete collaborator APIs (`PlotRegistry`, `RenderEngine`, `ViewRuntime`, `FigureUIAdapter`) with minimal return types and no command-bus indirection.
-- [ ] Define interface between plot parsing/parameter detection and registration policy (including reserved shape for future metadata hints).
-- [ ] Produce acceptance criteria that verify "orchestrator-only" responsibilities in `Figure.py`.
-- [ ] Prepare implementation blueprint in `plan.md` after boundary decisions are finalized.
+- [ ] Produce a full method ownership matrix for `Figure` with migration targets.
+- [ ] Define concrete APIs for `PlotRegistry`, parameter/parsing helper, `RenderEngine`, `ViewRuntime`, and `FigureUIAdapter`.
+- [ ] Define debouncing service interface and integration points (render + non-render consumers).
+- [ ] Document invariants for each collaborator (input assumptions, mutation rules, return guarantees).
+- [ ] Identify which existing modules are extended vs newly introduced to avoid abstraction duplication.
+- [ ] Draft phased migration strategy that keeps toolkit functioning at every phase boundary.
+- [ ] Convert this summary into implementation blueprint in `plan.md`, including acceptance tests.
 
 ## Exit criteria
 
-- [ ] `Figure.py` responsibilities are limited to orchestration, lifecycle composition, and public delegation.
-- [ ] Render pipeline policy is isolated in a dedicated service module with focused tests.
-- [ ] Plot lifecycle policy is isolated in a dedicated service module with focused tests.
-- [ ] View runtime lifecycle and UI synchronization are separated into distinct service/adapter modules.
-- [ ] Public helper facade remains stable while policy logic is removed from wrappers.
-- [ ] Documentation clearly maps each concern to a single owning module.
+- [ ] `Figure.py` responsibilities are limited to orchestration, lifecycle composition, and facade delegation.
+- [ ] Plot collection lifecycle is isolated in `PlotRegistry`, while parameter/parsing policy is isolated in its own collaborator.
+- [ ] Render policy is isolated in `RenderEngine` with deterministic synchronous APIs.
+- [ ] Debouncing exists as a reusable service used by render orchestration and available for other UI flows.
+- [ ] View runtime lifecycle is isolated from UI synchronization logic.
+- [ ] UI synchronization is isolated in `FigureUIAdapter` with snapshot-based boundaries.
+- [ ] Public helper facade remains stable while internal policy logic is removed from wrappers.
+- [ ] Documentation maps each concern to exactly one owning module.
+- [ ] Regression tests cover key behavior equivalence during extraction.
