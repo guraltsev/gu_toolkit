@@ -4,6 +4,15 @@
 Ready for external review
 
 ## Summary
+Assessment (2026-02-20): implementation and regression coverage are largely complete, but documentation alignment is not fully closed due to notebook TODO mismatch and pending review.
+
+State-of-completion checklist:
+- [x] Constructor/display lifecycle behavior is implemented (`display=False` by default, opt-in `display=True`).
+- [x] Regression tests cover constructor default behavior, constructor opt-in display, and explicit display hook behavior.
+- [x] Code-level docstrings describe the lifecycle contract.
+- [ ] Notebook guidance is still not fully aligned (remaining TODO text requests different default semantics).
+- [ ] External review/decision on notebook-default expectations is still pending.
+
 The display lifecycle contract is now explicit and test-enforced:
 - `Figure(...)` remains side-effect free by default.
 - `Figure(..., display=True)` is supported to force immediate display at construction time.

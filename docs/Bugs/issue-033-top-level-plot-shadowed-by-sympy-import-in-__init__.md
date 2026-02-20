@@ -4,6 +4,13 @@
 Open (root cause fixed in code; retained open until import-surface contract coverage is complete)
 
 ## Summary
+Assessment (2026-02-20): implementation is partially complete; runtime import rebinding is fixed, but import-surface contract coverage remains incomplete so the issue stays open.
+
+State-of-completion checklist:
+- [x] Package import order now preserves toolkit-level `plot` helper after wildcard notebook namespace imports.
+- [ ] Dedicated import-surface contract tests are still missing for top-level helper names that can be shadowed by wildcard imports.
+- [ ] Notebook/API documentation does not yet include a focused regression/quality guard for import-surface stability.
+
 A notebook snippet that should call toolkit plotting helpers:
 
 ```python
