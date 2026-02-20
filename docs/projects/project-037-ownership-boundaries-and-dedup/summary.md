@@ -67,6 +67,7 @@ Project-037 owns:
 - [x] Added ownership matrix artifact (`ownership-boundary-matrix-v1.md`) for `Figure.py` orchestration methods and collaborator ownership boundaries.
 - [x] Added boundary rule table with explicit allowed/forbidden dependency directions and enforcement notes.
 - [x] Added revision analysis (`revision-analysis-v2.md`) distinguishing current vs desired ownership/boundary state for all `REVISE` rows.
+- [x] Added consolidated matrix (`ownership-boundary-matrix-v3-consolidated.md`) merging v1 and v2 with code-verified correctness/feasibility review.
 - [ ] External architecture review of matrix and boundary table before moving project status beyond planning.
 
 ## Exit criteria
