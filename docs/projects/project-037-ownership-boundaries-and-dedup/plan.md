@@ -222,16 +222,19 @@ A preferred approach is identified for each decision; alternatives are listed wh
 
 1. **Provider boundary style for BR-04**
    - **Preferred:** Python Protocol interface injected into `Plot` constructor.
+   DECISION: CONFIRMED
    - Alternative: thin adapter object with concrete methods but no formal Protocol typing.
    - **Decision request:** confirm Protocol-first vs adapter-only.
 
 2. **Hook dispatch ownership location**
    - **Preferred:** keep registration + dispatch API in `ParameterManager`; `Figure` calls one method.
+DECISION: CONFIRMED
    - Alternative: separate hook bus component shared by Figure and ParameterManager.
    - **Decision request:** confirm whether to avoid introducing a new shared bus in this project.
 
 3. **Range contract placement**
    - **Preferred:** place in figure-domain module near `View`/`ViewManager` to keep range semantics view-centric.
+     DECISION: CONFIRMED
    - Alternative: generic utility module (risk: domain leakage).
    - **Decision request:** confirm view-domain placement.
 
