@@ -59,7 +59,7 @@ Project-037 owns:
 - [x] Publish boundary-rule table with allowed/forbidden directions.
 - [ ] Publish duplicate-cluster ledger with canonical-owner proposals.
 - [ ] Land at least one pilot dedup cluster through project-033 with regression tests.
-- [ ] Create `plan.md` with phased milestones and repository-safety checks.
+- [x] Create `plan.md` with phased milestones and repository-safety checks.
 - [x] Add reciprocal scope-link notes in 032/033/035/023 (036 archived).
 
 ## Progress checklist
