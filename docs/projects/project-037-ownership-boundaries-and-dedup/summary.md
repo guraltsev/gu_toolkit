@@ -46,6 +46,11 @@ Project-037 owns:
    - small, executable, stable slices,
    - acceptance checks per slice.
 
+5. **Developer handoff blueprint (`implementation-blueprint-handoff.md`)**
+   - file-level work packages,
+   - sequencing/dependency guidance,
+   - acceptance criteria and risk controls per slice.
+
 ## Sequencing role (under project-032)
 
 - Use 035 invariants as constraints.
