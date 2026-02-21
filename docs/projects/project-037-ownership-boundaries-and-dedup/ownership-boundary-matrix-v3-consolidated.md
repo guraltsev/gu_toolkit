@@ -30,9 +30,9 @@ Legend:
 - **Current owner (verified):** based on current code behavior.
 - **Desired owner:** target ownership boundary for convergence.
 - **Correctness vs code:** whether current implementation matches intended boundary direction.
-- **Feasibility:** practical migration complexity from current to desired state.
+- **Complexity:** practical migration complexity from current to desired state.
 
-| Area | Representative API/methods in `Figure.py` | Current owner (verified) | Desired owner | Consolidated action | Correctness vs code | Feasibility | Notes |
+| Area | Representative API/methods in `Figure.py` | Current owner (verified) | Desired owner | Consolidated action | Correctness vs code | Complexity | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Figure construction + collaborator wiring | `Figure.__init__`, `_create_view_runtime`, `_runtime_for_view` | `Figure` orchestrates wiring and per-view runtime creation | `Figure` thin orchestrator + collaborator factories where useful | **retain + thin** | **Aligned** | **Medium** | Wiring is centralized and coherent; extraction should avoid reducing readability. |
 | Workspace/view lifecycle | `add_view`, `set_active_view`, `view`, `remove_view`, `active_view_id`, `views` | `Figure` facade + `ViewManager` state owner | `ViewManager` owner, `Figure` facade | **retain facade; continue moving internals** | **Mostly aligned** | **Low-Medium** | `ViewManager` already owns view registry/active transitions; `Figure` still performs UI/runtime sync orchestration. |
@@ -52,18 +52,18 @@ Legend:
 
 ## B) Consolidated boundary rules BR-01..BR-10 (with code-state check)
 
-| Rule ID | Direction | Policy | Current state | Consolidated assessment |
-| --- | --- | --- | --- | --- |
-| BR-01 | `Figure` -> collaborators (`FigureLayout`, `ParameterManager`, `InfoPanelManager`, `LegendPanelManager`, `ViewManager`, `Plot`) | Allowed | Present | **Pass** |
-| BR-02 | `FigureLayout` -> `Figure` | Forbidden | No direct dependency observed in current modules | **Pass** |
-| BR-03 | `ParameterManager` -> `Figure` | Forbidden | Manager uses render callback contract and does not import `Figure` runtime internals | **Pass** |
-| BR-04 | `Plot` -> parameter context protocol (not concrete manager) | Allowed (contract-only) | `Plot` still accesses `self._smart_figure.parameters.parameter_context` and other figure defaults | **Partial / highest-risk gap** |
-| BR-05 | `Plot` -> `FigureLayout` | Forbidden | No layout dependency in plot runtime | **Pass** |
-| BR-06 | `InfoPanelManager` / `LegendPanelManager` -> parameter read/observe contract | Allowed (read + observe) | Compatible with current role split | **Pass (keep explicit contract)** |
-| BR-07 | `ViewManager` -> plot/parameter internals | Forbidden | `ViewManager` remains view-state only | **Pass** |
-| BR-08 | Collaborators -> `Figure` private methods | Forbidden | Mostly respected; `Plot` remains coupled to concrete `Figure` object (public API usage) | **Mostly pass; reduce coupling over time** |
-| BR-09 | Utility modules -> domain modules (reverse import) | Forbidden | Sampled modules follow this | **Pass** |
-| BR-10 | Adapter layer (`PlotlyPane`) -> orchestration/policy modules | Forbidden | Appears respected | **Pass** |
+| Rule ID | Direction | Policy | Current state |
+| --- | --- | --- | --- |
+| BR-01 | `Figure` -> collaborators (`FigureLayout`, `ParameterManager`, `InfoPanelManager`, `LegendPanelManager`, `ViewManager`, `Plot`) | Allowed | Present |
+| BR-02 | `FigureLayout` -> `Figure` | Forbidden | No direct dependency observed in current modules |
+| BR-03 | `ParameterManager` -> `Figure` | Forbidden | Manager uses render callback contract and does not import `Figure` runtime internals |
+| BR-04 | `Plot` -> parameter context protocol (not concrete manager) | Allowed (contract-only) | `Plot` still accesses `self._smart_figure.parameters.parameter_context` and other figure defaults |
+| BR-05 | `Plot` -> `FigureLayout` | Forbidden | No layout dependency in plot runtime |
+| BR-06 | `InfoPanelManager` / `LegendPanelManager` -> parameter read/observe contract | Allowed (read + observe) | Compatible with current role split |
+| BR-07 | `ViewManager` -> plot/parameter internals | Forbidden | `ViewManager` remains view-state only |
+| BR-08 | Collaborators -> `Figure` private methods | Forbidden | Mostly respected; `Plot` remains coupled to concrete `Figure` object (public API usage) |
+| BR-09 | Utility modules -> domain modules (reverse import) | Forbidden | Sampled modules follow this |
+| BR-10 | Adapter layer (`PlotlyPane`) -> orchestration/policy modules | Forbidden | Appears respected |
 
 ### Highest-risk discrepancy (confirmed)
 
@@ -85,9 +85,10 @@ Legend:
 
 1. **Migration complexity in hot paths:** `plot()` and `render()` are high-traffic APIs; behavior regressions are easy to introduce.
 2. **Compatibility surface is broad:** existing public aliases and historic semantics constrain refactor freedom.
-3. **State-contract churn risk:** range/home/viewport normalization affects persistence, stale handling, and live relayout behavior.
-4. **Potential over-abstraction:** premature service extraction could add indirection without immediate value if not done incrementally.
-5. **Inter-project coordination overhead:** 037 decisions need continuous alignment with 035/033/023 to avoid drift.
+   Note: backwards compatibility is not an issue and can be freely ignored (currently is private project)
+4. **State-contract churn risk:** range/home/viewport normalization affects persistence, stale handling, and live relayout behavior.
+5. **Potential over-abstraction:** premature service extraction could add indirection without immediate value if not done incrementally.
+6. **Inter-project coordination overhead:** 037 decisions need continuous alignment with 035/033/023 to avoid drift.
 
 ---
 
