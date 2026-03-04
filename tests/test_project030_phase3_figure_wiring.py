@@ -17,7 +17,8 @@ def test_plot_lifecycle_updates_legend_and_sidebar_visibility() -> None:
     assert fig._legend.has_legend is True
     assert fig._layout.legend_header.layout.display == "block"
     assert fig._layout.legend_box.layout.display == "flex"
-    assert fig._layout.sidebar_container.layout.display == "flex"
+    assert fig._layout.legend_container.layout.display == "flex"
+    assert fig._layout.sidebar_container.layout.display == "none"
     assert [row.children[1].value for row in fig._layout.legend_box.children] == [
         "sin(x)"
     ]

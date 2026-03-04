@@ -314,14 +314,25 @@ class FigureLayout:
             )
         )
 
+        self.legend_container = widgets.VBox(
+            [self.legend_header, self.legend_box],
+            layout=widgets.Layout(
+                margin="0px",
+                padding="0px 0px 0px 10px",
+                width="min(calc(28px + 20ch + 22px), 10%)",
+                flex="0 1 min(calc(28px + 20ch + 22px), 10%)",
+                min_width="0px",
+                max_width="10%",
+                display="none",
+            ),
+        )
+
         self.sidebar_container = widgets.VBox(
             [
                 self.params_header,
                 self.params_box,
                 self.info_header,
                 self.info_box,
-                self.legend_header,
-                self.legend_box,
             ],
             layout=widgets.Layout(
                 margin="0px",
@@ -334,7 +345,6 @@ class FigureLayout:
         )
 
         # 4. Main Content Wrapper (Flex)
-        #    Uses flex-wrap so the sidebar drops below the plot on narrow screens.
         self.left_panel = widgets.VBox(
             [self.view_tabs, self.plot_container],
             layout=widgets.Layout(
@@ -342,8 +352,21 @@ class FigureLayout:
             ),
         )
 
+        # Keep legend immediately to the right of the plot in its own column.
+        self.plot_and_legend_wrapper = widgets.Box(
+            [self.left_panel, self.legend_container],
+            layout=widgets.Layout(
+                display="flex",
+                flex_flow="row nowrap",
+                align_items="flex-start",
+                flex="1 1 560px",
+                width="100%",
+                gap="8px",
+            ),
+        )
+
         self.content_wrapper = widgets.Box(
-            [self.left_panel, self.sidebar_container],
+            [self.plot_and_legend_wrapper, self.sidebar_container],
             layout=widgets.Layout(
                 display="flex",
                 flex_flow="row wrap",
@@ -486,8 +509,9 @@ class FigureLayout:
 
         self.legend_header.layout.display = "block" if has_legend else "none"
         self.legend_box.layout.display = "flex" if has_legend else "none"
+        self.legend_container.layout.display = "flex" if has_legend else "none"
 
-        show_sidebar = has_params or has_info or has_legend
+        show_sidebar = has_params or has_info
         self.sidebar_container.layout.display = "flex" if show_sidebar else "none"
 
     def set_plot_widget(
@@ -643,20 +667,29 @@ class FigureLayout:
         is_full = change["new"]
         layout = self.content_wrapper.layout
         plot_layout = self.left_panel.layout
+        legend_layout = self.legend_container.layout
         sidebar_layout = self.sidebar_container.layout
 
         if is_full:
-            # Stack vertically, full width
+            # Stack sections vertically; keep legend to the right of the plot.
             layout.flex_flow = "column"
-            plot_layout.flex = "0 0 auto"
+            plot_layout.flex = "1 1 auto"
+            legend_layout.width = "min(calc(28px + 20ch + 22px), 10%)"
+            legend_layout.flex = "0 1 min(calc(28px + 20ch + 22px), 10%)"
+            legend_layout.max_width = "10%"
+            legend_layout.padding = "0px"
             sidebar_layout.flex = "0 0 auto"
             sidebar_layout.max_width = ""
             sidebar_layout.width = "100%"
             sidebar_layout.padding = "0px"
         else:
-            # Side-by-side (wrapping), restricted width for sidebar
+            # Side-by-side (wrapping), restricted width for params/info sidebar.
             layout.flex_flow = "row wrap"
             plot_layout.flex = "1 1 560px"
+            legend_layout.width = "min(calc(28px + 20ch + 22px), 10%)"
+            legend_layout.flex = "0 1 min(calc(28px + 20ch + 22px), 10%)"
+            legend_layout.max_width = "10%"
+            legend_layout.padding = "0px 0px 0px 10px"
             sidebar_layout.flex = "0 1 380px"
             sidebar_layout.max_width = "400px"
             sidebar_layout.width = "auto"
