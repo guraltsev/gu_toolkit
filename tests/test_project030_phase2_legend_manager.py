@@ -119,7 +119,7 @@ def test_toggle_marker_reflects_plot_color_and_visibility_state() -> None:
 
     assert row.toggle.icon == "circle"
     assert row.toggle.style.text_color == "#123456"
-    assert row.toggle.style.button_color == "transparent"
+    assert row.toggle.style.button_color == "rgba(0,0,0,0)"
     assert row.toggle.layout.width == "30px"
     assert row.toggle.layout.height == "30px"
     assert row.toggle.layout.opacity == "1"
@@ -128,5 +128,38 @@ def test_toggle_marker_reflects_plot_color_and_visibility_state() -> None:
 
     assert row.toggle.icon == "times-circle"
     assert row.toggle.style.text_color == "#123456"
-    assert row.toggle.style.button_color == "transparent"
+    assert row.toggle.style.button_color == "rgba(0,0,0,0)"
     assert row.toggle.layout.opacity == "0.6"
+
+
+def test_toggle_marker_uses_plotly_default_color_when_color_unspecified() -> None:
+    import plotly.graph_objects as go
+
+    class _FakePlotWithTrace:
+        def __init__(self, plot_id: str, trace: go.Scatter) -> None:
+            self.id = plot_id
+            self.label = "Default"
+            self.visible = True
+            self.views = ("main",)
+            self.color = None
+            self._trace = trace
+
+        def _reference_trace_handle(self) -> go.Scatter:
+            return self._trace
+
+    fig = go.FigureWidget()
+    fig.add_scatter(x=[0, 1], y=[0, 1], mode="lines", name="first")
+    fig.add_scatter(x=[0, 1], y=[1, 2], mode="lines", name="second")
+
+    box = widgets.VBox()
+    manager = LegendPanelManager(box)
+    manager.set_active_view("main")
+
+    first = _FakePlotWithTrace("p-default-1", fig.data[0])
+    second = _FakePlotWithTrace("p-default-2", fig.data[1])
+
+    manager.on_plot_added(first)
+    manager.on_plot_added(second)
+
+    assert manager._rows[first.id].toggle.style.text_color == "rgb(31, 119, 180)"
+    assert manager._rows[second.id].toggle.style.text_color == "rgb(255, 127, 14)"

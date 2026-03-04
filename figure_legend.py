@@ -52,6 +52,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import ipywidgets as widgets
+from plotly.colors import DEFAULT_PLOTLY_COLORS
 
 
 @dataclass
@@ -221,17 +222,81 @@ class LegendPanelManager:
     ) -> None:
         """Render the toggle marker as a color-coded circular legend control."""
         toggle.icon = "circle" if is_visible else "times-circle"
+        toggle.button_style = ""
         toggle.style.text_color = marker_color
-        toggle.style.button_color = "transparent"
+        toggle.style.button_color = "rgba(0,0,0,0)"
+        toggle.layout.border = "none"
         toggle.layout.opacity = "1" if is_visible else "0.6"
 
     @classmethod
     def _resolve_plot_color(cls, plot: Any) -> str:
-        """Return a legend marker color derived from the plot style when present."""
+        """Return a legend marker color derived from explicit or implicit trace styles.
+
+        Plotly often leaves ``trace.line.color`` unset in Python when color is not
+        specified by user code. In that case, the browser assigns a default color
+        from the active colorway during rendering. For legend rows we approximate
+        that same default using the trace index and colorway so markers do not
+        degrade to gray before explicit style is set.
+        """
         raw_color = cls._safe_attr_str(plot, "color").strip()
         if raw_color:
             return raw_color
+
+        trace_handle = cls._resolve_reference_trace_handle(plot)
+        if trace_handle is not None:
+            trace_color = cls._resolve_trace_handle_color(trace_handle)
+            if trace_color:
+                return trace_color
+
+            inferred = cls._resolve_default_color_from_parent_figure(trace_handle)
+            if inferred:
+                return inferred
         return "#6c757d"
+
+    @staticmethod
+    def _resolve_reference_trace_handle(plot: Any) -> Any:
+        """Return a best-effort representative trace handle for ``plot``."""
+        getter = getattr(plot, "_reference_trace_handle", None)
+        if callable(getter):
+            try:
+                return getter()
+            except Exception:
+                return None
+        return None
+
+    @classmethod
+    def _resolve_trace_handle_color(cls, trace_handle: Any) -> str:
+        """Read explicit color directly from a trace handle when available."""
+        line_obj = getattr(trace_handle, "line", None)
+        line_color = cls._safe_attr_str(line_obj, "color").strip()
+        if line_color:
+            return line_color
+
+        marker_obj = getattr(trace_handle, "marker", None)
+        marker_color = cls._safe_attr_str(marker_obj, "color").strip()
+        if marker_color:
+            return marker_color
+
+        return ""
+
+    @classmethod
+    def _resolve_default_color_from_parent_figure(cls, trace_handle: Any) -> str:
+        """Infer Plotly's default trace color from parent figure order and colorway."""
+        parent = getattr(trace_handle, "_parent", None)
+        traces = tuple(getattr(parent, "data", ())) if parent is not None else ()
+        if not traces:
+            return ""
+
+        try:
+            trace_index = traces.index(trace_handle)
+        except ValueError:
+            return ""
+
+        colorway = tuple(getattr(getattr(parent, "layout", None), "colorway", ()) or ())
+        palette = colorway if colorway else tuple(DEFAULT_PLOTLY_COLORS)
+        if not palette:
+            return ""
+        return str(palette[trace_index % len(palette)])
 
     @staticmethod
     def _coerce_visible_to_bool(value: Any) -> bool:
