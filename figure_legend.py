@@ -63,6 +63,7 @@ class LegendRowModel:
     container: widgets.HBox
     toggle: widgets.ToggleButton
     label_widget: widgets.HTMLMath
+    style_widget: widgets.HTML
     is_visible_for_active_view: bool = False
 
 
@@ -159,11 +160,30 @@ class LegendPanelManager:
                 padding="0",
             )
         )
+        toggle.add_class("gu-legend-toggle")
         label_widget = widgets.HTMLMath(
             value="", layout=widgets.Layout(margin="0", width="100%")
         )
+        style_widget = widgets.HTML(
+            value=(
+                "<style>"
+                ".gu-legend-toggle,"
+                ".gu-legend-toggle:hover,"
+                ".gu-legend-toggle:focus,"
+                ".gu-legend-toggle.mod-active,"
+                ".gu-legend-toggle.mod-active:hover,"
+                ".gu-legend-toggle.mod-active:focus {"
+                "background: transparent !important;"
+                "background-color: transparent !important;"
+                "background-image: none !important;"
+                "box-shadow: none !important;"
+                "}"
+                "</style>"
+            ),
+            layout=widgets.Layout(display="none", width="0", height="0"),
+        )
         container = widgets.HBox(
-            [toggle, label_widget],
+            [toggle, label_widget, style_widget],
             layout=widgets.Layout(
                 width="100%", align_items="center", margin="0", gap="6px"
             ),
@@ -177,6 +197,7 @@ class LegendPanelManager:
             container=container,
             toggle=toggle,
             label_widget=label_widget,
+            style_widget=style_widget,
         )
 
     def _sync_row_widgets(self, *, row: LegendRowModel, plot: Any) -> None:
