@@ -224,7 +224,7 @@ class LegendPanelManager:
         toggle.icon = "circle" if is_visible else "times-circle"
         toggle.button_style = ""
         toggle.style.text_color = marker_color
-        toggle.style.button_color = "rgba(0,0,0,0)"
+        toggle.style.button_color = "transparent"
         toggle.layout.border = "none"
         toggle.layout.opacity = "1" if is_visible else "0.6"
 
