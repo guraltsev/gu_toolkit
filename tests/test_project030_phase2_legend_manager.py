@@ -119,7 +119,8 @@ def test_toggle_marker_reflects_plot_color_and_visibility_state() -> None:
 
     assert row.toggle.icon == "circle"
     assert row.toggle.style.text_color == "#123456"
-    assert row.toggle.style.button_color == "rgba(0,0,0,0)"
+    assert row.toggle.style.button_color == "transparent"
+    assert "gu-legend-toggle" in row.toggle._dom_classes
     assert row.toggle.layout.width == "30px"
     assert row.toggle.layout.height == "30px"
     assert row.toggle.layout.opacity == "1"
@@ -128,7 +129,7 @@ def test_toggle_marker_reflects_plot_color_and_visibility_state() -> None:
 
     assert row.toggle.icon == "times-circle"
     assert row.toggle.style.text_color == "#123456"
-    assert row.toggle.style.button_color == "rgba(0,0,0,0)"
+    assert row.toggle.style.button_color == "transparent"
     assert row.toggle.layout.opacity == "0.6"
 
 
