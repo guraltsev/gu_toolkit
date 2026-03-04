@@ -60,7 +60,7 @@ class LegendRowModel:
 
     plot_id: str
     container: widgets.HBox
-    toggle: widgets.Checkbox
+    toggle: widgets.ToggleButton
     label_widget: widgets.HTMLMath
     is_visible_for_active_view: bool = False
 
@@ -146,11 +146,17 @@ class LegendPanelManager:
 
     def _create_row(self, plot_id: str) -> LegendRowModel:
         """Create a legend row widget bundle with toggle and label controls."""
-        toggle = widgets.Checkbox(
+        toggle = widgets.ToggleButton(
             value=False,
             description="",
-            indent=False,
-            layout=widgets.Layout(width="28px", min_width="28px", margin="0"),
+            tooltip="Toggle plot visibility",
+            layout=widgets.Layout(
+                width="24px",
+                min_width="24px",
+                height="24px",
+                margin="0",
+                padding="0",
+            )
         )
         label_widget = widgets.HTMLMath(
             value="", layout=widgets.Layout(margin="0", width="100%")
@@ -179,6 +185,10 @@ class LegendPanelManager:
             row.label_widget.value = label
 
         target_value = self._coerce_visible_to_bool(getattr(plot, "visible", True))
+        marker_color = self._resolve_plot_color(plot)
+        self._style_toggle_marker(
+            toggle=row.toggle, is_visible=target_value, marker_color=marker_color
+        )
         if row.toggle.value != target_value:
             self._suspended_plot_ids.add(row.plot_id)
             try:
@@ -196,6 +206,31 @@ class LegendPanelManager:
         if plot is None:
             return
         plot.visible = bool(change.get("new"))
+        row = self._rows.get(plot_id)
+        if row is None:
+            return
+        self._style_toggle_marker(
+            toggle=row.toggle,
+            is_visible=plot.visible is True,
+            marker_color=self._resolve_plot_color(plot),
+        )
+
+    @staticmethod
+    def _style_toggle_marker(
+        *, toggle: widgets.ToggleButton, is_visible: bool, marker_color: str
+    ) -> None:
+        """Render the toggle marker as a color-coded circular legend control."""
+        toggle.icon = "circle" if is_visible else "times-circle"
+        toggle.style.text_color = marker_color
+        toggle.style.button_color = "transparent" if is_visible else "#e0e0e0"
+
+    @classmethod
+    def _resolve_plot_color(cls, plot: Any) -> str:
+        """Return a legend marker color derived from the plot style when present."""
+        raw_color = cls._safe_attr_str(plot, "color").strip()
+        if raw_color:
+            return raw_color
+        return "#6c757d"
 
     @staticmethod
     def _coerce_visible_to_bool(value: Any) -> bool:
