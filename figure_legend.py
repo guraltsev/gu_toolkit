@@ -151,9 +151,9 @@ class LegendPanelManager:
             description="",
             tooltip="Toggle plot visibility",
             layout=widgets.Layout(
-                width="24px",
-                min_width="24px",
-                height="24px",
+                width="30px",
+                min_width="30px",
+                height="30px",
                 margin="0",
                 padding="0",
             )
@@ -222,7 +222,8 @@ class LegendPanelManager:
         """Render the toggle marker as a color-coded circular legend control."""
         toggle.icon = "circle" if is_visible else "times-circle"
         toggle.style.text_color = marker_color
-        toggle.style.button_color = "transparent" if is_visible else "#e0e0e0"
+        toggle.style.button_color = "transparent"
+        toggle.layout.opacity = "1" if is_visible else "0.6"
 
     @classmethod
     def _resolve_plot_color(cls, plot: Any) -> str:
