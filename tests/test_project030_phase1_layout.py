@@ -36,3 +36,18 @@ def test_update_sidebar_visibility_hides_sidebar_when_all_sections_empty() -> No
     layout.update_sidebar_visibility(has_params=False, has_info=False, has_legend=False)
 
     assert layout.sidebar_container.layout.display == "none"
+
+
+def test_legend_sidebar_width_is_capped_and_kept_on_the_right() -> None:
+    layout = FigureLayout()
+
+    assert layout.content_wrapper.layout.flex_flow == "row nowrap"
+    assert (
+        layout.sidebar_container.layout.width
+        == "min(calc(28px + 20ch + 22px), 10%)"
+    )
+    assert (
+        layout.sidebar_container.layout.flex
+        == "0 1 min(calc(28px + 20ch + 22px), 10%)"
+    )
+    assert layout.sidebar_container.layout.max_width == "10%"

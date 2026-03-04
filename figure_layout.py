@@ -326,15 +326,16 @@ class FigureLayout:
             layout=widgets.Layout(
                 margin="0px",
                 padding="0px 0px 0px 10px",
-                flex="0 1 380px",
-                min_width="300px",
-                max_width="400px",
+                width="min(calc(28px + 20ch + 22px), 10%)",
+                flex="0 1 min(calc(28px + 20ch + 22px), 10%)",
+                min_width="0px",
+                max_width="10%",
                 display="none",
             ),
         )
 
         # 4. Main Content Wrapper (Flex)
-        #    Uses flex-wrap so the sidebar drops below the plot on narrow screens.
+        #    Force a two-column layout so the sidebar remains on the right.
         self.left_panel = widgets.VBox(
             [self.view_tabs, self.plot_container],
             layout=widgets.Layout(
@@ -346,7 +347,7 @@ class FigureLayout:
             [self.left_panel, self.sidebar_container],
             layout=widgets.Layout(
                 display="flex",
-                flex_flow="row wrap",
+                flex_flow="row nowrap",
                 align_items="flex-start",
                 width="100%",
                 gap="8px",
