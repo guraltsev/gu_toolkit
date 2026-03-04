@@ -13,6 +13,7 @@ class _FakePlot:
     label: str
     visible: object
     views: tuple[str, ...]
+    color: str | None = None
 
 
 def test_lifecycle_add_update_remove_and_has_legend() -> None:
@@ -99,3 +100,33 @@ def test_toggle_updates_plot_visibility_with_boolean_semantics() -> None:
 
     row.toggle.value = True
     assert plot.visible is True
+
+
+def test_toggle_marker_reflects_plot_color_and_visibility_state() -> None:
+    box = widgets.VBox()
+    manager = LegendPanelManager(box)
+    manager.set_active_view("main")
+
+    plot = _FakePlot(
+        id="p1",
+        label="P1",
+        visible=True,
+        views=("main",),
+        color="#123456",
+    )
+    manager.on_plot_added(plot)
+    row = manager._rows["p1"]
+
+    assert row.toggle.icon == "circle"
+    assert row.toggle.style.text_color == "#123456"
+    assert row.toggle.style.button_color == "transparent"
+    assert row.toggle.layout.width == "30px"
+    assert row.toggle.layout.height == "30px"
+    assert row.toggle.layout.opacity == "1"
+
+    row.toggle.value = False
+
+    assert row.toggle.icon == "times-circle"
+    assert row.toggle.style.text_color == "#123456"
+    assert row.toggle.style.button_color == "transparent"
+    assert row.toggle.layout.opacity == "0.6"
