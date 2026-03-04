@@ -3,16 +3,16 @@ from __future__ import annotations
 from gu_toolkit import FigureLayout
 
 
-def test_sidebar_contains_legend_section_after_info_section() -> None:
+def test_sidebar_contains_legend_section_before_parameters_section() -> None:
     layout = FigureLayout()
 
     assert layout.sidebar_container.children == (
+        layout.legend_header,
+        layout.legend_box,
         layout.params_header,
         layout.params_box,
         layout.info_header,
         layout.info_box,
-        layout.legend_header,
-        layout.legend_box,
     )
 
 
