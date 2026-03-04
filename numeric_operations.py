@@ -155,7 +155,7 @@ def NReal_Fourier_Series(
     return cos_coeffs, sin_coeffs
 
 
-def play(expr, var_and_limits, loop=True, autoplay=False):
+def play(expr, var_and_limits, loop=False, autoplay=False):
     try:
         x, a, b = var_and_limits
     except Exception as exc:  # pragma: no cover

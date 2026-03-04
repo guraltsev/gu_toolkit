@@ -19,6 +19,7 @@ import numpy as np
 
 __all__ += ["np"]
 
+
 try:
     import pandas as pd
 except ModuleNotFoundError:  # Optional dependency
