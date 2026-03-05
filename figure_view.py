@@ -9,8 +9,7 @@ workspace (``Figure``) owns shared parameters and info infrastructure.
 Notes
 -----
 Phase 1/2 intentionally keeps UI routing on a single active Plotly widget.
-This model therefore focuses on state ownership and compatibility shims rather
-than tab-widget composition.
+This model therefore focuses on state ownership rather than tab-widget composition.
 """
 
 from __future__ import annotations

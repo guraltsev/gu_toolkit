@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sympy as sp
 
-from gu_toolkit import Figure, params
+from gu_toolkit import Figure, parameters
 
 
 def test_param_change_hooks_run_inside_triggering_figure_context() -> None:
@@ -13,20 +13,20 @@ def test_param_change_hooks_run_inside_triggering_figure_context() -> None:
     with fig1:
         fig1.parameter(a)
         fig1.plot(a * sp.sin(x), x, id="a_sin")
-        params[a].value = 1
+        parameters[a].value = 1
 
     with fig2:
         fig2.parameter(c)
         fig2.plot(c * sp.cos(x), x, id="c_cos")
-        params[c].value = 1
+        parameters[c].value = 1
 
     log: list[tuple[str, float]] = []
 
     def hook_fig1(event):
-        log.append(("fig1", float(params[a].value), float(event.new)))
+        log.append(("fig1", float(parameters[a].value), float(event.new)))
 
     def hook_fig2(event):
-        log.append(("fig2", float(params[c].value), float(event.new)))
+        log.append(("fig2", float(parameters[c].value), float(event.new)))
 
     fig1.add_param_change_hook(hook_fig1, run_now=False)
     fig2.add_param_change_hook(hook_fig2, run_now=False)

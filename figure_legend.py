@@ -19,9 +19,7 @@ Architecture notes
 ------------------
 - The manager is intentionally figure-agnostic in Phase 2. It tracks plots via
   lifecycle events (``on_plot_added/updated/removed``) and a local registry.
-- Visibility writes use boolean semantics (``True``/``False``) while still
-  tolerating legacy plot visibility values such as ``"legendonly"`` during
-  migration.
+- Visibility writes use strict boolean semantics (``True``/``False``).
 
 Examples
 --------
