@@ -40,7 +40,7 @@ from .Figure import (
 )
 from .FigureSnapshot import FigureSnapshot, InfoCardSnapshot, ViewSnapshot
 from .NamedFunction import NamedFunction as NamedFunction
-from .notebook_namespace import *
+from .Notebook import *
 from .numeric_callable import (
     DYNAMIC_PARAMETER,
     UNFREEZE,
@@ -57,7 +57,7 @@ from .PlotSnapshot import PlotSnapshot
 from .Slider import FloatSlider
 
 # Keep toolkit helpers authoritative after notebook namespace wildcard imports.
-# ``notebook_namespace`` intentionally exports SymPy's ``plot`` helper via
+# ``Notebook`` intentionally exports SymPy's ``plot`` helper via
 # ``from sympy import *`` for convenience, but package-level ``plot`` should
 # resolve to gu_toolkit's module helper for notebook examples and docs.
 plot = toolkit_plot

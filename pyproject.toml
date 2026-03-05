@@ -75,7 +75,7 @@ ignore = [
 "tests/*" = ["F401", "F811"]  # Allow unused imports and redefinitions in tests
 "*.ipynb" = ["E402", "F403", "F405"]  # Notebooks: allow imports not at top, star imports, and star import usage
 "src/gu_toolkit/Figure.py" = ["E402"]  # Deferred imports for circular import handling
-"src/gu_toolkit/notebook_namespace.py" = ["E402", "F403"]  # Intentional star imports and deferred imports for notebook convenience
+"src/gu_toolkit/Notebook.py" = ["E402", "F403"]  # Intentional star imports and deferred imports for notebook convenience
 
 [tool.ruff.lint.isort]
 known-first-party = ["gu_toolkit"]
