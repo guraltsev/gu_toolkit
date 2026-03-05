@@ -113,3 +113,8 @@ The toolkit now treats the **sidebar legend panel** as the primary legend UI for
 
 - Old: `showlegend=True` as the default interactive legend surface.
 - New: toolkit-owned side panel is the canonical legend interaction path; Plotly legend is no longer required for normal usage.
+
+## Source layout
+
+- Runtime package code now lives under src/gu_toolkit (src-layout packaging).
+- Tests and notebook examples should add src to sys.path when running from a checkout without installation.

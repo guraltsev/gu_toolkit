@@ -31,11 +31,9 @@ pandas = [
   "pandas",
 ]
 
-[tool.setuptools]
-packages = ["gu_toolkit"]
-
-[tool.setuptools.package-dir]
-gu_toolkit = "."
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["gu_toolkit*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -73,11 +71,11 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401", "F403"]  # Allow unused imports and star imports in __init__.py files
+"src/gu_toolkit/__init__.py" = ["F401", "F403"]  # Allow unused imports and star imports in __init__.py files
 "tests/*" = ["F401", "F811"]  # Allow unused imports and redefinitions in tests
 "*.ipynb" = ["E402", "F403", "F405"]  # Notebooks: allow imports not at top, star imports, and star import usage
-"Figure.py" = ["E402"]  # Deferred imports for circular import handling
-"notebook_namespace.py" = ["E402", "F403"]  # Intentional star imports and deferred imports for notebook convenience
+"src/gu_toolkit/Figure.py" = ["E402"]  # Deferred imports for circular import handling
+"src/gu_toolkit/notebook_namespace.py" = ["E402", "F403"]  # Intentional star imports and deferred imports for notebook convenience
 
 [tool.ruff.lint.isort]
 known-first-party = ["gu_toolkit"]
@@ -103,17 +101,17 @@ namespace_packages = true
 # Per-module configuration - start strict on core modules
 [[tool.mypy.overrides]]
 module = [
-  "figure_context",
-  "figure_info",
-  "figure_layout",
-  "figure_legend",
-  "figure_parameters",
-  "figure_plot",
-  "figure_view",
-  "ParamRef",
-  "ParamEvent",
-  "ParameterSnapshot",
-  "InputConvert",
+  "gu_toolkit.figure_context",
+  "gu_toolkit.figure_info",
+  "gu_toolkit.figure_layout",
+  "gu_toolkit.figure_legend",
+  "gu_toolkit.figure_parameters",
+  "gu_toolkit.figure_plot",
+  "gu_toolkit.figure_view",
+  "gu_toolkit.ParamRef",
+  "gu_toolkit.ParamEvent",
+  "gu_toolkit.ParameterSnapshot",
+  "gu_toolkit.InputConvert",
 ]
 disallow_untyped_defs = true
 disallow_any_unimported = false
