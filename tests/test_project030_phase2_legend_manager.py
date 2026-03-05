@@ -92,7 +92,7 @@ def test_toggle_updates_plot_visibility_with_boolean_semantics() -> None:
     manager = LegendPanelManager(box)
     manager.set_active_view("main")
 
-    plot = _FakePlot(id="p1", label="P1", visible="legendonly", views=("main",))
+    plot = _FakePlot(id="p1", label="P1", visible=False, views=("main",))
     manager.on_plot_added(plot)
     row = manager._rows["p1"]
 

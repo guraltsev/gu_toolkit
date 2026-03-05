@@ -17,7 +17,7 @@ def _build_exportable_figure(*, include_dynamic_info: bool) -> Figure:
         x,
         id="model",
         label="model(a,b)",
-        visible="legendonly",
+        visible=False,
         x_domain=(-2, 2),
         sampling_points=64,
         color="purple",
@@ -53,7 +53,7 @@ def test_snapshot_captures_parameters_plots_and_info_cards() -> None:
     assert plot.var == x
     assert plot.func == a * sp.sin(x) + b
     assert plot.parameters == (a, b)
-    assert plot.visible == "legendonly"
+    assert plot.visible is False
     assert plot.x_domain == (-2.0, 2.0)
     assert plot.sampling_points == 64
     assert plot.color == "purple"

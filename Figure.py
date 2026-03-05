@@ -110,7 +110,7 @@ from .figure_view_manager import ViewManager
 NumberLike = int | float
 NumberLikeOrStr = int | float | str
 RangeLike = tuple[NumberLikeOrStr, NumberLikeOrStr]
-VisibleSpec = bool | str  # Plotly uses True/False or the string "legendonly".
+VisibleSpec = bool
 
 # SECTION: Figure (The Coordinator) [id: Figure]
 # =============================================================================
@@ -181,7 +181,7 @@ class Figure:
         y_range: RangeLike = (-3, 3),
         debug: bool = False,
         default_view_id: str = "main",
-        plotly_legend_mode: Literal["side_panel", "plotly"] = "side_panel",
+        plotly_legend_mode: Literal["side_panel"] = "side_panel",
         display: bool = False,
     ) -> None:
         """Initialize a Figure instance with default ranges and sampling.
@@ -198,11 +198,8 @@ class Figure:
             Enable debug logging for renders and ranges.
         default_view_id : str, optional
             Initial workspace view identifier.
-        plotly_legend_mode : {"side_panel", "plotly"}, optional
-            Legend migration mode. ``"side_panel"`` uses the dedicated
-            toolkit legend as the canonical control surface and disables
-            Plotly's built-in legend. ``"plotly"`` keeps Plotly legend
-            rendering enabled for compatibility.
+        plotly_legend_mode : {"side_panel"}, optional
+            Legend mode. Only ``"side_panel"`` is supported.
         display : bool, optional
             If ``True``, trigger immediate notebook display after
             initialization by invoking :meth:`_ipython_display_`.
@@ -220,7 +217,7 @@ class Figure:
         Notes
         -----
         Parameters are managed by :class:`ParameterManager` and exposed through
-        :attr:`params`. Figure construction is side-effect free by default
+        :attr:`parameters`. Figure construction is side-effect free by default
         and does not trigger notebook display unless ``display=True`` is passed.
         """
         self._debug = debug
@@ -555,11 +552,6 @@ class Figure:
         return self._params
 
     @property
-    def params(self) -> ParameterManager:
-        """Alias for :attr:`parameters` for backward compatibility."""
-        return self.parameters
-
-    @property
     def info_output(self) -> dict[Hashable, widgets.Output]:
         """Dictionary of Info Output widgets indexed by id.
 
@@ -575,7 +567,7 @@ class Figure:
         True
 
         """
-        return self._info._outputs  # Direct access for backward compat or advanced use
+        return self._info._outputs
 
     @property
     def x_range(self) -> tuple[float, float]:
@@ -838,8 +830,8 @@ class Figure:
         Notes
         -----
         These options can be passed directly to :meth:`plot` and :func:`plot`.
-        Current supported shortcut keys are: ``color``, ``thickness``/``width``,
-        ``dash``, ``opacity``/``alpha``, ``line``, and ``trace``.
+        Current supported keys are: ``color``, ``thickness`` (alias ``width``),
+        ``dash``, ``opacity`` (alias ``alpha``), ``line``, and ``trace``.
         """
         return dict(PLOT_STYLE_OPTIONS)
 
@@ -874,9 +866,8 @@ class Figure:
         var : sympy.Symbol or tuple
             Plot variable ``x`` or ``(x, min, max)`` range tuple.
         parameters : list[sympy.Symbol] or None, optional
-            Deprecated. Use :meth:`parameter` / :attr:`parameters` to create and
-            manage controls explicitly. If omitted, symbols are inferred from
-            the expression.
+            Explicit parameter symbols to ensure. If omitted, symbols are
+            inferred from the expression.
         x_domain : RangeLike or None, optional
             Domain of the independent variable (e.g. ``(-10, 10)``).
             If "figure_default", the figure's range is used when plotting.
@@ -886,9 +877,9 @@ class Figure:
         label : str, optional
             Legend label for the trace. If omitted, new plots default to ``id``;
             existing plots keep their current label.
-        visible : bool or "legendonly", optional
-            Plotly visibility state for the trace. Hidden traces skip sampling
-            until shown.
+        visible : bool, optional
+            Visibility state for the trace. Hidden traces skip sampling until
+            shown.
 
         sampling_points : int or str, optional
             Number of sampling points for this plot. Use ``"figure_default"``
@@ -899,7 +890,7 @@ class Figure:
         thickness : int or float, optional
             Line width in pixels. ``1`` is thin; larger values produce thicker lines.
         width : int or float, optional
-            Alias for ``thickness``.
+            Supported alias for ``thickness``.
         dash : str or None, optional
             Line pattern. Supported values: ``"solid"``, ``"dot"``, ``"dash"``,
             ``"longdash"``, ``"dashdot"``, ``"longdashdot"``.
@@ -909,7 +900,7 @@ class Figure:
             Overall curve opacity between ``0.0`` (fully transparent) and
             ``1.0`` (fully opaque).
         alpha : int or float, optional
-            Alias for ``opacity``.
+            Supported alias for ``opacity``.
         trace : mapping or None, optional
             Extra full-trace style fields as a mapping (advanced usage).
         vars : Symbol or sequence or mapping, optional
@@ -957,7 +948,7 @@ class Figure:
         --------
         parameter : Create sliders without plotting.
         plot_style_options : List supported style kwargs and meanings
-            (`color`, `thickness`, `width`, `dash`, `opacity`, `alpha`, `line`, `trace`).
+            (`color`, `thickness`/`width`, `dash`, `opacity`/`alpha`, `line`, `trace`).
         """
         # ID Generation
         if id is None:
@@ -986,12 +977,6 @@ class Figure:
         if isinstance(var, tuple) and len(var) == 3:
             x_domain = (var[1], var[2])
 
-        if parameters is not None:
-            warnings.warn(
-                "plot(..., parameters=...) is deprecated; use parameter()/parameters to register controls.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
 
         thickness, opacity = resolve_style_aliases(
             thickness=thickness,
@@ -1109,9 +1094,6 @@ class Figure:
         >>> a = sp.symbols("a")  # doctest: +SKIP
         >>> fig.parameter(a, min=-2, max=2)  # doctest: +SKIP
 
-        See Also
-        --------
-        add_param : Backward-compatible alias.
         """
         result = self._params.parameter(symbols, control=control, **control_kwargs)
         self._sync_sidebar_visibility()
@@ -1169,34 +1151,6 @@ class Figure:
                     warnings.warn(f"Hook {h_id} failed: {e}", stacklevel=2)
 
         self._info.schedule_info_update(reason=reason, trigger=trigger)
-
-    def add_param(self, symbol: Symbol, **kwargs: Any) -> ParamRef:
-        """
-        Add a parameter manually.
-
-        Parameters
-        ----------
-        symbol : sympy.Symbol
-            Parameter symbol to create a slider for.
-        **kwargs : Any
-            Slider configuration (min, max, value, step).
-
-        Returns
-        -------
-        ParamRef
-            The created or reused parameter reference.
-
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> fig.add_param(a, min=-2, max=2)  # doctest: +SKIP
-
-        See Also
-        --------
-        parameter : Preferred API for parameter creation.
-        """
-        return self.parameter(symbol, **kwargs)
 
     def snapshot(self) -> FigureSnapshot:
         """Return an immutable snapshot of the entire figure state.
@@ -1328,34 +1282,6 @@ class Figure:
         self._info.set_simple_card(spec=spec, id=id, view=view)
         self._sync_sidebar_visibility()
 
-    def add_hook(
-        self, callback: Callable[[ParamEvent | None], Any], *, run_now: bool = True
-    ) -> Hashable:
-        """Alias for :meth:`add_param_change_hook`.
-
-        Parameters
-        ----------
-        callback : callable
-            Function with signature ``(event)``.
-        run_now : bool, optional
-            Whether to run once immediately with a ``None`` event.
-
-        Returns
-        -------
-        hashable
-            The hook identifier used for registration.
-
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.add_hook(lambda *_: None)  # doctest: +SKIP
-
-        See Also
-        --------
-        add_param_change_hook : Full API with explicit hook IDs.
-        """
-        return self.add_param_change_hook(callback, hook_id=None, run_now=run_now)
-
     def add_param_change_hook(
         self,
         callback: Callable[[ParamEvent | None], Any],
@@ -1415,7 +1341,7 @@ class Figure:
         ----------
         view_id : str or None, optional
             Target view identifier. ``None`` falls back to the active view for
-            backward compatibility with older direct test calls.
+            direct test calls.
         """
         target_view = self.active_view_id if view_id is None else str(view_id)
         debouncer = self._relayout_debouncers.get(target_view)
@@ -1429,7 +1355,7 @@ class Figure:
         ----------
         view_id : str or None, optional
             Target view identifier. ``None`` falls back to the active view for
-            backward compatibility.
+.
         """
         target_view = self.active_view_id if view_id is None else str(view_id)
         if target_view == self.active_view_id:
@@ -1553,7 +1479,6 @@ get_y_range = _figure_api.get_y_range
 info = _figure_api.info
 parameter = _figure_api.parameter
 parameters = _figure_api.parameters
-params = _figure_api.params
 plot = _figure_api.plot
 plots = _figure_api.plots
 plot_style_options = _figure_api.plot_style_options

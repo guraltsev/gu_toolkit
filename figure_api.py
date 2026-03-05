@@ -10,7 +10,7 @@ Architecture
 ------------
 - Current-figure resolution is handled by :mod:`figure_context`.
 - Concrete rendering and parameter behavior is provided by :class:`Figure`.
-- Proxy mappings (``params``/``plots``) expose discoverable access to current
+- Proxy mappings (``parameters``/``plots``) expose discoverable access to current
   figure managers while preserving mapping-style ergonomics.
 
 Examples
@@ -111,7 +111,6 @@ class _CurrentPlotsProxy(Mapping):
 
 
 parameters = _CurrentParametersProxy()
-params = parameters
 plots = _CurrentPlotsProxy()
 
 
@@ -184,7 +183,7 @@ def plot(
     parameters: Sequence[Symbol] | None = None,
     id: str | None = None,
     label: str | None = None,
-    visible: bool | str = True,
+    visible: bool = True,
     x_domain: tuple[int | float | str, int | float | str] | None = None,
     sampling_points: int | str | None = None,
     color: str | None = None,
@@ -234,7 +233,6 @@ __all__ = [
     "info",
     "parameter",
     "parameters",
-    "params",
     "plot",
     "plots",
     "plot_style_options",

@@ -7,13 +7,13 @@ from gu_toolkit import Figure
 from gu_toolkit.ParamEvent import ParamEvent
 
 
-def test_parameter_returns_same_ref_stored_in_params() -> None:
+def test_parameter_returns_same_ref_stored_in_parameters() -> None:
     fig = Figure()
     a = sp.Symbol("a")
 
     ref = fig.parameter(a)
 
-    assert ref is fig.params[a]
+    assert ref is fig.parameters[a]
     assert ref.parameter == a
 
 

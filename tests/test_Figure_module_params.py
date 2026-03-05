@@ -1,5 +1,5 @@
 """
-Minimal verification script for module-level params/parameter helpers.
+Minimal verification script for module-level parameters/parameter helpers.
 
 Run (from the repo root):
 
@@ -12,7 +12,7 @@ import pytest
 import sympy as sp
 
 import gu_toolkit.debouncing as debouncing_module
-from gu_toolkit import Figure, parameter, params, plot, plot_style_options
+from gu_toolkit import Figure, parameter, parameters, plot, plot_style_options
 
 
 class _FakeTimer:
@@ -33,21 +33,21 @@ class _FakeTimer:
         self.canceled = True
 
 
-def test_params_proxy_context_access() -> None:
+def test_parameters_proxy_context_access() -> None:
     x, a = sp.symbols("x a")
     fig = Figure()
     with fig:
-        param_ref = fig.params.parameter(a)
-        assert params[a] is param_ref
+        param_ref = fig.parameters.parameter(a)
+        assert parameters[a] is param_ref
 
 
-def test_params_strict_lookup() -> None:
+def test_parameters_strict_lookup() -> None:
     a = sp.symbols("a")
     fig = Figure()
     with fig:
-        assert a not in params
+        assert a not in parameters
         with pytest.raises(KeyError):
-            _ = params[a]
+            _ = parameters[a]
 
 
 def test_parameter_creation_path() -> None:
@@ -55,24 +55,24 @@ def test_parameter_creation_path() -> None:
     fig = Figure()
     with fig:
         param_ref = parameter(a)
-        assert params[a] is param_ref
+        assert parameters[a] is param_ref
 
 
 def test_no_context_behavior() -> None:
     a = sp.symbols("a")
     with pytest.raises(RuntimeError):
-        _ = params[a]
+        _ = parameters[a]
     with pytest.raises(RuntimeError):
         parameter(a)
 
 
-def test_params_setitem_sugar() -> None:
+def test_parameters_setitem_sugar() -> None:
     a = sp.symbols("a")
     fig = Figure()
     with fig:
-        fig.params.parameter(a, value=1)
-        params[a] = 7
-        assert params[a].value == 7
+        fig.parameters.parameter(a, value=1)
+        parameters[a] = 7
+        assert parameters[a].value == 7
 
 
 def test_plot_opacity_shortcut_and_validation() -> None:
@@ -88,41 +88,17 @@ def test_plot_opacity_shortcut_and_validation() -> None:
         plot.opacity = 1.2
 
 
-def test_plot_style_aliases_are_accepted_and_conflicts_rejected() -> None:
+def test_plot_style_uses_canonical_keys_only() -> None:
     x = sp.symbols("x")
     fig = Figure()
 
-    plot = fig.plot(sp.sin(x), x, id="sin", width=3, alpha=0.25)
+    plot = fig.plot(sp.sin(x), x, id="sin", thickness=3, opacity=0.25)
     assert plot.thickness == 3
     assert plot.opacity == 0.25
 
-    plot_same = fig.plot(
-        sp.sin(x), x, id="sin", thickness=2, width=2, opacity=0.5, alpha=0.5
-    )
-    assert plot_same.thickness == 2
-    assert plot_same.opacity == 0.5
-
-    with pytest.raises(ValueError, match="thickness=.*width"):
-        fig.plot(sp.sin(x), x, id="sin", thickness=2, width=4)
-
-    with pytest.raises(ValueError, match="opacity=.*alpha"):
-        fig.plot(sp.sin(x), x, id="sin", opacity=0.4, alpha=0.9)
-
-
-def test_plot_update_aliases_support_and_conflicts() -> None:
-    x = sp.symbols("x")
-    fig = Figure()
-    plot = fig.plot(sp.sin(x), x, id="sin")
-
-    plot.update(width=5, alpha=0.3)
+    plot.update(thickness=5, opacity=0.3)
     assert plot.thickness == 5
     assert plot.opacity == 0.3
-
-    with pytest.raises(ValueError, match="thickness=.*width"):
-        plot.update(thickness=1, width=2)
-
-    with pytest.raises(ValueError, match="opacity=.*alpha"):
-        plot.update(opacity=0.2, alpha=0.8)
 
 
 def test_plot_cached_samples_none_before_first_render() -> None:
@@ -207,8 +183,52 @@ def test_plot_figure_property_exposes_owner_and_context_manager() -> None:
 
     with plot.figure:
         param_ref = parameter(a)
-        assert params[a] is param_ref
+        assert parameters[a] is param_ref
 
+
+
+
+def test_plot_style_aliases_are_accepted_and_conflicts_rejected() -> None:
+    x = sp.symbols("x")
+    fig = Figure()
+
+    alias_plot = fig.plot(sp.sin(x), x, id="sin_alias", width=3, alpha=0.25)
+    assert alias_plot.thickness == 3
+    assert alias_plot.opacity == 0.25
+
+    plot_same = fig.plot(
+        sp.sin(x),
+        x,
+        id="sin_alias",
+        thickness=2,
+        width=2,
+        opacity=0.5,
+        alpha=0.5,
+    )
+    assert plot_same.thickness == 2
+    assert plot_same.opacity == 0.5
+
+    with pytest.raises(ValueError, match="thickness=.*width"):
+        fig.plot(sp.sin(x), x, id="sin_conflict", thickness=2, width=4)
+
+    with pytest.raises(ValueError, match="opacity=.*alpha"):
+        fig.plot(sp.sin(x), x, id="sin_conflict_opacity", opacity=0.4, alpha=0.9)
+
+
+def test_plot_update_aliases_support_and_conflicts() -> None:
+    x = sp.symbols("x")
+    fig = Figure()
+    plot_ref = fig.plot(sp.sin(x), x, id="sin_update")
+
+    plot_ref.update(width=5, alpha=0.3)
+    assert plot_ref.thickness == 5
+    assert plot_ref.opacity == 0.3
+
+    with pytest.raises(ValueError, match="thickness=.*width"):
+        plot_ref.update(thickness=1, width=2)
+
+    with pytest.raises(ValueError, match="opacity=.*alpha"):
+        plot_ref.update(opacity=0.2, alpha=0.8)
 
 def test_plot_style_options_are_discoverable() -> None:
     options = plot_style_options()

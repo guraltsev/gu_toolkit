@@ -194,7 +194,7 @@ Key behaviors:
 
 ### 3. `ParameterManager` (Parameter state + sliders)
 
-The `ParameterManager` is the “model” for slider state and change hooks. It creates `FloatSlider` instances and stores **parameter references** (`ParamRef`) by SymPy symbol. It also executes hooks when a parameter changes and provides dictionary-like access for compatibility (`fig.params[symbol]`).【F:Figure.py†L637-L940】【F:ParamRef.py†L1-L100】
+The `ParameterManager` is the “model” for slider state and change hooks. It creates `FloatSlider` instances and stores **parameter references** (`ParamRef`) by SymPy symbol. It also executes hooks when a parameter changes and provides dictionary-like access for compatibility (`fig.parameters[symbol]`).【F:Figure.py†L637-L940】【F:ParamRef.py†L1-L100】
 
 Key behaviors:
 - Uses `FloatSlider`, which combines a slider with a single editable numeric field and a settings panel for min/max/step values.【F:Slider.py†L1-L200】
@@ -207,7 +207,7 @@ Key behaviors:
 The parameter system was refactored to be **ref-first**, meaning the public parameter API now returns `ParamRef` objects instead of widgets:
 
 - `fig.parameter(symbol)` returns a `ParamRef`, not a widget.
-- `fig.params[symbol]` yields a `ParamRef` for compatibility with dict-like access.
+- `fig.parameters[symbol]` yields a `ParamRef` for compatibility with dict-like access.
 - The `ParamRef` exposes `.value`, `.parameter`, and `.widget` (for direct widget access when needed).
 - Change handling is normalized via `ParamEvent` objects, so callbacks no longer depend on raw traitlets change dicts.【F:ParamRef.py†L1-L100】【F:ParamEvent.py†L1-L40】
 
@@ -365,8 +365,7 @@ This section is a maintenance-oriented index to keep all Python source files dis
 
 ### Package entry points
 
-- `__init__.py` re-exports the high-level API (`Figure`, `plot`, `parameter`, `plot_style_options`, parser/event/ref helpers, numeric-expression wrappers, and the symbolic prelude). Use this as the first discovery stop for notebook users and downstream imports.【F:__init__.py†L1-L24】
-- `prelude.py` defines notebook-friendly symbols/functions (`SymbolFamily`, `FunctionFamily`, infix relations) plus convenient imports (`sp`, `np`, `pd`). It is intentionally broad to reduce friction in teaching and exploratory contexts.【F:prelude.py†L1-L223】
+- `__init__.py` re-exports the high-level API (`Figure`, `plot`, `parameter`, `plot_style_options`, parser/event/ref helpers, numeric-expression wrappers, and the notebook namespace). Use this as the first discovery stop for notebook users and downstream imports.【F:__init__.py†L1-L24】
 
 ### Figure core stack
 

@@ -69,7 +69,7 @@ from .PlotSnapshot import PlotSnapshot
 NumberLike = int | float
 NumberLikeOrStr = int | float | str
 RangeLike = tuple[NumberLikeOrStr, NumberLikeOrStr]
-VisibleSpec = bool | str
+VisibleSpec = bool
 
 
 @dataclass
@@ -138,8 +138,8 @@ class Plot:
             Number of samples; use ``"figure_default"`` to inherit from the figure.
         label : str, optional
             Trace label shown in the legend.
-        visible : bool or "legendonly", optional
-            Plotly visibility setting.
+        visible : bool, optional
+            Plot visibility setting.
         color : str or None, optional
             Line color. Common formats include named colors (e.g., ``"red"``),
             hex values (e.g., ``"#ff0000"``), and ``rgb(...)``/``rgba(...)``.
@@ -698,8 +698,8 @@ class Plot:
 
         Returns
         -------
-        bool or str
-            ``True``, ``False``, or ``"legendonly"``.
+        bool
+            ``True`` or ``False``.
 
         Examples
         --------
@@ -708,10 +708,6 @@ class Plot:
         >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
         >>> plot.visible  # doctest: +SKIP
         True
-
-        Notes
-        -----
-        ``"legendonly"`` hides the trace while keeping it in the legend.
         """
         return self._visible
 
@@ -721,7 +717,7 @@ class Plot:
 
         Parameters
         ----------
-        value : bool or "legendonly"
+        value : bool
             Visibility state.
 
         Returns
@@ -733,7 +729,7 @@ class Plot:
         >>> x = sp.symbols("x")  # doctest: +SKIP
         >>> fig = Figure()  # doctest: +SKIP
         >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
-        >>> plot.visible = "legendonly"  # doctest: +SKIP
+        >>> plot.visible = False  # doctest: +SKIP
 
         See Also
         --------

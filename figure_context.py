@@ -163,7 +163,7 @@ def _use_figure(fig: Figure) -> Iterator[Figure]:
 NumberLike = int | float
 NumberLikeOrStr = int | float | str
 RangeLike = tuple[NumberLikeOrStr, NumberLikeOrStr]
-VisibleSpec = bool | str  # Plotly uses True/False or the string "legendonly".
+VisibleSpec = bool
 
 PLOT_STYLE_OPTIONS: dict[str, str] = {
     "color": "Line color. Accepts CSS-like names (e.g., red), hex (#RRGGBB), or rgb()/rgba() strings.",

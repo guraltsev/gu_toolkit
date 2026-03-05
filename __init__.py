@@ -25,7 +25,6 @@ from .Figure import (
     info,
     parameter,
     parameters,
-    params,
     plots,
     render,
     set_sampling_points,

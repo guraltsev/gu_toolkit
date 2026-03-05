@@ -29,8 +29,8 @@ class PlotSnapshot:
         Parameter symbols used in *func* (in evaluation order).
     label : str
         Legend label.
-    visible : bool or str
-        Plotly visibility (``True``, ``False``, or ``"legendonly"``).
+    visible : bool
+        Plot visibility state.
     x_domain : tuple[float, float] or None
         Explicit domain override, or ``None`` for figure default.
     sampling_points : int or None
@@ -52,7 +52,7 @@ class PlotSnapshot:
     func: Expr
     parameters: tuple[Symbol, ...]
     label: str
-    visible: bool | str
+    visible: bool
     x_domain: tuple[float, float] | None
     sampling_points: int | None
     color: str | None

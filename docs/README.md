@@ -97,8 +97,7 @@ The toolkit now treats the **sidebar legend panel** as the primary legend UI for
 - Old: click Plotly legend entries in-chart to toggle traces.
 - New: use the legend side-panel checkbox next to each plot label.
 
-- Old: rely on `"legendonly"` visibility as a user-facing state.
-- New: prefer boolean visibility (`True`/`False`) controlled by the side panel; legacy `"legendonly"` is compatibility-only.
+- Visibility is boolean (`True`/`False`) and controlled by the side panel.
 
 - Old: `showlegend=True` as the default interactive legend surface.
 - New: toolkit-owned side panel is the canonical legend interaction path; Plotly legend is no longer required for normal usage.
