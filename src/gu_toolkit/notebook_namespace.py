@@ -29,7 +29,7 @@ else:
 
 try:
     from .numeric_operations import NIntegrate, NReal_Fourier_Series, play
-    from .symbolic_extensions import (
+    from .Symbolic import (
         FunctionFamily,
         Infix,
         SymbolFamily,
@@ -41,7 +41,7 @@ try:
     )
 except ImportError:  # pragma: no cover
     from numeric_operations import NIntegrate, NReal_Fourier_Series, play
-    from symbolic_extensions import (
+    from Symbolic import (
         FunctionFamily,
         Infix,
         SymbolFamily,
