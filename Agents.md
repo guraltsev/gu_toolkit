@@ -1,14 +1,11 @@
-# AGENTS.md — API Documentation and Contributor Discipline
 
-This repository is notebook-facing and API-facing. Preserve the existing documentation quality in core modules and extend it consistently to utility modules.
-
-## Non-negotiable documentation rules
+## Documentation rules
 - Every **public-facing** function/class/module MUST be documented.
 - Public-facing functions SHOULD include at least one runnable example (doctest-style or short snippet) when practical.
 - For small/simple public helpers, a concise usage snippet is acceptable instead of full doctest formatting.
 - Private helpers SHOULD include a short docstring stating purpose + important invariants/assumptions.
 
-## What counts as "public-facing" in this repo
+### What counts as "public-facing" in this repo
 - Anything re-exported from `__init__.py` / notebook namespace or exposed as part of user workflow.
 - CLI/notebook entrypoints, integration hooks, and top-level helpers users are expected to call.
 - Functions/classes listed in docs, guides, or examples.
@@ -25,7 +22,7 @@ This repository is notebook-facing and API-facing. Preserve the existing documen
 
 ## README/docs maintenance
 - If behavior, configuration, or public API changes, update docs in the same change.
-- In this repository, that typically means one or more of:
+- In this repository, update one or more of:
   - `docs/README.md`
   - `docs/develop_guide/*.md`
   - project/issue/discussion docs (in `docs/bugs/` or `docs/projects/`) where behavior is tracked.

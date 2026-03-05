@@ -1,6 +1,7 @@
 # Docs tracker
 
 This folder uses a lightweight lifecycle model:
+
 - **Issues (`Bugs/`)** track defects with clear reproduction/fix criteria.
 - **Projects (`projects/`)** track scoped bodies of work with TODO checklists.
 - **Discussions (`Discussions/`)** hold exploratory design notes that are not yet executable plans.
@@ -15,13 +16,14 @@ This folder uses a lightweight lifecycle model:
 - `Discussions/`: exploratory/decision content.
 - `develop_guide/`: durable implementation guides.
 
-
 ---
 
 ## Issue workflow (`docs/Bugs`)
 
 ### Active issue file requirements
+
 Each active issue file should contain:
+
 1. **Title** (`Issue NNN: ...`).
 2. **Status** (`Open`, `Blocked`, `In Progress`, etc.).
 3. **Summary** (1-3 paragraphs).
@@ -30,11 +32,15 @@ Each active issue file should contain:
 6. **Exit criteria** (what must be true to close it).
 
 ### Issue naming
+
 Use stable, sortable names:
+
 - `issue-018-short-description.md`
 
 ### Closing issues
+
 When fixed or otherwise resolved:
+
 1. Move file to `Bugs/_closed/`.
 2. Update status/disposition in the file body.
 3. Keep original issue ID in filename.
@@ -45,7 +51,9 @@ When fixed or otherwise resolved:
 ## Project workflow (`docs/projects`)
 
 ### Active project file requirements
+
 Every active project should include:
+
 1. **Title + project ID** (`Project NNN: ...`).
 2. **Status** (`Backlog`, `Active`, `Discovery`, `Blocked`).
 3. **Goal/Scope** section.
@@ -53,14 +61,18 @@ Every active project should include:
 5. **Exit criteria** (completion definition).
 
 ### Preferred project structures
+
 Use a **project folder** by default:
+
 - `project-0NN-topic/summary.md`
 - `project-0NN-topic/plan.md` (optional only when implementation planning is not yet decided)
 
 Legacy single-file projects may exist, but new projects should use the folder structure so summary and execution planning stay separated.
 
 ### Completing projects
+
 When a project is done:
+
 1. Move file/folder to `projects/_completed/`.
 2. Mark final status and completion date.
 3. Leave a concise summary of delivered outcomes.
@@ -74,10 +86,10 @@ When a project is done:
 3. **Update links after moves**: ensure cross-references remain valid.
 4. **Use consistent IDs**: new issues/projects should use the next available number.
 
-
 ## API examples policy
 
 For plotting examples in docs and notebooks, use the callable-first API style:
+
 - `fig.plot(expr_or_callable, x, ...)`
 - `plot(expr_or_callable, x, ...)`
 - range form: `plot(f, (x, xmin, xmax), ...)`
