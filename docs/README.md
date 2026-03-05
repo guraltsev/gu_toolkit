@@ -117,4 +117,5 @@ The toolkit now treats the **sidebar legend panel** as the primary legend UI for
 ## Source layout
 
 - Runtime package code now lives under src/gu_toolkit (src-layout packaging).
+- `src/gu_toolkit/Notebook.py` defines the notebook convenience namespace used by `from gu_toolkit import *`, bundling SymPy/NumPy helpers and toolkit symbols for interactive use.
 - Tests and notebook examples should add src to sys.path when running from a checkout without installation.
