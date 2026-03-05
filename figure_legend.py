@@ -52,6 +52,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import ipywidgets as widgets
+from plotly.colors import DEFAULT_PLOTLY_COLORS
 
 
 @dataclass
@@ -60,8 +61,9 @@ class LegendRowModel:
 
     plot_id: str
     container: widgets.HBox
-    toggle: widgets.Checkbox
+    toggle: widgets.ToggleButton
     label_widget: widgets.HTMLMath
+    style_widget: widgets.HTML
     is_visible_for_active_view: bool = False
 
 
@@ -146,17 +148,42 @@ class LegendPanelManager:
 
     def _create_row(self, plot_id: str) -> LegendRowModel:
         """Create a legend row widget bundle with toggle and label controls."""
-        toggle = widgets.Checkbox(
+        toggle = widgets.ToggleButton(
             value=False,
             description="",
-            indent=False,
-            layout=widgets.Layout(width="28px", min_width="28px", margin="0"),
+            tooltip="Toggle plot visibility",
+            layout=widgets.Layout(
+                width="30px",
+                min_width="30px",
+                height="30px",
+                margin="0",
+                padding="0",
+            )
         )
+        toggle.add_class("gu-legend-toggle")
         label_widget = widgets.HTMLMath(
             value="", layout=widgets.Layout(margin="0", width="100%")
         )
+        style_widget = widgets.HTML(
+            value=(
+                "<style>"
+                ".gu-legend-toggle,"
+                ".gu-legend-toggle:hover,"
+                ".gu-legend-toggle:focus,"
+                ".gu-legend-toggle.mod-active,"
+                ".gu-legend-toggle.mod-active:hover,"
+                ".gu-legend-toggle.mod-active:focus {"
+                "background: transparent !important;"
+                "background-color: transparent !important;"
+                "background-image: none !important;"
+                "box-shadow: none !important;"
+                "}"
+                "</style>"
+            ),
+            layout=widgets.Layout(display="none", width="0", height="0"),
+        )
         container = widgets.HBox(
-            [toggle, label_widget],
+            [toggle, label_widget, style_widget],
             layout=widgets.Layout(
                 width="100%", align_items="center", margin="0", gap="6px"
             ),
@@ -170,6 +197,7 @@ class LegendPanelManager:
             container=container,
             toggle=toggle,
             label_widget=label_widget,
+            style_widget=style_widget,
         )
 
     def _sync_row_widgets(self, *, row: LegendRowModel, plot: Any) -> None:
@@ -179,6 +207,10 @@ class LegendPanelManager:
             row.label_widget.value = label
 
         target_value = self._coerce_visible_to_bool(getattr(plot, "visible", True))
+        marker_color = self._resolve_plot_color(plot)
+        self._style_toggle_marker(
+            toggle=row.toggle, is_visible=target_value, marker_color=marker_color
+        )
         if row.toggle.value != target_value:
             self._suspended_plot_ids.add(row.plot_id)
             try:
@@ -196,6 +228,96 @@ class LegendPanelManager:
         if plot is None:
             return
         plot.visible = bool(change.get("new"))
+        row = self._rows.get(plot_id)
+        if row is None:
+            return
+        self._style_toggle_marker(
+            toggle=row.toggle,
+            is_visible=plot.visible is True,
+            marker_color=self._resolve_plot_color(plot),
+        )
+
+    @staticmethod
+    def _style_toggle_marker(
+        *, toggle: widgets.ToggleButton, is_visible: bool, marker_color: str
+    ) -> None:
+        """Render the toggle marker as a color-coded circular legend control."""
+        toggle.icon = "circle" if is_visible else "times-circle"
+        toggle.button_style = ""
+        toggle.style.text_color = marker_color
+        toggle.style.button_color = "transparent"
+        toggle.layout.border = "none"
+        toggle.layout.opacity = "1" if is_visible else "0.6"
+
+    @classmethod
+    def _resolve_plot_color(cls, plot: Any) -> str:
+        """Return a legend marker color derived from explicit or implicit trace styles.
+
+        Plotly often leaves ``trace.line.color`` unset in Python when color is not
+        specified by user code. In that case, the browser assigns a default color
+        from the active colorway during rendering. For legend rows we approximate
+        that same default using the trace index and colorway so markers do not
+        degrade to gray before explicit style is set.
+        """
+        raw_color = cls._safe_attr_str(plot, "color").strip()
+        if raw_color:
+            return raw_color
+
+        trace_handle = cls._resolve_reference_trace_handle(plot)
+        if trace_handle is not None:
+            trace_color = cls._resolve_trace_handle_color(trace_handle)
+            if trace_color:
+                return trace_color
+
+            inferred = cls._resolve_default_color_from_parent_figure(trace_handle)
+            if inferred:
+                return inferred
+        return "#6c757d"
+
+    @staticmethod
+    def _resolve_reference_trace_handle(plot: Any) -> Any:
+        """Return a best-effort representative trace handle for ``plot``."""
+        getter = getattr(plot, "_reference_trace_handle", None)
+        if callable(getter):
+            try:
+                return getter()
+            except Exception:
+                return None
+        return None
+
+    @classmethod
+    def _resolve_trace_handle_color(cls, trace_handle: Any) -> str:
+        """Read explicit color directly from a trace handle when available."""
+        line_obj = getattr(trace_handle, "line", None)
+        line_color = cls._safe_attr_str(line_obj, "color").strip()
+        if line_color:
+            return line_color
+
+        marker_obj = getattr(trace_handle, "marker", None)
+        marker_color = cls._safe_attr_str(marker_obj, "color").strip()
+        if marker_color:
+            return marker_color
+
+        return ""
+
+    @classmethod
+    def _resolve_default_color_from_parent_figure(cls, trace_handle: Any) -> str:
+        """Infer Plotly's default trace color from parent figure order and colorway."""
+        parent = getattr(trace_handle, "_parent", None)
+        traces = tuple(getattr(parent, "data", ())) if parent is not None else ()
+        if not traces:
+            return ""
+
+        try:
+            trace_index = traces.index(trace_handle)
+        except ValueError:
+            return ""
+
+        colorway = tuple(getattr(getattr(parent, "layout", None), "colorway", ()) or ())
+        palette = colorway if colorway else tuple(DEFAULT_PLOTLY_COLORS)
+        if not palette:
+            return ""
+        return str(palette[trace_index % len(palette)])
 
     @staticmethod
     def _coerce_visible_to_bool(value: Any) -> bool:

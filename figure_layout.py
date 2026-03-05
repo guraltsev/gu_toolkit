@@ -276,7 +276,7 @@ class FigureLayout:
         # 3. Controls Sidebar (The "Right" Panel)
         #    Initially hidden (display="none") until parameters/info/legend widgets are added.
         self.params_header = widgets.HTML(
-            "<b>Parameters</b>", layout=widgets.Layout(display="none", margin="0")
+            "<b>Parameters</b>", layout=widgets.Layout(display="none", margin="10px 0 0 0")
         )
         self.params_box = widgets.VBox(
             layout=widgets.Layout(
@@ -302,7 +302,7 @@ class FigureLayout:
         )
 
         self.legend_header = widgets.HTML(
-            "<b>Legend</b>", layout=widgets.Layout(display="none", margin="10px 0 0 0")
+            "<b>Legend</b>", layout=widgets.Layout(display="none", margin="0")
         )
         self.legend_box = widgets.VBox(
             layout=widgets.Layout(
@@ -316,12 +316,12 @@ class FigureLayout:
 
         self.sidebar_container = widgets.VBox(
             [
+                self.legend_header,
+                self.legend_box,
                 self.params_header,
                 self.params_box,
                 self.info_header,
                 self.info_box,
-                self.legend_header,
-                self.legend_box,
             ],
             layout=widgets.Layout(
                 margin="0px",
