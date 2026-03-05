@@ -149,11 +149,14 @@ class Figure:
 
     Examples
     --------
-    >>>     >>> x, a = sp.symbols("x a")
+    >>> from gu_toolkit.Figure import Figure
+    >>> from gu_toolkit.Symbolic import SymbolFamily
+    >>> x, a = SymbolFamily("x a")
     >>> fig = Figure()
-    >>> fig.parameter(a, min=-2, max=2)
     >>> fig.plot(a*sp.sin(x), x, id="a_sin")
     >>> fig
+    >>> # Adjust default parameter range
+    >>> fig.parameter(a, min=-2, max=2)
     """
 
     __slots__ = [

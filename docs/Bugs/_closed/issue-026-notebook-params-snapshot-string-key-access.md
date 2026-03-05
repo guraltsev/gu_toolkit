@@ -1,4 +1,4 @@
-# Issue 026: `params.snapshot()` key-access ergonomics mismatch in notebook diagnostics example
+# Issue 026: `parameters.snapshot()` key-access ergonomics mismatch in notebook diagnostics example
 
 ## Status
 Closed
@@ -14,7 +14,7 @@ State-of-completion checklist:
 
 ## Evidence
 - `ParameterSnapshot.__getitem__` supports symbol keys and unambiguous string-name keys.
-- `params.snapshot()` now supports symbol keys and unambiguous string-name keys while preserving symbol-based iteration.
+- `parameters.snapshot()` now supports symbol keys and unambiguous string-name keys while preserving symbol-based iteration.
 - `tests/test_parameter_snapshot_numeric_expression.py` covers unambiguous string success, unknown-name failure, ambiguous-name failure, and symbol-only key iteration guarantees.
 - `docs/notebooks/Toolkit_overview.ipynb` diagnostics code uses `p['b']` and no longer documents missing string-key lookup as a bug.
 

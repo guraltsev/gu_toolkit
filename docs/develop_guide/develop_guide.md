@@ -376,7 +376,7 @@ This section is a maintenance-oriented index to keep all Python source files dis
   - `InfoPanelManager` owns info components and output routing for sidebar content.【F:Figure.py†L1282-L1428】
   - `Plot` encapsulates symbolic expression + numeric core + trace updates. Style update helpers (`_update_line_style`) are intentionally private and local to trace mutation behavior.【F:Figure.py†L1434-L2062】
   - `Figure` orchestrates figure/widget lifecycle, render triggers, pan/zoom throttling, and context-manager behavior for global helper routing.【F:Figure.py†L2065-L3008】
-  - `_CurrentParamsProxy` exposes module-level discoverable access (`params[...]`, `params.parameter(...)`) to the active figure’s parameter manager.【F:Figure.py†L3014-L3070】
+  - `_CurrentParametersProxy` exposes module-level discoverable access (`parameters[...]`, `parameters.parameter(...)`) to the active figure’s parameter manager.【F:Figure.py†L3014-L3070】
 
 ### Plotly host + parameter controls
 
@@ -405,4 +405,3 @@ This section is a maintenance-oriented index to keep all Python source files dis
 ### Symbolic function authoring
 
 - `NamedFunction.py` provides the `@NamedFunction` API for creating SymPy function classes with symbolic definitions and numeric implementations while preserving inspectable signatures and generated docs.【F:NamedFunction.py†L1-L689】
-
