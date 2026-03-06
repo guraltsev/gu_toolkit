@@ -8,6 +8,8 @@ readable:
   ``[]`` while preserving SymPy assumptions.
 * :class:`FunctionFamily` creates indexed SymPy undefined functions and also
   behaves like a callable base function.
+* :func:`symbols` creates one or more symbol/function families from a
+  space-separated string, mirroring :func:`sympy.symbols` ergonomics.
 * :class:`Infix` and the predefined operator instances (:data:`eq`,
   :data:`lt`, :data:`le`, :data:`gt`, :data:`ge`) provide pipe-based infix
   syntax such as ``a |eq| b`` for relational construction.
@@ -18,7 +20,58 @@ repeating the same index returns the same symbolic object instance.
 
 from __future__ import annotations
 
+from typing import Any
+
 import sympy as sp
+
+
+def _create_family(factory, source, **kwargs):
+    """Create family objects while preserving SymPy's output shape."""
+
+    if isinstance(source, sp.Symbol):
+        return factory(source.name, **kwargs)
+    if isinstance(source, (tuple, list, set)):
+        mapped = (_create_family(factory, item, **kwargs) for item in source)
+        return type(source)(mapped)
+    return factory(str(source), **kwargs)
+
+
+def symbols(names, *, cls=sp.Symbol, **args) -> Any:
+    """Create one or more symbolic families with SymPy-compatible signature.
+
+    This helper intentionally keeps the same call signature as
+    :func:`sympy.symbols`, but maps common classes to toolkit families:
+
+    * ``cls=sympy.Symbol`` -> :class:`SymbolFamily`
+    * ``cls=sympy.Function`` -> :class:`FunctionFamily`
+
+    Any other ``cls`` is delegated directly to :func:`sympy.symbols`.
+
+    Examples
+    --------
+    >>> x, y = symbols("x y")
+    >>> x[1], y[2]
+    (x_1, y_2)
+    >>> f, g = symbols("f g", cls=sp.Function)
+    >>> f(sp.Symbol("t")), g[0](sp.Symbol("t"))
+    (f(t), g_0(t))
+    >>> n = symbols("n", integer=True)
+    >>> n[3].is_integer
+    True
+    """
+
+    if cls in (sp.Symbol, SymbolFamily):
+        family_cls = SymbolFamily
+    elif cls in (sp.Function, FunctionFamily):
+        family_cls = FunctionFamily
+    else:
+        return sp.symbols(names, cls=cls, **args)
+
+    parser_args = {}
+    if "seq" in args:
+        parser_args["seq"] = args["seq"]
+    parsed = sp.symbols(names, cls=sp.Symbol, **parser_args)
+    return _create_family(family_cls, parsed, **args)
 
 
 class SymbolFamily(sp.Symbol):
@@ -205,6 +258,7 @@ ge = Infix(sp.Ge)
 
 
 __all__ = [
+    "symbols",
     "SymbolFamily",
     "FunctionFamily",
     "Infix",
