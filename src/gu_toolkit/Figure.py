@@ -2,26 +2,36 @@
 
 Purpose
 -------
-This module provides the public ``Figure`` class and module-level convenience
-helpers that power the interactive plotting workflow in ``gu_toolkit``. It
-connects symbolic SymPy expressions to Plotly traces and notebook widgets so
-users can explore parameterized functions in real time.
+This module provides the ``Figure`` class and module-level
+convenience helpers of ``gu_toolkit``. 
+
+Figure allows plotting symbolic (SymPy) expressions. 
+
+It does: 
+- automatic parameter detection
+- automatic resampling on viewport movement
+- multiple plot tabs
+- allows adjusting plot styles. 
+- custom info cards with information about the plots
+
+Currently, Figure uses Plotly as a backend for plotting. 
 
 Concepts and structure
 ----------------------
 The implementation is composition-based:
 
-- ``Figure`` coordinates rendering and exposes the public plotting API.
-- ``FigureLayout`` owns widget/layout construction.
-- ``ParameterManager`` owns controls and parameter hooks.
+- ``Figure`` coordinates rendering and provides the public plotting methods.
+- ``FigureLayout`` responsible for layout construction.
+- ``ParameterManager`` responsible for parameter controls and on-change hooks.
 - ``InfoPanelManager`` owns sidebar output/components.
 - ``Plot`` (from ``figure_plot``) encapsulates per-curve math/trace logic.
 
 Architecture notes
 ------------------
 ``Figure`` delegates as much behavior as possible to specialized collaborators
-(``figure_layout``, ``figure_parameters``, ``figure_info``, ``figure_plot``),
-while this module provides the top-level coordinator and user-facing helper
+(``figure_layout``, ``figure_parameters``, ``figure_info``, ``figure_plot``).
+
+The module itself provides the top-level coordinator and user-facing helper
 functions (``plot``, ``parameter``, ``render``, range/title helpers, etc.).
 
 Important gotchas
@@ -35,12 +45,14 @@ Important gotchas
 
 Examples
 --------
->>> >>> from gu_toolkit.Figure import Figure
->>> x, a = sp.symbols("x a")
+>>> from gu_toolkit.Figure import Figure
+>>> from gu_toolkit.Symbolic import symbols
+>>> from sympy import sin
+>>> x, a, b, c = symbols("x a b c")
 >>> fig = Figure()
->>> fig.parameter(a, min=-2, max=2)  # doctest: +SKIP
->>> fig.plot(a * sp.sin(x), x, id="wave")  # doctest: +SKIP
->>> fig  # doctest: +SKIP
+>>> with fig: 
+>>>     plot(a * sin(b*x+c), x, id="wave1", label=r"$a \sin(b x + c)$") # doctest: +SKIP
+>>> display(fig)                                                        # doctest: +SKIP
 
 Discoverability
 ---------------
@@ -107,15 +119,14 @@ from .figure_view_manager import ViewManager
 # -----------------------------
 # Small type aliases
 # -----------------------------
-NumberLike = int | float
-NumberLikeOrStr = int | float | str
-RangeLike = tuple[NumberLikeOrStr, NumberLikeOrStr]
-VisibleSpec = bool
+NumberLike = int | float # TODO: What is the point of this? Add documentation when this should be used 
+NumberLikeOrStr = int | float | str # TODO: What is the point of this? Add documentation when this should be used 
+RangeLike = tuple[NumberLikeOrStr, NumberLikeOrStr] # TODO: What is the point of this? Add documentation when this should be used 
+VisibleSpec = bool # TODO: What is the point of this? Add documentation when this should be used 
 
 # SECTION: Figure (The Coordinator) [id: Figure]
 # =============================================================================
-
-
+# TODO: What is this class. The documentation is horrible. 
 class _ViewRuntime(NamedTuple):
     """Runtime objects owned by a single workspace view."""
 
@@ -125,20 +136,20 @@ class _ViewRuntime(NamedTuple):
 
 class Figure:
     """
-    An interactive Plotly figure for plotting SymPy functions with slider parameters.
+    An interactive Figure for plotting SymPy functions with automatic parameter detection.
 
     What problem does this solve?
     -----------------------------
     We often want to:
     - type a symbolic function like ``sin(x)`` or ``a*x**2 + b`` (SymPy),
-    - *see* it immediately (Plotly),
+    - *see* it immediately,
     - and then explore “What happens if I change a parameter?”
 
     ``Figure`` provides a simple API that encourages experimentation.
 
     Key features
     ------------
-    - Uses Plotly ``FigureWidget`` so it is interactive inside notebooks.
+    - Plotting backend: Plotly ``FigureWidget`` so it is interactive inside notebooks.
     - Construction is side-effect free by default; pass ``display=True``
       to force immediate notebook display, or call ``display(fig)`` explicitly.
     - Uses a right-side controls panel for parameter sliders.
@@ -150,23 +161,27 @@ class Figure:
     Examples
     --------
     >>> from gu_toolkit.Figure import Figure
-    >>> from gu_toolkit.Symbolic import SymbolFamily
-    >>> x, a = SymbolFamily("x a")
+    >>> from gu_toolkit.Symbolic import symbols
+    >>> from sympy import sin
+    >>> x, a, b, c = symbols("x a b c")
     >>> fig = Figure()
-    >>> fig.plot(a*sp.sin(x), x, id="a_sin")
-    >>> fig
+    >>> with fig: 
+    >>>     plot(a * sin(b*x+c), x, id="wave1", label=r"$a \sin(b x + c)$") # doctest: +SKIP
+    >>> display(fig)            
     >>> # Adjust default parameter range
-    >>> fig.parameter(a, min=-2, max=2)
+    >>> with fig:
+    >>>     parameter(a, value=1, min=0, max=5)
     """
 
+# TODO Document all the slot variables
     __slots__ = [
+        "plots",
         "_layout",
         "_params",
         "_info",
         "_legend",
         "_view_manager",
         "_view_runtime",
-        "plots",
         "_sampling_points",
         "_debug",
         "_plotly_legend_mode",
@@ -183,8 +198,8 @@ class Figure:
         x_range: RangeLike = (-4, 4),
         y_range: RangeLike = (-3, 3),
         debug: bool = False,
-        default_view_id: str = "main",
-        plotly_legend_mode: Literal["side_panel"] = "side_panel",
+        default_view_id: str = "main", #TODO: Eliminate this. View ids are implementation details of the view manager. If one want, one can set it manually by accessing the view manager.
+        plotly_legend_mode: Literal["side_panel"] = "side_panel", #TODO Eliminate this 
         display: bool = False,
     ) -> None:
         """Initialize a Figure instance with default ranges and sampling.
@@ -199,7 +214,7 @@ class Figure:
             Initial y-axis range.
         debug : bool, optional
             Enable debug logging for renders and ranges.
-        default_view_id : str, optional
+        default_view_id : str, optional 
             Initial workspace view identifier.
         plotly_legend_mode : {"side_panel"}, optional
             Legend mode. Only ``"side_panel"`` is supported.
@@ -213,7 +228,7 @@ class Figure:
 
         Examples
         --------
-        >>> fig = Figure(x_range=(-6, 6), y_range=(-2, 2))  # doctest: +SKIP
+        >>> fig = Figure(x_range=(-6, 6), y_range=(-2, 2))  # doctest: +SKIP 
         >>> fig.sampling_points  # doctest: +SKIP
         500
 
@@ -223,7 +238,9 @@ class Figure:
         :attr:`parameters`. Figure construction is side-effect free by default
         and does not trigger notebook display unless ``display=True`` is passed.
         """
+        # TODO Why does the documentation have all these doctest: +SKIP
         self._debug = debug
+
         if plotly_legend_mode not in {"side_panel", "plotly"}:
             raise ValueError(
                 "plotly_legend_mode must be either 'side_panel' or 'plotly'"
@@ -249,6 +266,7 @@ class Figure:
         self._legend = LegendPanelManager(self._layout.legend_box)
 
         # 3. Initialize Per-View Plotly Runtime
+        # TODO: WTF is a runtime?! Use simpler lexicon in documentation. 
         self._view_runtime: dict[str, _ViewRuntime] = {}
         self._relayout_debouncers: dict[str, QueuedDebouncer] = {}
         self._layout.observe_tab_selection(self.set_active_view)
@@ -263,16 +281,76 @@ class Figure:
         self._render_info_last_log_t = 0.0
         self._render_debug_last_log_t = 0.0
 
-        if display:
+        if display: #TODO rename display to show
             self._ipython_display_()
 
-    # --- Properties ---
+    # --- Figure-level properties ---
+    @property
+    def title(self) -> str:
+        """Return the title text shown above the figure.
 
+        Returns
+        -------
+        str
+            Current title (HTML/LaTeX is allowed).
+
+        Examples
+        --------
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> fig.title = "Demo"  # doctest: +SKIP
+        >>> fig.title  # doctest: +SKIP
+        'Demo'
+
+        See Also
+        --------
+        FigureLayout.set_title : Underlying layout helper.
+        """
+        return self._layout.get_title()
+
+    @title.setter
+    def title(self, value: str) -> None:
+        """Set the title text shown above the figure.
+
+        Parameters
+        ----------
+        value : str
+            Title text (HTML/LaTeX supported).
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> fig.title = r"$y=\\sin(x)$"  # doctest: +SKIP
+
+        See Also
+        --------
+        title : Read the current title text.
+        """
+        self._layout.set_title(value)
+
+    # -------------------------------
+    # Properties 
+    # -------------------------------
+    
+    # --- Views ---
+    # TODO: instead, make views be a dict like object that has the property "current_id" so 
+    # active_view_id can be: Figure.views.current_id 
+    # Mark this property as deprecated
+    # Instead of _active_view expose views.current()
+    # Actually ViewManager should support a dict-like interface and views should just point to the view manager
+    # ViewManager should have:
+    # - a current read-only property
+    # - a current_id property with setter
+    # views should be a read-only property that points to the view manager _view_manager
     @property
     def active_view_id(self) -> str:
         """Return the currently active view identifier."""
         return self._view_manager.active_view_id
-
+    
+    # TODO Document what a view is. A view is a plot "tab" This needs to be documented somewhere
     @property
     def views(self) -> dict[str, View]:
         """Return the workspace view registry."""
@@ -282,60 +360,11 @@ class Figure:
         """Return the active view model."""
         return self._view_manager.active_view()
 
-    def _default_figure_layout(self) -> dict[str, Any]:
-        """Return shared Plotly layout defaults copied into each view widget."""
-        show_plotly_legend = self._plotly_legend_mode == "plotly"
-        return {
-            "autosize": True,
-            "template": "plotly_white",
-            "showlegend": show_plotly_legend,
-            "margin": {"l": 48, "r": 28, "t": 48, "b": 44},
-            "font": {
-                "family": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-                "size": 14,
-                "color": "#1f2933",
-            },
-            "paper_bgcolor": "#ffffff",
-            "plot_bgcolor": "#f8fafc",
-            "legend": {
-                "bgcolor": "rgba(255,255,255,0.7)",
-                "bordercolor": "rgba(15,23,42,0.08)",
-                "borderwidth": 1,
-            },
-            "xaxis": {
-                "zeroline": True,
-                "zerolinewidth": 1.5,
-                "zerolinecolor": "#334155",
-                "showline": True,
-                "linecolor": "#94a3b8",
-                "linewidth": 1,
-                "mirror": True,
-                "ticks": "outside",
-                "tickcolor": "#94a3b8",
-                "ticklen": 6,
-                "showgrid": True,
-                "gridcolor": "rgba(148,163,184,0.35)",
-                "gridwidth": 1,
-            },
-            "yaxis": {
-                "zeroline": True,
-                "zerolinewidth": 1.5,
-                "zerolinecolor": "#334155",
-                "showline": True,
-                "linecolor": "#94a3b8",
-                "linewidth": 1,
-                "mirror": True,
-                "ticks": "outside",
-                "tickcolor": "#94a3b8",
-                "ticklen": 6,
-                "showgrid": True,
-                "gridcolor": "rgba(148,163,184,0.35)",
-                "gridwidth": 1,
-            },
-        }
+
 
     def _runtime_for_view(self, view_id: str) -> _ViewRuntime:
         """Return the per-view runtime bundle for ``view_id``."""
+        # TODO WHAT IS THIS? This should be explained and documented. This seems to be an internal implementation detail that maybe should not live in figure?
         return self._view_runtime[view_id]
 
     def _create_view_runtime(self, *, view_id: str) -> _ViewRuntime:
@@ -392,7 +421,7 @@ class Figure:
             x_label=x_label,
             y_label=y_label,
         )
-        runtime = self._create_view_runtime(view_id=view_id)
+        runtime = self._create_view_runtime(view_id=view_id) #TODO What the hell is a view_runtime?
         runtime.figure_widget.update_xaxes(range=view.default_x_range)
         runtime.figure_widget.update_yaxes(range=view.default_y_range)
         if view.is_active:
@@ -464,52 +493,61 @@ class Figure:
             self._legend.has_legend,
         )
 
-    @property
-    def title(self) -> str:
-        """Return the title text shown above the figure.
 
-        Returns
-        -------
-        str
-            Current title (HTML/LaTeX is allowed).
+    # --- Layout ---
+    def _default_figure_layout(self) -> dict[str, Any]:
+        """Return shared Plotly layout defaults copied into each view widget."""
+        show_plotly_legend = self._plotly_legend_mode == "plotly"
+        return {
+            "autosize": True,
+            "template": "plotly_white",
+            "showlegend": show_plotly_legend,
+            "margin": {"l": 48, "r": 28, "t": 48, "b": 44},
+            "font": {
+                "family": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+                "size": 14,
+                "color": "#1f2933",
+            },
+            "paper_bgcolor": "#ffffff",
+            "plot_bgcolor": "#f8fafc",
+            "legend": {
+                "bgcolor": "rgba(255,255,255,0.7)",
+                "bordercolor": "rgba(15,23,42,0.08)",
+                "borderwidth": 1,
+            },
+            "xaxis": {
+                "zeroline": True,
+                "zerolinewidth": 1.5,
+                "zerolinecolor": "#334155",
+                "showline": True,
+                "linecolor": "#94a3b8",
+                "linewidth": 1,
+                "mirror": True,
+                "ticks": "outside",
+                "tickcolor": "#94a3b8",
+                "ticklen": 6,
+                "showgrid": True,
+                "gridcolor": "rgba(148,163,184,0.35)",
+                "gridwidth": 1,
+            },
+            "yaxis": {
+                "zeroline": True,
+                "zerolinewidth": 1.5,
+                "zerolinecolor": "#334155",
+                "showline": True,
+                "linecolor": "#94a3b8",
+                "linewidth": 1,
+                "mirror": True,
+                "ticks": "outside",
+                "tickcolor": "#94a3b8",
+                "ticklen": 6,
+                "showgrid": True,
+                "gridcolor": "rgba(148,163,184,0.35)",
+                "gridwidth": 1,
+            },
+        }
 
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.title = "Demo"  # doctest: +SKIP
-        >>> fig.title  # doctest: +SKIP
-        'Demo'
-
-        See Also
-        --------
-        FigureLayout.set_title : Underlying layout helper.
-        """
-        return self._layout.get_title()
-
-    @title.setter
-    def title(self, value: str) -> None:
-        """Set the title text shown above the figure.
-
-        Parameters
-        ----------
-        value : str
-            Title text (HTML/LaTeX supported).
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.title = r"$y=\\sin(x)$"  # doctest: +SKIP
-
-        See Also
-        --------
-        title : Read the current title text.
-        """
-        self._layout.set_title(value)
-
+    
     @property
     def figure_widget(self) -> go.FigureWidget:
         """Access the active view's Plotly FigureWidget.
@@ -549,11 +587,14 @@ class Figure:
             raise KeyError(f"Unknown view: {view_id}")
         return self._runtime_for_view(view_id).pane
 
+
+    # --- Parameters ---
     @property
     def parameters(self) -> ParameterManager:
-        """The figure ParameterManager (preferred name)."""
-        return self._params
+        """The figure parameter manager."""
+        return self._params #TODO rename to _parameter_manager
 
+    # --- Parameters ---
     @property
     def info_output(self) -> dict[Hashable, widgets.Output]:
         """Dictionary of Info Output widgets indexed by id.
