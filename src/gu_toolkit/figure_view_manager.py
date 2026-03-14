@@ -13,13 +13,19 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from .figure_view import View
+from .figure_types import RangeLike
 from .InputConvert import InputConvert
 
 
 class ViewManager:
     """Own workspace view models and active-view selection state."""
 
-    def __init__(self, *, default_view_id: str) -> None:
+    DEFAULT_VIEW_ID = "main"
+
+    def __init__(self, *, default_view_id: str = DEFAULT_VIEW_ID) -> None:
+        # View ids are primarily an internal coordination detail, but the
+        # manager keeps a stable default id so external-facing helpers can
+        # always rely on a first view existing.
         self._default_view_id = str(default_view_id)
         self._views: dict[str, View] = {}
         self._active_view_id = self._default_view_id
@@ -54,8 +60,8 @@ class ViewManager:
         view_id: str,
         *,
         title: str | None,
-        x_range: tuple[int | float | str, int | float | str] | None,
-        y_range: tuple[int | float | str, int | float | str] | None,
+        x_range: RangeLike | None,
+        y_range: RangeLike | None,
         x_label: str | None,
         y_label: str | None,
     ) -> View:

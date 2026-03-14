@@ -1,68 +1,57 @@
-"""Interactive Figure orchestration for notebook plotting.
+"""Interactive figure coordinator for notebook plotting.
 
-Purpose
--------
-This module provides the ``Figure`` class and module-level
-convenience helpers of ``gu_toolkit``. 
+This module contains the notebook-facing :class:`~gu_toolkit.Figure.Figure`
+coordinator and re-exports the module-level helper functions (``plot``,
+``parameter``, ``render``, …) from :mod:`gu_toolkit.figure_api`.
 
-Figure allows plotting symbolic (SymPy) expressions. 
+A **view** is a named plotting workspace (shown as a tab) with its own axis
+defaults and remembered viewport. Plots can belong to one or more views.
 
-It does: 
-- automatic parameter detection
-- automatic resampling on viewport movement
-- multiple plot tabs
-- allows adjusting plot styles. 
-- custom info cards with information about the plots
+Most implementation details live in the split ``figure_*`` modules.
 
-Currently, Figure uses Plotly as a backend for plotting. 
+Examples (notebook)
+-------------------
+```python
+from sympy import sin, symbols
+from gu_toolkit import Figure, plot, parameter
 
-Concepts and structure
-----------------------
-The implementation is composition-based:
+x, a, b, c = symbols("x a b c")
 
-- ``Figure`` coordinates rendering and provides the public plotting methods.
-- ``FigureLayout`` responsible for layout construction.
-- ``ParameterManager`` responsible for parameter controls and on-change hooks.
-- ``InfoPanelManager`` owns sidebar output/components.
-- ``Plot`` (from ``figure_plot``) encapsulates per-curve math/trace logic.
+# Create a figure and plot a sine wave
+# Parameters will be detected automatically
+fig = Figure(show=True)
 
-Architecture notes
-------------------
-``Figure`` delegates as much behavior as possible to specialized collaborators
-(``figure_layout``, ``figure_parameters``, ``figure_info``, ``figure_plot``).
+with fig:
+    plot(a * sin(b * x + c), x, label=r"$a\\sin(bx+c)$")
 
-The module itself provides the top-level coordinator and user-facing helper
-functions (``plot``, ``parameter``, ``render``, range/title helpers, etc.).
+# Set the title
+with fig:
+    set_title("A sine wave")
 
-Important gotchas
------------------
-- Plotly ``FigureWidget`` requires a real container height; use the layout
-  helpers as designed when embedding in custom notebook UIs.
-- Parameter updates and relayout events are debounced/throttled to prevent
-  excessive rerenders.
-- Global helper functions route through the active figure context; ensure a
-  current figure is set (e.g., by using ``with fig:``) before calling them.
+# Change parameter value and range
+with fig:
+    parameter(a, value=1, min=0, max=5)
 
-Examples
+# Add a second wave
+with fig:
+    plot(a * cos(b * x + c), x, label=r"$a\\sin(bx+c)$",
+        color="green",
+        alpha=0.075,
+        width=5)
+    
+```
+
+See also
 --------
->>> from gu_toolkit.Figure import Figure
->>> from gu_toolkit.Symbolic import symbols
->>> from sympy import sin
->>> x, a, b, c = symbols("x a b c")
->>> fig = Figure()
->>> with fig: 
->>>     plot(a * sin(b*x+c), x, id="wave1", label=r"$a \sin(b x + c)$") # doctest: +SKIP
->>> display(fig)                                                        # doctest: +SKIP
-
-Discoverability
----------------
-If you are extending behavior, inspect next:
-
-- ``figure_plot.py`` for per-curve sampling/render internals.
-- ``figure_parameters.py`` for parameter registration and hooks.
-- ``figure_layout.py`` for widget tree/layout decisions.
-- ``PlotlyPane.py`` for robust Plotly resizing in notebook containers.
+* :mod:`gu_toolkit.figure_api` for module-level helpers.
+* :mod:`gu_toolkit.figure_context` for the current-figure stack.
+* :mod:`gu_toolkit.figure_layout` for widget tree/layout.
+* :mod:`gu_toolkit.figure_plot` for per-curve sampling/trace logic.
+* :mod:`gu_toolkit.figure_view_manager` for view models and active selection.
 """
+#TODO This documentation is not bad but is too short. It misses many important details. Not all of them should necessarily be fully documented here, but for all functionalities there should be a guide on where to find the complete documentation.
+
+#TODO: Make sure the language you use throughout the docs is explicit and well defined. Do not assume that the reader knows what you're talking about. It is ok to make documentation longer by explaining what the terms are. 
 
 from __future__ import annotations
 
@@ -71,7 +60,8 @@ import time
 import warnings
 from collections.abc import Callable, Hashable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
-from typing import Any, Literal, NamedTuple
+from dataclasses import dataclass
+from typing import Any
 
 import ipywidgets as widgets
 import plotly.graph_objects as go
@@ -84,20 +74,19 @@ from .figure_plot_normalization import PlotVarsSpec, normalize_plot_inputs
 from .figure_plot_style import PLOT_STYLE_OPTIONS, resolve_style_aliases
 from .FigureSnapshot import FigureSnapshot, ViewSnapshot
 
-# Internal imports (assumed to exist in the same package)
 from .InputConvert import InputConvert
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
+from .figure_types import RangeLike, VisibleSpec
 
 # Module logger
 # - Uses a NullHandler so importing this module never configures global logging.
 # - Callers can enable logs via standard logging configuration.
+# TODO: Write a more detailed explanation of how to use logging
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     logger.addHandler(logging.NullHandler())
-
-_FIGURE_STACK: list[Figure] = []
 
 
 from .figure_context import (
@@ -107,6 +96,7 @@ from .figure_context import (
     _push_current_figure,
     _use_figure,
     current_figure,  # noqa: F401 - re-exported for __init__.py
+    #TODO Explain better what's going on here, why is current_figure re-exported
 )
 from .figure_info import InfoPanelManager
 from .figure_layout import FigureLayout
@@ -116,139 +106,236 @@ from .figure_plot import Plot
 from .figure_view import View
 from .figure_view_manager import ViewManager
 
-# -----------------------------
-# Small type aliases
-# -----------------------------
-NumberLike = int | float # TODO: What is the point of this? Add documentation when this should be used 
-NumberLikeOrStr = int | float | str # TODO: What is the point of this? Add documentation when this should be used 
-RangeLike = tuple[NumberLikeOrStr, NumberLikeOrStr] # TODO: What is the point of this? Add documentation when this should be used 
-VisibleSpec = bool # TODO: What is the point of this? Add documentation when this should be used 
-
 # SECTION: Figure (The Coordinator) [id: Figure]
 # =============================================================================
-# TODO: What is this class. The documentation is horrible. 
-class _ViewRuntime(NamedTuple):
-    """Runtime objects owned by a single workspace view."""
+@dataclass(frozen=True)
+class _ViewBackend:
+    """Per-view widget backend.
+
+    A :class:`~gu_toolkit.figure_view.View` stores the *model* state for a view
+    (ranges, labels, stale flags). ``_ViewBackend`` stores the corresponding
+    UI/runtime objects: 
+    
+    
+
+    - the Plotly :class:`~plotly.graph_objects.FigureWidget`,
+    - the :class:`~gu_toolkit.PlotlyPane.PlotlyPane` wrapper used for robust
+      notebook resizing,
+    - a per-view relayout debouncer used to throttle pan/zoom rerenders.
+
+    This is internal to :class:`Figure` and is not part of the public API.
+    """
 
     figure_widget: go.FigureWidget
     pane: PlotlyPane
+    relayout_debouncer: QueuedDebouncer
+#TODO Should this not be in figure_view?
 
+class FigureViews(Mapping[str, View]):
+    """Mapping-like facade for figure views.
 
+    ``FigureViews`` is intentionally small: it provides a dictionary-style
+    interface for retrieving view models (``fig.views["main"]``) and a
+    discoverable "current view" concept (``fig.views.current`` /
+    ``fig.views.current_id``).
+
+    The underlying :class:`~gu_toolkit.figure_view_manager.ViewManager` remains
+    a pure model. Switching views has UI side-effects, so the coordinator
+    (:class:`Figure`) owns those transitions.
+    """
+
+    def __init__(self, fig: Figure) -> None:
+        self._fig = fig
+
+    def __getitem__(self, key: str) -> View:
+        return self._fig._view_manager.require_view(str(key))
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._fig._view_manager.views)
+
+    def __len__(self) -> int:
+        return len(self._fig._view_manager.views)
+
+    @property
+    def current_id(self) -> str:
+        """Return the current active view id."""
+        return self._fig._view_manager.active_view_id
+
+    @current_id.setter
+    def current_id(self, value: str) -> None:
+        self._fig.set_active_view(str(value))
+
+    @property
+    def current(self) -> View:
+        """Return the current active view model."""
+        return self._fig._view_manager.active_view()
+
+    def add(
+        self,
+        view_id: str,
+        *,
+        title: str | None = None,
+        x_range: RangeLike | None = None,
+        y_range: RangeLike | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
+        activate: bool = False,
+    ) -> View:
+        """Create a new view (delegates to :meth:`Figure.add_view`)."""
+        view = self._fig.add_view(
+            view_id,
+            title=title,
+            x_range=x_range,
+            y_range=y_range,
+            x_label=x_label,
+            y_label=y_label,
+            activate=activate,
+        )
+        return view
+
+    def remove(self, view_id: str) -> None:
+        """Remove a view (delegates to :meth:`Figure.remove_view`)."""
+        self._fig.remove_view(view_id)
+
+    def select(self, view_id: str) -> None:
+        """Switch the active view (equivalent to setting :attr:`current_id`)."""
+        self.current_id = view_id
+#TODO Should this not be in figure_view?
+
+#TODO many of these concepts come out of the blue! info card? side panel?
+# A person reading these docs will be confused. 
+# We need a more comprehensive and coherently organized documentation. 
+# You added the explanation for what a view is. This level of detail should be afforded to ALL of the concepts. A clear organization map should be present in the docs. Also, tips on how to find this documentation at runtime should be provided in the docstrings.
 class Figure:
+    """Notebook-facing coordinator for interactive plotting.
+
+    ``Figure`` is the package entry point that wires together specialized
+    collaborators:
+
+    - :class:`~gu_toolkit.figure_layout.FigureLayout` builds the widget tree.
+    - :class:`~gu_toolkit.figure_parameters.ParameterManager` owns parameter
+      controls and change hooks.
+    - :class:`~gu_toolkit.figure_info.InfoPanelManager` owns info-card outputs.
+    - :class:`~gu_toolkit.figure_legend.LegendPanelManager` owns the side-panel
+      legend rows.
+    - :class:`~gu_toolkit.figure_view_manager.ViewManager` owns *view models*
+      (no widgets).
+    - :class:`~gu_toolkit.figure_plot.Plot` owns per-curve sampling and trace
+      updates.
+
+    A **view** is a named plotting workspace (shown as a tab) with its own axis
+    defaults and remembered viewport. Plots can be associated with one or more
+    views.
+
+    Parameters
+    ----------
+    sampling_points:
+        Default number of x samples used when rendering a plot. 
+    x_range, y_range:
+        Default axis ranges for the initial view.
+    show:
+        If ``True``, display the figure immediately in IPython/Jupyter.
+    display:
+        Deprecated alias for ``show``. #TODO remove this completely
+
+    #TODO We should actually remove this from figure and make it a per-view configuration. I think we should remove this explicit parameter and have a "smart" system that takes keyword parameters and routes them to the right place. For example
+    show should be authentically a Figure property, but x_range, y_range
+    should be view properties forwarded to the main view.
+    Title should be a figure parameter. What else?
+
+
+
+    Attributes
+    ----------
+    plots : dict[str, Plot]
+        Registry of plots keyed by plot id.
+    views : FigureViews
+        Mapping-like facade over view models with ``current`` / ``current_id``.
+    parameters : ParameterManager
+        Manager for parameter controls.
+    info_output : Mapping[Hashable, ipywidgets.Output]
+        Read-only mapping of info output widgets created via
+        :meth:`InfoPanelManager.get_output`.
+
+    Notes
+    -----
+    ``Figure`` is intentionally a coordinator. Widget-building and per-plot
+    sampling logic live in their own modules (``figure_layout`` and
+    ``figure_plot``). 
+    #TODO these notes are cryptic and need to be rewritten with a more comprehensive explanation and links to appropriate docs
     """
-    An interactive Figure for plotting SymPy functions with automatic parameter detection.
-
-    What problem does this solve?
-    -----------------------------
-    We often want to:
-    - type a symbolic function like ``sin(x)`` or ``a*x**2 + b`` (SymPy),
-    - *see* it immediately,
-    - and then explore “What happens if I change a parameter?”
-
-    ``Figure`` provides a simple API that encourages experimentation.
-
-    Key features
-    ------------
-    - Plotting backend: Plotly ``FigureWidget`` so it is interactive inside notebooks.
-    - Construction is side-effect free by default; pass ``display=True``
-      to force immediate notebook display, or call ``display(fig)`` explicitly.
-    - Uses a right-side controls panel for parameter sliders.
-    - Supports plotting multiple curves identified by an ``id``.
-    - Re-renders curves on:
-      - slider changes,
-      - pan/zoom changes (throttled to at most once every 0.5 seconds).
-
-    Examples
-    --------
-    >>> from gu_toolkit.Figure import Figure
-    >>> from gu_toolkit.Symbolic import symbols
-    >>> from sympy import sin
-    >>> x, a, b, c = symbols("x a b c")
-    >>> fig = Figure()
-    >>> with fig: 
-    >>>     plot(a * sin(b*x+c), x, id="wave1", label=r"$a \sin(b x + c)$") # doctest: +SKIP
-    >>> display(fig)            
-    >>> # Adjust default parameter range
-    >>> with fig:
-    >>>     parameter(a, value=1, min=0, max=5)
-    """
-
-# TODO Document all the slot variables
+# TODO slots continue to be undocumented! Is that an issue? Where does a person discover the documentation of what these do?
     __slots__ = [
         "plots",
         "_layout",
-        "_params",
+        "_parameter_manager",
         "_info",
         "_legend",
         "_view_manager",
-        "_view_runtime",
+        "_view_backends",
+        "_views",
         "_sampling_points",
-        "_debug",
-        "_plotly_legend_mode",
         "_render_info_last_log_t",
         "_render_debug_last_log_t",
-        "_relayout_debouncers",
-        "_has_been_displayed",
         "_print_capture",
     ]
 
     def __init__(
         self,
+        *,
         sampling_points: int = 500,
         x_range: RangeLike = (-4, 4),
         y_range: RangeLike = (-3, 3),
-        debug: bool = False,
-        default_view_id: str = "main", #TODO: Eliminate this. View ids are implementation details of the view manager. If one want, one can set it manually by accessing the view manager.
-        plotly_legend_mode: Literal["side_panel"] = "side_panel", #TODO Eliminate this 
-        display: bool = False,
+        show: bool = False,
+        display: bool | None = None,
+        **_deprecated_kwargs: Any,
     ) -> None:
-        """Initialize a Figure instance with default ranges and sampling.
+        # Handle backwards-compatible keyword arguments that were removed from
+        # the public constructor.
+        # TODO: see TODO above about kwargs. The kwargs name should not be deprecated, but some deprecated kwargs should be removed.
 
-        Parameters
-        ----------
-        sampling_points : int, optional
-            Default number of samples per plot.
-        x_range : RangeLike, optional
-            Initial x-axis range.
-        y_range : RangeLike, optional
-            Initial y-axis range.
-        debug : bool, optional
-            Enable debug logging for renders and ranges.
-        default_view_id : str, optional 
-            Initial workspace view identifier.
-        plotly_legend_mode : {"side_panel"}, optional
-            Legend mode. Only ``"side_panel"`` is supported.
-        display : bool, optional
-            If ``True``, trigger immediate notebook display after
-            initialization by invoking :meth:`_ipython_display_`.
+        debug = bool(_deprecated_kwargs.pop("debug", False)) #TODO: this module is missing a guide on how to enable debugging. Is the debugging functionality actually there?
+        default_view_id = _deprecated_kwargs.pop("default_view_id", None)
+        plotly_legend_mode = _deprecated_kwargs.pop("plotly_legend_mode", None)
+        if _deprecated_kwargs:
+            unexpected = ", ".join(sorted(_deprecated_kwargs))
+            raise TypeError(f"Figure() got unexpected keyword argument(s): {unexpected}")
 
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        >>> fig = Figure(x_range=(-6, 6), y_range=(-2, 2))  # doctest: +SKIP 
-        >>> fig.sampling_points  # doctest: +SKIP
-        500
-
-        Notes
-        -----
-        Parameters are managed by :class:`ParameterManager` and exposed through
-        :attr:`parameters`. Figure construction is side-effect free by default
-        and does not trigger notebook display unless ``display=True`` is passed.
-        """
-        # TODO Why does the documentation have all these doctest: +SKIP
-        self._debug = debug
-
-        if plotly_legend_mode not in {"side_panel", "plotly"}:
-            raise ValueError(
-                "plotly_legend_mode must be either 'side_panel' or 'plotly'"
+        if debug:
+            warnings.warn(
+                "Figure(debug=...) is deprecated. Configure logging instead.", #TODO: no explanation on how to do this. 
+                DeprecationWarning,
+                stacklevel=2,
             )
-        self._plotly_legend_mode = plotly_legend_mode
+            logger.setLevel(logging.DEBUG)
+
+        if default_view_id is not None:
+            warnings.warn(
+                "Figure(default_view_id=...) is deprecated and ignored; view ids are managed via fig.views.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if plotly_legend_mode is not None:
+            warnings.warn(
+                "Figure(plotly_legend_mode=...) is deprecated; the toolkit uses a side-panel legend.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        if display is not None:
+            warnings.warn(
+                "Figure(display=...) is deprecated; use Figure(show=...) instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if show is not False and bool(display) != bool(show):
+                raise ValueError(
+                    "Figure() received both show= and display= with different values; use only show=."
+                )
+            show = bool(display)
+
         self._sampling_points = sampling_points
         self.plots: dict[str, Plot] = {}
-        self._has_been_displayed = False
         self._print_capture: ExitStack | None = None
 
         # 1. Initialize Layout (View)
@@ -256,7 +343,7 @@ class Figure:
 
         # 2. Initialize Managers
         # Note: we pass a callback for rendering so params can trigger updates
-        self._params = ParameterManager(
+        self._parameter_manager = ParameterManager(
             self.render,
             self._layout.params_box,
             modal_host=self._layout.root_widget,
@@ -265,24 +352,30 @@ class Figure:
         self._info.bind_figure(self)
         self._legend = LegendPanelManager(self._layout.legend_box)
 
-        # 3. Initialize Per-View Plotly Runtime
-        # TODO: WTF is a runtime?! Use simpler lexicon in documentation. 
-        self._view_runtime: dict[str, _ViewRuntime] = {}
-        self._relayout_debouncers: dict[str, QueuedDebouncer] = {}
+        # 3. Initialize per-view Plotly backends (widgets + debouncers)
+        self._view_backends: dict[str, _ViewBackend] = {}
+        #TODO This should NOT be here. This should be in figure_views and it should cleanly expose the the current view to the figure.
         self._layout.observe_tab_selection(self.set_active_view)
 
+        # 3b. Views facade
+        self._view_manager = ViewManager()
+        self._views = FigureViews(self)
+
         # 4. Set Initial State
-        self._view_manager = ViewManager(default_view_id=str(default_view_id))
-        self.add_view(self._view_manager.default_view_id, x_range=x_range, y_range=y_range)
-        self._legend.set_active_view(self.active_view_id)
+        self.add_view(
+            self._view_manager.default_view_id,
+            x_range=x_range,
+            y_range=y_range,
+        )
+        self._legend.set_active_view(self._view_manager.active_view_id)
         self._sync_sidebar_visibility()
 
         # 5. Bind Events
         self._render_info_last_log_t = 0.0
         self._render_debug_last_log_t = 0.0
 
-        if display: #TODO rename display to show
-            self._ipython_display_()
+        if show:
+            self.show()
 
     # --- Figure-level properties ---
     @property
@@ -332,43 +425,49 @@ class Figure:
         self._layout.set_title(value)
 
     # -------------------------------
-    # Properties 
+    # Views
     # -------------------------------
-    
-    # --- Views ---
-    # TODO: instead, make views be a dict like object that has the property "current_id" so 
-    # active_view_id can be: Figure.views.current_id 
-    # Mark this property as deprecated
-    # Instead of _active_view expose views.current()
-    # Actually ViewManager should support a dict-like interface and views should just point to the view manager
-    # ViewManager should have:
-    # - a current read-only property
-    # - a current_id property with setter
-    # views should be a read-only property that points to the view manager _view_manager
+
+    @property
+    def views(self) -> FigureViews:
+        """Mapping-like access to workspace views.
+
+        Examples
+        --------
+        >>> fig = Figure()  # doctest: +SKIP
+        >>> list(fig.views)  # doctest: +SKIP
+        ['main']
+        >>> fig.views.current_id  # doctest: +SKIP
+        'main'
+        """
+        return self._views
+
+#TODO Remove deprecated property!
     @property
     def active_view_id(self) -> str:
-        """Return the currently active view identifier."""
-        return self._view_manager.active_view_id
-    
-    # TODO Document what a view is. A view is a plot "tab" This needs to be documented somewhere
-    @property
-    def views(self) -> dict[str, View]:
-        """Return the workspace view registry."""
-        return self._view_manager.views
+        """Return the currently active view id.
 
-    def _active_view(self) -> View:
-        """Return the active view model."""
+        .. deprecated:: 0.0
+            Use ``fig.views.current_id`` instead.
+        """
+        warnings.warn(
+            "Figure.active_view_id is deprecated; use fig.views.current_id.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.views.current_id
+
+    def _current_view(self) -> View:
+        """Return the active view model (internal, no deprecation warnings)."""
         return self._view_manager.active_view()
 
-
-
-    def _runtime_for_view(self, view_id: str) -> _ViewRuntime:
-        """Return the per-view runtime bundle for ``view_id``."""
-        # TODO WHAT IS THIS? This should be explained and documented. This seems to be an internal implementation detail that maybe should not live in figure?
-        return self._view_runtime[view_id]
-
-    def _create_view_runtime(self, *, view_id: str) -> _ViewRuntime:
-        """Create and register per-view widget runtime state."""
+#TODO As described above, this should not be here. It should be in view_manager.
+    def _backend_for_view(self, view_id: str) -> _ViewBackend:
+        """Return the per-view widget backend bundle for ``view_id``."""
+        return self._view_backends[view_id]
+#TODO As described above, this should not be here. It should be in view_manager.
+    def _create_view_backend(self, *, view_id: str) -> _ViewBackend:
+        """Create and register per-view widget backend state."""
         figure_widget = go.FigureWidget()
         figure_widget.update_layout(**self._default_figure_layout())
         pane = PlotlyPane(
@@ -382,25 +481,29 @@ class Figure:
             autorange_mode="none",
             defer_reveal=True,
         )
-        runtime = _ViewRuntime(figure_widget=figure_widget, pane=pane)
-        self._view_runtime[view_id] = runtime
-        self._layout.set_view_plot_widget(
-            view_id, pane.widget, reflow_callback=pane.reflow
-        )
-
+#TODO I think we should have a unique debouncer at the figure level that decides when to call the redraw for the current view. Discuss pros/cons of this approach in a comment. 
         debouncer = QueuedDebouncer(
             lambda *args: self._run_relayout(view_id=view_id, *args),  # noqa: B026
             execute_every_ms=500,
             drop_overflow=True,
         )
-        self._relayout_debouncers[view_id] = debouncer
+        backend = _ViewBackend(
+            figure_widget=figure_widget,
+            pane=pane,
+            relayout_debouncer=debouncer,
+        )
+        self._view_backends[view_id] = backend
+        self._layout.set_view_plot_widget(
+            view_id, pane.widget, reflow_callback=pane.reflow
+        )
         figure_widget.layout.on_change(
             lambda *args: self._throttled_relayout(view_id, *args),
             "xaxis.range",
             "yaxis.range",
         )
-        return runtime
+        return backend
 
+#TODO The documentation is bad. The user (especially a non-programmer end user) has no idea what a view model is. Make sure the language is natural and accessible, especially in public facing docs. 
     def add_view(
         self,
         id: str,
@@ -410,8 +513,24 @@ class Figure:
         y_range: RangeLike | None = None,
         x_label: str | None = None,
         y_label: str | None = None,
+        activate: bool = False,
     ) -> View:
-        """Add a view model to the workspace registry."""
+        """Add a view model to the workspace registry.
+
+        Parameters
+        ----------
+        id:
+            View identifier.
+        title:
+            Optional human-readable title shown in the tab selector.
+        x_range, y_range:
+            Optional default ranges for the view.
+        x_label, y_label:
+            Optional axis label metadata.
+        activate:
+            If ``True``, make the new view the current active view.
+            #TODO: State defaults. 
+        """
         view_id = str(id)
         view = self._view_manager.add_view(
             view_id,
@@ -421,48 +540,55 @@ class Figure:
             x_label=x_label,
             y_label=y_label,
         )
-        runtime = self._create_view_runtime(view_id=view_id) #TODO What the hell is a view_runtime?
-        runtime.figure_widget.update_xaxes(range=view.default_x_range)
-        runtime.figure_widget.update_yaxes(range=view.default_y_range)
+        backend = self._create_view_backend(view_id=view_id)
+        backend.figure_widget.update_xaxes(range=view.default_x_range)
+        backend.figure_widget.update_yaxes(range=view.default_y_range)
         if view.is_active:
             self._info.set_active_view(view_id)
             self._legend.set_active_view(view_id)
         self._layout.set_view_tabs(
-            tuple(self._view_manager.views.keys()), active_view_id=self.active_view_id
+            tuple(self._view_manager.views.keys()),
+            active_view_id=self._view_manager.active_view_id,
         )
+        if activate and not view.is_active:
+            self.set_active_view(view_id)
         return view
 
     def set_active_view(self, id: str) -> None:
         """Set the active view id and synchronize widget ranges."""
+        view_id = str(id)
         transition = self._view_manager.set_active_view(
-            id,
+            view_id,
             current_viewport_x=self._viewport_x_range,
             current_viewport_y=self._viewport_y_range,
         )
         if transition is None:
             return
         _, nxt = transition
-        self._info.set_active_view(id)
-        self._legend.set_active_view(id)
+        self._info.set_active_view(view_id)
+        self._legend.set_active_view(view_id)
 
         self.figure_widget.update_xaxes(range=nxt.viewport_x_range or nxt.default_x_range)
         self.figure_widget.update_yaxes(range=nxt.viewport_y_range or nxt.default_y_range)
 
         for plot in self.plots.values():
-            plot.render(view_id=self.active_view_id)
+            plot.render(view_id=self._view_manager.active_view_id)
         if nxt.is_stale:
-            self._view_manager.clear_stale(self.active_view_id)
+            self._view_manager.clear_stale(self._view_manager.active_view_id)
 
         self._layout.set_view_tabs(
-            tuple(self._view_manager.views.keys()), active_view_id=self.active_view_id
+            tuple(self._view_manager.views.keys()),
+            active_view_id=self._view_manager.active_view_id,
         )
-        self._layout.trigger_reflow_for_view(self.active_view_id)
+        self._layout.trigger_reflow_for_view(self._view_manager.active_view_id)
         self._sync_sidebar_visibility()
 
+# TODO A cleaner api would be with figure.views["view_id"]
+# i.e. each view in the viewmanager is a contextmanager
     @contextmanager
     def view(self, id: str) -> Iterator[Figure]:
         """Temporarily switch the active workspace view within a context."""
-        previous = self.active_view_id
+        previous = self._view_manager.active_view_id
         self.set_active_view(id)
         try:
             yield self
@@ -478,30 +604,32 @@ class Figure:
             plot.remove_from_view(id)
             self._legend.on_plot_updated(plot)
         self._view_manager.remove_view(id)
-        self._view_runtime.pop(id, None)
-        self._relayout_debouncers.pop(id, None)
+        self._view_backends.pop(id, None)
         self._layout.set_view_tabs(
-            tuple(self._view_manager.views.keys()), active_view_id=self.active_view_id
+            tuple(self._view_manager.views.keys()),
+            active_view_id=self._view_manager.active_view_id,
         )
         self._sync_sidebar_visibility()
 
     def _sync_sidebar_visibility(self) -> None:
         """Apply consolidated sidebar section visibility from all managers."""
         self._layout.update_sidebar_visibility(
-            self._params.has_params,
+            self._parameter_manager.has_params,
             self._info.has_info,
             self._legend.has_legend,
         )
 
 
     # --- Layout ---
+    #TODO: Should this be in the figure_layout or figure_plot_style? Also, why is this a function and not a variable?
     def _default_figure_layout(self) -> dict[str, Any]:
         """Return shared Plotly layout defaults copied into each view widget."""
-        show_plotly_legend = self._plotly_legend_mode == "plotly"
         return {
             "autosize": True,
             "template": "plotly_white",
-            "showlegend": show_plotly_legend,
+            # The toolkit provides a dedicated legend side panel. Keep Plotly's
+            # built-in legend off by default to avoid duplication.
+            "showlegend": False,
             "margin": {"l": 48, "r": 28, "t": 48, "b": 44},
             "font": {
                 "family": "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
@@ -547,7 +675,7 @@ class Figure:
             },
         }
 
-    
+    #TODO is this necessary? Does this ever get used? Should it maybe be accessed through the view?
     @property
     def figure_widget(self) -> go.FigureWidget:
         """Access the active view's Plotly FigureWidget.
@@ -557,7 +685,7 @@ class Figure:
         plotly.graph_objects.FigureWidget
             The interactive Plotly widget for :attr:`active_view_id`.
         """
-        return self._runtime_for_view(self.active_view_id).figure_widget
+        return self._backend_for_view(self._view_manager.active_view_id).figure_widget
 
     def figure_widget_for(self, view_id: str) -> go.FigureWidget:
         """Return the Plotly FigureWidget backing ``view_id``.
@@ -572,32 +700,33 @@ class Figure:
         plotly.graph_objects.FigureWidget
             The widget owned by that view.
         """
-        if view_id not in self._view_manager.views:
-            raise KeyError(f"Unknown view: {view_id}")
-        return self._runtime_for_view(view_id).figure_widget
+        key = str(view_id)
+        self._view_manager.require_view(key)
+        return self._backend_for_view(key).figure_widget
 
     @property
     def pane(self) -> PlotlyPane:
         """Access the active view's :class:`PlotlyPane`."""
-        return self._runtime_for_view(self.active_view_id).pane
+        return self._backend_for_view(self._view_manager.active_view_id).pane
 
     def pane_for(self, view_id: str) -> PlotlyPane:
         """Return the :class:`PlotlyPane` backing ``view_id``."""
-        if view_id not in self._view_manager.views:
-            raise KeyError(f"Unknown view: {view_id}")
-        return self._runtime_for_view(view_id).pane
+        key = str(view_id)
+        self._view_manager.require_view(key)
+        return self._backend_for_view(key).pane
 
 
     # --- Parameters ---
     @property
     def parameters(self) -> ParameterManager:
         """The figure parameter manager."""
-        return self._params #TODO rename to _parameter_manager
+        return self._parameter_manager
 
-    # --- Parameters ---
+    # --- Info Cards ---
+    #TODO: instead of a dict, this should be a InfoManager, defined in figure_info
     @property
-    def info_output(self) -> dict[Hashable, widgets.Output]:
-        """Dictionary of Info Output widgets indexed by id.
+    def info_output(self) -> Mapping[Hashable, widgets.Output]:
+        """Read-only mapping of info output widgets indexed by id.
 
         Returns
         -------
@@ -607,12 +736,16 @@ class Figure:
         Examples
         --------
         >>> fig = Figure()  # doctest: +SKIP
-        >>> isinstance(fig.info_output, dict)  # doctest: +SKIP
-        True
+        >>> list(fig.info_output)  # doctest: +SKIP
+        []
 
         """
-        return self._info._outputs
+        return self._info.outputs
 
+    # TODO: See next line
+    # --- GIVE THIS SECTION A NAME ---
+    
+    #TODO all instances of _current_view should be self.views.current
     @property
     def x_range(self) -> tuple[float, float]:
         """Return the default x-axis range.
@@ -632,7 +765,7 @@ class Figure:
         --------
         y_range : The default y-axis range.
         """
-        return self._active_view().default_x_range
+        return self._current_view().default_x_range
 
     @x_range.setter
     def x_range(self, value: RangeLike) -> None:
@@ -660,7 +793,7 @@ class Figure:
             float(InputConvert(value[0], float)),
             float(InputConvert(value[1], float)),
         )
-        self._active_view().default_x_range = rng
+        self._current_view().default_x_range = rng
         self.figure_widget.update_xaxes(range=rng)
 
     @property
@@ -682,7 +815,7 @@ class Figure:
         --------
         x_range : The default x-axis range.
         """
-        return self._active_view().default_y_range
+        return self._current_view().default_y_range
 
     @y_range.setter
     def y_range(self, value: RangeLike) -> None:
@@ -710,7 +843,7 @@ class Figure:
             float(InputConvert(value[0], float)),
             float(InputConvert(value[1], float)),
         )
-        self._active_view().default_y_range = rng
+        self._current_view().default_y_range = rng
         self.figure_widget.update_yaxes(range=rng)
 
     @property
@@ -724,21 +857,21 @@ class Figure:
         if rng is None:
             return None
         result = (float(rng[0]), float(rng[1]))
-        self._active_view().viewport_x_range = result
+        self._current_view().viewport_x_range = result
         return result
 
     @_viewport_x_range.setter
     def _viewport_x_range(self, value: RangeLike | None) -> None:
         if value is None:
-            rng = self._active_view().default_x_range
-            self._active_view().viewport_x_range = rng
+            rng = self._current_view().default_x_range
+            self._current_view().viewport_x_range = rng
             self.figure_widget.update_xaxes(range=rng)
             return
         rng = (
             float(InputConvert(value[0], float)),
             float(InputConvert(value[1], float)),
         )
-        self._active_view().viewport_x_range = rng
+        self._current_view().viewport_x_range = rng
         self.figure_widget.update_xaxes(range=rng)
 
     @property
@@ -752,21 +885,21 @@ class Figure:
         if rng is None:
             return None
         result = (float(rng[0]), float(rng[1]))
-        self._active_view().viewport_y_range = result
+        self._current_view().viewport_y_range = result
         return result
 
     @_viewport_y_range.setter
     def _viewport_y_range(self, value: RangeLike | None) -> None:
         if value is None:
-            rng = self._active_view().default_y_range
-            self._active_view().viewport_y_range = rng
+            rng = self._current_view().default_y_range
+            self._current_view().viewport_y_range = rng
             self.figure_widget.update_yaxes(range=rng)
             return
         rng = (
             float(InputConvert(value[0], float)),
             float(InputConvert(value[1], float)),
         )
-        self._active_view().viewport_y_range = rng
+        self._current_view().viewport_y_range = rng
         self.figure_widget.update_yaxes(range=rng)
 
     @property
@@ -862,6 +995,7 @@ class Figure:
 
     # --- Public API ---
 
+    #TODO: The next method is a great idea. Maybe we should call methods and variables that are used in discoverability to end with "_help"
     @staticmethod
     def plot_style_options() -> dict[str, str]:
         """Return discoverable plot-style options supported by :meth:`plot`.
@@ -879,6 +1013,12 @@ class Figure:
         """
         return dict(PLOT_STYLE_OPTIONS)
 
+# TODO Refactor the style options to be kwargs and use PLOT_STYLE_OPTIONS to parse them. 
+# TODO: Also, maybe we should have PLOT_STYLE_OPTIONS have a different schema:
+#documentation
+#type
+#default 
+#and the function above should just parse that into a full docstring or something. Propose a smart design for this. Maybe even encode this into a dataclass? Discuss! 
     def plot(
         self,
         func: Any,
@@ -966,12 +1106,14 @@ class Figure:
 
         Examples
         --------
+        >>> import sympy as sp
         >>> x, a = sp.symbols("x a")  # doctest: +SKIP
         >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.parameter(a, min=-2, max=2)  # doctest: +SKIP
-        >>> fig.plot(a * sp.sin(x), x, id="a_sin")  # doctest: +SKIP
-        >>> fig.plot(sp.sin(x), x, id="sin")  # doctest: +SKIP
-
+        >>> with fig:
+        >>>     plot(a * sp.sin(x), x, id="a_sin")  # doctest: +SKIP
+        >>>     plot(sp.sin(x), x, id="sin")  # doctest: +SKIP
+        >>> fig.show()
+        
         Notes
         -----
         Prefer explicit parameter setup with :meth:`parameter`/``parameters``
@@ -1046,14 +1188,10 @@ class Figure:
         else:
             update_dont_create = False
 
-        initial_func = (
-            normalized_var if normalized_numeric_fn is not None else normalized_func
-        )
-
         if update_dont_create:
             update_kwargs: dict[str, Any] = {
                 "var": normalized_var,
-                "func": initial_func,
+                "func": normalized_func,
                 "parameters": parameters,
                 "visible": visible,
                 "x_domain": x_domain,
@@ -1066,6 +1204,8 @@ class Figure:
                 "trace": trace,
                 "view": view,
             }
+            if normalized_numeric_fn is not None:
+                update_kwargs["numeric_function"] = normalized_numeric_fn
             if label is not None:
                 update_kwargs["label"] = label
             self.plots[id].update(**update_kwargs)
@@ -1076,11 +1216,15 @@ class Figure:
             view_ids = (
                 (view,)
                 if isinstance(view, str)
-                else (tuple(view) if view is not None else (self.active_view_id,))
+                else (
+                    tuple(view)
+                    if view is not None
+                    else (self._view_manager.active_view_id,)
+                )
             )
             plot = Plot(
                 var=normalized_var,
-                func=initial_func,
+                func=normalized_func,
                 smart_figure=self,
                 parameters=parameters,
                 x_domain=x_domain,
@@ -1095,16 +1239,11 @@ class Figure:
                 trace=trace,
                 plot_id=id,
                 view_ids=view_ids,
+                numeric_function=normalized_numeric_fn,
             )
             self.plots[id] = plot
             self._legend.on_plot_added(plot)
             self._sync_sidebar_visibility()
-
-        if normalized_numeric_fn is not None:
-            plot.set_numeric_function(
-                normalized_var, normalized_numeric_fn, parameters=parameters
-            )
-            plot.render()
 
         return plot
 
@@ -1139,7 +1278,9 @@ class Figure:
         >>> fig.parameter(a, min=-2, max=2)  # doctest: +SKIP
 
         """
-        result = self._params.parameter(symbols, control=control, **control_kwargs)
+        result = self._parameter_manager.parameter(
+            symbols, control=control, **control_kwargs
+        )
         self._sync_sidebar_visibility()
         return result
 
@@ -1174,20 +1315,22 @@ class Figure:
         self._log_render(reason, trigger)
 
         # 1. Update active-view plots
+        current_view_id = self._view_manager.active_view_id
+
         for plot in self.plots.values():
-            plot.render(view_id=self.active_view_id)
+            plot.render(view_id=current_view_id)
 
         # 1b. Mark inactive memberships stale on parameter changes.
         if reason == "param_change":
             for plot in self.plots.values():
                 for view_id in plot.views:
-                    if view_id != self.active_view_id:
+                    if view_id != current_view_id:
                         self._view_manager.mark_stale(view_id=view_id)
 
         # 2. Run hooks (if triggered by parameter change)
         # Note: ParameterManager triggers this render, then we run hooks.
         if reason == "param_change" and trigger:
-            hooks = self._params.get_hooks()
+            hooks = self._parameter_manager.get_hooks()
             for h_id, callback in list(hooks.items()):
                 try:
                     callback(trigger)
@@ -1222,7 +1365,7 @@ class Figure:
             y_range=self.y_range,
             sampling_points=self.sampling_points or 500,
             title=self.title or "",
-            parameters=self._params.snapshot(full=True),
+            parameters=self._parameter_manager.snapshot(full=True),
             plots={pid: p.snapshot(id=pid) for pid, p in self.plots.items()},
             info_cards=self._info.snapshot(),
             views=tuple(
@@ -1238,7 +1381,7 @@ class Figure:
                 )
                 for view in self.views.values()
             ),
-            active_view_id=self.active_view_id,
+            active_view_id=self._view_manager.active_view_id,
         )
 
     def to_code(self, *, options: CodegenOptions | None = None) -> str:
@@ -1365,7 +1508,7 @@ class Figure:
             with _use_figure(self):
                 return callback(event)
 
-        hook_id = self._params.add_hook(_wrapped, hook_id)
+        hook_id = self._parameter_manager.add_hook(_wrapped, hook_id)
 
         if run_now:
             try:
@@ -1387,10 +1530,12 @@ class Figure:
             Target view identifier. ``None`` falls back to the active view for
             direct test calls.
         """
-        target_view = self.active_view_id if view_id is None else str(view_id)
-        debouncer = self._relayout_debouncers.get(target_view)
-        if debouncer is not None:
-            debouncer(*args)
+        target_view = (
+            self._view_manager.active_view_id if view_id is None else str(view_id)
+        )
+        backend = self._view_backends.get(target_view)
+        if backend is not None:
+            backend.relayout_debouncer(*args)
 
     def _run_relayout(self, *_, view_id: str | None = None) -> None:
         """Execute one relayout render from the queued debouncer.
@@ -1401,8 +1546,9 @@ class Figure:
             Target view identifier. ``None`` falls back to the active view for
 .
         """
-        target_view = self.active_view_id if view_id is None else str(view_id)
-        if target_view == self.active_view_id:
+        active_view_id = self._view_manager.active_view_id
+        target_view = active_view_id if view_id is None else str(view_id)
+        if target_view == active_view_id:
             self.render(reason="relayout")
         elif target_view in self.views:
             self._view_manager.mark_stale(view_id=target_view)
@@ -1457,8 +1603,14 @@ class Figure:
         explicit display (for example ``display(fig)``) drives first render.
         ``Figure(...)`` construction itself is intentionally side-effect free.
         """
-        self._has_been_displayed = True
         display(self._layout.output_widget)
+
+    def show(self) -> None:
+        """Display the figure in IPython/Jupyter.
+
+        This is a small convenience wrapper around ``display(fig)``.
+        """
+        display(self)
 
     def __enter__(self) -> Figure:
         """Enter a context where this figure is the current target.
@@ -1531,3 +1683,34 @@ set_sampling_points = _figure_api.set_sampling_points
 set_title = _figure_api.set_title
 set_x_range = _figure_api.set_x_range
 set_y_range = _figure_api.set_y_range
+
+
+__all__ = [
+    # Coordinator entry point
+    "Figure",
+    "FigureViews",
+    # Common collaborating types (re-exported for convenience)
+    "FigureLayout",
+    "Plot",
+    "View",
+    "FigureSnapshot",
+    "ViewSnapshot",
+    # Context
+    "current_figure",
+    # Module-level helpers (figure_api)
+    "plot",
+    "plots",
+    "parameter",
+    "parameters",
+    "info",
+    "render",
+    "get_sampling_points",
+    "set_sampling_points",
+    "get_x_range",
+    "set_x_range",
+    "get_y_range",
+    "set_y_range",
+    "get_title",
+    "set_title",
+    "plot_style_options",
+]

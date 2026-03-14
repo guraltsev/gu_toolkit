@@ -6,8 +6,9 @@ import html
 import re
 import time
 import traceback
-from collections.abc import Callable, Hashable, Sequence
+from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
 
 import ipywidgets as widgets
@@ -212,6 +213,18 @@ class InfoPanelManager:
         get_output : Create an output widget in the info panel.
         """
         return len(self._outputs) > 0
+
+    @property
+    def outputs(self) -> Mapping[Hashable, widgets.Output]:
+        """Read-only mapping of lazily created info outputs.
+
+        Notes
+        -----
+        This property intentionally returns a read-only mapping to avoid
+        external code mutating the manager's internal registry.
+        Use :meth:`get_output` to create and retrieve outputs.
+        """
+        return MappingProxyType(self._outputs)
 
     def set_simple_card(
         self,

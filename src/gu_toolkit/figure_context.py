@@ -10,6 +10,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .Figure import Figure
 
+from .figure_plot_style import PLOT_STYLE_OPTIONS
+from .figure_types import NumberLike, NumberLikeOrStr, RangeLike, VisibleSpec
+
 _FIGURE_STACK_LOCAL = threading.local()
 
 
@@ -157,19 +160,6 @@ def _use_figure(fig: Figure) -> Iterator[Figure]:
         _pop_current_figure(fig)
 
 
-# -----------------------------
-# Small type aliases
-# -----------------------------
-NumberLike = int | float
-NumberLikeOrStr = int | float | str
-RangeLike = tuple[NumberLikeOrStr, NumberLikeOrStr]
-VisibleSpec = bool
-
-PLOT_STYLE_OPTIONS: dict[str, str] = {
-    "color": "Line color. Accepts CSS-like names (e.g., red), hex (#RRGGBB), or rgb()/rgba() strings.",
-    "thickness": "Line width in pixels. Larger values draw thicker lines.",
-    "dash": "Line pattern. Supported values: solid, dot, dash, longdash, dashdot, longdashdot.",
-    "opacity": "Overall trace opacity from 0.0 (fully transparent) to 1.0 (fully opaque).",
-    "line": "Extra line-style fields as a mapping (for advanced per-line styling).",
-    "trace": "Extra trace fields as a mapping (for advanced full-trace styling).",
-}
+# NOTE: Type aliases and plot-style contracts are defined in dedicated modules
+# (``figure_types`` and ``figure_plot_style``). We re-export them here for
+# backwards compatibility with early internal imports.

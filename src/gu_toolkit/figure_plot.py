@@ -62,14 +62,10 @@ from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
 from .figure_context import _FigureDefaultSentinel, _is_figure_default
+from .figure_types import NumberLike, NumberLikeOrStr, RangeLike, VisibleSpec
 from .InputConvert import InputConvert
 from .numpify import DYNAMIC_PARAMETER, NumericFunction, numpify_cached
 from .PlotSnapshot import PlotSnapshot
-
-NumberLike = int | float
-NumberLikeOrStr = int | float | str
-RangeLike = tuple[NumberLikeOrStr, NumberLikeOrStr]
-VisibleSpec = bool
 
 
 @dataclass
@@ -118,6 +114,8 @@ class Plot:
         trace: Mapping[str, Any] | None = None,
         plot_id: str = "",
         view_ids: Sequence[str] | None = None,
+        *,
+        numeric_function: NumericFunction | None = None,
     ) -> None:
         """
         Create a new Plot instance. (Usually called by Figure.plot)
@@ -176,7 +174,7 @@ class Plot:
         self._x_data: np.ndarray | None = None
         self._y_data: np.ndarray | None = None
         self._handles: dict[str, PlotHandle] = {}
-        self._view_ids = set(view_ids or (self._smart_figure.active_view_id,))
+        self._view_ids = set(view_ids or (self._smart_figure.views.current_id,))
         self._visible: VisibleSpec = visible
 
         for view_id in sorted(self._view_ids):
@@ -189,7 +187,19 @@ class Plot:
             trace_update = dict(trace)
             for trace_handle in self._iter_trace_handles():
                 trace_handle.update(**trace_update)
-        self.set_func(var, func, parameters)
+
+        # Symbolic compilation is the default path. When a precompiled
+        # NumericFunction is supplied (callable-first plotting), skip the
+        # symbolic compilation step and bind the numeric backend directly.
+        if numeric_function is None:
+            self.set_func(var, func, parameters)
+        else:
+            self.set_numeric_function(
+                var,
+                numeric_function,
+                parameters=parameters,
+                symbolic_expression=func,
+            )
         self.x_domain = x_domain
 
         if _is_figure_default(sampling_points):
@@ -225,7 +235,7 @@ class Plot:
 
     def _reference_trace_handle(self) -> go.Scatter | None:
         """Return a representative trace handle for style/property reads."""
-        active = self._handles.get(self._smart_figure.active_view_id)
+        active = self._handles.get(self._smart_figure.views.current_id)
         if active is not None and active.trace_handle is not None:
             return active.trace_handle
         for trace_handle in self._iter_trace_handles():
@@ -292,6 +302,8 @@ class Plot:
         var: Symbol,
         numeric_function: NumericFunction,
         parameters: Sequence[Symbol] = (),
+        *,
+        symbolic_expression: Expr | None = None,
     ) -> None:
         """Set a precompiled :class:`NumericFunction` backend for this plot.
 
@@ -312,6 +324,10 @@ class Plot:
         self._var = var
         if numeric_function.symbolic is not None:
             self._func = sp.sympify(numeric_function.symbolic)
+        elif symbolic_expression is not None:
+            # Preserve meaningful labeling/snapshotting for callable-backed
+            # plots even when the NumericFunction doesn't carry a symbolic form.
+            self._func = sp.sympify(symbolic_expression)
         elif isinstance(getattr(self, "_func", None), sp.Expr):
             self._func = self._func
         else:
@@ -338,7 +354,7 @@ class Plot:
             return
         self._view_ids.add(view_id)
         self._create_trace_handle(view_id=view_id, label=self.label)
-        if view_id == self._smart_figure.active_view_id and self._visible is True:
+        if view_id == self._smart_figure.views.current_id and self._visible is True:
             self.render(view_id=view_id)
 
     def remove_from_view(self, view_id: str) -> None:
@@ -762,7 +778,7 @@ class Plot:
         Rendering uses the figure's current viewport if it has been panned or
         zoomed.
         """
-        target_view = view_id or self._smart_figure.active_view_id
+        target_view = view_id or self._smart_figure.views.current_id
         self._set_visibility_for_target_view(target_view)
         if target_view not in self._view_ids:
             return
@@ -771,7 +787,7 @@ class Plot:
 
         # Phase 2 keeps concrete rendering pinned to active view only.
         fig = self._smart_figure
-        if target_view != fig.active_view_id:
+        if target_view != fig.views.current_id:
             fig.views[target_view].is_stale = True
             return
 
@@ -937,11 +953,20 @@ class Plot:
                 trace_handle.update(**trace_update)
 
         # Function update
-        if any(k in kwargs for k in ("var", "func", "parameters")):
+        if any(k in kwargs for k in ("var", "func", "parameters", "numeric_function")):
             v = kwargs.get("var", self._var)
             f = kwargs.get("func", self._func)
             p = kwargs.get("parameters", self.parameters)
-            self.set_func(v, f, p)
+            numeric_fn = kwargs.get("numeric_function")
+            if numeric_fn is not None:
+                self.set_numeric_function(
+                    v,
+                    numeric_fn,
+                    parameters=p,
+                    symbolic_expression=f,
+                )
+            else:
+                self.set_func(v, f, p)
             self.render()
 
 
