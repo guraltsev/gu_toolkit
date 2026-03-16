@@ -43,7 +43,7 @@ class ViewSnapshot:
     id : str
         Stable view identifier.
     title : str
-        Human-readable label for the view tab.
+        Human-readable label for the view selector.
     x_label : str
         Optional x-axis label metadata.
     y_label : str
@@ -75,9 +75,9 @@ class FigureSnapshot:
     Parameters
     ----------
     x_range : tuple[float, float]
-        Default x-axis range.
+        Default x-axis range for the main view.
     y_range : tuple[float, float]
-        Default y-axis range.
+        Default y-axis range for the main view.
     sampling_points : int
         Default sample count.
     title : str

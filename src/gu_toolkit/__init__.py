@@ -15,8 +15,10 @@ from . import numpify as numpify_module
 from .codegen import CodegenOptions, figure_to_code, sympy_to_code
 from .Figure import (
     Figure,
+    FigureViews,
     FigureLayout,
     Plot,
+    View,
     current_figure,
     get_sampling_points,
     get_title,

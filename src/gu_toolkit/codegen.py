@@ -365,9 +365,7 @@ def figure_to_code(
     if options.include_imports:
         lines.append("import sympy as sp")
         if options.interface_style == "context_manager":
-            lines.append(
-                "from gu_toolkit import Figure, parameter, plot, info, set_title"
-            )
+            lines.append("from gu_toolkit import Figure, parameter, plot, info")
         else:
             lines.append("from gu_toolkit import Figure")
         lines.append("from IPython.display import display")
@@ -382,14 +380,24 @@ def figure_to_code(
 
     # -- figure construction ------------------------------------------------
     lines.append("# Figure")
+    main_view = next((view for view in snapshot.views if view.id == "main"), None)
+    main_x_range = main_view.x_range if main_view is not None else snapshot.x_range
+    main_y_range = main_view.y_range if main_view is not None else snapshot.y_range
+    main_x_label = main_view.x_label if main_view is not None else ""
+    main_y_label = main_view.y_label if main_view is not None else ""
+
     lines.append(
-        f"fig = Figure("
-        f"x_range=({_fmt_float(snapshot.x_range[0])}, {_fmt_float(snapshot.x_range[1])}), "
-        f"y_range=({_fmt_float(snapshot.y_range[0])}, {_fmt_float(snapshot.y_range[1])}), "
+        "fig = Figure("
+        f"title={snapshot.title!r}, "
+        f"default_x_range=({_fmt_float(main_x_range[0])}, {_fmt_float(main_x_range[1])}), "
+        f"default_y_range=({_fmt_float(main_y_range[0])}, {_fmt_float(main_y_range[1])}), "
+        f"x_label={main_x_label!r}, y_label={main_y_label!r}, "
         f"sampling_points={snapshot.sampling_points})"
     )
-    if snapshot.title and options.interface_style == "figure_methods":
-        lines.append(f"fig.title = {snapshot.title!r}")
+
+    if main_view is not None and main_view.title != "main":
+        lines.append(f"fig.views['main'].title = {main_view.title!r}")
+
     if getattr(snapshot, "views", ()):
         for view in snapshot.views:
             if view.id == "main":
@@ -400,8 +408,22 @@ def figure_to_code(
                 f"y_range=({_fmt_float(view.y_range[0])}, {_fmt_float(view.y_range[1])}), "
                 f"x_label={view.x_label!r}, y_label={view.y_label!r})"
             )
-        if snapshot.active_view_id != "main":
-            lines.append(f"fig.set_active_view({snapshot.active_view_id!r})")
+
+    for view in snapshot.views:
+        if view.viewport_x_range is not None and view.viewport_x_range != view.x_range:
+            lines.append(
+                f"fig.views[{view.id!r}].current_x_range = "
+                f"({_fmt_float(view.viewport_x_range[0])}, {_fmt_float(view.viewport_x_range[1])})"
+            )
+        if view.viewport_y_range is not None and view.viewport_y_range != view.y_range:
+            lines.append(
+                f"fig.views[{view.id!r}].current_y_range = "
+                f"({_fmt_float(view.viewport_y_range[0])}, {_fmt_float(view.viewport_y_range[1])})"
+            )
+
+    if snapshot.active_view_id != "main":
+        lines.append(f"fig.views.current_id = {snapshot.active_view_id!r}")
+
     lines.append("display(fig)")
     lines.append("")
 
@@ -437,8 +459,6 @@ def figure_to_code(
 
     if options.interface_style == "context_manager":
         lines.append("with fig:")
-        if snapshot.title:
-            lines.append(f"    set_title({snapshot.title!r})")
         if not body_lines:
             lines.append("    pass")
             lines.append("")

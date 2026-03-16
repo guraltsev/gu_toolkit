@@ -4,7 +4,7 @@ This module contains the notebook-facing :class:`~gu_toolkit.Figure.Figure`
 coordinator and re-exports the module-level helper functions (``plot``,
 ``parameter``, ``render``, …) from :mod:`gu_toolkit.figure_api`.
 
-A **view** is a named plotting workspace (shown as a tab) with its own axis
+A **view** is a named plotting workspace (shown through the view selector) with its own axis
 defaults and remembered viewport. Plots can belong to one or more views.
 
 Most implementation details live in the split ``figure_*`` modules.
@@ -60,7 +60,6 @@ import time
 import warnings
 from collections.abc import Callable, Hashable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass
 from typing import Any
 
 import ipywidgets as widgets
@@ -103,105 +102,11 @@ from .figure_layout import FigureLayout
 from .figure_legend import LegendPanelManager
 from .figure_parameters import ParameterManager
 from .figure_plot import Plot
-from .figure_view import View
+from .figure_view import FigureViews, View
 from .figure_view_manager import ViewManager
 
 # SECTION: Figure (The Coordinator) [id: Figure]
 # =============================================================================
-@dataclass(frozen=True)
-class _ViewBackend:
-    """Per-view widget backend.
-
-    A :class:`~gu_toolkit.figure_view.View` stores the *model* state for a view
-    (ranges, labels, stale flags). ``_ViewBackend`` stores the corresponding
-    UI/runtime objects: 
-    
-    
-
-    - the Plotly :class:`~plotly.graph_objects.FigureWidget`,
-    - the :class:`~gu_toolkit.PlotlyPane.PlotlyPane` wrapper used for robust
-      notebook resizing,
-    - a per-view relayout debouncer used to throttle pan/zoom rerenders.
-
-    This is internal to :class:`Figure` and is not part of the public API.
-    """
-
-    figure_widget: go.FigureWidget
-    pane: PlotlyPane
-    relayout_debouncer: QueuedDebouncer
-#TODO Should this not be in figure_view?
-
-class FigureViews(Mapping[str, View]):
-    """Mapping-like facade for figure views.
-
-    ``FigureViews`` is intentionally small: it provides a dictionary-style
-    interface for retrieving view models (``fig.views["main"]``) and a
-    discoverable "current view" concept (``fig.views.current`` /
-    ``fig.views.current_id``).
-
-    The underlying :class:`~gu_toolkit.figure_view_manager.ViewManager` remains
-    a pure model. Switching views has UI side-effects, so the coordinator
-    (:class:`Figure`) owns those transitions.
-    """
-
-    def __init__(self, fig: Figure) -> None:
-        self._fig = fig
-
-    def __getitem__(self, key: str) -> View:
-        return self._fig._view_manager.require_view(str(key))
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self._fig._view_manager.views)
-
-    def __len__(self) -> int:
-        return len(self._fig._view_manager.views)
-
-    @property
-    def current_id(self) -> str:
-        """Return the current active view id."""
-        return self._fig._view_manager.active_view_id
-
-    @current_id.setter
-    def current_id(self, value: str) -> None:
-        self._fig.set_active_view(str(value))
-
-    @property
-    def current(self) -> View:
-        """Return the current active view model."""
-        return self._fig._view_manager.active_view()
-
-    def add(
-        self,
-        view_id: str,
-        *,
-        title: str | None = None,
-        x_range: RangeLike | None = None,
-        y_range: RangeLike | None = None,
-        x_label: str | None = None,
-        y_label: str | None = None,
-        activate: bool = False,
-    ) -> View:
-        """Create a new view (delegates to :meth:`Figure.add_view`)."""
-        view = self._fig.add_view(
-            view_id,
-            title=title,
-            x_range=x_range,
-            y_range=y_range,
-            x_label=x_label,
-            y_label=y_label,
-            activate=activate,
-        )
-        return view
-
-    def remove(self, view_id: str) -> None:
-        """Remove a view (delegates to :meth:`Figure.remove_view`)."""
-        self._fig.remove_view(view_id)
-
-    def select(self, view_id: str) -> None:
-        """Switch the active view (equivalent to setting :attr:`current_id`)."""
-        self.current_id = view_id
-#TODO Should this not be in figure_view?
-
 #TODO many of these concepts come out of the blue! info card? side panel?
 # A person reading these docs will be confused. 
 # We need a more comprehensive and coherently organized documentation. 
@@ -223,7 +128,7 @@ class Figure:
     - :class:`~gu_toolkit.figure_plot.Plot` owns per-curve sampling and trace
       updates.
 
-    A **view** is a named plotting workspace (shown as a tab) with its own axis
+    A **view** is a named plotting workspace (shown through the view selector) with its own axis
     defaults and remembered viewport. Plots can be associated with one or more
     views.
 
@@ -272,27 +177,37 @@ class Figure:
         "_info",
         "_legend",
         "_view_manager",
-        "_view_backends",
         "_views",
         "_sampling_points",
         "_render_info_last_log_t",
         "_render_debug_last_log_t",
         "_print_capture",
+        "_context_depth",
+        "_relayout_debouncer",
+        "_pending_relayout_view_id",
     ]
 
     def __init__(
         self,
         *,
+        title: str = "",
         sampling_points: int = 500,
-        x_range: RangeLike = (-4, 4),
-        y_range: RangeLike = (-3, 3),
+        default_x_range: RangeLike | None = None,
+        default_y_range: RangeLike | None = None,
+        x_label: str = "",
+        y_label: str = "",
         show: bool = False,
         display: bool | None = None,
+        x_range: RangeLike | None = None,
+        y_range: RangeLike | None = None,
         **_deprecated_kwargs: Any,
     ) -> None:
         # Handle backwards-compatible keyword arguments that were removed from
         # the public constructor.
         # TODO: see TODO above about kwargs. The kwargs name should not be deprecated, but some deprecated kwargs should be removed.
+
+        def _same_range(lhs: RangeLike, rhs: RangeLike) -> bool:
+            return tuple(lhs) == tuple(rhs)
 
         debug = bool(_deprecated_kwargs.pop("debug", False)) #TODO: this module is missing a guide on how to enable debugging. Is the debugging functionality actually there?
         default_view_id = _deprecated_kwargs.pop("default_view_id", None)
@@ -322,6 +237,30 @@ class Figure:
                 stacklevel=2,
             )
 
+        if x_range is not None:
+            warnings.warn(
+                "Figure(x_range=...) is deprecated; use Figure(default_x_range=...) instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if default_x_range is not None and not _same_range(x_range, default_x_range):
+                raise ValueError(
+                    "Figure() received both default_x_range= and deprecated x_range= with different values; use only default_x_range=."
+                )
+            default_x_range = x_range
+
+        if y_range is not None:
+            warnings.warn(
+                "Figure(y_range=...) is deprecated; use Figure(default_y_range=...) instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if default_y_range is not None and not _same_range(y_range, default_y_range):
+                raise ValueError(
+                    "Figure() received both default_y_range= and deprecated y_range= with different values; use only default_y_range=."
+                )
+            default_y_range = y_range
+
         if display is not None:
             warnings.warn(
                 "Figure(display=...) is deprecated; use Figure(show=...) instead.",
@@ -334,12 +273,19 @@ class Figure:
                 )
             show = bool(display)
 
+        if default_x_range is None:
+            default_x_range = (-4, 4)
+        if default_y_range is None:
+            default_y_range = (-3, 3)
+
         self._sampling_points = sampling_points
         self.plots: dict[str, Plot] = {}
         self._print_capture: ExitStack | None = None
+        self._context_depth = 0
+        self._pending_relayout_view_id: str | None = None
 
         # 1. Initialize Layout (View)
-        self._layout = FigureLayout()
+        self._layout = FigureLayout(title=title)
 
         # 2. Initialize Managers
         # Note: we pass a callback for rendering so params can trigger updates
@@ -352,25 +298,34 @@ class Figure:
         self._info.bind_figure(self)
         self._legend = LegendPanelManager(self._layout.legend_box)
 
-        # 3. Initialize per-view Plotly backends (widgets + debouncers)
-        self._view_backends: dict[str, _ViewBackend] = {}
-        #TODO This should NOT be here. This should be in figure_views and it should cleanly expose the the current view to the figure.
-        self._layout.observe_tab_selection(self.set_active_view)
+        # 3. Figure-level relayout debouncer + layout observers
+        self._relayout_debouncer = QueuedDebouncer(
+            self._dispatch_relayout,
+            execute_every_ms=500,
+            drop_overflow=True,
+        )
+        self._layout.observe_view_selection(self.set_active_view)
+        self._layout.observe_full_width_change(
+            lambda _is_full: self._request_active_view_reflow("full_width_change")
+        )
 
-        # 3b. Views facade
+        # 4. Views facade and model registry
         self._view_manager = ViewManager()
         self._views = FigureViews(self)
 
-        # 4. Set Initial State
+        # 5. Set initial state
         self.add_view(
             self._view_manager.default_view_id,
-            x_range=x_range,
-            y_range=y_range,
+            x_range=default_x_range,
+            y_range=default_y_range,
+            x_label=x_label,
+            y_label=y_label,
         )
-        self._legend.set_active_view(self._view_manager.active_view_id)
-        self._sync_sidebar_visibility()
+        self._legend.set_active_view(self.views.current_id)
+        if self._sync_sidebar_visibility():
+            self._request_active_view_reflow("sidebar_visibility")
 
-        # 5. Bind Events
+        # 6. Logging state
         self._render_info_last_log_t = 0.0
         self._render_debug_last_log_t = 0.0
 
@@ -457,17 +412,17 @@ class Figure:
         )
         return self.views.current_id
 
-    def _current_view(self) -> View:
-        """Return the active view model (internal, no deprecation warnings)."""
-        return self._view_manager.active_view()
-
-#TODO As described above, this should not be here. It should be in view_manager.
-    def _backend_for_view(self, view_id: str) -> _ViewBackend:
-        """Return the per-view widget backend bundle for ``view_id``."""
-        return self._view_backends[view_id]
-#TODO As described above, this should not be here. It should be in view_manager.
-    def _create_view_backend(self, *, view_id: str) -> _ViewBackend:
-        """Create and register per-view widget backend state."""
+    def _create_view(
+        self,
+        view_id: str,
+        *,
+        title: str | None = None,
+        x_range: RangeLike | None = None,
+        y_range: RangeLike | None = None,
+        x_label: str | None = None,
+        y_label: str | None = None,
+    ) -> View:
+        """Create one public :class:`View` object with its stable runtime."""
         figure_widget = go.FigureWidget()
         figure_widget.update_layout(**self._default_figure_layout())
         pane = PlotlyPane(
@@ -481,27 +436,35 @@ class Figure:
             autorange_mode="none",
             defer_reveal=True,
         )
-#TODO I think we should have a unique debouncer at the figure level that decides when to call the redraw for the current view. Discuss pros/cons of this approach in a comment. 
-        debouncer = QueuedDebouncer(
-            lambda *args: self._run_relayout(view_id=view_id, *args),  # noqa: B026
-            execute_every_ms=500,
-            drop_overflow=True,
-        )
-        backend = _ViewBackend(
+        return View(
+            figure=self,
+            id=view_id,
+            title=(str(view_id) if title is None else str(title)),
+            x_label=(x_label or ""),
+            y_label=(y_label or ""),
+            default_x_range=(x_range if x_range is not None else (-4, 4)),
+            default_y_range=(y_range if y_range is not None else (-3, 3)),
             figure_widget=figure_widget,
             pane=pane,
-            relayout_debouncer=debouncer,
         )
-        self._view_backends[view_id] = backend
-        self._layout.set_view_plot_widget(
-            view_id, pane.widget, reflow_callback=pane.reflow
-        )
-        figure_widget.layout.on_change(
-            lambda *args: self._throttled_relayout(view_id, *args),
+
+    def _attach_view_callbacks(self, view: View) -> None:
+        """Attach figure-level relayout routing to one view widget."""
+        view.figure_widget.layout.on_change(
+            lambda *args, _view_id=view.id: self._queue_relayout(_view_id, *args),
             "xaxis.range",
             "yaxis.range",
         )
-        return backend
+
+    def _request_active_view_reflow(self, reason: str) -> None:
+        """Explicitly reflow the active view pane after geometry changes."""
+        del reason
+        if not self._view_manager.views:
+            return
+        try:
+            self.views.current.pane.reflow()
+        except Exception:  # pragma: no cover - defensive widget boundary
+            logger.debug("Active view reflow failed", exc_info=True)
 
 #TODO The documentation is bad. The user (especially a non-programmer end user) has no idea what a view model is. Make sure the language is natural and accessible, especially in public facing docs. 
     def add_view(
@@ -522,7 +485,7 @@ class Figure:
         id:
             View identifier.
         title:
-            Optional human-readable title shown in the tab selector.
+            Optional human-readable title shown in the view selector.
         x_range, y_range:
             Optional default ranges for the view.
         x_label, y_label:
@@ -532,7 +495,7 @@ class Figure:
             #TODO: State defaults. 
         """
         view_id = str(id)
-        view = self._view_manager.add_view(
+        view = self._create_view(
             view_id,
             title=title,
             x_range=x_range,
@@ -540,80 +503,90 @@ class Figure:
             x_label=x_label,
             y_label=y_label,
         )
-        backend = self._create_view_backend(view_id=view_id)
-        backend.figure_widget.update_xaxes(range=view.default_x_range)
-        backend.figure_widget.update_yaxes(range=view.default_y_range)
+        self._view_manager.register_view(view)
+        self._layout.ensure_view_page(view.id, view.title)
+        self._layout.attach_view_widget(view.id, view.pane.widget)
+        self._layout.set_view_order(tuple(self._view_manager.views.keys()))
+        self._attach_view_callbacks(view)
         if view.is_active:
-            self._info.set_active_view(view_id)
-            self._legend.set_active_view(view_id)
-        self._layout.set_view_tabs(
-            tuple(self._view_manager.views.keys()),
-            active_view_id=self._view_manager.active_view_id,
-        )
+            self._layout.set_active_view(view.id)
+            self._info.set_active_view(view.id)
+            self._legend.set_active_view(view.id)
+        else:
+            self._layout.set_active_view(self.views.current_id)
         if activate and not view.is_active:
             self.set_active_view(view_id)
+        else:
+            self._request_active_view_reflow("view_added")
         return view
 
     def set_active_view(self, id: str) -> None:
         """Set the active view id and synchronize widget ranges."""
         view_id = str(id)
-        transition = self._view_manager.set_active_view(
-            view_id,
-            current_viewport_x=self._viewport_x_range,
-            current_viewport_y=self._viewport_y_range,
-        )
-        if transition is None:
+        if not self._view_manager.views:
+            raise KeyError(f"Unknown view: {view_id}")
+
+        current_view = self.views.current
+        if current_view.id == view_id:
+            self._layout.set_active_view(view_id)
             return
+
+        current_view.current_x_range
+        current_view.current_y_range
+
+        transition = self._view_manager.set_active_view(view_id)
+        if transition is None:
+            self._layout.set_active_view(view_id)
+            return
+
         _, nxt = transition
+        self._layout.set_active_view(view_id)
         self._info.set_active_view(view_id)
         self._legend.set_active_view(view_id)
 
-        self.figure_widget.update_xaxes(range=nxt.viewport_x_range or nxt.default_x_range)
-        self.figure_widget.update_yaxes(range=nxt.viewport_y_range or nxt.default_y_range)
+        nxt.current_x_range = nxt.viewport_x_range or nxt.x_range
+        nxt.current_y_range = nxt.viewport_y_range or nxt.y_range
+        self._request_active_view_reflow("view_activated")
 
         for plot in self.plots.values():
-            plot.render(view_id=self._view_manager.active_view_id)
+            plot.render(view_id=self.views.current_id)
         if nxt.is_stale:
-            self._view_manager.clear_stale(self._view_manager.active_view_id)
+            self._view_manager.clear_stale(self.views.current_id)
 
-        self._layout.set_view_tabs(
-            tuple(self._view_manager.views.keys()),
-            active_view_id=self._view_manager.active_view_id,
-        )
-        self._layout.trigger_reflow_for_view(self._view_manager.active_view_id)
-        self._sync_sidebar_visibility()
+        if self._sync_sidebar_visibility():
+            self._request_active_view_reflow("sidebar_visibility")
 
-# TODO A cleaner api would be with figure.views["view_id"]
-# i.e. each view in the viewmanager is a contextmanager
     @contextmanager
     def view(self, id: str) -> Iterator[Figure]:
-        """Temporarily switch the active workspace view within a context."""
-        previous = self._view_manager.active_view_id
-        self.set_active_view(id)
-        try:
+        """Deprecated alias for ``with fig.views[id]:``."""
+        warnings.warn(
+            "Figure.view(...) is deprecated; use `with fig.views[view_id]:` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        with self.views[str(id)]:
             yield self
-        finally:
-            if previous in self._view_manager.views:
-                self.set_active_view(previous)
 
     def remove_view(self, id: str) -> None:
         """Remove a view and drop plot memberships to it."""
-        if id not in self._view_manager.views:
+        view_id = str(id)
+        if view_id not in self._view_manager.views:
             return
         for plot in self.plots.values():
-            plot.remove_from_view(id)
+            plot.remove_from_view(view_id)
             self._legend.on_plot_updated(plot)
-        self._view_manager.remove_view(id)
-        self._view_backends.pop(id, None)
-        self._layout.set_view_tabs(
-            tuple(self._view_manager.views.keys()),
-            active_view_id=self._view_manager.active_view_id,
-        )
-        self._sync_sidebar_visibility()
+        self._view_manager.remove_view(view_id)
+        self._layout.remove_view_page(view_id)
+        self._layout.set_view_order(tuple(self._view_manager.views.keys()))
+        self._layout.set_active_view(self.views.current_id)
+        if self._sync_sidebar_visibility():
+            self._request_active_view_reflow("sidebar_visibility")
+        else:
+            self._request_active_view_reflow("view_removed")
 
-    def _sync_sidebar_visibility(self) -> None:
+    def _sync_sidebar_visibility(self) -> bool:
         """Apply consolidated sidebar section visibility from all managers."""
-        self._layout.update_sidebar_visibility(
+        return self._layout.update_sidebar_visibility(
             self._parameter_manager.has_params,
             self._info.has_info,
             self._legend.has_legend,
@@ -685,7 +658,7 @@ class Figure:
         plotly.graph_objects.FigureWidget
             The interactive Plotly widget for :attr:`active_view_id`.
         """
-        return self._backend_for_view(self._view_manager.active_view_id).figure_widget
+        return self.views.current.figure_widget
 
     def figure_widget_for(self, view_id: str) -> go.FigureWidget:
         """Return the Plotly FigureWidget backing ``view_id``.
@@ -700,20 +673,16 @@ class Figure:
         plotly.graph_objects.FigureWidget
             The widget owned by that view.
         """
-        key = str(view_id)
-        self._view_manager.require_view(key)
-        return self._backend_for_view(key).figure_widget
+        return self.views[str(view_id)].figure_widget
 
     @property
     def pane(self) -> PlotlyPane:
         """Access the active view's :class:`PlotlyPane`."""
-        return self._backend_for_view(self._view_manager.active_view_id).pane
+        return self.views.current.pane
 
     def pane_for(self, view_id: str) -> PlotlyPane:
         """Return the :class:`PlotlyPane` backing ``view_id``."""
-        key = str(view_id)
-        self._view_manager.require_view(key)
-        return self._backend_for_view(key).pane
+        return self.views[str(view_id)].pane
 
 
     # --- Parameters ---
@@ -721,6 +690,11 @@ class Figure:
     def parameters(self) -> ParameterManager:
         """The figure parameter manager."""
         return self._parameter_manager
+
+    @property
+    def info_manager(self) -> InfoPanelManager:
+        """Advanced access to the figure's info-panel manager."""
+        return self._info
 
     # --- Info Cards ---
     #TODO: instead of a dict, this should be a InfoManager, defined in figure_info
@@ -765,7 +739,7 @@ class Figure:
         --------
         y_range : The default y-axis range.
         """
-        return self._current_view().default_x_range
+        return self.views.current.x_range
 
     @x_range.setter
     def x_range(self, value: RangeLike) -> None:
@@ -789,12 +763,7 @@ class Figure:
         -----
         This updates the default Plotly axis range and the visible viewport immediately.
         """
-        rng = (
-            float(InputConvert(value[0], float)),
-            float(InputConvert(value[1], float)),
-        )
-        self._current_view().default_x_range = rng
-        self.figure_widget.update_xaxes(range=rng)
+        self.views.current.x_range = value
 
     @property
     def y_range(self) -> tuple[float, float]:
@@ -815,7 +784,7 @@ class Figure:
         --------
         x_range : The default x-axis range.
         """
-        return self._current_view().default_y_range
+        return self.views.current.y_range
 
     @y_range.setter
     def y_range(self, value: RangeLike) -> None:
@@ -839,12 +808,7 @@ class Figure:
         -----
         This updates the default Plotly axis range and the visible viewport immediately.
         """
-        rng = (
-            float(InputConvert(value[0], float)),
-            float(InputConvert(value[1], float)),
-        )
-        self._current_view().default_y_range = rng
-        self.figure_widget.update_yaxes(range=rng)
+        self.views.current.y_range = value
 
     @property
     def _viewport_x_range(self) -> tuple[float, float] | None:
@@ -853,26 +817,11 @@ class Figure:
         Reading this property queries the live Plotly widget viewport.
         Setting it pans/zooms the visible x-range without changing ``x_range``.
         """
-        rng = self.figure_widget.layout.xaxis.range
-        if rng is None:
-            return None
-        result = (float(rng[0]), float(rng[1]))
-        self._current_view().viewport_x_range = result
-        return result
+        return self.views.current.current_x_range
 
     @_viewport_x_range.setter
     def _viewport_x_range(self, value: RangeLike | None) -> None:
-        if value is None:
-            rng = self._current_view().default_x_range
-            self._current_view().viewport_x_range = rng
-            self.figure_widget.update_xaxes(range=rng)
-            return
-        rng = (
-            float(InputConvert(value[0], float)),
-            float(InputConvert(value[1], float)),
-        )
-        self._current_view().viewport_x_range = rng
-        self.figure_widget.update_xaxes(range=rng)
+        self.views.current.current_x_range = value
 
     @property
     def _viewport_y_range(self) -> tuple[float, float] | None:
@@ -881,26 +830,11 @@ class Figure:
         Reading this property queries the live Plotly widget viewport.
         Setting it pans/zooms the visible y-range without changing ``y_range``.
         """
-        rng = self.figure_widget.layout.yaxis.range
-        if rng is None:
-            return None
-        result = (float(rng[0]), float(rng[1]))
-        self._current_view().viewport_y_range = result
-        return result
+        return self.views.current.current_y_range
 
     @_viewport_y_range.setter
     def _viewport_y_range(self, value: RangeLike | None) -> None:
-        if value is None:
-            rng = self._current_view().default_y_range
-            self._current_view().viewport_y_range = rng
-            self.figure_widget.update_yaxes(range=rng)
-            return
-        rng = (
-            float(InputConvert(value[0], float)),
-            float(InputConvert(value[1], float)),
-        )
-        self._current_view().viewport_y_range = rng
-        self.figure_widget.update_yaxes(range=rng)
+        self.views.current.current_y_range = value
 
     @property
     def current_x_range(self) -> tuple[float, float] | None:
@@ -1180,7 +1114,8 @@ class Figure:
             self.parameter(parameters)
 
         # Update UI visibility
-        self._sync_sidebar_visibility()
+        if self._sync_sidebar_visibility():
+            self._request_active_view_reflow("sidebar_visibility")
 
         # Create or Update Plot
         if id in self.plots:
@@ -1211,7 +1146,8 @@ class Figure:
             self.plots[id].update(**update_kwargs)
             plot = self.plots[id]
             self._legend.on_plot_updated(plot)
-            self._sync_sidebar_visibility()
+            if self._sync_sidebar_visibility():
+                self._request_active_view_reflow("sidebar_visibility")
         else:
             view_ids = (
                 (view,)
@@ -1219,7 +1155,7 @@ class Figure:
                 else (
                     tuple(view)
                     if view is not None
-                    else (self._view_manager.active_view_id,)
+                    else (self.views.current_id,)
                 )
             )
             plot = Plot(
@@ -1243,7 +1179,8 @@ class Figure:
             )
             self.plots[id] = plot
             self._legend.on_plot_added(plot)
-            self._sync_sidebar_visibility()
+            if self._sync_sidebar_visibility():
+                self._request_active_view_reflow("sidebar_visibility")
 
         return plot
 
@@ -1281,7 +1218,8 @@ class Figure:
         result = self._parameter_manager.parameter(
             symbols, control=control, **control_kwargs
         )
-        self._sync_sidebar_visibility()
+        if self._sync_sidebar_visibility():
+            self._request_active_view_reflow("sidebar_visibility")
         return result
 
     def render(self, reason: str = "manual", trigger: ParamEvent | None = None) -> None:
@@ -1315,7 +1253,7 @@ class Figure:
         self._log_render(reason, trigger)
 
         # 1. Update active-view plots
-        current_view_id = self._view_manager.active_view_id
+        current_view_id = self.views.current_id
 
         for plot in self.plots.values():
             plot.render(view_id=current_view_id)
@@ -1360,9 +1298,14 @@ class Figure:
         --------
         to_code : Generate a Python script from the snapshot.
         """
+        active_view = self.views.current
+        active_view.current_x_range
+        active_view.current_y_range
+        main_view = self.views[self._view_manager.default_view_id]
+
         return FigureSnapshot(
-            x_range=self.x_range,
-            y_range=self.y_range,
+            x_range=main_view.x_range,
+            y_range=main_view.y_range,
             sampling_points=self.sampling_points or 500,
             title=self.title or "",
             parameters=self._parameter_manager.snapshot(full=True),
@@ -1374,14 +1317,14 @@ class Figure:
                     title=view.title,
                     x_label=view.x_label,
                     y_label=view.y_label,
-                    x_range=view.default_x_range,
-                    y_range=view.default_y_range,
+                    x_range=view.x_range,
+                    y_range=view.y_range,
                     viewport_x_range=view.viewport_x_range,
                     viewport_y_range=view.viewport_y_range,
                 )
                 for view in self.views.values()
             ),
-            active_view_id=self._view_manager.active_view_id,
+            active_view_id=self.views.current_id,
         )
 
     def to_code(self, *, options: CodegenOptions | None = None) -> str:
@@ -1467,7 +1410,8 @@ class Figure:
     ) -> None:
         """Create or replace a simple info card in the Info sidebar."""
         self._info.set_simple_card(spec=spec, id=id, view=view)
-        self._sync_sidebar_visibility()
+        if self._sync_sidebar_visibility():
+            self._request_active_view_reflow("sidebar_visibility")
 
     def add_param_change_hook(
         self,
@@ -1521,36 +1465,22 @@ class Figure:
 
     # --- Internal / Plumbing ---
 
-    def _throttled_relayout(self, view_id: str | None = None, *args: Any) -> None:
-        """Queue relayout events through the per-view debouncing wrapper.
+    def _queue_relayout(self, view_id: str, *_: Any) -> None:
+        """Queue a relayout event on the figure-level debouncer."""
+        self._pending_relayout_view_id = str(view_id)
+        self._relayout_debouncer()
 
-        Parameters
-        ----------
-        view_id : str or None, optional
-            Target view identifier. ``None`` falls back to the active view for
-            direct test calls.
-        """
-        target_view = (
-            self._view_manager.active_view_id if view_id is None else str(view_id)
-        )
-        backend = self._view_backends.get(target_view)
-        if backend is not None:
-            backend.relayout_debouncer(*args)
-
-    def _run_relayout(self, *_, view_id: str | None = None) -> None:
-        """Execute one relayout render from the queued debouncer.
-
-        Parameters
-        ----------
-        view_id : str or None, optional
-            Target view identifier. ``None`` falls back to the active view for
-.
-        """
-        active_view_id = self._view_manager.active_view_id
-        target_view = active_view_id if view_id is None else str(view_id)
-        if target_view == active_view_id:
+    def _dispatch_relayout(self) -> None:
+        """Dispatch the most recent queued relayout event."""
+        target_view = self._pending_relayout_view_id
+        self._pending_relayout_view_id = None
+        if target_view is None:
+            return
+        if target_view not in self.views:
+            return
+        if target_view == self.views.current_id:
             self.render(reason="relayout")
-        elif target_view in self.views:
+        else:
             self._view_manager.mark_stale(view_id=target_view)
 
     def _log_render(self, reason: str, trigger: Any) -> None:
@@ -1631,7 +1561,8 @@ class Figure:
         plot : Module-level helper that uses the current figure if available.
         """
         _push_current_figure(self)
-        if self._print_capture is None:
+        self._context_depth += 1
+        if self._context_depth == 1 and self._print_capture is None:
             stack = ExitStack()
             stack.enter_context(self._layout.print_output)
             self._print_capture = stack
@@ -1661,7 +1592,9 @@ class Figure:
         try:
             _pop_current_figure(self)
         finally:
-            if self._print_capture is not None:
+            if self._context_depth > 0:
+                self._context_depth -= 1
+            if self._context_depth == 0 and self._print_capture is not None:
                 self._print_capture.close()
                 self._print_capture = None
 

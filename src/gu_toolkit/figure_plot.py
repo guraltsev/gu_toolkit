@@ -212,7 +212,7 @@ class Plot:
 
     def _create_trace_handle(self, *, view_id: str, label: str) -> PlotHandle:
         """Create and register a per-view Plotly trace handle."""
-        figure_widget = self._smart_figure.figure_widget_for(view_id)
+        figure_widget = self._smart_figure.views[view_id].figure_widget
         figure_widget.add_scatter(
             x=[],
             y=[],
@@ -253,7 +253,7 @@ class Plot:
         handle = self._handles.get(view_id)
         if handle is None or handle.trace_handle is None:
             return
-        figure_widget = self._smart_figure.figure_widget_for(view_id)
+        figure_widget = self._smart_figure.views[view_id].figure_widget
         figure_widget.data = tuple(
             trace for trace in figure_widget.data if trace is not handle.trace_handle
         )
@@ -813,7 +813,7 @@ class Plot:
         target_handle = self._handles[target_view].trace_handle
         if target_handle is None:
             return
-        with fig.figure_widget_for(target_view).batch_update():
+        with fig.views[target_view].figure_widget.batch_update():
             target_handle.x = x_values
             target_handle.y = y_values
 
