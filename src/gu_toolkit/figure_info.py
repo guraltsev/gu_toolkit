@@ -1,4 +1,17 @@
-"""Info panel manager for Figure."""
+"""Info section manager for figure sidebars.
+
+The *Info section* is the optional sidebar region used for explanatory text,
+small computed summaries, and arbitrary notebook output associated with a
+figure. Two lanes are supported:
+
+- raw :class:`ipywidgets.Output` widgets created via :meth:`get_output`, and
+- simple *info cards* created via :meth:`set_simple_card`.
+
+An *info card* is a small rich-text block composed of static string segments,
+dynamic callable segments, or a mixture of both. Cards may be global or scoped
+to a specific view. A view-scoped card is shown only while that view is the
+active one.
+"""
 
 from __future__ import annotations
 
@@ -22,11 +35,12 @@ from .FigureSnapshot import InfoCardSnapshot
 
 
 class InfoPanelManager:
-    """
-    Manages the 'Info' section output widgets and interactive components.
+    """Own the figure sidebar's Info section.
 
-    It allows adding "Output" widgets (where you can print text or display charts)
-    and registering "Stateful Components" (classes that update when sliders move).
+    ``InfoPanelManager`` is the advanced API behind :meth:`Figure.info`.
+    It manages both raw output widgets and simple info cards, keeps track of the
+    active view for view-scoped cards, and produces immutable info-card
+    snapshots for serialization.
     """
 
     _ID_REGEX = re.compile(r"^info:(\d+)$")
@@ -195,7 +209,7 @@ class InfoPanelManager:
 
     @property
     def has_info(self) -> bool:
-        """Whether any info outputs exist.
+        """Whether the figure has any Info-section content.
 
         Returns
         -------
@@ -211,6 +225,11 @@ class InfoPanelManager:
         See Also
         --------
         get_output : Create an output widget in the info panel.
+
+        Notes
+        -----
+        This is a global section-level flag. View-scoped cards still count as
+        info content even when they are hidden for the currently active view.
         """
         return len(self._outputs) > 0
 
@@ -233,7 +252,24 @@ class InfoPanelManager:
         *,
         view: str | None = None,
     ) -> Hashable:
-        """Create or replace a simple rich-text info card."""
+        """Create or replace a simple rich-text info card.
+
+        Parameters
+        ----------
+        spec:
+            Static string content, one dynamic callable, or a sequence mixing
+            both. Dynamic callables receive ``(figure, context)``.
+        id:
+            Optional stable identifier used for replacement.
+        view:
+            Optional view id. When provided, the card is only visible while
+            that view is active.
+
+        Returns
+        -------
+        Hashable
+            The card identifier.
+        """
         if id is None:
             id = self._next_simple_id()
         elif isinstance(id, str):
@@ -270,7 +306,7 @@ class InfoPanelManager:
         card.output.layout.display = "block" if visible else "none"
 
     def set_active_view(self, view_id: str) -> None:
-        """Update which scoped info cards are visible in the sidebar."""
+        """Update which view-scoped cards are visible in the sidebar."""
         self._active_view_id = str(view_id)
         for card in self._simple_cards.values():
             self._apply_card_visibility(card)
@@ -386,18 +422,15 @@ class InfoPanelManager:
         return owner
 
     def bind_figure(self, fig: Any) -> None:
-        """Bind the owning Figure instance for dynamic callable execution."""
+        """Bind the owning figure used when dynamic card callables run."""
         setattr(self, "__figure_owner", fig)
 
     def snapshot(self) -> tuple[InfoCardSnapshot, ...]:
         """Return immutable snapshots of all simple info cards.
 
-        Static text segments are captured verbatim.  Dynamic (callable)
-        segments are stored as the placeholder string ``"<dynamic>"``.
-
-        Returns
-        -------
-        tuple[InfoCardSnapshot, ...]
+        Static text segments are captured verbatim. Dynamic callable segments
+        are stored as the placeholder string ``"<dynamic>"`` because the
+        callable implementation itself is not serialized.
         """
         results: list[InfoCardSnapshot] = []
         for card in self._simple_cards.values():

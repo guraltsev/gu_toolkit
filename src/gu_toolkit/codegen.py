@@ -216,6 +216,17 @@ def _fmt_float(v: float) -> str:
     return repr(v)
 
 
+def _main_view_snapshot(snapshot: FigureSnapshot):
+    """Return the serialized main-view snapshot when present.
+
+    Code generation intentionally reconstructs figure constructor defaults from
+    the ``main`` view rather than from the currently active view. This keeps
+    multi-view round-tripping correct when a snapshot was taken while another
+    view was active.
+    """
+    return next((view for view in snapshot.views if view.id == "main"), None)
+
+
 def _symbol_definitions(symbols: list[Symbol]) -> str:
     """Emit ``x = sp.Symbol('x')`` lines (or a grouped form)."""
     if not symbols:
@@ -380,7 +391,7 @@ def figure_to_code(
 
     # -- figure construction ------------------------------------------------
     lines.append("# Figure")
-    main_view = next((view for view in snapshot.views if view.id == "main"), None)
+    main_view = _main_view_snapshot(snapshot)
     main_x_range = main_view.x_range if main_view is not None else snapshot.x_range
     main_y_range = main_view.y_range if main_view is not None else snapshot.y_range
     main_x_label = main_view.x_label if main_view is not None else ""

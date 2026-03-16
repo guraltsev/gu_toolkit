@@ -1,57 +1,53 @@
-"""Interactive figure coordinator for notebook plotting.
+"""Interactive figure coordinator and public API hub.
 
-This module contains the notebook-facing :class:`~gu_toolkit.Figure.Figure`
-coordinator and re-exports the module-level helper functions (``plot``,
-``parameter``, ``render``, …) from :mod:`gu_toolkit.figure_api`.
-
-A **view** is a named plotting workspace (shown through the view selector) with its own axis
-defaults and remembered viewport. Plots can belong to one or more views.
-
-Most implementation details live in the split ``figure_*`` modules.
-
-Examples (notebook)
--------------------
-```python
-from sympy import sin, symbols
-from gu_toolkit import Figure, plot, parameter
-
-x, a, b, c = symbols("x a b c")
-
-# Create a figure and plot a sine wave
-# Parameters will be detected automatically
-fig = Figure(show=True)
-
-with fig:
-    plot(a * sin(b * x + c), x, label=r"$a\\sin(bx+c)$")
-
-# Set the title
-with fig:
-    set_title("A sine wave")
-
-# Change parameter value and range
-with fig:
-    parameter(a, value=1, min=0, max=5)
-
-# Add a second wave
-with fig:
-    plot(a * cos(b * x + c), x, label=r"$a\\sin(bx+c)$",
-        color="green",
-        alpha=0.075,
-        width=5)
-    
-```
-
-See also
+Glossary
 --------
-* :mod:`gu_toolkit.figure_api` for module-level helpers.
-* :mod:`gu_toolkit.figure_context` for the current-figure stack.
-* :mod:`gu_toolkit.figure_layout` for widget tree/layout.
-* :mod:`gu_toolkit.figure_plot` for per-curve sampling/trace logic.
-* :mod:`gu_toolkit.figure_view_manager` for view models and active selection.
-"""
-#TODO This documentation is not bad but is too short. It misses many important details. Not all of them should necessarily be fully documented here, but for all functionalities there should be a guide on where to find the complete documentation.
+Figure
+    Top-level notebook object that coordinates layout, plots, parameters,
+    info content, legends, views, snapshots, and code generation.
+View
+    Named plotting workspace inside one figure. Each public :class:`View`
+    owns one stable Plotly widget runtime, its default axis ranges, remembered
+    viewport, and axis labels.
+Sidebar
+    The optional right-hand panel that can show the toolkit legend,
+    parameter controls, and the Info section.
+Info section / info card
+    The Info section is the sidebar area for explanatory content. An info card
+    is a small rich-text block created with :meth:`Figure.info` or the
+    module-level :func:`info` helper. Cards may be global or scoped to a
+    specific view.
+Current figure
+    Thread-local routing target used by module-level helpers. ``with fig:``
+    makes a figure current. ``with fig.views["detail"]:`` makes the figure
+    current *and* activates that view for the duration of the block.
+Module-level helpers
+    Convenience functions from :mod:`gu_toolkit.figure_api` such as ``plot``,
+    ``parameter``, ``info``, ``set_x_range``, and ``render``. They delegate to
+    the current figure and current active view; they do not store independent
+    plotting state.
 
-#TODO: Make sure the language you use throughout the docs is explicit and well defined. Do not assume that the reader knows what you're talking about. It is ok to make documentation longer by explaining what the terms are. 
+Navigation map
+--------------
+- :mod:`gu_toolkit.figure_view` defines the public :class:`View` object and the
+  :class:`FigureViews` facade.
+- :mod:`gu_toolkit.figure_layout` owns widget composition only.
+- :mod:`gu_toolkit.figure_plot` owns per-curve numeric sampling and trace
+  updates.
+- :mod:`gu_toolkit.figure_parameters` owns parameter controls and hooks.
+- :mod:`gu_toolkit.figure_info` owns the Info section and info cards.
+- :mod:`gu_toolkit.figure_legend` owns the toolkit sidebar legend.
+- :mod:`gu_toolkit.FigureSnapshot` and :mod:`gu_toolkit.codegen` own
+  reproducible state and source generation.
+
+Logging
+-------
+Use Python's standard :mod:`logging` module rather than ``Figure(debug=...)``::
+
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger("gu_toolkit.Figure").setLevel(logging.DEBUG)
+"""
 
 from __future__ import annotations
 
@@ -70,7 +66,7 @@ from sympy.core.symbol import Symbol
 from .codegen import CodegenOptions
 from .debouncing import QueuedDebouncer
 from .figure_plot_normalization import PlotVarsSpec, normalize_plot_inputs
-from .figure_plot_style import PLOT_STYLE_OPTIONS, resolve_style_aliases
+from .figure_plot_style import plot_style_option_docs, validate_style_kwargs
 from .FigureSnapshot import FigureSnapshot, ViewSnapshot
 
 from .InputConvert import InputConvert
@@ -82,7 +78,6 @@ from .figure_types import RangeLike, VisibleSpec
 # Module logger
 # - Uses a NullHandler so importing this module never configures global logging.
 # - Callers can enable logs via standard logging configuration.
-# TODO: Write a more detailed explanation of how to use logging
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     logger.addHandler(logging.NullHandler())
@@ -95,7 +90,6 @@ from .figure_context import (
     _push_current_figure,
     _use_figure,
     current_figure,  # noqa: F401 - re-exported for __init__.py
-    #TODO Explain better what's going on here, why is current_figure re-exported
 )
 from .figure_info import InfoPanelManager
 from .figure_layout import FigureLayout
@@ -107,69 +101,56 @@ from .figure_view_manager import ViewManager
 
 # SECTION: Figure (The Coordinator) [id: Figure]
 # =============================================================================
-#TODO many of these concepts come out of the blue! info card? side panel?
-# A person reading these docs will be confused. 
-# We need a more comprehensive and coherently organized documentation. 
-# You added the explanation for what a view is. This level of detail should be afforded to ALL of the concepts. A clear organization map should be present in the docs. Also, tips on how to find this documentation at runtime should be provided in the docstrings.
 class Figure:
     """Notebook-facing coordinator for interactive plotting.
 
-    ``Figure`` is the package entry point that wires together specialized
-    collaborators:
+    ``Figure`` keeps high-level orchestration in one place while delegating
+    specialized state and lifecycle logic to dedicated collaborators.
 
-    - :class:`~gu_toolkit.figure_layout.FigureLayout` builds the widget tree.
-    - :class:`~gu_toolkit.figure_parameters.ParameterManager` owns parameter
-      controls and change hooks.
-    - :class:`~gu_toolkit.figure_info.InfoPanelManager` owns info-card outputs.
-    - :class:`~gu_toolkit.figure_legend.LegendPanelManager` owns the side-panel
-      legend rows.
-    - :class:`~gu_toolkit.figure_view_manager.ViewManager` owns *view models*
-      (no widgets).
-    - :class:`~gu_toolkit.figure_plot.Plot` owns per-curve sampling and trace
-      updates.
-
-    A **view** is a named plotting workspace (shown through the view selector) with its own axis
-    defaults and remembered viewport. Plots can be associated with one or more
-    views.
+    Mental model
+    ------------
+    - ``fig.views["id"]`` returns the public :class:`View` object for one
+      plotting workspace.
+    - ``fig.views.current`` and ``fig.views.current_id`` are the canonical
+      active-view accessors.
+    - ``Figure.x_range`` and ``Figure.y_range`` are convenience shorthands for
+      the current view, not figure-global axes.
+    - :class:`FigureLayout` owns widget composition only; rendering decisions
+      and relayout policy stay here in ``Figure``.
+    - ``fig.info_manager`` is the advanced Info-section access point.
+      ``fig.info(...)`` is the convenience API for small rich-text cards.
 
     Parameters
     ----------
-    sampling_points:
-        Default number of x samples used when rendering a plot. 
-    x_range, y_range:
-        Default axis ranges for the initial view.
-    show:
-        If ``True``, display the figure immediately in IPython/Jupyter.
-    display:
-        Deprecated alias for ``show``. #TODO remove this completely
-
-    #TODO We should actually remove this from figure and make it a per-view configuration. I think we should remove this explicit parameter and have a "smart" system that takes keyword parameters and routes them to the right place. For example
-    show should be authentically a Figure property, but x_range, y_range
-    should be view properties forwarded to the main view.
-    Title should be a figure parameter. What else?
-
-
+    title : str, optional
+        Figure title shown above the widget tree.
+    sampling_points : int, optional
+        Default sample count used when a plot does not set its own override.
+    default_x_range, default_y_range : RangeLike, optional
+        Initial default ranges seeded into the main view.
+    x_label, y_label : str, optional
+        Initial axis labels for the main view.
+    show : bool, optional
+        If ``True``, display immediately in IPython/Jupyter.
+    display, x_range, y_range : optional
+        Deprecated compatibility aliases accepted for one transition cycle.
 
     Attributes
     ----------
     plots : dict[str, Plot]
-        Registry of plots keyed by plot id.
+        Registry of plot objects keyed by plot id.
     views : FigureViews
-        Mapping-like facade over view models with ``current`` / ``current_id``.
+        Mapping-like view facade with ``current`` / ``current_id`` helpers.
     parameters : ParameterManager
-        Manager for parameter controls.
-    info_output : Mapping[Hashable, ipywidgets.Output]
-        Read-only mapping of info output widgets created via
-        :meth:`InfoPanelManager.get_output`.
+        Parameter manager used by sliders and plot evaluation.
+    info_manager : InfoPanelManager
+        Advanced access point for raw info outputs and info-card management.
 
     Notes
     -----
-    ``Figure`` is intentionally a coordinator. Widget-building and per-plot
-    sampling logic live in their own modules (``figure_layout`` and
-    ``figure_plot``). 
-    #TODO these notes are cryptic and need to be rewritten with a more comprehensive explanation and links to appropriate docs
+    ``Figure`` is intentionally a coordinator. Widget-building, parameter
+    storage, and per-curve rendering each live in their own owner modules.
     """
-# TODO slots continue to be undocumented! Is that an issue? Where does a person discover the documentation of what these do?
     __slots__ = [
         "plots",
         "_layout",
@@ -204,12 +185,11 @@ class Figure:
     ) -> None:
         # Handle backwards-compatible keyword arguments that were removed from
         # the public constructor.
-        # TODO: see TODO above about kwargs. The kwargs name should not be deprecated, but some deprecated kwargs should be removed.
 
         def _same_range(lhs: RangeLike, rhs: RangeLike) -> bool:
             return tuple(lhs) == tuple(rhs)
 
-        debug = bool(_deprecated_kwargs.pop("debug", False)) #TODO: this module is missing a guide on how to enable debugging. Is the debugging functionality actually there?
+        debug = bool(_deprecated_kwargs.pop("debug", False))
         default_view_id = _deprecated_kwargs.pop("default_view_id", None)
         plotly_legend_mode = _deprecated_kwargs.pop("plotly_legend_mode", None)
         if _deprecated_kwargs:
@@ -218,7 +198,7 @@ class Figure:
 
         if debug:
             warnings.warn(
-                "Figure(debug=...) is deprecated. Configure logging instead.", #TODO: no explanation on how to do this. 
+                "Figure(debug=...) is deprecated. Configure logging instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -385,19 +365,15 @@ class Figure:
 
     @property
     def views(self) -> FigureViews:
-        """Mapping-like access to workspace views.
+        """Mapping-like access to the figure's public :class:`View` objects.
 
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> list(fig.views)  # doctest: +SKIP
-        ['main']
-        >>> fig.views.current_id  # doctest: +SKIP
-        'main'
+        ``fig.views[view_id]`` returns the public view object. Use
+        ``fig.views.current`` and ``fig.views.current_id`` for active-view
+        access, and prefer ``with fig.views[view_id]:`` when module-level
+        helpers should target a specific workspace temporarily.
         """
         return self._views
 
-#TODO Remove deprecated property!
     @property
     def active_view_id(self) -> str:
         """Return the currently active view id.
@@ -466,7 +442,6 @@ class Figure:
         except Exception:  # pragma: no cover - defensive widget boundary
             logger.debug("Active view reflow failed", exc_info=True)
 
-#TODO The documentation is bad. The user (especially a non-programmer end user) has no idea what a view model is. Make sure the language is natural and accessible, especially in public facing docs. 
     def add_view(
         self,
         id: str,
@@ -478,21 +453,26 @@ class Figure:
         y_label: str | None = None,
         activate: bool = False,
     ) -> View:
-        """Add a view model to the workspace registry.
+        """Create and register a new plotting workspace.
 
         Parameters
         ----------
         id:
-            View identifier.
+            Stable view identifier.
         title:
-            Optional human-readable title shown in the view selector.
+            Optional human-readable selector label. Defaults to ``id``.
         x_range, y_range:
-            Optional default ranges for the view.
+            Optional default axis ranges for the new view.
         x_label, y_label:
-            Optional axis label metadata.
+            Optional axis titles applied to the new view's Plotly widget.
         activate:
-            If ``True``, make the new view the current active view.
-            #TODO: State defaults. 
+            If ``True``, make the new view current immediately. The default is
+            ``False``.
+
+        Returns
+        -------
+        View
+            The newly created public view object.
         """
         view_id = str(id)
         view = self._create_view(
@@ -594,7 +574,6 @@ class Figure:
 
 
     # --- Layout ---
-    #TODO: Should this be in the figure_layout or figure_plot_style? Also, why is this a function and not a variable?
     def _default_figure_layout(self) -> dict[str, Any]:
         """Return shared Plotly layout defaults copied into each view widget."""
         return {
@@ -648,15 +627,11 @@ class Figure:
             },
         }
 
-    #TODO is this necessary? Does this ever get used? Should it maybe be accessed through the view?
     @property
     def figure_widget(self) -> go.FigureWidget:
-        """Access the active view's Plotly FigureWidget.
+        """Access the current view's Plotly ``FigureWidget``.
 
-        Returns
-        -------
-        plotly.graph_objects.FigureWidget
-            The interactive Plotly widget for :attr:`active_view_id`.
+        This is a convenience shorthand for ``fig.views.current.figure_widget``.
         """
         return self.views.current.figure_widget
 
@@ -693,33 +668,25 @@ class Figure:
 
     @property
     def info_manager(self) -> InfoPanelManager:
-        """Advanced access to the figure's info-panel manager."""
+        """Advanced access to the Info section manager.
+
+        Use :meth:`info` for simple rich-text cards. Reach for
+        ``fig.info_manager`` when you need raw :class:`ipywidgets.Output`
+        widgets, card snapshots, or other manager-level operations.
+        """
         return self._info
 
     # --- Info Cards ---
-    #TODO: instead of a dict, this should be a InfoManager, defined in figure_info
     @property
     def info_output(self) -> Mapping[Hashable, widgets.Output]:
-        """Read-only mapping of info output widgets indexed by id.
+        """Compatibility view of raw info outputs keyed by id.
 
-        Returns
-        -------
-        dict
-            Mapping of output IDs to ``ipywidgets.Output`` instances.
-
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> list(fig.info_output)  # doctest: +SKIP
-        []
-
+        Prefer :attr:`info_manager` for new advanced code. ``info_output`` is a
+        thin read-only alias kept for callers that only need the raw output
+        widgets created through :meth:`InfoPanelManager.get_output`.
         """
         return self._info.outputs
 
-    # TODO: See next line
-    # --- GIVE THIS SECTION A NAME ---
-    
-    #TODO all instances of _current_view should be self.views.current
     @property
     def x_range(self) -> tuple[float, float]:
         """Return the default x-axis range.
@@ -731,7 +698,7 @@ class Figure:
 
         Examples
         --------
-        >>> fig = Figure(x_range=(-2, 2))  # doctest: +SKIP
+        >>> fig = Figure(default_x_range=(-2, 2))  # doctest: +SKIP
         >>> fig.x_range  # doctest: +SKIP
         (-2.0, 2.0)
 
@@ -929,30 +896,16 @@ class Figure:
 
     # --- Public API ---
 
-    #TODO: The next method is a great idea. Maybe we should call methods and variables that are used in discoverability to end with "_help"
     @staticmethod
     def plot_style_options() -> dict[str, str]:
-        """Return discoverable plot-style options supported by :meth:`plot`.
+        """Return discoverable help text for supported plot-style keywords.
 
-        Returns
-        -------
-        dict[str, str]
-            Mapping of option names to short descriptions.
-
-        Notes
-        -----
-        These options can be passed directly to :meth:`plot` and :func:`plot`.
-        Current supported keys are: ``color``, ``thickness`` (alias ``width``),
-        ``dash``, ``opacity`` (alias ``alpha``), ``line``, and ``trace``.
+        The returned mapping is generated from structured metadata in
+        :mod:`gu_toolkit.figure_plot_style`, so aliases, accepted values, and
+        default-behavior notes stay synchronized with the actual style contract.
         """
-        return dict(PLOT_STYLE_OPTIONS)
+        return plot_style_option_docs()
 
-# TODO Refactor the style options to be kwargs and use PLOT_STYLE_OPTIONS to parse them. 
-# TODO: Also, maybe we should have PLOT_STYLE_OPTIONS have a different schema:
-#documentation
-#type
-#default 
-#and the function above should just parse that into a full docstring or something. Propose a smart design for this. Maybe even encode this into a dataclass? Discuss! 
     def plot(
         self,
         func: Any,
@@ -1062,7 +1015,8 @@ class Figure:
         :meth:`numpify.NumericFunction.unfreeze`.
 
         All supported style options for this method are discoverable via
-        :meth:`Figure.plot_style_options`.
+        :meth:`Figure.plot_style_options`, which is generated from the
+        structured metadata in :mod:`gu_toolkit.figure_plot_style`.
 
         See Also
         --------
@@ -1097,13 +1051,25 @@ class Figure:
         if isinstance(var, tuple) and len(var) == 3:
             x_domain = (var[1], var[2])
 
-
-        thickness, opacity = resolve_style_aliases(
-            thickness=thickness,
-            width=width,
-            opacity=opacity,
-            alpha=alpha,
+        style_kwargs = validate_style_kwargs(
+            {
+                "color": color,
+                "thickness": thickness,
+                "width": width,
+                "dash": dash,
+                "line": line,
+                "opacity": opacity,
+                "alpha": alpha,
+                "trace": trace,
+            },
+            caller="plot()",
         )
+        color = style_kwargs.get("color")
+        thickness = style_kwargs.get("thickness")
+        dash = style_kwargs.get("dash")
+        line = style_kwargs.get("line")
+        opacity = style_kwargs.get("opacity")
+        trace = style_kwargs.get("trace")
 
         # Parameter Autodetection
         if parameters is None:
@@ -1282,6 +1248,8 @@ class Figure:
 
         The snapshot captures figure-level settings, full parameter metadata,
         plot symbolic expressions with styling, and static info card content.
+        Top-level ``x_range`` / ``y_range`` fields intentionally mirror the
+        main view defaults rather than the currently active view.
 
         Returns
         -------
@@ -1303,6 +1271,9 @@ class Figure:
         active_view.current_y_range
         main_view = self.views[self._view_manager.default_view_id]
 
+        # The top-level x/y fields intentionally mirror main-view defaults so
+        # snapshot/code generation is independent of whichever view happens to
+        # be active when ``snapshot()`` is called.
         return FigureSnapshot(
             x_range=main_view.x_range,
             y_range=main_view.y_range,
@@ -1408,7 +1379,23 @@ class Figure:
         *,
         view: str | None = None,
     ) -> None:
-        """Create or replace a simple info card in the Info sidebar."""
+        """Create or replace a simple info card in the Info sidebar.
+
+        An *info card* is a small rich-text block shown in the figure's
+        ``Info`` section. ``spec`` may be a static string, a callable, or a
+        mixed sequence of static and dynamic segments. Dynamic callables receive
+        ``(figure, context)`` and are re-evaluated after renders.
+
+        Parameters
+        ----------
+        spec:
+            Static text, one dynamic callable, or a mixed sequence of both.
+        id:
+            Optional stable card identifier used for replacement.
+        view:
+            Optional view id. When provided, the card is only visible while that
+            view is active.
+        """
         self._info.set_simple_card(spec=spec, id=id, view=view)
         if self._sync_sidebar_visibility():
             self._request_active_view_reflow("sidebar_visibility")
@@ -1543,22 +1530,11 @@ class Figure:
         display(self)
 
     def __enter__(self) -> Figure:
-        """Enter a context where this figure is the current target.
+        """Enter a context where this figure becomes the current target.
 
-        Returns
-        -------
-        Figure
-            The same instance, for use with ``with`` blocks.
-
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> with fig:  # doctest: +SKIP
-        ...     pass
-
-        See Also
-        --------
-        plot : Module-level helper that uses the current figure if available.
+        Nested ``with fig:`` and ``with fig.views[view_id]:`` blocks are safe:
+        the figure keeps one shared output-capture context open until the
+        outermost block exits.
         """
         _push_current_figure(self)
         self._context_depth += 1

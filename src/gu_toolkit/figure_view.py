@@ -1,8 +1,12 @@
-"""Public view objects and figure-level view facade.
+"""Public view objects and the figure-level view facade.
 
-This module defines the public ``View`` object returned by ``fig.views[...]``
-and the small mapping-like ``FigureViews`` facade exposed on
-:class:`gu_toolkit.Figure.Figure`.
+A :class:`View` is the public per-workspace object returned by
+``fig.views[view_id]``. It owns one stable Plotly widget runtime together with
+per-view axis defaults, remembered viewport state, and selector metadata.
+
+``FigureViews`` is the small mapping-like facade exposed on :class:`Figure`.
+It provides ``current`` / ``current_id`` helpers plus creation and removal
+delegation without exposing :class:`ViewManager` internals.
 """
 
 from __future__ import annotations
@@ -24,9 +28,13 @@ class View:
     """Public object representing one plotting workspace in a figure.
 
     A view owns one stable Plotly widget runtime for its entire lifetime,
-    together with per-view axis defaults and remembered viewport state.
-    It can be activated directly via :meth:`activate` or used as a context
-    manager with ``with fig.views["detail"]:``.
+    together with per-view axis defaults, remembered viewport state, axis
+    labels, and selector title. It can be activated directly via
+    :meth:`activate` or used as a context manager with
+    ``with fig.views["detail"]:``.
+
+    A view does **not** own plots, parameters, or layout policy. Those remain
+    coordinated by :class:`Figure` and the specialized manager modules.
     """
 
     __slots__ = (

@@ -62,6 +62,7 @@ from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
 
 from .figure_context import _FigureDefaultSentinel, _is_figure_default
+from .figure_plot_style import validate_style_kwargs
 from .figure_types import NumberLike, NumberLikeOrStr, RangeLike, VisibleSpec
 from .InputConvert import InputConvert
 from .numpify import DYNAMIC_PARAMETER, NumericFunction, numpify_cached
@@ -921,34 +922,30 @@ class Plot:
                 for view_id in requested_views:
                     self.add_to_view(view_id)
 
-        line_thickness = kwargs.get("thickness")
-        if "width" in kwargs:
-            if line_thickness is not None and kwargs["width"] != line_thickness:
-                raise ValueError(
-                    "Plot.update() received both thickness= and width= with different values; use only one."
-                )
-            line_thickness = (
-                kwargs["width"] if line_thickness is None else line_thickness
-            )
-
-        curve_opacity = kwargs.get("opacity")
-        if "alpha" in kwargs:
-            if curve_opacity is not None and kwargs["alpha"] != curve_opacity:
-                raise ValueError(
-                    "Plot.update() received both opacity= and alpha= with different values; use only one."
-                )
-            curve_opacity = kwargs["alpha"] if curve_opacity is None else curve_opacity
+        style_kwargs = validate_style_kwargs(
+            {
+                "color": kwargs.get("color"),
+                "thickness": kwargs.get("thickness"),
+                "width": kwargs.get("width"),
+                "dash": kwargs.get("dash"),
+                "line": kwargs.get("line"),
+                "opacity": kwargs.get("opacity"),
+                "alpha": kwargs.get("alpha"),
+                "trace": kwargs.get("trace"),
+            },
+            caller="Plot.update()",
+        )
 
         self._update_line_style(
-            color=kwargs.get("color"),
-            thickness=line_thickness,
-            dash=kwargs.get("dash"),
-            line=kwargs.get("line"),
+            color=style_kwargs.get("color"),
+            thickness=style_kwargs.get("thickness"),
+            dash=style_kwargs.get("dash"),
+            line=style_kwargs.get("line"),
         )
         if "opacity" in kwargs or "alpha" in kwargs:
-            self.opacity = curve_opacity
-        if kwargs.get("trace"):
-            trace_update = dict(kwargs["trace"])
+            self.opacity = style_kwargs.get("opacity")
+        if style_kwargs.get("trace"):
+            trace_update = dict(style_kwargs["trace"])
             for trace_handle in self._iter_trace_handles():
                 trace_handle.update(**trace_update)
 

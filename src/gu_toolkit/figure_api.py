@@ -1,27 +1,33 @@
 """Module-level convenience API for current-figure workflows.
 
-Purpose
--------
-This module owns notebook-facing free-function helpers such as ``plot()``,
-``parameter()``, and range/title setters. The helpers delegate through the
-active figure context without storing independent plotting state.
+The helpers in this module do not own plotting state. They resolve the
+*current figure* from :mod:`gu_toolkit.figure_context` and delegate to that
+figure's public API.
 
-Architecture
-------------
-- Current-figure resolution is handled by :mod:`figure_context`.
-- Concrete rendering and parameter behavior is provided by :class:`Figure`.
-- Proxy mappings (``parameters``/``plots``) expose discoverable access to current
-  figure managers while preserving mapping-style ergonomics.
+Two context patterns matter:
+
+- ``with fig:`` makes ``fig`` the current target while leaving the current view
+  unchanged.
+- ``with fig.views["detail"]:`` makes ``fig`` current *and* temporarily makes
+  ``"detail"`` the active view, so module-level helpers route into that view.
 
 Examples
 --------
 >>> import sympy as sp
->>> from gu_toolkit import Figure, parameter, plot
+>>> from gu_toolkit import Figure, parameter, plot, info
 >>> x, a = sp.symbols("x a")
 >>> fig = Figure()  # doctest: +SKIP
->>> with fig:  # doctest: +SKIP
+>>> fig.views.add("detail", x_range=(-1, 1), y_range=(-1, 1))  # doctest: +SKIP
+>>> with fig.views["detail"]:  # doctest: +SKIP
 ...     parameter(a, min=-1, max=1)  # doctest: +SKIP
 ...     plot(a * sp.sin(x), x, id="wave")  # doctest: +SKIP
+...     info("Zoomed view")  # doctest: +SKIP
+
+Notes
+-----
+``plot(...)`` will auto-create a new figure when no current figure exists.
+Other helpers such as ``parameter(...)``, ``info(...)``, and range/title
+setters require an active figure context.
 """
 
 from __future__ import annotations
@@ -134,6 +140,11 @@ def info(
     *,
     view: str | None = None,
 ) -> None:
+    """Create or replace a simple info card on the current figure.
+
+    When ``view`` is provided, the card is only visible while that view is the
+    active view on the current figure.
+    """
     _require_current_figure().info(spec=spec, id=id, view=view)
 
 
@@ -162,6 +173,12 @@ def get_sampling_points() -> int | None:
 
 
 def plot_style_options() -> dict[str, str]:
+    """Return help text for supported plot-style keywords.
+
+    The mapping is generated from the structured plot-style metadata used by
+    :class:`Figure`, so aliases and accepted values stay synchronized with the
+    actual plotting contract.
+    """
     from .Figure import Figure
 
     return Figure.plot_style_options()
@@ -197,6 +214,7 @@ def plot(
     view: str | Sequence[str] | None = None,
     vars: PlotVarsSpec | None = None,
 ) -> Plot:
+    """Plot on the current figure, auto-creating one when needed."""
     fig = _current_figure()
     if fig is None:
         from .Figure import Figure
