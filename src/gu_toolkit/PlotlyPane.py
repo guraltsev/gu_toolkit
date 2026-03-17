@@ -173,12 +173,22 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+import logging
 
 import anywidget
 import ipywidgets as W
 import traitlets
 
+from .layout_logging import LOGGER_NAME, new_debug_id
+
 __all__ = ["PlotlyResizeDriver", "PlotlyPaneStyle", "PlotlyPane"]
+
+logger = logging.getLogger(f"{LOGGER_NAME}.plotly_pane")
+driver_logger = logging.getLogger(f"{LOGGER_NAME}.plotly_driver")
+if not logger.handlers:
+    logger.addHandler(logging.NullHandler())
+if not driver_logger.handlers:
+    driver_logger.addHandler(logging.NullHandler())
 
 
 def _uid(n: int = 8) -> str:
@@ -280,6 +290,9 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
     followup_ms_2 = traitlets.Int(250).tag(sync=True)
 
     debug_js = traitlets.Bool(False).tag(sync=True)
+    figure_id = traitlets.Unicode("").tag(sync=True)
+    view_id = traitlets.Unicode("").tag(sync=True)
+    pane_id = traitlets.Unicode("").tag(sync=True)
 
     # Frontend module: anywidget expects an ES module that default-exports an object
     # with a `render({ model, el })` method. The render method returns an optional
@@ -292,6 +305,12 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
 
     function safeLog(enabled, ...args) {
       if (enabled) console.log("[PlotlyResizeDriver]", ...args);
+    }
+
+    function emit(model, enabled, event, phase, fields) {
+      const payload = Object.assign({ event, phase, source: "PlotlyResizeDriver" }, fields || {});
+      safeLog(enabled, payload);
+      try { model.send({ type: "layout_event", payload }); } catch (e) {}
     }
 
     function pxSizeOf(el) {
@@ -441,7 +460,8 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
         // Hide host until we can size Plotly at least once (optional).
         setHostHidden(true);
 
-        async function doResize(reason) {
+        async function doResize(reason, requestId) {
+          emit(model, debug, "resize_attempt_started", "started", Object.assign(identity(), { reason, request_id: requestId || null }));
           host = resolveHost();
           if (!host) return false;
 
@@ -561,7 +581,7 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
 
         // Custom messages (Python-side reflow)
         const onMsg = (msg) => {
-          if (msg && msg.type === "reflow") schedule("msg:reflow");
+          if (msg && msg.type === "reflow") schedule(msg.reason || "msg:reflow", msg.request_id || null);
         };
         model.on("msg:custom", onMsg);
 
@@ -574,8 +594,9 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
         model.on("change:autorange_mode", onAutorangeChange);
         model.on("change:defer_reveal", onRevealChange);
 
+        emit(model, debug, "driver_mounted", "completed", Object.assign(identity(), { reason: "render" }));
         // Initial sizing attempt.
-        schedule("init");
+        schedule("init", null);
 
         // Cleanup when widget is disposed.
         return () => {
@@ -588,12 +609,13 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
           try { model.off("change:autorange_mode", onAutorangeChange); } catch (e) {}
           try { model.off("change:defer_reveal", onRevealChange); } catch (e) {}
           try { setHostHidden(false); } catch (e) {}
+          emit(model, debug, "driver_disposed", "completed", Object.assign(identity(), {}));
         };
       }
     };
     """
 
-    def reflow(self) -> None:
+    def reflow(self, *, reason: str = "manual", request_id: str | None = None, view_id: str | None = None, figure_id: str | None = None, pane_id: str | None = None) -> None:
         """
         Request a resize/reflow from the frontend.
 
@@ -607,7 +629,7 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
         - Showing/hiding sibling widgets
         - Changing CSS/layout attributes that affect size
         """
-        self.send({"type": "reflow"})
+        self.send({"type": "reflow", "reason": reason, "request_id": request_id, "view_id": view_id or self.view_id, "figure_id": figure_id or self.figure_id, "pane_id": pane_id or self.pane_id})
 
 
 @dataclass(frozen=True)
@@ -715,6 +737,9 @@ class PlotlyPane:
         debug_js: bool = False,
     ):
         """Initialize a pane that keeps Plotly sized to its widget container."""
+        self.debug_pane_id = new_debug_id("pane")
+        self._layout_event_emitter = None
+        self._layout_debug_context: dict[str, Any] = {"pane_id": self.debug_pane_id}
         # Anywidget driver: performs the actual DOM sizing + Plotly resize calls.
         self.driver = PlotlyResizeDriver(
             autorange_mode=autorange_mode,
@@ -722,6 +747,7 @@ class PlotlyPane:
             debounce_ms=debounce_ms,
             min_delta_px=min_delta_px,
             debug_js=debug_js,
+            pane_id=self.debug_pane_id,
         )
 
         # Host container: owns pixel height (via outer layout), keeps Plotly flexible.
@@ -740,6 +766,8 @@ class PlotlyPane:
         )
 
         # Wrapper container: applies visual styling (padding/border/radius/overflow).
+        self.driver.on_msg(self._handle_driver_message)
+
         self._wrap = W.Box(
             [self._host],
             layout=W.Layout(
@@ -755,6 +783,30 @@ class PlotlyPane:
             ),
         )
 
+
+    def bind_layout_debug(self, emitter, **context: Any) -> None:
+        self._layout_event_emitter = emitter
+        self._layout_debug_context = {**self._layout_debug_context, **context, "pane_id": self.debug_pane_id}
+        self.driver.figure_id = str(self._layout_debug_context.get("figure_id", ""))
+        self.driver.view_id = str(self._layout_debug_context.get("view_id", ""))
+        self.driver.pane_id = self.debug_pane_id
+
+    def _emit_layout_event(self, event: str, *, source: str, phase: str, level: int = logging.DEBUG, **fields: Any) -> None:
+        if self._layout_event_emitter is None:
+            return
+        payload = dict(self._layout_debug_context)
+        payload.update(fields)
+        self._layout_event_emitter(event=event, source=source, phase=phase, level=level, **payload)
+
+    def _handle_driver_message(self, _widget: Any, content: Any, _buffers: Any) -> None:
+        if not isinstance(content, dict) or content.get("type") != "layout_event":
+            return
+        payload = dict(content.get("payload") or {})
+        event = str(payload.pop("event", "driver_event"))
+        phase = str(payload.pop("phase", "completed"))
+        source = str(payload.pop("source", "PlotlyResizeDriver"))
+        self._emit_layout_event(event, source=source, phase=phase, **payload)
+
     @property
     def widget(self) -> W.Widget:
         """
@@ -765,11 +817,12 @@ class PlotlyPane:
         """
         return self._wrap
 
-    def reflow(self) -> None:
+    def reflow(self, *, reason: str = "manual", request_id: str | None = None, view_id: str | None = None, figure_id: str | None = None, pane_id: str | None = None) -> None:
         """
         Trigger a programmatic resize/reflow.
 
         Calls `PlotlyResizeDriver.reflow()`, which schedules a resize in the
         frontend. Use this after known layout changes initiated by Python code.
         """
-        self.driver.reflow()
+        self._emit_layout_event("reflow_message_sent", source="PlotlyPane", phase="sent", reason=reason, request_id=request_id, view_id=view_id, figure_id=figure_id)
+        self.driver.reflow(reason=reason, request_id=request_id, view_id=view_id, figure_id=figure_id, pane_id=self.debug_pane_id)

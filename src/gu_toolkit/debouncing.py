@@ -4,40 +4,6 @@ Purpose
 -------
 Provides ``QueuedDebouncer``, a small utility that buffers callback invocations
 and executes them on a fixed cadence.
-
-Concepts and structure
-----------------------
-Calls are queued as immutable payloads (args/kwargs). On each tick, the
-callback receives either the oldest call or, when ``drop_overflow=True``, only
-the most recent queued call.
-
-Architecture notes
-------------------
-Scheduling supports both async-loop and threaded environments:
-
-- Uses ``asyncio.get_running_loop().call_later`` when an event loop exists.
-- Falls back to ``threading.Timer`` otherwise.
-
-Important gotchas
------------------
-- Callback exceptions are logged and contained so the queue keeps processing.
-- The class does not retry failed callbacks; it only isolates failures.
-- ``execute_every_ms`` must be strictly positive.
-
-Examples
---------
->>> events = []
->>> def cb(v):
-...     events.append(v)
->>> d = QueuedDebouncer(cb, execute_every_ms=50, drop_overflow=True)
->>> d(1); d(2)  # doctest: +SKIP
-
-Discoverability
----------------
-Related modules:
-
-- ``Figure.py`` and ``figure_info.py`` for integration points.
-- ``tests/test_debouncing_error_handling.py`` for behavior guarantees.
 """
 
 from __future__ import annotations
@@ -50,6 +16,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from .layout_logging import LOGGER_NAME, emit_layout_event
+
 
 @dataclass
 class _QueuedCall:
@@ -58,17 +26,7 @@ class _QueuedCall:
 
 
 class QueuedDebouncer:
-    """Queue callback invocations and execute at a fixed cadence.
-
-    Parameters
-    ----------
-    callback:
-        Callable to execute from queued events.
-    execute_every_ms:
-        Execution cadence in milliseconds.
-    drop_overflow:
-        If ``True``, each tick keeps only the last queued event before executing.
-    """
+    """Queue callback invocations and execute at a fixed cadence."""
 
     def __init__(
         self,
@@ -76,25 +34,45 @@ class QueuedDebouncer:
         *,
         execute_every_ms: int,
         drop_overflow: bool = True,
+        name: str = "QueuedDebouncer",
+        event_sink: Callable[..., Any] | None = None,
     ) -> None:
         if execute_every_ms <= 0:
             raise ValueError("execute_every_ms must be > 0")
         self._callback = callback
         self._execute_every_s = execute_every_ms / 1000.0
         self._drop_overflow = bool(drop_overflow)
+        self._name = str(name)
+        self._event_sink = event_sink
 
         self._queue: deque[_QueuedCall] = deque()
         self._lock = threading.Lock()
         self._timer: Any | None = None
 
+    def _emit(self, event: str, *, phase: str, level: int = logging.DEBUG, **fields: Any) -> None:
+        if self._event_sink is not None:
+            self._event_sink(event=event, source="QueuedDebouncer", phase=phase, level=level, owner=self._name, **fields)
+            return
+        emit_layout_event(
+            logging.getLogger(f"{LOGGER_NAME}.debounce"),
+            event=event,
+            source="QueuedDebouncer",
+            phase=phase,
+            level=level,
+            owner=self._name,
+            **fields,
+        )
+
     def __call__(self, *args: Any, **kwargs: Any) -> None:
         with self._lock:
             self._queue.append(_QueuedCall(args=args, kwargs=dict(kwargs)))
+            self._emit("debounce_enqueued", phase="queued", queue_depth=len(self._queue))
             if self._timer is None:
                 self._schedule_next_locked()
 
     def _schedule_next_locked(self) -> None:
         delay_s = self._execute_every_s
+        self._emit("debounce_tick_scheduled", phase="scheduled", delay_ms=int(delay_s * 1000), queue_depth=len(self._queue))
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -108,6 +86,7 @@ class QueuedDebouncer:
 
     def _on_tick(self) -> None:
         call: _QueuedCall | None = None
+        remaining = 0
 
         with self._lock:
             self._timer = None
@@ -115,15 +94,22 @@ class QueuedDebouncer:
                 return
 
             if self._drop_overflow and len(self._queue) > 1:
+                dropped = len(self._queue) - 1
                 last = self._queue[-1]
                 self._queue.clear()
                 self._queue.append(last)
+                self._emit("debounce_drop_overflow", phase="queued", dropped_count=dropped)
 
             call = self._queue.popleft()
+            remaining = len(self._queue)
             if self._queue:
                 self._schedule_next_locked()
 
+        self._emit("debounce_tick_started", phase="started", queue_depth=remaining + 1)
         try:
             self._callback(*call.args, **call.kwargs)
         except Exception:  # pragma: no cover - defensive callback boundary
+            self._emit("debounce_tick_failed", phase="failed", level=logging.ERROR)
             logging.getLogger(__name__).exception("QueuedDebouncer callback failed")
+        else:
+            self._emit("debounce_tick_completed", phase="completed", queue_depth=remaining)

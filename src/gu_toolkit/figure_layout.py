@@ -16,6 +16,8 @@ from typing import Any
 import ipywidgets as widgets
 from IPython.display import display
 
+from .layout_logging import layout_value_snapshot
+
 
 class OneShotOutput(widgets.Output):
     """An ``Output`` widget that raises when displayed more than once."""
@@ -60,6 +62,8 @@ class FigureLayout:
 
     def __init__(self, title: str = "") -> None:
         self._view_pages: dict[str, _ViewPage] = {}
+        self._layout_event_emitter: Callable[..., Any] | None = None
+        self._layout_event_base: dict[str, Any] = {}
         self._ordered_view_ids: tuple[str, ...] = ()
         self._active_view_id: str | None = None
         self._suspend_view_selector_events = False
@@ -210,6 +214,24 @@ class FigureLayout:
         )
 
         self.full_width_checkbox.observe(self._on_full_width_change, names="value")
+        self._emit_layout_event(
+            "layout_initialized",
+            phase="completed",
+            title=title,
+            sidebar_display=self.sidebar_container.layout.display,
+            view_stage=layout_value_snapshot(self.view_stage.layout, ("width", "height", "min_height", "display", "overflow")),
+        )
+
+    def bind_layout_debug(self, emitter: Callable[..., Any], **base_fields: Any) -> None:
+        self._layout_event_emitter = emitter
+        self._layout_event_base = dict(base_fields)
+
+    def _emit_layout_event(self, event: str, *, phase: str, **fields: Any) -> None:
+        if self._layout_event_emitter is None:
+            return
+        payload = dict(self._layout_event_base)
+        payload.update(fields)
+        self._layout_event_emitter(event=event, source="FigureLayout", phase=phase, **payload)
 
     @property
     def output_widget(self) -> OneShotOutput:
@@ -290,6 +312,9 @@ class FigureLayout:
             page.title = str(title)
         self._rebuild_view_stage()
         self._refresh_view_selector()
+        self._emit_layout_event("view_order_changed", phase="completed", ordered_view_ids=list(self._ordered_view_ids))
+        self._emit_layout_event("view_page_removed", phase="completed", view_id=view_id)
+        self._emit_layout_event("view_page_created", phase="completed", view_id=view_id, title=title, host_box=layout_value_snapshot(host_box.layout, ("width", "height", "display", "overflow")))
         self._apply_active_page_visibility()
 
     def attach_view_widget(self, view_id: str, widget: widgets.Widget) -> None:
@@ -303,6 +328,7 @@ class FigureLayout:
         page = self._view_pages[key]
         page.widget = widget
         page.host_box.children = (widget,)
+        self._emit_layout_event("view_widget_attached", phase="completed", view_id=view_id, widget_type=type(widget).__name__)
 
     def remove_view_page(self, view_id: str) -> None:
         """Remove page bookkeeping for ``view_id`` if present."""
@@ -423,9 +449,9 @@ class FigureLayout:
 
     def _apply_active_page_visibility(self) -> None:
         for view_id, page in self._view_pages.items():
-            page.host_box.layout.display = (
-                "flex" if view_id == self._active_view_id else "none"
-            )
+            display = "flex" if view_id == self._active_view_id else "none"
+            page.host_box.layout.display = display
+            self._emit_layout_event("view_page_visibility_changed", phase="completed", view_id=view_id, display_state=display, is_active=(view_id == self._active_view_id))
 
     def _refresh_view_selector(self) -> None:
         options = [
@@ -451,6 +477,7 @@ class FigureLayout:
                 self.view_selector.value = desired_value
         finally:
             self._suspend_view_selector_events = False
+        self._emit_layout_event("view_selector_refreshed", phase="completed", options=[val for _, val in options], selector_display=self.view_selector.layout.display, active_view_id=self._active_view_id)
 
     def _on_full_width_change(self, change: dict[str, Any]) -> None:
         is_full = bool(change["new"])
@@ -472,3 +499,4 @@ class FigureLayout:
             sidebar_layout.max_width = "400px"
             sidebar_layout.width = "auto"
             sidebar_layout.padding = "0px 0px 0px 10px"
+        self._emit_layout_event("full_width_layout_changed", phase="completed", is_full=is_full, content_wrapper=layout_value_snapshot(layout, ("display", "flex_flow", "gap")), left_panel=layout_value_snapshot(plot_layout, ("width", "flex")), sidebar=layout_value_snapshot(sidebar_layout, ("display", "flex", "max_width", "width", "padding")))

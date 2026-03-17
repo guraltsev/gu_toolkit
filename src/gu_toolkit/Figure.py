@@ -64,6 +64,7 @@ from IPython.display import display
 from sympy.core.symbol import Symbol
 
 from .codegen import CodegenOptions
+from .layout_logging import LayoutEventBuffer, make_event_emitter, new_debug_id, new_request_id
 from .debouncing import QueuedDebouncer
 from .figure_plot_normalization import PlotVarsSpec, normalize_plot_inputs
 from .figure_plot_style import plot_style_option_docs, validate_style_kwargs
@@ -166,6 +167,10 @@ class Figure:
         "_context_depth",
         "_relayout_debouncer",
         "_pending_relayout_view_id",
+        "_layout_debug_figure_id",
+        "_layout_event_buffer",
+        "_layout_event_emitter",
+        "_layout_event_seq",
     ]
 
     def __init__(
@@ -263,9 +268,19 @@ class Figure:
         self._print_capture: ExitStack | None = None
         self._context_depth = 0
         self._pending_relayout_view_id: str | None = None
+        self._layout_debug_figure_id = new_debug_id("figure")
+        self._layout_event_buffer = LayoutEventBuffer(maxlen=500)
+        self._layout_event_seq = 0
+        self._layout_event_emitter = make_event_emitter(
+            logging.getLogger("gu_toolkit.layout.figure"),
+            buffer=self._layout_event_buffer,
+            base_fields={"figure_id": self._layout_debug_figure_id},
+            seq_factory=self._next_layout_seq,
+        )
 
         # 1. Initialize Layout (View)
         self._layout = FigureLayout(title=title)
+        self._layout.bind_layout_debug(self._emit_layout_event, figure_id=self._layout_debug_figure_id)
 
         # 2. Initialize Managers
         # Note: we pass a callback for rendering so params can trigger updates
@@ -283,7 +298,10 @@ class Figure:
             self._dispatch_relayout,
             execute_every_ms=500,
             drop_overflow=True,
+            name="Figure.relayout",
+            event_sink=self._emit_layout_event,
         )
+        self._emit_layout_event("relayout_debouncer_created", source="Figure", phase="completed", level=logging.INFO)
         self._layout.observe_view_selection(self.set_active_view)
         self._layout.observe_full_width_change(
             lambda _is_full: self._request_active_view_reflow("full_width_change")
@@ -302,8 +320,11 @@ class Figure:
             y_label=y_label,
         )
         self._legend.set_active_view(self.views.current_id)
+        self._emit_layout_event("active_view_after_remove", source="Figure", phase="completed", view_id=self.views.current_id)
         if self._sync_sidebar_visibility():
             self._request_active_view_reflow("sidebar_visibility")
+
+        self._emit_layout_event("figure_created", source="Figure", phase="completed", level=logging.INFO, title=title, sampling_points=sampling_points)
 
         # 6. Logging state
         self._render_info_last_log_t = 0.0
@@ -311,6 +332,33 @@ class Figure:
 
         if show:
             self.show()
+
+    def _next_layout_seq(self) -> int:
+        self._layout_event_seq += 1
+        return self._layout_event_seq
+
+    def _emit_layout_event(self, *, event: str, source: str, phase: str, level: int = logging.DEBUG, **fields: Any) -> dict[str, Any]:
+        return self._layout_event_emitter(event=event, source=source, phase=phase, level=level, active_view_id=(self._view_manager.active_view_id if hasattr(self, "_view_manager") else None), **fields)
+
+    def _python_layout_snapshot(self, view_id: str | None = None) -> dict[str, Any]:
+        active_id = view_id or (self.views.current_id if getattr(self, "_view_manager", None) and self._view_manager.views else None)
+        snap = {
+            "content_wrapper_display": self._layout.content_wrapper.layout.display,
+            "content_wrapper_flex_flow": self._layout.content_wrapper.layout.flex_flow,
+            "sidebar_display": self._layout.sidebar_container.layout.display,
+            "view_stage_height": self._layout.view_stage.layout.height,
+        }
+        if active_id is not None and active_id in self.views:
+            pane = self.views[active_id].pane
+            snap.update({
+                "pane_id": pane.debug_pane_id,
+                "pane_widget_width": pane.widget.layout.width,
+                "pane_widget_height": pane.widget.layout.height,
+                "host_display": pane._host.layout.display,
+                "host_width": pane._host.layout.width,
+                "host_height": pane._host.layout.height,
+            })
+        return snap
 
     # --- Figure-level properties ---
     @property
@@ -412,7 +460,7 @@ class Figure:
             autorange_mode="none",
             defer_reveal=True,
         )
-        return View(
+        view = View(
             figure=self,
             id=view_id,
             title=(str(view_id) if title is None else str(title)),
@@ -423,6 +471,9 @@ class Figure:
             figure_widget=figure_widget,
             pane=pane,
         )
+        pane.bind_layout_debug(self._emit_layout_event, figure_id=self._layout_debug_figure_id, view_id=view_id)
+        self._emit_layout_event("view_runtime_created", source="Figure", phase="completed", view_id=view_id, pane_id=pane.debug_pane_id, default_x_range=view.default_x_range, default_y_range=view.default_y_range)
+        return view
 
     def _attach_view_callbacks(self, view: View) -> None:
         """Attach figure-level relayout routing to one view widget."""
@@ -434,12 +485,16 @@ class Figure:
 
     def _request_active_view_reflow(self, reason: str) -> None:
         """Explicitly reflow the active view pane after geometry changes."""
-        del reason
         if not self._view_manager.views:
+            self._emit_layout_event("reflow_requested", source="Figure", phase="skipped", level=logging.WARNING, reason=reason, outcome="no_views")
             return
+        view = self.views.current
+        request_id = new_request_id()
+        self._emit_layout_event("reflow_requested", source="Figure", phase="requested", level=logging.INFO, reason=reason, request_id=request_id, view_id=view.id, pane_id=view.pane.debug_pane_id, snapshot=self._python_layout_snapshot(view.id))
         try:
-            self.views.current.pane.reflow()
+            view.pane.reflow(reason=reason, request_id=request_id, view_id=view.id, figure_id=self._layout_debug_figure_id)
         except Exception:  # pragma: no cover - defensive widget boundary
+            self._emit_layout_event("reflow_send_failed", source="Figure", phase="failed", level=logging.ERROR, reason=reason, request_id=request_id, view_id=view.id, pane_id=view.pane.debug_pane_id)
             logger.debug("Active view reflow failed", exc_info=True)
 
     def add_view(
@@ -494,6 +549,7 @@ class Figure:
             self._legend.set_active_view(view.id)
         else:
             self._layout.set_active_view(self.views.current_id)
+        self._emit_layout_event("view_registered", source="Figure", phase="completed", level=logging.INFO, view_id=view.id, pane_id=view.pane.debug_pane_id, activate=activate)
         if activate and not view.is_active:
             self.set_active_view(view_id)
         else:
@@ -509,14 +565,18 @@ class Figure:
         current_view = self.views.current
         if current_view.id == view_id:
             self._layout.set_active_view(view_id)
+            self._emit_layout_event("view_switch_requested", source="Figure", phase="completed", view_id=view_id, outcome="already_active")
             return
 
+        self._emit_layout_event("view_switch_requested", source="Figure", phase="requested", level=logging.INFO, view_id=view_id, previous_view_id=current_view.id)
         current_view.current_x_range
         current_view.current_y_range
+        self._emit_layout_event("viewport_captured", source="Figure", phase="completed", view_id=current_view.id, viewport_x_range=current_view.viewport_x_range, viewport_y_range=current_view.viewport_y_range)
 
         transition = self._view_manager.set_active_view(view_id)
         if transition is None:
             self._layout.set_active_view(view_id)
+            self._emit_layout_event("active_view_changed", source="Figure", phase="completed", level=logging.INFO, view_id=view_id)
             return
 
         _, nxt = transition
@@ -526,6 +586,8 @@ class Figure:
 
         nxt.current_x_range = nxt.viewport_x_range or nxt.x_range
         nxt.current_y_range = nxt.viewport_y_range or nxt.y_range
+        self._emit_layout_event("active_view_changed", source="Figure", phase="completed", level=logging.INFO, view_id=view_id, previous_view_id=current_view.id)
+        self._emit_layout_event("viewport_restored", source="Figure", phase="completed", view_id=view_id, viewport_x_range=nxt.viewport_x_range, viewport_y_range=nxt.viewport_y_range)
         self._request_active_view_reflow("view_activated")
 
         for plot in self.plots.values():
@@ -555,6 +617,7 @@ class Figure:
         for plot in self.plots.values():
             plot.remove_from_view(view_id)
             self._legend.on_plot_updated(plot)
+        self._emit_layout_event("view_removed", source="Figure", phase="requested", level=logging.INFO, view_id=view_id)
         self._view_manager.remove_view(view_id)
         self._layout.remove_view_page(view_id)
         self._layout.set_view_order(tuple(self._view_manager.views.keys()))
@@ -566,11 +629,13 @@ class Figure:
 
     def _sync_sidebar_visibility(self) -> bool:
         """Apply consolidated sidebar section visibility from all managers."""
-        return self._layout.update_sidebar_visibility(
+        changed = self._layout.update_sidebar_visibility(
             self._parameter_manager.has_params,
             self._info.has_info,
             self._legend.has_legend,
         )
+        self._emit_layout_event("sidebar_visibility_sync", source="Figure", phase="completed", changed=changed, params_visible=self._parameter_manager.has_params, info_visible=self._info.has_info, legend_visible=self._legend.has_legend)
+        return changed
 
 
     # --- Layout ---
@@ -1184,6 +1249,7 @@ class Figure:
         result = self._parameter_manager.parameter(
             symbols, control=control, **control_kwargs
         )
+        self._emit_layout_event("parameter_controls_updated", source="Figure", phase="completed")
         if self._sync_sidebar_visibility():
             self._request_active_view_reflow("sidebar_visibility")
         return result
@@ -1216,6 +1282,7 @@ class Figure:
         When called due to a parameter change, hooks registered via
         :meth:`add_param_change_hook` are invoked after plotting.
         """
+        self._emit_layout_event("render_started", source="Figure", phase="started", level=logging.INFO, reason=reason, trigger_type=(type(trigger).__name__ if trigger is not None else None))
         self._log_render(reason, trigger)
 
         # 1. Update active-view plots
@@ -1242,6 +1309,7 @@ class Figure:
                     warnings.warn(f"Hook {h_id} failed: {e}", stacklevel=2)
 
         self._info.schedule_info_update(reason=reason, trigger=trigger)
+        self._emit_layout_event("render_completed", source="Figure", phase="completed", level=logging.INFO, reason=reason, view_id=current_view_id)
 
     def snapshot(self) -> FigureSnapshot:
         """Return an immutable snapshot of the entire figure state.
@@ -1455,6 +1523,7 @@ class Figure:
     def _queue_relayout(self, view_id: str, *_: Any) -> None:
         """Queue a relayout event on the figure-level debouncer."""
         self._pending_relayout_view_id = str(view_id)
+        self._emit_layout_event("plotly_relayout_queued", source="Figure", phase="queued", view_id=str(view_id))
         self._relayout_debouncer()
 
     def _dispatch_relayout(self) -> None:
@@ -1462,13 +1531,17 @@ class Figure:
         target_view = self._pending_relayout_view_id
         self._pending_relayout_view_id = None
         if target_view is None:
+            self._emit_layout_event("plotly_relayout_dispatched", source="Figure", phase="skipped", outcome="no_pending_view")
             return
         if target_view not in self.views:
+            self._emit_layout_event("plotly_relayout_dispatched", source="Figure", phase="skipped", outcome="missing_view", view_id=target_view)
             return
         if target_view == self.views.current_id:
+            self._emit_layout_event("plotly_relayout_dispatched", source="Figure", phase="completed", view_id=target_view)
             self.render(reason="relayout")
         else:
             self._view_manager.mark_stale(view_id=target_view)
+            self._emit_layout_event("inactive_view_marked_stale", source="Figure", phase="completed", view_id=target_view)
 
     def _log_render(self, reason: str, trigger: Any) -> None:
         """Log render information with rate-limiting.
@@ -1484,6 +1557,7 @@ class Figure:
         -------
         None
         """
+        self._emit_layout_event("render_debug", source="Figure", phase="completed", reason=reason, trigger_type=(type(trigger).__name__ if trigger is not None else None))
         # Simple rate-limited logging implementation
         now = time.monotonic()
         if (
@@ -1501,6 +1575,7 @@ class Figure:
             logger.debug(f"ranges x={self.x_range} y={self.y_range}")
 
     def _ipython_display_(self, **kwargs: Any) -> None:
+        self._emit_layout_event("figure_displayed", source="Figure", phase="completed", level=logging.INFO, display_method="_ipython_display_")
         """
         Special method called by IPython to display the object.
         Uses IPython.display.display() to render the underlying widget.
@@ -1523,6 +1598,7 @@ class Figure:
         display(self._layout.output_widget)
 
     def show(self) -> None:
+        self._emit_layout_event("figure_displayed", source="Figure", phase="completed", level=logging.INFO, display_method="show")
         """Display the figure in IPython/Jupyter.
 
         This is a small convenience wrapper around ``display(fig)``.
