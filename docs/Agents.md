@@ -2,14 +2,14 @@ This file applies to everything under `docs/`.
 
 ## Follow documentation lifecycle conventions
 
-- New defects gobunder `docs/bugs/` with stable, sortable filenames (DO NOT put open issues in `open` subfolder).
-- Completed issues move to `docs/Bugs/_closed/` (note the underscrore).
-- New implementation roadmaps go under `docs/projects/` (DO NOT put open issues in `open` subfolder).
-- Completed projects move to `docs/projects/_completed/`(note the underscrore).
+- New defects gobunder `docs/issues/` with stable, sortable filenames (DO NOT put open issues in `open` subfolder).
+- Completed issues move to `docs/issues/_closed/` (note the underscrore).
+- New implementation roadmaps go under `docs/issues/` (DO NOT put open issues in `open` subfolder).
+- Completed projects move to `docs/issues/_completed/`(note the underscrore).
 - Make sure `docs/README.md` is up to date with current best practices and organization of this project. Do not include specific bug information in `docs/README.md`
 - NEVER delete issues/projects. Just move them to closed/completed when they are done.
 
-## Required structure for issue files (markdown)
+## Required structure for bug files (markdown)
 
 Should contain at least the following as top level sections
 
