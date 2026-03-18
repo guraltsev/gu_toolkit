@@ -7,10 +7,10 @@ __all__ = ["create_mystery_function"]
 
 
 def create_mystery_function(N, debug=False):
-    """
+    r"""
     Create a mystery function of the form
     $$
-    F(x)= α_1\\,\\sin(2 π x)+α_2\\,\\sin(2 π 2 x) + \\ldots +α_{N} \\,\\sin(2 π N x)
+    F(x)= α_1\,\sin(2 π x)+α_2\,\sin(2 π 2 x) + \ldots +α_{N} \,\sin(2 π N x)
     $$
 
     The numbers $α_n$ are chosen randomly **between -1 and 1** with **step 0.1**.
@@ -37,36 +37,42 @@ def create_mystery_function(N, debug=False):
     return F
 
 
-import ipywidgets as widgets
-from IPython.display import clear_output, display
+__all__ += ["SupNormCard", "MaxDistanceCard"]
 
-__all__ += ["SupNormCard","MaxDistanceCard"]
 
-def MaxDistanceCard(var,F,G):
-    return SupNormCard(var, F-G)
-    
-def SupNormCard(var,F):
-    class SupNormCard_for_specific_functions:
-        def __init__(self, out, fig):
-            self.xs = np.linspace(-0.5, 0.5, 2000)
-    
-            self.prefix = widgets.HTMLMath(
-                value=r"The largest distance between the two functions on "
-                      r"$\left[-\tfrac12,\tfrac12\right]$ is: "
-            )
-            self.value = widgets.HTML(value="<code>…</code>")
-            with out:
-                clear_output()
-                display(widgets.VBox([self.prefix, self.value]))
-            self.expr = sp.Abs(F)
-            self.var = var
-            self.params = tuple(sorted([s for s in self.expr.free_symbols if s != self.var], key=lambda s: s.sort_key()))
-            for p in self.params:
-                    fig.add_param(p)
-                    
-        def update(self, change, fig, out):
-            par_vals = [fig._params[p].value for p in self.params]  # current slider values
-            expr_np= numpify_cached(self.expr, args=[self.var] + list(self.params))
-            sup = float(np.max(expr_np(self.xs, *par_vals)))
-            self.value.value = f"<code>{sup:g}</code>"
-    return SupNormCard_for_specific_functions
+def _metric_card(description, var, expr, reducer):
+    """Return a Figure.info-compatible mixed static/dynamic card spec."""
+    interval = (-0.5, 0.5)
+    xs = np.linspace(interval[0], interval[1], 2000)
+    expr = sp.Abs(sp.sympify(expr))
+    params = tuple(
+        sorted((s for s in expr.free_symbols if s != var), key=lambda s: s.sort_key())
+    )
+    expr_np = numpify_cached(expr, vars=(var, *params))
+
+    def _value(fig, _ctx):
+        missing = [p for p in params if p not in fig.parameters]
+        if missing:
+            fig.parameter(missing)
+        par_vals = [fig.parameters[p].value for p in params]
+        values = np.asarray(expr_np(xs, *par_vals), dtype=float)
+        metric_value = float(reducer(values))
+        return f"<code>{metric_value:g}</code>"
+
+    return [description, _value]
+
+
+def MaxDistanceCard(var, F, G):
+    return SupNormCard(var, F - G)
+
+
+def SupNormCard(var, F):
+    return _metric_card(
+        (
+            r"The largest distance between the two functions on "
+            r"$\left[-\tfrac12,\tfrac12\right]$ is:"
+        ),
+        var,
+        F,
+        np.max,
+    )
