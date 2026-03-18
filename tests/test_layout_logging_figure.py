@@ -65,3 +65,30 @@ def test_sidebar_visibility_logging_changed_vs_unchanged() -> None:
     names = [event["event"] for event in events]
     assert "sidebar_visibility_unchanged" in names
     assert "sidebar_visibility_changed" in names
+
+
+def test_public_reflow_layout_routes_to_named_view() -> None:
+    with _enabled_layout_logging():
+        fig = Figure()
+    detail = fig.add_view("detail")
+    calls: list[dict[str, object]] = []
+
+    def _fake_reflow(**kwargs):
+        calls.append(dict(kwargs))
+
+    detail.pane.reflow = _fake_reflow  # type: ignore[method-assign]
+
+    request_id = fig.reflow_layout(reason="manual_check", view_id="detail")
+
+    assert isinstance(request_id, str)
+    assert request_id.startswith("req-")
+    assert calls
+    assert calls[0]["reason"] == "manual_check"
+    assert calls[0]["view_id"] == "detail"
+    assert calls[0]["request_id"] == request_id
+
+    events = fig._layout_event_buffer.snapshot()
+    reflow_events = [event for event in events if event["event"] == "reflow_requested"]
+    assert reflow_events
+    assert reflow_events[-1]["view_id"] == "detail"
+    assert reflow_events[-1]["request_id"] == request_id

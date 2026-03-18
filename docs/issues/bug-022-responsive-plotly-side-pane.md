@@ -7,7 +7,7 @@ Open
 Assessment (2026-02-17): implementation is partially complete; coverage and/or documentation gaps listed below keep this issue open.
 
 State-of-completion checklist:
-- [x] `PlotlyPane`/`PlotlyResizeDriver` implementation includes resize observers, clip-ancestor handling, debounce, and follow-up reflow hooks.
+- [x] `PlotlyPane`/`PlotlyResizeDriver` implementation includes resize observers, clip-ancestor handling, debounce, follow-up reflow hooks, and explicit frontend geometry-state syncing back to Python.
 - [x] Basic automated tests exist for `PlotlyPane` wrapper behavior (`reflow` delegation and style wiring).
 - [ ] No deterministic browser/integration test validates side-pane or container-width resize behavior end to end.
 - [ ] Manual notebook checklist item for side-pane width changes is still unchecked.
@@ -15,7 +15,7 @@ State-of-completion checklist:
 
 ## Evidence
 - `tests/test-responsive_plotly.ipynb` still includes unchecked side-pane resize verification items.
-- Current automated tests do not assert real DOM resize behavior under side-pane/container width transitions.
+- Current automated tests do not assert real DOM resize behavior under side-pane/container width transitions, even though Python-side diagnostics now expose the browser geometry state used during recovery.
 
 ## TODO
 - [ ] Add a browser-based integration test that resizes the plot container and asserts figure relayout behavior.

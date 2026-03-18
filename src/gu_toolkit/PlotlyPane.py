@@ -1,188 +1,37 @@
-"""
-plotly_pane.py — Responsive Plotly FigureWidget pane for Jupyter via anywidget
+"""Responsive Plotly pane primitives.
 
-This module provides a small, reusable “Plotly pane” that can be embedded into
-arbitrary ipywidgets layouts while maintaining reliable Plotly sizing under
-dynamic container changes (e.g., JupyterLab sidebars, split panels, flex reflows).
+This module contains two layers:
 
-It is designed for the common situation where:
+- :class:`PlotlyResizeDriver`, an ``anywidget`` frontend driver that measures the
+  DOM host, tracks visibility/size transitions, and triggers Plotly resize.
+- :class:`PlotlyPane`, a small Python wrapper that exposes the driver plus the
+  host/wrapper widgets used by the rest of the toolkit.
 
-- You have a `plotly.graph_objects.FigureWidget` (or any widget that renders a
-  Plotly DOM subtree containing a `.js-plotly-plot` element), and
-- You want the Plotly plot to *track the pixel size of its container*, including
-  changes that are *not* simple window resizes (sidebar toggles, panel drags),
-  and
-- You want optional “autorange” behavior after resizing, and
-- You may want to defer showing the host until a valid size is available, to
-  reduce “flash at wrong size” artifacts.
-
-Public API
-----------
-
-Primary classes:
-
-- `PlotlyResizeDriver`
-    An `anywidget.AnyWidget` whose frontend JavaScript attaches observers
-    (ResizeObserver + MutationObserver) to locate a Plotly element under a host
-    container and call Plotly’s resize mechanisms when the host size changes.
-
-    The driver widget itself is hidden (`display: none`); it is intended to be
-    placed as a child of (or adjacent to) the Plotly FigureWidget within the
-    same container.
-
-- `PlotlyPaneStyle`
-    A small frozen dataclass holding visual styling options (padding/border/etc.)
-    for the pane wrapper.
-
-- `PlotlyPane`
-    A Python-side convenience wrapper that assembles:
-      (a) a “host” flex box that owns the pixel height
-      (b) the figure widget + `PlotlyResizeDriver`
-      (c) an outer wrapper that applies style (padding/border/radius/overflow)
-
-    Exposes `.widget` (the widget to embed in layouts) and `.reflow()` for
-    manual, programmatic resizing.
-
-Typical usage
--------------
-
-1) Create a Plotly FigureWidget:
-
-    import plotly.graph_objects as go
-    figw = go.FigureWidget(data=[go.Scatter(y=[1, 3, 2])])
-
-2) Wrap it in a PlotlyPane:
-
-    pane = PlotlyPane(
-        figw,
-        style=PlotlyPaneStyle(padding_px=8, border="1px solid #ddd"),
-        autorange_mode="once",   # "none" | "once" | "always"
-        defer_reveal=True,
-    )
-
-3) Place pane.widget into an ipywidgets layout that provides a real pixel height:
-
-    import ipywidgets as W
-    root = W.Box(
-        [pane.widget],
-        layout=W.Layout(height="70vh", width="100%")
-    )
-    display(root)
-
-4) If your code performs layout changes that might not trigger observers
-   (or you want deterministic recovery), call:
-
-    pane.reflow()
-
-Architecture / design summary
------------------------------
-
-There are two layers:
-
-(1) Frontend resize logic (JavaScript in `PlotlyResizeDriver._esm`)
-
-    - Determines a “host” element:
-        - If `host_selector` is set, uses `document.querySelector(host_selector)`.
-        - Otherwise uses `el.parentElement` where `el` is the driver’s DOM node.
-
-    - Locates the Plotly element:
-        - Searches under host for `.js-plotly-plot` (Plotly’s standard container).
-
-    - Computes an “effective size”:
-        - Uses host bounding box for width/height.
-        - Additionally attempts to find the nearest ancestor with non-`visible`
-          horizontal overflow (a “clip ancestor”). This is a pragmatic approach
-          for JupyterLab-like layouts where the visible width can be constrained
-          by a clipping parent even if the host’s nominal layout width is larger.
-        - Effective width is `min(host.width, clip.width)`, height is host.height.
-
-    - Applies sizing to the Plotly DOM:
-        - Sets plot element and `.plot-container` heights in pixels.
-        - Clamps width via `maxWidth` to the effective visible width and enforces
-          `min-width: 0` / `width: 100%` to allow shrink in flex layouts.
-
-    - Triggers Plotly resize:
-        - Prefer `window.Plotly.Plots.resize(plotEl)` when available.
-        - Fallback: dispatch a global `window.resize` event.
-
-    - Optional autorange:
-        - If `autorange_mode` is "once" or "always", attempts `Plotly.relayout`
-          with `{xaxis*.autorange: true, yaxis*.autorange: true}` for all axes
-          in `_fullLayout`. (This relies on Plotly’s runtime layout object and
-          is necessarily Plotly-specific.)
-
-    - Observers and scheduling:
-        - Uses `ResizeObserver` on the host to react to size changes.
-        - Uses `ResizeObserver` on the clip ancestor (if distinct) to react to
-          changes in the clipping viewport.
-        - Uses `MutationObserver` on the host subtree to detect Plotly DOM
-          insertion and trigger an initial resize.
-        - Debounces resize work (`debounce_ms`) and performs two follow-up resizes
-          (`followup_ms_1`, `followup_ms_2`) to survive animated transitions.
-
-    - Deferred reveal:
-        - If `defer_reveal=True`, the host is hidden via `opacity: 0` and
-          `pointer-events: none` until the first successful resize.
-
-(2) Python wrapper layer (`PlotlyPane`)
-
-    - Constructs a host container (`self._host`) that:
-        - is a flex column
-        - has `width="100%"`, `height="100%"`, `min_width="0"`, `min_height="0"`
-        - contains `[figw, driver]`
-      The outer layout is responsible for giving this a real pixel height.
-
-    - Constructs a wrapper (`self._wrap`) that applies the visual style
-      (padding/border/radius/overflow).
-
-Key contract / expectation
---------------------------
-
-For reliable behavior, the pane must ultimately receive a computed pixel height.
-In practice, that means some ancestor in the ipywidgets layout should set a
-height (e.g. `"70vh"`, `"400px"`, or a flex layout where height is defined).
-
-If the pane has no real height (e.g. all ancestors have `height="auto"`), Plotly
-has no stable target size and may collapse or render unpredictably.
-
-Limitations / notes
--------------------
-
-- The driver assumes Plotly renders an element with class `.js-plotly-plot`.
-  This is standard for Plotly, but it is still a DOM-level coupling.
-
-- Autorange uses the presence of `plotEl._fullLayout` and `Plotly.relayout`.
-  If Plotly changes these internals, autorange behavior may degrade (resize will
-  still function via `Plots.resize`/fallback).
-
-- This code uses `ResizeObserver` and `MutationObserver`, which are supported by
-  modern browsers. If unavailable, no polyfill is provided here.
-
-- The “clip ancestor” heuristic is intentionally generic; it can be adjusted if
-  a target environment has more specific layout structure.
-
-Exports
--------
-
-- `PlotlyResizeDriver`
-- `PlotlyPaneStyle`
-- `PlotlyPane`
+The updated implementation makes geometry state explicit and synced back to
+Python so notebook diagnostics can show actual browser measurements rather than
+only ipywidgets layout traits.
 """
 
 from __future__ import annotations
 
 import inspect
-import uuid
-from dataclasses import dataclass
 import logging
+import uuid
+from dataclasses import asdict, dataclass
+from typing import Any
 
 import anywidget
 import ipywidgets as W
 import traitlets
 
-from .layout_logging import LOGGER_NAME, new_debug_id
+from .layout_logging import LOGGER_NAME, new_debug_id, new_request_id
 
-__all__ = ["PlotlyResizeDriver", "PlotlyPaneStyle", "PlotlyPane"]
+__all__ = [
+    "PlotlyResizeDriver",
+    "PlotlyPaneStyle",
+    "PlotlyPaneGeometry",
+    "PlotlyPane",
+]
 
 logger = logging.getLogger(f"{LOGGER_NAME}.plotly_pane")
 driver_logger = logging.getLogger(f"{LOGGER_NAME}.plotly_driver")
@@ -193,100 +42,108 @@ if not driver_logger.handlers:
 
 
 def _uid(n: int = 8) -> str:
-    """
-    Return a short random hex identifier.
-
-    Parameters
-    ----------
-    n:
-        Number of hex characters to return. Default is 8.
-
-    Notes
-    -----
-    This helper is not used by the public API in this file, but is commonly
-    useful when you want to generate per-instance CSS classes/selectors for
-    complex widget layouts.
-    """
+    """Return a short random hex identifier."""
     return uuid.uuid4().hex[:n]
 
 
+def _widget_layout_or_none(widget: Any) -> W.Layout | None:
+    """Return the ipywidgets layout object for ``widget`` when available.
+
+    Plotly ``FigureWidget`` exposes ``layout`` as the figure's graph layout, not
+    the surrounding ipywidgets ``Layout``. This helper keeps the pane from
+    treating graph layout objects like widget shell layout objects.
+    """
+
+    layout_obj = getattr(widget, "layout", None)
+    return layout_obj if isinstance(layout_obj, W.Layout) else None
+
+
+def _apply_default_fill_hints(widget: Any) -> None:
+    """Apply default flex-fill hints to widgets that expose ``ipywidgets.Layout``."""
+
+    widget_layout = _widget_layout_or_none(widget)
+    if widget_layout is None:
+        return
+    if getattr(widget_layout, "width", "") in (None, ""):
+        widget_layout.width = "100%"
+    if getattr(widget_layout, "height", "") in (None, ""):
+        widget_layout.height = "100%"
+    if getattr(widget_layout, "min_width", "") in (None, ""):
+        widget_layout.min_width = "0"
+    if getattr(widget_layout, "min_height", "") in (None, ""):
+        widget_layout.min_height = "0"
+
+
+@dataclass(frozen=True)
+class PlotlyPaneGeometry:
+    """Browser-side geometry snapshot mirrored from the frontend driver."""
+
+    state: str = "created"
+    frontend_ready: bool = False
+    host_connected: bool = False
+    host_visible: bool = False
+    plot_found: bool = False
+    last_reason: str = ""
+    last_request_id: str | None = None
+    last_completed_reason: str = ""
+    last_completed_request_id: str | None = None
+    last_outcome: str = "created"
+    last_error: str = ""
+    pending_reason: str = ""
+    pending_request_id: str | None = None
+    reflow_token: int = 0
+    host_width: int = 0
+    host_height: int = 0
+    clip_width: int = 0
+    clip_height: int = 0
+    measured_width: int = 0
+    measured_height: int = 0
+    resize_count: int = 0
+    failure_count: int = 0
+
+    @classmethod
+    def from_driver(cls, driver: "PlotlyResizeDriver") -> "PlotlyPaneGeometry":
+        def _none_if_empty(value: str) -> str | None:
+            return value or None
+
+        return cls(
+            state=driver.frontend_state,
+            frontend_ready=bool(driver.frontend_ready),
+            host_connected=bool(driver.host_connected),
+            host_visible=bool(driver.host_visible),
+            plot_found=bool(driver.plot_found),
+            last_reason=driver.last_reason,
+            last_request_id=_none_if_empty(driver.last_request_id),
+            last_completed_reason=driver.last_completed_reason,
+            last_completed_request_id=_none_if_empty(driver.last_completed_request_id),
+            last_outcome=driver.last_outcome,
+            last_error=driver.last_error,
+            pending_reason=driver.pending_reason,
+            pending_request_id=_none_if_empty(driver.pending_request_id),
+            reflow_token=int(driver.reflow_token),
+            host_width=int(driver.host_width),
+            host_height=int(driver.host_height),
+            clip_width=int(driver.clip_width),
+            clip_height=int(driver.clip_height),
+            measured_width=int(driver.measured_width),
+            measured_height=int(driver.measured_height),
+            resize_count=int(driver.resize_count),
+            failure_count=int(driver.failure_count),
+        )
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 class PlotlyResizeDriver(anywidget.AnyWidget):
-    """
-    Frontend resize driver for a Plotly DOM subtree.
-
-    This widget is meant to be included as a hidden child within (or adjacent to)
-    the container that hosts a Plotly-rendered widget (typically a
-    `plotly.graph_objects.FigureWidget`).
-
-    The JavaScript frontend:
-
-    - Resolves a host element (by `host_selector` or `parentElement`).
-    - Locates the Plotly node `.js-plotly-plot`.
-    - Computes an effective size (optionally constrained by a clipping ancestor).
-    - Applies pixel height + width clamps to the Plotly DOM.
-    - Calls Plotly’s resize API (`Plotly.Plots.resize`) when available.
-    - Optionally triggers autorange via `Plotly.relayout`.
-    - Observes host and clip-ancestor size changes via `ResizeObserver`.
-    - Detects initial Plotly DOM insertion via `MutationObserver`.
-    - Supports Python-side manual reflow via a custom message.
-
-    Traitlets (synced to frontend)
-    ------------------------------
-
-    host_selector:
-        Optional CSS selector. If non-empty, the driver uses
-        `document.querySelector(host_selector)` as the host container.
-        If empty, the host is `el.parentElement`.
-
-        In most cases (including `PlotlyPane`), leaving this empty is best.
-
-    autorange_mode:
-        Controls post-resize autorange behavior:
-        - "none": never autorange
-        - "once": autorange at most one time after a successful resize
-        - "always": autorange after every resize
-
-    defer_reveal:
-        If True, hides the host container (opacity 0, pointer-events none) until
-        the first successful resize is performed.
-
-    debounce_ms:
-        Debounce delay for resize scheduling (milliseconds).
-
-    min_delta_px:
-        Minimum pixel change in width or height before a resize is applied once
-        the host is already “revealed”. Prevents jitter from tiny oscillations.
-
-    followup_ms_1 / followup_ms_2:
-        Extra follow-up resizes scheduled after the debounced resize. These are
-        a pragmatic stabilizer for animated transitions in JupyterLab-like UIs.
-
-    debug_js:
-        If True, enables console logging from the frontend driver.
-
-    Public methods
-    --------------
-    reflow():
-        Send a custom message to trigger a resize schedule on the frontend.
-        This is useful when you programmatically change layout state and want
-        deterministic correction.
-
-    Implementation detail
-    ---------------------
-    The widget’s frontend node is hidden (`display: none`) and serves only as a
-    coordination point for trait syncing and custom messages.
-    """
+    """Frontend resize driver for a Plotly DOM subtree."""
 
     host_selector = traitlets.Unicode("").tag(sync=True)
-    autorange_mode = traitlets.Unicode("none").tag(
-        sync=True
-    )  # "none" | "once" | "always"
+    autorange_mode = traitlets.Unicode("none").tag(sync=True)
     defer_reveal = traitlets.Bool(True).tag(sync=True)
 
     debounce_ms = traitlets.Int(60).tag(sync=True)
     min_delta_px = traitlets.Int(2).tag(sync=True)
-
-    # follow-up resizes to survive JupyterLab sidebar transitions
     followup_ms_1 = traitlets.Int(80).tag(sync=True)
     followup_ms_2 = traitlets.Int(250).tag(sync=True)
 
@@ -296,13 +153,37 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
     view_id = traitlets.Unicode("").tag(sync=True)
     pane_id = traitlets.Unicode("").tag(sync=True)
 
-    # Frontend module: anywidget expects an ES module that default-exports an object
-    # with a `render({ model, el })` method. The render method returns an optional
-    # cleanup function called on widget disposal.
+    frontend_ready = traitlets.Bool(False).tag(sync=True)
+    frontend_state = traitlets.Unicode("created").tag(sync=True)
+    host_connected = traitlets.Bool(False).tag(sync=True)
+    host_visible = traitlets.Bool(False).tag(sync=True)
+    plot_found = traitlets.Bool(False).tag(sync=True)
+    last_reason = traitlets.Unicode("").tag(sync=True)
+    last_request_id = traitlets.Unicode("").tag(sync=True)
+    last_completed_reason = traitlets.Unicode("").tag(sync=True)
+    last_completed_request_id = traitlets.Unicode("").tag(sync=True)
+    last_outcome = traitlets.Unicode("created").tag(sync=True)
+    last_error = traitlets.Unicode("").tag(sync=True)
+    pending_reason = traitlets.Unicode("").tag(sync=True)
+    pending_request_id = traitlets.Unicode("").tag(sync=True)
+    reflow_token = traitlets.Int(0).tag(sync=True)
+    host_width = traitlets.Int(0).tag(sync=True)
+    host_height = traitlets.Int(0).tag(sync=True)
+    clip_width = traitlets.Int(0).tag(sync=True)
+    clip_height = traitlets.Int(0).tag(sync=True)
+    measured_width = traitlets.Int(0).tag(sync=True)
+    measured_height = traitlets.Int(0).tag(sync=True)
+    resize_count = traitlets.Int(0).tag(sync=True)
+    failure_count = traitlets.Int(0).tag(sync=True)
+
     _esm = r"""
     function clampInt(x, dflt) {
-      let n = Number(x);
+      const n = Number(x);
       return Number.isFinite(n) ? Math.trunc(n) : dflt;
+    }
+
+    function sameScalar(a, b) {
+      return a === b || (Number.isNaN(a) && Number.isNaN(b));
     }
 
     function safeLog(enabled, ...args) {
@@ -316,9 +197,26 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
       try { model.send({ type: "layout_event", payload }); } catch (e) {}
     }
 
+    function syncTraits(model, fields) {
+      let changed = false;
+      for (const [key, value] of Object.entries(fields || {})) {
+        if (!sameScalar(model.get(key), value)) {
+          model.set(key, value);
+          changed = true;
+        }
+      }
+      if (changed) {
+        try { model.save_changes(); } catch (e) {}
+      }
+    }
+
     function pxSizeOf(el) {
+      if (!el) return { w: 0, h: 0 };
       const r = el.getBoundingClientRect();
-      return { w: Math.round(r.width), h: Math.round(r.height) };
+      return {
+        w: Math.max(0, Math.round(r.width || 0)),
+        h: Math.max(0, Math.round(r.height || 0)),
+      };
     }
 
     function findPlotEl(host) {
@@ -326,15 +224,22 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
       return host.querySelector(".js-plotly-plot");
     }
 
+    function collectAncestorChain(startEl, limit) {
+      const out = [];
+      let el = startEl;
+      while (el && el.parentElement && out.length < limit) {
+        el = el.parentElement;
+        out.push(el);
+      }
+      return out;
+    }
+
     function findClipAncestor(startEl) {
-      // Nearest ancestor that can clip horizontally (common in JupyterLab layouts).
-      // Generic heuristic: detect via computed overflow-x/overflow.
       let el = startEl;
       while (el && el.parentElement) {
         el = el.parentElement;
         const cs = getComputedStyle(el);
         const ox = cs.overflowX || cs.overflow || "visible";
-        // treat anything but 'visible' as potentially clipping / viewport-defining
         if (ox !== "visible") return el;
       }
       return null;
@@ -344,8 +249,25 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
       const hs = pxSizeOf(host);
       if (!clip) return hs;
       const cs = pxSizeOf(clip);
-      // visible width is limited by the clip viewport even if host layout width stays large
-      return { w: Math.min(hs.w, cs.w), h: hs.h };
+      return {
+        w: cs.w > 0 ? Math.min(hs.w, cs.w) : hs.w,
+        h: hs.h,
+      };
+    }
+
+    function hostVisibility(host, intersectionState) {
+      if (!host) {
+        return { connected: false, visible: false, hiddenByStyle: true };
+      }
+      const connected = !!host.isConnected;
+      if (!connected) {
+        return { connected: false, visible: false, hiddenByStyle: true };
+      }
+      const cs = getComputedStyle(host);
+      const hiddenByStyle = cs.display === "none" || cs.visibility === "hidden";
+      const hasClientRects = host.getClientRects().length > 0;
+      const visible = connected && !hiddenByStyle && hasClientRects && intersectionState !== false;
+      return { connected, visible, hiddenByStyle };
     }
 
     function setPlotHeights(plotEl, hPx) {
@@ -355,7 +277,6 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
     }
 
     function applyWidthClamp(plotEl, wPx) {
-      // Clamp width to effective visible width (important under JupyterLab side panes).
       plotEl.style.width = "100%";
       plotEl.style.minWidth = "0";
       plotEl.style.maxWidth = `${wPx}px`;
@@ -378,6 +299,7 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
         }
       } catch (e) {}
       window.dispatchEvent(new Event("resize"));
+      return null;
     }
 
     function buildAutorangeUpdate(plotEl) {
@@ -416,10 +338,37 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
 
     export default {
       render({ model, el }) {
-        // The driver node is an implementation detail: it should not affect layout.
         el.style.display = "none";
 
         let debug = !!model.get("debug_js");
+        let host = null;
+        let clip = null;
+        let roHost = null;
+        let roClip = null;
+        let moHost = null;
+        let moAncestors = null;
+        let ioHost = null;
+        let follow1 = null;
+        let follow2 = null;
+        let recoveryTimers = [];
+        let recoveryToken = 0;
+        let transitionTargets = [];
+        let lastApplied = { w: 0, h: 0 };
+        let revealed = false;
+        let didAutorangeOnce = false;
+        let resizeCount = 0;
+        let failureCount = 0;
+        let lastIntersection = null;
+        let destroyed = false;
+        let handledReflowToken = 0;
+
+        function identity() {
+          return {
+            figure_id: model.get("figure_id") || "",
+            view_id: model.get("view_id") || "",
+            pane_id: model.get("pane_id") || "",
+          };
+        }
 
         function resolveHost() {
           const sel = model.get("host_selector");
@@ -429,28 +378,9 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
           return el.parentElement;
         }
 
-        let host = resolveHost();
-        if (!host) {
-          safeLog(debug, "No host found; driver inactive.");
-          return;
-        }
-
-        // clip ancestor used for effective visible width under JupyterLab side panes
-        let clip = findClipAncestor(host);
-
-        let last = { w: 0, h: 0 };
-        let follow1 = null;
-        let follow2 = null;
-
-        let roHost = null;
-        let roClip = null;
-        let mo = null;
-
-        let revealed = false;
-        let didAutorangeOnce = false;
-
         function setHostHidden(hidden) {
-          if (!model.get("defer_reveal")) return;
+          if (!host) return;
+          if (!model.get("defer_reveal")) hidden = false;
           if (hidden) {
             host.style.opacity = "0";
             host.style.pointerEvents = "none";
@@ -460,40 +390,265 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
           }
         }
 
-        // Hide host until we can size Plotly at least once (optional).
-        setHostHidden(true);
+        function clearTransitionTargets() {
+          for (const target of transitionTargets) {
+            try { target.removeEventListener("transitionend", onTransitionEnd); } catch (e) {}
+          }
+          transitionTargets = [];
+        }
 
-        async function doResize(reason, requestId) {
-          emit(model, debug, "resize_attempt_started", "started", Object.assign(identity(), { reason, request_id: requestId || null }));
-          host = resolveHost();
-          if (!host) return false;
+        function bindTransitionTargets(targets) {
+          clearTransitionTargets();
+          for (const target of targets) {
+            try {
+              target.addEventListener("transitionend", onTransitionEnd);
+              transitionTargets.push(target);
+            } catch (e) {}
+          }
+        }
 
-          // refresh clip in case DOM reparenting occurred
-          clip = findClipAncestor(host);
+        function disconnectObservers() {
+          try { if (roHost) roHost.disconnect(); } catch (e) {}
+          try { if (roClip) roClip.disconnect(); } catch (e) {}
+          try { if (moHost) moHost.disconnect(); } catch (e) {}
+          try { if (moAncestors) moAncestors.disconnect(); } catch (e) {}
+          try { if (ioHost) ioHost.disconnect(); } catch (e) {}
+          roHost = null;
+          roClip = null;
+          moHost = null;
+          moAncestors = null;
+          ioHost = null;
+          clearTransitionTargets();
+        }
 
-          const plotEl = findPlotEl(host);
-          if (!plotEl) {
-            safeLog(debug, "Plot element not found yet:", reason);
+        function clearFollowups() {
+          if (follow1) clearTimeout(follow1);
+          if (follow2) clearTimeout(follow2);
+          follow1 = null;
+          follow2 = null;
+        }
+
+        function clearRecovery() {
+          recoveryToken += 1;
+          for (const timerId of recoveryTimers) {
+            clearTimeout(timerId);
+          }
+          recoveryTimers = [];
+        }
+
+        function scheduleRecovery(reason, requestId) {
+          clearRecovery();
+          const token = recoveryToken;
+          const delays = [0, 40, 120, 240, 500, 900, 1500];
+          recoveryTimers = delays.map((delay, index) => {
+            return setTimeout(() => {
+              if (destroyed || token !== recoveryToken) return;
+              debouncedResize({
+                reason: `${reason}:recovery${index + 1}`,
+                requestId: requestId || null,
+                force: true,
+              });
+              if (index === delays.length - 1) {
+                recoveryTimers = [];
+              }
+            }, delay);
+          });
+        }
+
+        function refreshObservers() {
+          const nextHost = resolveHost();
+          const nextClip = nextHost ? findClipAncestor(nextHost) : null;
+          if (nextHost === host && nextClip === clip) {
+            return;
+          }
+
+          disconnectObservers();
+          host = nextHost;
+          clip = nextClip;
+          lastIntersection = null;
+
+          if (!host) return;
+
+          roHost = new ResizeObserver(() => schedule("ResizeObserver:host", null, false));
+          roHost.observe(host);
+
+          if (clip && clip !== host) {
+            roClip = new ResizeObserver(() => schedule("ResizeObserver:clip", null, false));
+            roClip.observe(clip);
+          }
+
+          moHost = new MutationObserver(() => schedule("MutationObserver:host", null, true));
+          moHost.observe(host, { childList: true, subtree: true });
+
+          const ancestorTargets = [host, ...collectAncestorChain(host, 12)];
+          moAncestors = new MutationObserver(() => schedule("MutationObserver:ancestor", null, true));
+          for (const target of ancestorTargets) {
+            try {
+              moAncestors.observe(target, {
+                attributes: true,
+                attributeFilter: ["style", "class", "hidden", "open", "aria-hidden", "aria-expanded"],
+              });
+            } catch (e) {}
+          }
+          bindTransitionTargets(ancestorTargets);
+
+          if (typeof IntersectionObserver === "function") {
+            ioHost = new IntersectionObserver((entries) => {
+              const entry = entries && entries[0] ? entries[0] : null;
+              lastIntersection = entry ? !!entry.isIntersecting : lastIntersection;
+              schedule("IntersectionObserver", null, true);
+            }, { root: null, threshold: [0, 0.01, 0.5, 1] });
+            ioHost.observe(host);
+          }
+
+          if (model.get("defer_reveal") && !revealed) {
+            setHostHidden(true);
+          } else {
+            setHostHidden(false);
+          }
+        }
+
+        function publishState(state, fields) {
+          syncTraits(model, Object.assign({ frontend_ready: true, frontend_state: state }, fields || {}));
+        }
+
+        function currentGeometry(reason, requestId, plotEl) {
+          const hostSize = pxSizeOf(host);
+          const clipSize = clip ? pxSizeOf(clip) : { w: 0, h: 0 };
+          const effective = effectiveSize(host, clip);
+          const visibility = hostVisibility(host, lastIntersection);
+          return {
+            state: "ready",
+            host_connected: visibility.connected,
+            host_visible: visibility.visible,
+            plot_found: !!plotEl,
+            last_reason: reason || "",
+            last_request_id: requestId || "",
+            host_width: hostSize.w,
+            host_height: hostSize.h,
+            clip_width: clipSize.w,
+            clip_height: clipSize.h,
+            measured_width: effective.w,
+            measured_height: effective.h,
+          };
+        }
+
+        function markWaiting(state, outcome, reason, requestId, plotEl, extra) {
+          failureCount += 1;
+          const geometry = currentGeometry(reason, requestId, plotEl);
+          publishState(state, Object.assign({}, geometry, {
+            frontend_state: state,
+            last_outcome: outcome,
+            last_error: (extra && extra.last_error) || "",
+            failure_count: failureCount,
+            resize_count: resizeCount,
+          }, extra || {}));
+          emit(model, debug, "resize_waiting", "waiting", Object.assign(identity(), {
+            state,
+            outcome,
+            reason: reason || "",
+            request_id: requestId || null,
+            host_w: geometry.host_width,
+            host_h: geometry.host_height,
+            clip_w: geometry.clip_width,
+            clip_h: geometry.clip_height,
+            effective_w: geometry.measured_width,
+            effective_h: geometry.measured_height,
+            failure_count: failureCount,
+          }));
+          scheduleRecovery(reason || outcome, requestId || null);
+          return false;
+        }
+
+        async function doResize(reason, requestId, force) {
+          emit(model, debug, "resize_attempt_started", "started", Object.assign(identity(), {
+            reason: reason || "",
+            request_id: requestId || null,
+            force: !!force,
+          }));
+
+          refreshObservers();
+          if (!host) {
+            publishState("waiting_for_host", {
+              frontend_ready: true,
+              host_connected: false,
+              host_visible: false,
+              plot_found: false,
+              last_reason: reason || "",
+              last_request_id: requestId || "",
+              last_outcome: "waiting_for_host",
+              last_error: "",
+              failure_count: failureCount,
+              resize_count: resizeCount,
+            });
+            emit(model, debug, "resize_waiting", "waiting", Object.assign(identity(), {
+              state: "waiting_for_host",
+              outcome: "waiting_for_host",
+              reason: reason || "",
+              request_id: requestId || null,
+            }));
+            scheduleRecovery(reason || "waiting_for_host", requestId || null);
             return false;
           }
 
-          const cur = effectiveSize(host, clip);
-          if (!(cur.w > 0 && cur.h > 0)) return false;
+          clip = findClipAncestor(host);
+          const plotEl = findPlotEl(host);
+          const visibility = hostVisibility(host, lastIntersection);
+          const geometry = currentGeometry(reason, requestId, plotEl);
+
+          if (!plotEl) {
+            return markWaiting("waiting_for_plot", "waiting_for_plot", reason, requestId, plotEl, null);
+          }
+          if (!visibility.connected || !visibility.visible) {
+            return markWaiting("waiting_for_visibility", "waiting_for_visibility", reason, requestId, plotEl, null);
+          }
+          if (!(geometry.measured_width > 0 && geometry.measured_height > 0)) {
+            return markWaiting("waiting_for_measurement", "waiting_for_measurement", reason, requestId, plotEl, null);
+          }
 
           const minDelta = clampInt(model.get("min_delta_px"), 2);
-          const dw = Math.abs(cur.w - last.w);
-          const dh = Math.abs(cur.h - last.h);
+          const dw = Math.abs(geometry.measured_width - lastApplied.w);
+          const dh = Math.abs(geometry.measured_height - lastApplied.h);
+          if (!force && revealed && dw < minDelta && dh < minDelta) {
+            clearRecovery();
+            publishState("ready", Object.assign({}, geometry, {
+              last_completed_reason: reason || model.get("last_completed_reason") || "",
+              last_completed_request_id: requestId || model.get("last_completed_request_id") || "",
+              last_outcome: "skipped_min_delta",
+              last_error: "",
+              pending_reason: "",
+              pending_request_id: "",
+              failure_count: failureCount,
+              resize_count: resizeCount,
+            }));
+            emit(model, debug, "resize_skipped", "completed", Object.assign(identity(), {
+              outcome: "skipped_min_delta",
+              reason: reason || "",
+              request_id: requestId || null,
+              host_w: geometry.host_width,
+              host_h: geometry.host_height,
+              effective_w: geometry.measured_width,
+              effective_h: geometry.measured_height,
+            }));
+            return true;
+          }
 
-          // If already stable/visible, ignore tiny jitter.
-          if (revealed && dw < minDelta && dh < minDelta) return true;
+          lastApplied = { w: geometry.measured_width, h: geometry.measured_height };
+          applyWidthClamp(plotEl, geometry.measured_width);
+          setPlotHeights(plotEl, geometry.measured_height);
 
-          last = cur;
-
-          // Apply size hints directly to Plotly DOM before requesting Plotly resize.
-          applyWidthClamp(plotEl, cur.w);
-          setPlotHeights(plotEl, cur.h);
-
-          await plotlyResize(plotEl);
+          try {
+            await plotlyResize(plotEl);
+          } catch (error) {
+            return markWaiting(
+              "waiting_for_plotly",
+              "plotly_resize_failed",
+              reason,
+              requestId,
+              plotEl,
+              { last_error: String(error || "Plotly resize failed") },
+            );
+          }
 
           const mode = model.get("autorange_mode") || "none";
           didAutorangeOnce = await maybeAutorange(plotEl, mode, didAutorangeOnce, debug);
@@ -502,6 +657,31 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
             setHostHidden(false);
             revealed = true;
           }
+          clearRecovery();
+          resizeCount += 1;
+          publishState("ready", Object.assign({}, geometry, {
+            last_completed_reason: reason || model.get("last_completed_reason") || "",
+            last_completed_request_id: requestId || model.get("last_completed_request_id") || "",
+            last_outcome: "resized",
+            last_error: "",
+            pending_reason: "",
+            pending_request_id: "",
+            failure_count: failureCount,
+            resize_count: resizeCount,
+          }));
+          emit(model, debug, "resize_applied", "completed", Object.assign(identity(), {
+            outcome: "resized",
+            reason: reason || "",
+            request_id: requestId || null,
+            force: !!force,
+            host_w: geometry.host_width,
+            host_h: geometry.host_height,
+            clip_w: geometry.clip_width,
+            clip_h: geometry.clip_height,
+            effective_w: geometry.measured_width,
+            effective_h: geometry.measured_height,
+            resize_count: resizeCount,
+          }));
           return true;
         }
 
@@ -541,76 +721,111 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
           return enqueue;
         }
 
-        function clearFollowups() {
-          if (follow1) clearTimeout(follow1);
-          if (follow2) clearTimeout(follow2);
-          follow1 = follow2 = null;
-        }
-
-        function schedule(reason, requestId) {
+        function schedule(reason, requestId, force) {
           clearFollowups();
           const wait = clampInt(model.get("debounce_ms"), 60);
           const t1 = clampInt(model.get("followup_ms_1"), 80);
           const t2 = clampInt(model.get("followup_ms_2"), 250);
 
-          debouncedResize({ reason, requestId: requestId || null });
-
-          // Per-instance follow-ups: helps with JupyterLab sidebar transitions/animations.
-          follow1 = setTimeout(() => { debouncedResize({ reason: reason + ":follow1", requestId: requestId || null }); }, wait + t1);
-          follow2 = setTimeout(() => { debouncedResize({ reason: reason + ":follow2", requestId: requestId || null }); }, wait + t2);
+          debouncedResize({ reason, requestId: requestId || null, force: !!force });
+          follow1 = setTimeout(() => {
+            debouncedResize({ reason: `${reason}:follow1`, requestId: requestId || null, force: true });
+          }, wait + t1);
+          follow2 = setTimeout(() => {
+            debouncedResize({ reason: `${reason}:follow2`, requestId: requestId || null, force: true });
+          }, wait + t2);
         }
 
         const debouncedResize = createQueuedDebouncer(
-          (payload) => { doResize(payload.reason, payload.requestId); },
+          (payload) => {
+            doResize(payload.reason, payload.requestId, !!payload.force);
+          },
           () => clampInt(model.get("debounce_ms"), 60),
           true,
         );
 
-        // Observe host size changes.
-        roHost = new ResizeObserver(() => schedule("ResizeObserver:host"));
-        roHost.observe(host);
-
-        // Observe clip viewport too (this is what changes when side panes constrain visible width).
-        if (clip && clip !== host) {
-          roClip = new ResizeObserver(() => schedule("ResizeObserver:clip"));
-          roClip.observe(clip);
-        }
-
-        // Wait for Plotly to insert DOM, then resize.
-        mo = new MutationObserver(() => {
-          if (findPlotEl(resolveHost())) schedule("MutationObserver");
-        });
-        mo.observe(host, { childList: true, subtree: true });
-
-        // Custom messages (Python-side reflow)
         const onMsg = (msg) => {
-          if (msg && msg.type === "reflow") schedule(msg.reason || "msg:reflow", msg.request_id || null);
+          if (msg && msg.type === "reflow") {
+            syncTraits(model, {
+              pending_reason: msg.reason || "msg:reflow",
+              pending_request_id: msg.request_id || "",
+              last_reason: msg.reason || "msg:reflow",
+              last_request_id: msg.request_id || "",
+            });
+            schedule(msg.reason || "msg:reflow", msg.request_id || null, msg.force !== false);
+          }
         };
-        model.on("msg:custom", onMsg);
-
-        // React to trait changes
-        const onAutorangeChange = () => schedule("change:autorange_mode");
+        const onAutorangeChange = () => schedule("change:autorange_mode", null, true);
         const onRevealChange = () => {
-          if (!model.get("defer_reveal")) setHostHidden(false);
-          schedule("change:defer_reveal");
+          if (!model.get("defer_reveal")) {
+            setHostHidden(false);
+            revealed = true;
+          } else if (!revealed) {
+            setHostHidden(true);
+          }
+          schedule("change:defer_reveal", null, true);
         };
+        const onDebugChange = () => {
+          debug = !!model.get("debug_js");
+        };
+        const onHostSelectorChange = () => {
+          refreshObservers();
+          schedule("change:host_selector", null, true);
+        };
+        const onReflowTokenChange = () => {
+          const token = clampInt(model.get("reflow_token"), 0);
+          if (token <= handledReflowToken) return;
+          handledReflowToken = token;
+          schedule(model.get("pending_reason") || "trait:reflow_token", model.get("pending_request_id") || null, true);
+        };
+        const onWindowResize = () => schedule("window:resize", null, false);
+        const onVisibilityChange = () => schedule("document:visibilitychange", null, true);
+        const onTransitionEnd = () => schedule("transitionend", null, true);
+
+        model.on("msg:custom", onMsg);
         model.on("change:autorange_mode", onAutorangeChange);
         model.on("change:defer_reveal", onRevealChange);
+        model.on("change:debug_js", onDebugChange);
+        model.on("change:host_selector", onHostSelectorChange);
+        model.on("change:reflow_token", onReflowTokenChange);
+        window.addEventListener("resize", onWindowResize);
+        document.addEventListener("visibilitychange", onVisibilityChange);
 
+        refreshObservers();
+        if (model.get("defer_reveal") && !revealed) {
+          setHostHidden(true);
+        } else {
+          setHostHidden(false);
+        }
+        publishState("frontend_mounted", {
+          host_connected: !!(host && host.isConnected),
+          host_visible: false,
+          plot_found: false,
+          last_reason: "render",
+          last_request_id: "",
+          last_outcome: "mounted",
+          last_error: "",
+          resize_count: resizeCount,
+          failure_count: failureCount,
+        });
         emit(model, debug, "driver_mounted", "completed", Object.assign(identity(), { reason: "render" }));
-        // Initial sizing attempt.
-        schedule("init", null);
+        schedule("init", null, true);
+        onReflowTokenChange();
 
-        // Cleanup when widget is disposed.
         return () => {
-          try { clearFollowups(); } catch (e) {}
+          destroyed = true;
+          clearFollowups();
+          clearRecovery();
           try { debouncedResize.cancel(); } catch (e) {}
-          try { if (roHost) roHost.disconnect(); } catch (e) {}
-          try { if (roClip) roClip.disconnect(); } catch (e) {}
-          try { if (mo) mo.disconnect(); } catch (e) {}
+          disconnectObservers();
           try { model.off("msg:custom", onMsg); } catch (e) {}
           try { model.off("change:autorange_mode", onAutorangeChange); } catch (e) {}
           try { model.off("change:defer_reveal", onRevealChange); } catch (e) {}
+          try { model.off("change:debug_js", onDebugChange); } catch (e) {}
+          try { model.off("change:host_selector", onHostSelectorChange); } catch (e) {}
+          try { model.off("change:reflow_token", onReflowTokenChange); } catch (e) {}
+          try { window.removeEventListener("resize", onWindowResize); } catch (e) {}
+          try { document.removeEventListener("visibilitychange", onVisibilityChange); } catch (e) {}
           try { setHostHidden(false); } catch (e) {}
           emit(model, debug, "driver_disposed", "completed", Object.assign(identity(), {}));
         };
@@ -618,43 +833,56 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
     };
     """
 
-    def reflow(self, *, reason: str = "manual", request_id: str | None = None, view_id: str | None = None, figure_id: str | None = None, pane_id: str | None = None) -> None:
-        """
-        Request a resize/reflow from the frontend.
+    def geometry_snapshot(self) -> PlotlyPaneGeometry:
+        """Return the latest browser-side geometry snapshot."""
+        return PlotlyPaneGeometry.from_driver(self)
 
-        This sends a custom message handled by the frontend driver, which schedules
-        a debounced resize plus follow-up resizes.
+    def geometry_snapshot_dict(self) -> dict[str, Any]:
+        """Return the latest browser-side geometry snapshot as a dictionary."""
+        return self.geometry_snapshot().as_dict()
 
-        Use this when you programmatically alter layout in ways that may not be
-        detected (or where you want deterministic correction), e.g.:
+    def queue_reflow(self, *, reason: str = "manual", request_id: str | None = None) -> str:
+        """Persist one reflow request so it survives frontend mount timing."""
+        resolved_request_id = request_id or new_request_id()
+        self.pending_reason = str(reason)
+        self.pending_request_id = str(resolved_request_id)
+        self.last_reason = str(reason)
+        self.last_request_id = str(resolved_request_id)
+        self.last_outcome = "queued"
+        self.last_error = ""
+        self.reflow_token = int(self.reflow_token or 0) + 1
+        return str(resolved_request_id)
 
-        - Toggling a sidebar or accordion that changes available width
-        - Showing/hiding sibling widgets
-        - Changing CSS/layout attributes that affect size
-        """
-        self.send({"type": "reflow", "reason": reason, "request_id": request_id, "view_id": view_id or self.view_id, "figure_id": figure_id or self.figure_id, "pane_id": pane_id or self.pane_id})
+    def reflow(
+        self,
+        *,
+        reason: str = "manual",
+        request_id: str | None = None,
+        view_id: str | None = None,
+        figure_id: str | None = None,
+        pane_id: str | None = None,
+        force: bool = True,
+        persist: bool = True,
+    ) -> str:
+        """Request a resize/reflow from the frontend and return the request id."""
+        resolved_request_id = self.queue_reflow(reason=reason, request_id=request_id) if persist else (request_id or new_request_id())
+        self.send(
+            {
+                "type": "reflow",
+                "reason": reason,
+                "request_id": resolved_request_id,
+                "view_id": view_id or self.view_id,
+                "figure_id": figure_id or self.figure_id,
+                "pane_id": pane_id or self.pane_id,
+                "force": bool(force),
+            }
+        )
+        return str(resolved_request_id)
 
 
 @dataclass(frozen=True)
 class PlotlyPaneStyle:
-    """
-    Visual styling options for `PlotlyPane`.
-
-    Parameters
-    ----------
-    padding_px:
-        Inner padding (in pixels) applied around the host container. This is
-        applied by the outer wrapper box.
-
-    border:
-        CSS border string (e.g. "1px solid #ddd").
-
-    border_radius_px:
-        Corner radius in pixels.
-
-    overflow:
-        Overflow policy for the wrapper. Default "hidden" is typical for plots.
-    """
+    """Visual styling options for :class:`PlotlyPane`."""
 
     padding_px: int = 0
     border: str = "1px solid #ddd"
@@ -663,87 +891,25 @@ class PlotlyPaneStyle:
 
 
 class PlotlyPane:
-    """
-    Styled, responsive plot area for a Plotly `FigureWidget` (or compatible widget).
-
-    This is a small Python-side wrapper that:
-
-    - creates a “host” container with stable flex sizing rules,
-    - inserts the Plotly widget plus a hidden `PlotlyResizeDriver`,
-    - applies user-facing styling via an outer wrapper box,
-    - exposes the wrapper as `.widget` for embedding in any ipywidgets layout.
-
-    Outer layout contract
-    ---------------------
-
-    The pane only works reliably if `pane.widget` is given a real computed pixel
-    height (directly or via its ancestors). Common patterns:
-
-    - Put it inside a container with a fixed height: `"400px"`.
-    - Put it inside a container with viewport height: `"70vh"`.
-    - Put it in a flex layout where an ancestor defines height and this pane
-      has `height="100%"`.
-
-    Parameters
-    ----------
-    figw:
-        The widget that renders a Plotly figure. Typically
-        `plotly.graph_objects.FigureWidget`, but any widget that creates a Plotly
-        DOM element with class `.js-plotly-plot` under this pane’s host may work.
-
-    style:
-        `PlotlyPaneStyle` controlling padding/border/radius/overflow of the outer
-        wrapper.
-
-    autorange_mode:
-        One of:
-        - "none": never autorange after resizing
-        - "once": autorange at most once after a successful resize
-        - "always": autorange after every resize
-
-        Autorange is performed via `Plotly.relayout` in the frontend.
-
-    defer_reveal:
-        If True, hides the host (opacity 0) until the driver performs a first
-        successful resize. This helps reduce initial “wrong size flash”.
-
-    debounce_ms:
-        Debounce delay for resize scheduling (milliseconds).
-
-    min_delta_px:
-        Ignore tiny size jitter smaller than this threshold (after reveal).
-
-    debug_js:
-        Enable frontend console logs for troubleshooting.
-
-    Attributes
-    ----------
-    driver:
-        The underlying `PlotlyResizeDriver` instance.
-
-    Notes
-    -----
-    The `PlotlyResizeDriver` is inserted as a hidden sibling of the Plotly widget
-    inside the host. By default, it uses its DOM parent as the host; no selector
-    is required for the common case.
-    """
+    """Styled, responsive plot area for a Plotly ``FigureWidget``."""
 
     def __init__(
         self,
         figw: W.Widget,
         *,
         style: PlotlyPaneStyle = PlotlyPaneStyle(),  # noqa: B008
-        autorange_mode: str = "none",  # "none" | "once" | "always"
+        autorange_mode: str = "none",
         defer_reveal: bool = True,
         debounce_ms: int = 60,
         min_delta_px: int = 2,
         debug_js: bool = False,
     ):
-        """Initialize a pane that keeps Plotly sized to its widget container."""
         self.debug_pane_id = new_debug_id("pane")
         self._layout_event_emitter = None
         self._layout_debug_context: dict[str, Any] = {"pane_id": self.debug_pane_id}
-        # Anywidget driver: performs the actual DOM sizing + Plotly resize calls.
+
+        _apply_default_fill_hints(figw)
+
         self.driver = PlotlyResizeDriver(
             autorange_mode=autorange_mode,
             defer_reveal=defer_reveal,
@@ -752,11 +918,30 @@ class PlotlyPane:
             debug_js=debug_js,
             pane_id=self.debug_pane_id,
         )
+        try:
+            self.driver.layout.display = "none"
+            self.driver.layout.width = "0px"
+            self.driver.layout.height = "0px"
+        except Exception:  # pragma: no cover - defensive widget boundary
+            pass
 
-        # Host container: owns pixel height (via outer layout), keeps Plotly flexible.
-        # The driver is a hidden child and does not affect layout.
+        self._plot_slot = W.Box(
+            [figw],
+            layout=W.Layout(
+                width="100%",
+                height="100%",
+                min_width="0",
+                min_height="0",
+                display="flex",
+                flex_flow="column",
+                overflow="hidden",
+                flex="1 1 auto",
+                align_self="stretch",
+            ),
+        )
+
         self._host = W.Box(
-            [figw, self.driver],
+            [self._plot_slot, self.driver],
             layout=W.Layout(
                 width="100%",
                 height="100%",
@@ -768,7 +953,6 @@ class PlotlyPane:
             ),
         )
 
-        # Wrapper container: applies visual styling (padding/border/radius/overflow).
         self.driver.on_msg(self._handle_driver_message)
 
         self._wrap = W.Box(
@@ -786,21 +970,38 @@ class PlotlyPane:
             ),
         )
 
-
-    def bind_layout_debug(self, emitter, **context: Any) -> None:
+    def bind_layout_debug(self, emitter: Any, **context: Any) -> None:
         self._layout_event_emitter = emitter
-        self._layout_debug_context = {**self._layout_debug_context, **context, "pane_id": self.debug_pane_id}
+        self._layout_debug_context = {
+            **self._layout_debug_context,
+            **context,
+            "pane_id": self.debug_pane_id,
+        }
         self.driver.emit_layout_events = True
         self.driver.figure_id = str(self._layout_debug_context.get("figure_id", ""))
         self.driver.view_id = str(self._layout_debug_context.get("view_id", ""))
         self.driver.pane_id = self.debug_pane_id
 
-    def _emit_layout_event(self, event: str, *, source: str, phase: str, level: int = logging.DEBUG, **fields: Any) -> None:
+    def _emit_layout_event(
+        self,
+        event: str,
+        *,
+        source: str,
+        phase: str,
+        level: int = logging.DEBUG,
+        **fields: Any,
+    ) -> None:
         if self._layout_event_emitter is None:
             return
         payload = dict(self._layout_debug_context)
         payload.update(fields)
-        self._layout_event_emitter(event=event, source=source, phase=phase, level=level, **payload)
+        self._layout_event_emitter(
+            event=event,
+            source=source,
+            phase=phase,
+            level=level,
+            **payload,
+        )
 
     def _handle_driver_message(self, _widget: Any, content: Any, _buffers: Any) -> None:
         if not isinstance(content, dict) or content.get("type") != "layout_event":
@@ -813,29 +1014,69 @@ class PlotlyPane:
 
     @property
     def widget(self) -> W.Widget:
-        """
-        The widget to embed in your outer ipywidgets layout.
-
-        This is the outer wrapper box that applies `PlotlyPaneStyle`. Ensure that
-        some ancestor provides a real pixel height so the driver can size Plotly.
-        """
+        """Return the widget that should be embedded into outer layouts."""
         return self._wrap
 
-    def reflow(self, *, reason: str = "manual", request_id: str | None = None, view_id: str | None = None, figure_id: str | None = None, pane_id: str | None = None) -> None:
-        """
-        Trigger a programmatic resize/reflow.
+    @property
+    def geometry(self) -> PlotlyPaneGeometry:
+        """Return the latest frontend geometry snapshot."""
+        return self.driver.geometry_snapshot()
 
-        Calls `PlotlyResizeDriver.reflow()`, which schedules a resize in the
-        frontend. Use this after known layout changes initiated by Python code.
-        """
+    def geometry_snapshot(self) -> PlotlyPaneGeometry:
+        """Return the latest frontend geometry snapshot."""
+        return self.geometry
+
+    def debug_snapshot(self) -> dict[str, Any]:
+        """Return a combined widget-tree and frontend-geometry snapshot."""
+        snap = {
+            "pane_id": self.debug_pane_id,
+            "wrap_children": len(self._wrap.children),
+            "host_children": len(self._host.children),
+            "pane_widget_width": self._wrap.layout.width,
+            "pane_widget_height": self._wrap.layout.height,
+            "host_display": self._host.layout.display,
+            "host_width": self._host.layout.width,
+            "host_height": self._host.layout.height,
+            "host_flex_flow": self._host.layout.flex_flow,
+            "plot_slot_width": self._plot_slot.layout.width,
+            "plot_slot_height": self._plot_slot.layout.height,
+            "driver_autorange_mode": self.driver.autorange_mode,
+            "driver_defer_reveal": self.driver.defer_reveal,
+            "driver_debounce_ms": self.driver.debounce_ms,
+            "driver_min_delta_px": self.driver.min_delta_px,
+        }
+        for key, value in self.geometry.as_dict().items():
+            snap[f"geometry_{key}"] = value
+        return snap
+
+    def layout_snapshot(self) -> dict[str, Any]:
+        """Alias for :meth:`debug_snapshot` used by notebook diagnostics."""
+        return self.debug_snapshot()
+
+    def reflow(
+        self,
+        *,
+        reason: str = "manual",
+        request_id: str | None = None,
+        view_id: str | None = None,
+        figure_id: str | None = None,
+        pane_id: str | None = None,
+        force: bool = True,
+    ) -> str:
+        """Trigger a programmatic resize/reflow and return the request id."""
+        resolved_request_id = self.driver.queue_reflow(
+            reason=reason,
+            request_id=(request_id or new_request_id()),
+        )
         self._emit_layout_event(
             "reflow_message_sent",
             source="PlotlyPane",
             phase="sent",
             reason=reason,
-            request_id=request_id,
+            request_id=resolved_request_id,
             view_id=view_id,
             figure_id=figure_id,
+            force=force,
         )
         reflow_callable = self.driver.reflow
         try:
@@ -845,19 +1086,34 @@ class PlotlyPane:
 
         accepts_kwargs = (
             parameters is None
-            or any(param.kind is inspect.Parameter.VAR_KEYWORD for param in parameters.values())
-            or any(name in parameters for name in ("reason", "request_id", "view_id", "figure_id", "pane_id"))
+            or any(
+                param.kind is inspect.Parameter.VAR_KEYWORD
+                for param in parameters.values()
+            )
+            or any(
+                name in parameters
+                for name in (
+                    "reason",
+                    "request_id",
+                    "view_id",
+                    "figure_id",
+                    "pane_id",
+                    "force",
+                    "persist",
+                )
+            )
         )
         if accepts_kwargs:
             reflow_callable(
                 reason=reason,
-                request_id=request_id,
+                request_id=resolved_request_id,
                 view_id=view_id,
                 figure_id=figure_id,
                 pane_id=(pane_id or self.debug_pane_id),
+                force=force,
+                persist=False,
             )
-            return
+            return str(resolved_request_id)
 
-        # Backwards-compatible fallback for tests or monkeypatched drivers that
-        # still expose a zero-argument reflow callable.
         reflow_callable()
+        return str(resolved_request_id)

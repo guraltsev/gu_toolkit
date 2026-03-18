@@ -321,6 +321,7 @@ class Figure:
         self._layout.observe_full_width_change(
             lambda _is_full: self._request_active_view_reflow("full_width_change")
         )
+        self._layout.bind_view_reflow(self._request_view_reflow)
 
         # 4. Views facade and model registry
         self._view_manager = ViewManager()
@@ -374,19 +375,13 @@ class Figure:
         snap = {
             "content_wrapper_display": self._layout.content_wrapper.layout.display,
             "content_wrapper_flex_flow": self._layout.content_wrapper.layout.flex_flow,
+            "content_layout_mode": self._layout.content_layout_mode,
             "sidebar_display": self._layout.sidebar_container.layout.display,
             "view_stage_height": self._layout.view_stage.layout.height,
         }
         if active_id is not None and active_id in self.views:
             pane = self.views[active_id].pane
-            snap.update({
-                "pane_id": pane.debug_pane_id,
-                "pane_widget_width": pane.widget.layout.width,
-                "pane_widget_height": pane.widget.layout.height,
-                "host_display": pane._host.layout.display,
-                "host_width": pane._host.layout.width,
-                "host_height": pane._host.layout.height,
-            })
+            snap.update(pane.debug_snapshot())
         return snap
 
     # --- Figure-level properties ---
@@ -513,19 +508,82 @@ class Figure:
             "yaxis.range",
         )
 
+    def _request_view_reflow(self, view_id: str, reason: str) -> str | None:
+        """Explicitly reflow one view pane after a geometry change."""
+        if not self._view_manager.views:
+            self._emit_layout_event(
+                "reflow_requested",
+                source="Figure",
+                phase="skipped",
+                level=logging.WARNING,
+                reason=reason,
+                outcome="no_views",
+                view_id=view_id,
+            )
+            return None
+
+        target_view_id = str(view_id)
+        if target_view_id not in self.views:
+            self._emit_layout_event(
+                "reflow_requested",
+                source="Figure",
+                phase="skipped",
+                level=logging.WARNING,
+                reason=reason,
+                outcome="unknown_view",
+                view_id=target_view_id,
+            )
+            return None
+
+        view = self.views[target_view_id]
+        request_id = new_request_id()
+        self._emit_layout_event(
+            "reflow_requested",
+            source="Figure",
+            phase="requested",
+            level=logging.INFO,
+            reason=reason,
+            request_id=request_id,
+            view_id=view.id,
+            pane_id=view.pane.debug_pane_id,
+            snapshot=self._python_layout_snapshot(view.id),
+        )
+        try:
+            view.pane.reflow(
+                reason=reason,
+                request_id=request_id,
+                view_id=view.id,
+                figure_id=self._layout_debug_figure_id,
+            )
+        except Exception:  # pragma: no cover - defensive widget boundary
+            self._emit_layout_event(
+                "reflow_send_failed",
+                source="Figure",
+                phase="failed",
+                level=logging.ERROR,
+                reason=reason,
+                request_id=request_id,
+                view_id=view.id,
+                pane_id=view.pane.debug_pane_id,
+            )
+            logger.debug("View reflow failed", exc_info=True)
+            return None
+        return request_id
+
     def _request_active_view_reflow(self, reason: str) -> None:
         """Explicitly reflow the active view pane after geometry changes."""
         if not self._view_manager.views:
-            self._emit_layout_event("reflow_requested", source="Figure", phase="skipped", level=logging.WARNING, reason=reason, outcome="no_views")
+            self._request_view_reflow("", reason)
             return
-        view = self.views.current
-        request_id = new_request_id()
-        self._emit_layout_event("reflow_requested", source="Figure", phase="requested", level=logging.INFO, reason=reason, request_id=request_id, view_id=view.id, pane_id=view.pane.debug_pane_id, snapshot=self._python_layout_snapshot(view.id))
-        try:
-            view.pane.reflow(reason=reason, request_id=request_id, view_id=view.id, figure_id=self._layout_debug_figure_id)
-        except Exception:  # pragma: no cover - defensive widget boundary
-            self._emit_layout_event("reflow_send_failed", source="Figure", phase="failed", level=logging.ERROR, reason=reason, request_id=request_id, view_id=view.id, pane_id=view.pane.debug_pane_id)
-            logger.debug("Active view reflow failed", exc_info=True)
+        self._request_view_reflow(self.views.current_id, reason)
+
+    def reflow_layout(self, *, reason: str = "manual", view_id: str | None = None) -> str | None:
+        """Public helper to request a pane reflow for the active or named view."""
+        target_view_id = str(view_id) if view_id is not None else (self.views.current_id if self._view_manager.views else "")
+        if not target_view_id:
+            self._request_view_reflow(target_view_id, reason)
+            return None
+        return self._request_view_reflow(target_view_id, reason)
 
     def add_view(
         self,

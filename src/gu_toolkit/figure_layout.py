@@ -67,6 +67,8 @@ class FigureLayout:
         self._ordered_view_ids: tuple[str, ...] = ()
         self._active_view_id: str | None = None
         self._suspend_view_selector_events = False
+        self._reflow_callback: Callable[[str, str], Any] | None = None
+        self._content_layout_mode = "wrapped"
 
         # 1. Title bar
         self.title_html = widgets.HTMLMath(
@@ -99,7 +101,7 @@ class FigureLayout:
             layout=widgets.Layout(
                 width="100%",
                 height="60vh",
-                min_width="320px",
+                min_width="0",
                 min_height="260px",
                 margin="0px",
                 padding="0px",
@@ -164,9 +166,11 @@ class FigureLayout:
                 margin="0px",
                 padding="0px 0px 0px 10px",
                 flex="0 1 380px",
-                min_width="300px",
+                min_width="260px",
                 max_width="400px",
                 display="none",
+                overflow="auto",
+                box_sizing="border-box",
             ),
         )
 
@@ -174,7 +178,11 @@ class FigureLayout:
         self.left_panel = widgets.VBox(
             [self.view_selector, self.view_stage],
             layout=widgets.Layout(
-                width="100%", flex="1 1 560px", margin="0px", padding="0px"
+                width="100%",
+                min_width="0",
+                flex="1 1 560px",
+                margin="0px",
+                padding="0px",
             ),
         )
 
@@ -183,8 +191,10 @@ class FigureLayout:
             layout=widgets.Layout(
                 display="flex",
                 flex_flow="row wrap",
-                align_items="flex-start",
+                align_items="stretch",
                 width="100%",
+                min_width="0",
+                min_height="0",
                 gap="8px",
             ),
         )
@@ -210,10 +220,11 @@ class FigureLayout:
 
         self.root_widget = widgets.VBox(
             [self._titlebar, self.content_wrapper, self.print_area],
-            layout=widgets.Layout(width="100%", position="relative"),
+            layout=widgets.Layout(width="100%", min_width="0", position="relative"),
         )
 
         self.full_width_checkbox.observe(self._on_full_width_change, names="value")
+        self._apply_content_layout_mode(is_full=self.full_width_checkbox.value)
         self._emit_layout_event(
             "layout_initialized",
             phase="completed",
@@ -233,12 +244,56 @@ class FigureLayout:
         payload.update(fields)
         self._layout_event_emitter(event=event, source="FigureLayout", phase=phase, **payload)
 
+    def bind_reflow_request(self, callback: Callable[[str, str], Any] | None) -> None:
+        """Backward-compatible alias for :meth:`bind_view_reflow`."""
+        self._reflow_callback = callback
+
     @property
     def output_widget(self) -> OneShotOutput:
         out = OneShotOutput()
         with out:
             display(self.root_widget)
         return out
+
+    def layout_snapshot(self) -> dict[str, Any]:
+        """Return a structural snapshot of the figure layout widget tree."""
+        pages = {
+            view_id: {
+                "title": page.title,
+                "display": page.host_box.layout.display,
+                "has_widget": page.widget is not None,
+            }
+            for view_id, page in self._view_pages.items()
+        }
+        return {
+            "title": self.title_html.value,
+            "full_width": bool(self.full_width_checkbox.value),
+            "content_layout_mode": self._content_layout_mode,
+            "ordered_view_ids": list(self._ordered_view_ids),
+            "active_view_id": self._active_view_id,
+            "view_selector_display": self.view_selector.layout.display,
+            "content_wrapper": layout_value_snapshot(
+                self.content_wrapper.layout,
+                ("display", "flex_flow", "gap", "width", "min_width", "min_height"),
+            ),
+            "left_panel": layout_value_snapshot(
+                self.left_panel.layout,
+                ("width", "min_width", "flex"),
+            ),
+            "view_stage": layout_value_snapshot(
+                self.view_stage.layout,
+                ("width", "height", "min_width", "min_height", "display", "flex", "overflow"),
+            ),
+            "sidebar": layout_value_snapshot(
+                self.sidebar_container.layout,
+                ("display", "flex", "min_width", "max_width", "width", "padding", "overflow"),
+            ),
+            "print_area": layout_value_snapshot(
+                self.print_area.layout,
+                ("width", "margin"),
+            ),
+            "pages": pages,
+        }
 
     def set_title(self, text: str) -> None:
         self.title_html.value = text
@@ -433,6 +488,15 @@ class FigureLayout:
 
         self.full_width_checkbox.observe(_on_full_width, names="value")
 
+    def bind_view_reflow(self, callback: Callable[[str, str], Any]) -> None:
+        """Register a callback used by compatibility reflow wrappers."""
+        self._reflow_callback = callback
+
+    @property
+    def content_layout_mode(self) -> str:
+        """Return the current high-level content layout mode."""
+        return self._content_layout_mode
+
     # ------------------------------------------------------------------
     # Compatibility wrappers kept for one refactor cycle.
     # ------------------------------------------------------------------
@@ -443,7 +507,8 @@ class FigureLayout:
         *,
         reflow_callback: Callable[[], None] | None = None,
     ) -> None:
-        del reflow_callback
+        if reflow_callback is not None:
+            self.bind_view_reflow(lambda _view_id, _reason: reflow_callback())
         self.ensure_view_page("main", "main")
         self.attach_view_widget("main", widget)
         self.set_view_order(("main",))
@@ -456,7 +521,8 @@ class FigureLayout:
         *,
         reflow_callback: Callable[[], None] | None = None,
     ) -> None:
-        del reflow_callback
+        if reflow_callback is not None:
+            self.bind_view_reflow(lambda _view_id, _reason: reflow_callback())
         self.ensure_view_page(str(view_id), str(view_id))
         self.attach_view_widget(str(view_id), widget)
 
@@ -465,7 +531,22 @@ class FigureLayout:
         self.set_active_view(active_view_id)
 
     def trigger_reflow_for_view(self, view_id: str) -> None:
-        del view_id
+        key = str(view_id)
+        if self._reflow_callback is None:
+            self._emit_layout_event(
+                "reflow_callback_missing",
+                phase="skipped",
+                view_id=key,
+                reason="compatibility_reflow",
+            )
+            return None
+        self._emit_layout_event(
+            "reflow_callback_invoked",
+            phase="requested",
+            view_id=key,
+            reason="compatibility_reflow",
+        )
+        self._reflow_callback(key, "compatibility_reflow")
         return None
 
     def observe_tab_selection(self, callback: Callable[[str], None]) -> None:
@@ -514,13 +595,13 @@ class FigureLayout:
             self._suspend_view_selector_events = False
         self._emit_layout_event("view_selector_refreshed", phase="completed", options=[val for _, val in options], selector_display=self.view_selector.layout.display, active_view_id=self._active_view_id)
 
-    def _on_full_width_change(self, change: dict[str, Any]) -> None:
-        is_full = bool(change["new"])
+    def _apply_content_layout_mode(self, *, is_full: bool) -> None:
         layout = self.content_wrapper.layout
         plot_layout = self.left_panel.layout
         sidebar_layout = self.sidebar_container.layout
 
         if is_full:
+            self._content_layout_mode = "stacked"
             layout.flex_flow = "column"
             plot_layout.flex = "0 0 auto"
             sidebar_layout.flex = "0 0 auto"
@@ -528,10 +609,26 @@ class FigureLayout:
             sidebar_layout.width = "100%"
             sidebar_layout.padding = "0px"
         else:
+            self._content_layout_mode = "wrapped"
             layout.flex_flow = "row wrap"
             plot_layout.flex = "1 1 560px"
             sidebar_layout.flex = "0 1 380px"
             sidebar_layout.max_width = "400px"
             sidebar_layout.width = "auto"
             sidebar_layout.padding = "0px 0px 0px 10px"
-        self._emit_layout_event("full_width_layout_changed", phase="completed", is_full=is_full, content_wrapper=layout_value_snapshot(layout, ("display", "flex_flow", "gap")), left_panel=layout_value_snapshot(plot_layout, ("width", "flex")), sidebar=layout_value_snapshot(sidebar_layout, ("display", "flex", "max_width", "width", "padding")))
+
+    def _on_full_width_change(self, change: dict[str, Any]) -> None:
+        is_full = bool(change["new"])
+        self._apply_content_layout_mode(is_full=is_full)
+        layout = self.content_wrapper.layout
+        plot_layout = self.left_panel.layout
+        sidebar_layout = self.sidebar_container.layout
+        self._emit_layout_event(
+            "full_width_layout_changed",
+            phase="completed",
+            is_full=is_full,
+            layout_mode=self._content_layout_mode,
+            content_wrapper=layout_value_snapshot(layout, ("display", "flex_flow", "gap")),
+            left_panel=layout_value_snapshot(plot_layout, ("width", "min_width", "flex")),
+            sidebar=layout_value_snapshot(sidebar_layout, ("display", "flex", "max_width", "width", "padding")),
+        )

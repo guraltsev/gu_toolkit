@@ -152,7 +152,7 @@ It owns:
 - writing width/height hints into Plotly DOM
 - calling Plotly resize/autorange
 
-This is the part of the system that actually knows whether the plot filled its available area.
+This is the part of the system that actually knows whether the plot filled its available area. It now publishes an explicit frontend geometry snapshot (state, visibility, measured size, last request ids, and resize counters) back to Python for notebook diagnostics and log capture.
 
 ### `Plot`
 `Plot` is about traces and data, not layout.
@@ -264,7 +264,7 @@ Current `view_stage` layout:
 
 - `width="100%"`
 - `height="60vh"`
-- `min_width="320px"`
+- `min_width="0"`
 - `min_height="260px"`
 - `flex="1 1 560px"`
 - `display="flex"`
@@ -306,7 +306,7 @@ Only the active page is switched to `display="flex"`.
 Important consequence: the *visible plot area* is smaller than `_wrap` when padding/border are present.
 
 ### What the Python side does **not** do
-The current code does **not** set an explicit pixel height on the `FigureWidget` itself from Python.
+The current code does **not** set an explicit pixel height on the Plotly figure layout from Python. It only applies fill hints such as `width="100%"`, `height="100%"`, `min_width="0"`, and `min_height="0"` when the embedded widget exposes a real `ipywidgets.Layout`. For Plotly `FigureWidget`, the pane instead uses a dedicated plot slot container with those fill semantics so it does not confuse Plotly's graph layout with widget shell layout.
 
 Instead, the frontend JS later writes height into:
 
@@ -331,7 +331,7 @@ Default state:
 
 - `display="flex"`
 - `flex_flow="row wrap"`
-- `align_items="flex-start"`
+- `align_items="stretch"`
 - `width="100%"`
 - `gap="8px"`
 
@@ -349,7 +349,7 @@ So the plot side is flexible and can grow/shrink with the row.
 `sidebar_container` uses:
 
 - `flex="0 1 380px"`
-- `min_width="300px"`
+- `min_width="260px"`
 - `max_width="400px"`
 - `display="none"` initially
 - left padding in non-full-width mode
