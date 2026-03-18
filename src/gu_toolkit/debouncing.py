@@ -16,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from .layout_logging import LOGGER_NAME, emit_layout_event
+from .layout_logging import LOGGER_NAME, emit_layout_event, is_layout_logger_explicitly_enabled
 
 
 @dataclass
@@ -53,8 +53,11 @@ class QueuedDebouncer:
         if self._event_sink is not None:
             self._event_sink(event=event, source="QueuedDebouncer", phase=phase, level=level, owner=self._name, **fields)
             return
+        debounce_logger = logging.getLogger(f"{LOGGER_NAME}.debounce")
+        if not is_layout_logger_explicitly_enabled(debounce_logger):
+            return
         emit_layout_event(
-            logging.getLogger(f"{LOGGER_NAME}.debounce"),
+            debounce_logger,
             event=event,
             source="QueuedDebouncer",
             phase=phase,

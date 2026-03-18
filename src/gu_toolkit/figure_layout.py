@@ -281,12 +281,23 @@ class FigureLayout:
             self.legend_box.layout.display,
             self.sidebar_container.layout.display,
         )
-        return new_state != old_state
+        changed = new_state != old_state
+        self._emit_layout_event(
+            "sidebar_visibility_changed" if changed else "sidebar_visibility_unchanged",
+            phase="completed",
+            has_params=has_params,
+            has_info=has_info,
+            has_legend=has_legend,
+            sidebar_display=self.sidebar_container.layout.display,
+        )
+        return changed
 
     def ensure_view_page(self, view_id: str, title: str) -> None:
         """Ensure a persistent host page exists for ``view_id``."""
         key = str(view_id)
+        previous_order = self._ordered_view_ids
         page = self._view_pages.get(key)
+        created = False
         if page is None:
             host_box = widgets.Box(
                 children=(),
@@ -300,21 +311,37 @@ class FigureLayout:
                     overflow="hidden",
                 ),
             )
-            self._view_pages[key] = _ViewPage(
+            page = _ViewPage(
                 view_id=key,
                 title=str(title),
                 host_box=host_box,
                 widget=None,
             )
+            self._view_pages[key] = page
             if key not in self._ordered_view_ids:
                 self._ordered_view_ids = (*self._ordered_view_ids, key)
+            created = True
         else:
             page.title = str(title)
+
         self._rebuild_view_stage()
         self._refresh_view_selector()
-        self._emit_layout_event("view_order_changed", phase="completed", ordered_view_ids=list(self._ordered_view_ids))
-        self._emit_layout_event("view_page_removed", phase="completed", view_id=view_id)
-        self._emit_layout_event("view_page_created", phase="completed", view_id=view_id, title=title, host_box=layout_value_snapshot(host_box.layout, ("width", "height", "display", "overflow")))
+        if self._ordered_view_ids != previous_order:
+            self._emit_layout_event(
+                "view_order_changed",
+                phase="completed",
+                ordered_view_ids=list(self._ordered_view_ids),
+            )
+        self._emit_layout_event(
+            "view_page_created" if created else "view_page_updated",
+            phase="completed",
+            view_id=view_id,
+            title=title,
+            host_box=layout_value_snapshot(
+                page.host_box.layout,
+                ("width", "height", "display", "overflow"),
+            ),
+        )
         self._apply_active_page_visibility()
 
     def attach_view_widget(self, view_id: str, widget: widgets.Widget) -> None:
@@ -333,6 +360,7 @@ class FigureLayout:
     def remove_view_page(self, view_id: str) -> None:
         """Remove page bookkeeping for ``view_id`` if present."""
         key = str(view_id)
+        previous_order = self._ordered_view_ids
         page = self._view_pages.pop(key, None)
         if page is None:
             return
@@ -344,6 +372,13 @@ class FigureLayout:
             )
         self._rebuild_view_stage()
         self._refresh_view_selector()
+        if self._ordered_view_ids != previous_order:
+            self._emit_layout_event(
+                "view_order_changed",
+                phase="completed",
+                ordered_view_ids=list(self._ordered_view_ids),
+            )
+        self._emit_layout_event("view_page_removed", phase="completed", view_id=view_id)
         self._apply_active_page_visibility()
 
     def set_view_order(self, view_ids: Sequence[str]) -> None:

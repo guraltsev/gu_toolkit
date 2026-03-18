@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from gu_toolkit.layout_logging import LayoutEventBuffer, emit_layout_event, make_event_emitter, new_request_id
+import logging
+
+from gu_toolkit.layout_logging import (
+    LayoutEventBuffer,
+    emit_layout_event,
+    is_layout_logger_explicitly_enabled,
+    make_event_emitter,
+    new_request_id,
+)
 
 
 def test_request_id_generation_is_stable_and_prefixed() -> None:
@@ -37,3 +45,25 @@ def test_emit_layout_event_flattens_nested_size_fields() -> None:
     assert payload["sizes_host_w"] == 100
     assert payload["sizes_host_h"] == 200
     assert payload["view_id"] == "main"
+
+
+def test_explicit_layout_logger_enablement_ignores_root_logger() -> None:
+    root_logger = logging.getLogger()
+    layout_logger = logging.getLogger("gu_toolkit.layout")
+    figure_logger = logging.getLogger("gu_toolkit.layout.figure")
+
+    old_root = root_logger.level
+    old_layout = layout_logger.level
+    old_figure = figure_logger.level
+    try:
+        root_logger.setLevel(logging.DEBUG)
+        layout_logger.setLevel(logging.NOTSET)
+        figure_logger.setLevel(logging.NOTSET)
+        assert not is_layout_logger_explicitly_enabled("gu_toolkit.layout.figure")
+
+        layout_logger.setLevel(logging.INFO)
+        assert is_layout_logger_explicitly_enabled("gu_toolkit.layout.figure")
+    finally:
+        figure_logger.setLevel(old_figure)
+        layout_logger.setLevel(old_layout)
+        root_logger.setLevel(old_root)

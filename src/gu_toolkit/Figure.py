@@ -46,7 +46,7 @@ Use Python's standard :mod:`logging` module rather than ``Figure(debug=...)``::
 
     import logging
     logging.basicConfig(level=logging.INFO)
-    logging.getLogger("gu_toolkit.Figure").setLevel(logging.DEBUG)
+    logging.getLogger("gu_toolkit.layout").setLevel(logging.DEBUG)
 """
 
 from __future__ import annotations
@@ -64,7 +64,13 @@ from IPython.display import display
 from sympy.core.symbol import Symbol
 
 from .codegen import CodegenOptions
-from .layout_logging import LayoutEventBuffer, make_event_emitter, new_debug_id, new_request_id
+from .layout_logging import (
+    LayoutEventBuffer,
+    is_layout_logger_explicitly_enabled,
+    make_event_emitter,
+    new_debug_id,
+    new_request_id,
+)
 from .debouncing import QueuedDebouncer
 from .figure_plot_normalization import PlotVarsSpec, normalize_plot_inputs
 from .figure_plot_style import plot_style_option_docs, validate_style_kwargs
@@ -168,9 +174,11 @@ class Figure:
         "_relayout_debouncer",
         "_pending_relayout_view_id",
         "_layout_debug_figure_id",
+        "_layout_debug_enabled",
         "_layout_event_buffer",
         "_layout_event_emitter",
         "_layout_event_seq",
+        "_has_been_displayed",
     ]
 
     def __init__(
@@ -207,7 +215,7 @@ class Figure:
                 DeprecationWarning,
                 stacklevel=2,
             )
-            logger.setLevel(logging.DEBUG)
+            logging.getLogger("gu_toolkit.layout").setLevel(logging.DEBUG)
 
         if default_view_id is not None:
             warnings.warn(
@@ -268,7 +276,11 @@ class Figure:
         self._print_capture: ExitStack | None = None
         self._context_depth = 0
         self._pending_relayout_view_id: str | None = None
+        self._has_been_displayed = False
         self._layout_debug_figure_id = new_debug_id("figure")
+        self._layout_debug_enabled = is_layout_logger_explicitly_enabled(
+            "gu_toolkit.layout.figure"
+        )
         self._layout_event_buffer = LayoutEventBuffer(maxlen=500)
         self._layout_event_seq = 0
         self._layout_event_emitter = make_event_emitter(
@@ -280,7 +292,10 @@ class Figure:
 
         # 1. Initialize Layout (View)
         self._layout = FigureLayout(title=title)
-        self._layout.bind_layout_debug(self._emit_layout_event, figure_id=self._layout_debug_figure_id)
+        if self._layout_debug_enabled:
+            self._layout.bind_layout_debug(
+                self._emit_layout_event, figure_id=self._layout_debug_figure_id
+            )
 
         # 2. Initialize Managers
         # Note: we pass a callback for rendering so params can trigger updates
@@ -299,7 +314,7 @@ class Figure:
             execute_every_ms=500,
             drop_overflow=True,
             name="Figure.relayout",
-            event_sink=self._emit_layout_event,
+            event_sink=(self._emit_layout_event if self._layout_debug_enabled else (lambda **_kwargs: None)),
         )
         self._emit_layout_event("relayout_debouncer_created", source="Figure", phase="completed", level=logging.INFO)
         self._layout.observe_view_selection(self.set_active_view)
@@ -337,8 +352,22 @@ class Figure:
         self._layout_event_seq += 1
         return self._layout_event_seq
 
-    def _emit_layout_event(self, *, event: str, source: str, phase: str, level: int = logging.DEBUG, **fields: Any) -> dict[str, Any]:
-        return self._layout_event_emitter(event=event, source=source, phase=phase, level=level, active_view_id=(self._view_manager.active_view_id if hasattr(self, "_view_manager") else None), **fields)
+    def _emit_layout_event(self, event: str, *, source: str, phase: str, level: int = logging.DEBUG, **fields: Any) -> dict[str, Any]:
+        if not self._layout_debug_enabled:
+            return {}
+        if "active_view_id" not in fields:
+            fields["active_view_id"] = (
+                self._view_manager.active_view_id
+                if hasattr(self, "_view_manager")
+                else None
+            )
+        return self._layout_event_emitter(
+            event=event,
+            source=source,
+            phase=phase,
+            level=level,
+            **fields,
+        )
 
     def _python_layout_snapshot(self, view_id: str | None = None) -> dict[str, Any]:
         active_id = view_id or (self.views.current_id if getattr(self, "_view_manager", None) and self._view_manager.views else None)
@@ -471,7 +500,8 @@ class Figure:
             figure_widget=figure_widget,
             pane=pane,
         )
-        pane.bind_layout_debug(self._emit_layout_event, figure_id=self._layout_debug_figure_id, view_id=view_id)
+        if self._layout_debug_enabled:
+            pane.bind_layout_debug(self._emit_layout_event, figure_id=self._layout_debug_figure_id, view_id=view_id)
         self._emit_layout_event("view_runtime_created", source="Figure", phase="completed", view_id=view_id, pane_id=pane.debug_pane_id, default_x_range=view.default_x_range, default_y_range=view.default_y_range)
         return view
 
@@ -1575,7 +1605,6 @@ class Figure:
             logger.debug(f"ranges x={self.x_range} y={self.y_range}")
 
     def _ipython_display_(self, **kwargs: Any) -> None:
-        self._emit_layout_event("figure_displayed", source="Figure", phase="completed", level=logging.INFO, display_method="_ipython_display_")
         """
         Special method called by IPython to display the object.
         Uses IPython.display.display() to render the underlying widget.
@@ -1595,15 +1624,31 @@ class Figure:
         explicit display (for example ``display(fig)``) drives first render.
         ``Figure(...)`` construction itself is intentionally side-effect free.
         """
+        del kwargs
+        self._has_been_displayed = True
+        self._emit_layout_event(
+            "figure_displayed",
+            source="Figure",
+            phase="completed",
+            level=logging.INFO,
+            display_method="_ipython_display_",
+        )
         display(self._layout.output_widget)
 
     def show(self) -> None:
-        self._emit_layout_event("figure_displayed", source="Figure", phase="completed", level=logging.INFO, display_method="show")
         """Display the figure in IPython/Jupyter.
 
         This is a small convenience wrapper around ``display(fig)``.
         """
-        display(self)
+        self._has_been_displayed = True
+        self._emit_layout_event(
+            "figure_displayed",
+            source="Figure",
+            phase="completed",
+            level=logging.INFO,
+            display_method="show",
+        )
+        display(self._layout.output_widget)
 
     def __enter__(self) -> Figure:
         """Enter a context where this figure becomes the current target.

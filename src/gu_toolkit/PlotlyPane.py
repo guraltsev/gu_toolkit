@@ -171,6 +171,7 @@ Exports
 
 from __future__ import annotations
 
+import inspect
 import uuid
 from dataclasses import dataclass
 import logging
@@ -290,6 +291,7 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
     followup_ms_2 = traitlets.Int(250).tag(sync=True)
 
     debug_js = traitlets.Bool(False).tag(sync=True)
+    emit_layout_events = traitlets.Bool(False).tag(sync=True)
     figure_id = traitlets.Unicode("").tag(sync=True)
     view_id = traitlets.Unicode("").tag(sync=True)
     pane_id = traitlets.Unicode("").tag(sync=True)
@@ -310,6 +312,7 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
     function emit(model, enabled, event, phase, fields) {
       const payload = Object.assign({ event, phase, source: "PlotlyResizeDriver" }, fields || {});
       safeLog(enabled, payload);
+      if (!model.get("emit_layout_events")) return;
       try { model.send({ type: "layout_event", payload }); } catch (e) {}
     }
 
@@ -544,21 +547,21 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
           follow1 = follow2 = null;
         }
 
-        function schedule(reason) {
+        function schedule(reason, requestId) {
           clearFollowups();
           const wait = clampInt(model.get("debounce_ms"), 60);
           const t1 = clampInt(model.get("followup_ms_1"), 80);
           const t2 = clampInt(model.get("followup_ms_2"), 250);
 
-          debouncedResize(reason);
+          debouncedResize({ reason, requestId: requestId || null });
 
           // Per-instance follow-ups: helps with JupyterLab sidebar transitions/animations.
-          follow1 = setTimeout(() => { debouncedResize(reason + ":follow1"); }, wait + t1);
-          follow2 = setTimeout(() => { debouncedResize(reason + ":follow2"); }, wait + t2);
+          follow1 = setTimeout(() => { debouncedResize({ reason: reason + ":follow1", requestId: requestId || null }); }, wait + t1);
+          follow2 = setTimeout(() => { debouncedResize({ reason: reason + ":follow2", requestId: requestId || null }); }, wait + t2);
         }
 
         const debouncedResize = createQueuedDebouncer(
-          (reason) => { doResize(reason); },
+          (payload) => { doResize(payload.reason, payload.requestId); },
           () => clampInt(model.get("debounce_ms"), 60),
           true,
         );
@@ -787,6 +790,7 @@ class PlotlyPane:
     def bind_layout_debug(self, emitter, **context: Any) -> None:
         self._layout_event_emitter = emitter
         self._layout_debug_context = {**self._layout_debug_context, **context, "pane_id": self.debug_pane_id}
+        self.driver.emit_layout_events = True
         self.driver.figure_id = str(self._layout_debug_context.get("figure_id", ""))
         self.driver.view_id = str(self._layout_debug_context.get("view_id", ""))
         self.driver.pane_id = self.debug_pane_id
@@ -824,5 +828,36 @@ class PlotlyPane:
         Calls `PlotlyResizeDriver.reflow()`, which schedules a resize in the
         frontend. Use this after known layout changes initiated by Python code.
         """
-        self._emit_layout_event("reflow_message_sent", source="PlotlyPane", phase="sent", reason=reason, request_id=request_id, view_id=view_id, figure_id=figure_id)
-        self.driver.reflow(reason=reason, request_id=request_id, view_id=view_id, figure_id=figure_id, pane_id=self.debug_pane_id)
+        self._emit_layout_event(
+            "reflow_message_sent",
+            source="PlotlyPane",
+            phase="sent",
+            reason=reason,
+            request_id=request_id,
+            view_id=view_id,
+            figure_id=figure_id,
+        )
+        reflow_callable = self.driver.reflow
+        try:
+            parameters = inspect.signature(reflow_callable).parameters
+        except (TypeError, ValueError):
+            parameters = None
+
+        accepts_kwargs = (
+            parameters is None
+            or any(param.kind is inspect.Parameter.VAR_KEYWORD for param in parameters.values())
+            or any(name in parameters for name in ("reason", "request_id", "view_id", "figure_id", "pane_id"))
+        )
+        if accepts_kwargs:
+            reflow_callable(
+                reason=reason,
+                request_id=request_id,
+                view_id=view_id,
+                figure_id=figure_id,
+                pane_id=(pane_id or self.debug_pane_id),
+            )
+            return
+
+        # Backwards-compatible fallback for tests or monkeypatched drivers that
+        # still expose a zero-argument reflow callable.
+        reflow_callable()

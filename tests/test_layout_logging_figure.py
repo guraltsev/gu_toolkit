@@ -1,10 +1,33 @@
 from __future__ import annotations
 
+import logging
+from contextlib import contextmanager
+
 from gu_toolkit import Figure
 
 
-def test_request_active_view_reflow_emits_reason_and_request_id(monkeypatch) -> None:
+@contextmanager
+def _enabled_layout_logging():
+    layout_logger = logging.getLogger("gu_toolkit.layout")
+    old_level = layout_logger.level
+    try:
+        layout_logger.setLevel(logging.DEBUG)
+        yield
+    finally:
+        layout_logger.setLevel(old_level)
+
+
+
+
+def test_figure_layout_debug_is_disabled_by_default() -> None:
     fig = Figure()
+
+    assert fig._layout_debug_enabled is False
+    assert fig._layout_event_buffer.snapshot() == []
+
+def test_request_active_view_reflow_emits_reason_and_request_id() -> None:
+    with _enabled_layout_logging():
+        fig = Figure()
     calls: list[dict[str, object]] = []
 
     def _fake_reflow(**kwargs):
@@ -27,7 +50,8 @@ def test_request_active_view_reflow_emits_reason_and_request_id(monkeypatch) -> 
 
 
 def test_sidebar_visibility_logging_changed_vs_unchanged() -> None:
-    fig = Figure()
+    with _enabled_layout_logging():
+        fig = Figure()
 
     changed = fig._layout.update_sidebar_visibility(False, False, False)
     unchanged = fig._layout.update_sidebar_visibility(False, False, False)

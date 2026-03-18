@@ -43,6 +43,32 @@ def new_request_id() -> str:
 
 
 
+def is_layout_logger_explicitly_enabled(logger_or_name: str | logging.Logger) -> bool:
+    """Return whether layout instrumentation was explicitly enabled.
+
+    Only logger levels configured on the ``gu_toolkit.layout`` hierarchy count.
+    Inherited root-logger configuration is intentionally ignored so layout debug
+    work stays off unless the caller opts in for this subsystem.
+    """
+    if isinstance(logger_or_name, logging.Logger):
+        logger_obj = logger_or_name
+    else:
+        logger_obj = logging.getLogger(logger_or_name)
+
+    while logger_obj is not None:
+        name = logger_obj.name or ""
+        if name in {"root", ""}:
+            return False
+        if name == LOGGER_NAME or name.startswith(f"{LOGGER_NAME}."):
+            if logger_obj.level != logging.NOTSET:
+                return logger_obj.level <= logging.INFO
+            logger_obj = logger_obj.parent
+            continue
+        logger_obj = logger_obj.parent
+    return False
+
+
+
 def normalize_fields(fields: Mapping[str, Any]) -> dict[str, Any]:
     payload: dict[str, Any] = {}
     for key, value in fields.items():
