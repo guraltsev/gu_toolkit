@@ -14,7 +14,7 @@ Parameter-change hooks needed to support:
 
 ## Resolution evidence
 Notebook validation plan and checks live in:
-- `tests/test_SmartFigure-param_change_hooks.ipynb`
+- `tests/test_Figure-param_change_hooks.ipynb`
 
 Automated support is implemented in:
 - `figure_parameters.py` (`add_hook`, hook storage, id generation)

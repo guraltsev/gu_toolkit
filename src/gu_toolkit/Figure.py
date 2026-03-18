@@ -256,13 +256,13 @@ class Figure:
 
         if display is not None:
             warnings.warn(
-                "Figure(display=...) is deprecated; use Figure(show=...) instead.",
+                "Figure(show=...) is deprecated; use Figure(show=...) instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
             if show is not False and bool(display) != bool(show):
                 raise ValueError(
-                    "Figure() received both show= and display= with different values; use only show=."
+                    "Figure() received both show= and show= with different values; use only show=."
                 )
             show = bool(display)
 
@@ -838,7 +838,7 @@ class Figure:
 
         Examples
         --------
-        >>> fig = Figure(y_range=(-1, 1))  # doctest: +SKIP
+        >>> fig = Figure(default_y_range=(-1, 1))  # doctest: +SKIP
         >>> fig.y_range  # doctest: +SKIP
         (-1.0, 1.0)
 

@@ -112,7 +112,7 @@ def test_plot_cached_samples_none_before_first_render() -> None:
 
 def test_context_plot_autodetects_expression_parameters_for_module_helper() -> None:
     x, a, b = sp.symbols("x a b")
-    fig = Figure(x_range=(-8, 8))
+    fig = Figure(default_x_range=(-8, 8))
 
     with fig:
         wave = plot(a * sp.sin(b * x), x, id="wave")
@@ -328,7 +328,7 @@ def test_relayout_debounce_drop_overflow_keeps_final_event() -> None:
 
 
 def test_viewport_range_controls_read_widget_state() -> None:
-    fig = Figure(x_range=(-4, 4), y_range=(-3, 3))
+    fig = Figure(default_x_range=(-4, 4), default_y_range=(-3, 3))
 
     fig.figure_widget.update_xaxes(range=(-2, 2))
     fig.figure_widget.update_yaxes(range=(-1, 1))
@@ -340,7 +340,7 @@ def test_viewport_range_controls_read_widget_state() -> None:
 
 
 def test_viewport_range_controls_move_view_without_changing_defaults() -> None:
-    fig = Figure(x_range=(-6, 6), y_range=(-5, 5))
+    fig = Figure(default_x_range=(-6, 6), default_y_range=(-5, 5))
 
     fig._viewport_x_range = (-3, 1)
     fig._viewport_y_range = (-2, 2)
@@ -352,7 +352,7 @@ def test_viewport_range_controls_move_view_without_changing_defaults() -> None:
 
 
 def test_viewport_range_controls_support_reset_to_defaults() -> None:
-    fig = Figure(x_range=(-7, 7), y_range=(-4, 4))
+    fig = Figure(default_x_range=(-7, 7), default_y_range=(-4, 4))
 
     fig._viewport_x_range = (-2, 2)
     fig._viewport_y_range = (-1, 1)

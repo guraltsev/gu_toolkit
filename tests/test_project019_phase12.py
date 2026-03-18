@@ -4,15 +4,15 @@ from gu_toolkit import Figure
 
 
 def test_default_view_registry_and_active_range_delegation() -> None:
-    fig = Figure(x_range=(-6, 6), y_range=(-5, 5))
-    assert fig.active_view_id == "main"
+    fig = Figure(default_x_range=(-6, 6), default_y_range=(-5, 5))
+    assert fig.views.current_id == "main"
     assert tuple(fig.views.keys()) == ("main",)
     assert fig.x_range == (-6.0, 6.0)
     assert fig.y_range == (-5.0, 5.0)
 
 
 def test_add_view_and_switch_preserves_independent_defaults() -> None:
-    fig = Figure(x_range=(-6, 6), y_range=(-5, 5))
+    fig = Figure(default_x_range=(-6, 6), default_y_range=(-5, 5))
     fig.add_view("alt", x_range=(-2, 2), y_range=(-1, 1))
     fig.set_active_view("alt")
     assert fig.x_range == (-2.0, 2.0)
@@ -50,21 +50,22 @@ def test_parameter_change_marks_inactive_view_stale_until_activation() -> None:
     assert fig.views["alt"].is_stale is False
 
 
-def test_layout_shows_tabs_only_for_multi_view() -> None:
+def test_layout_shows_view_selector_only_for_multi_view() -> None:
     fig = Figure()
-    assert fig._layout.view_tabs.layout.display == "none"
+    assert fig._layout.view_selector.layout.display == "none"
     fig.add_view("alt")
-    assert fig._layout.view_tabs.layout.display == "flex"
-    assert fig._layout.view_tabs.get_title(0) == "main"
-    assert fig._layout.view_tabs.get_title(1) == "alt"
+    assert fig._layout.view_selector.layout.display == "flex"
+    options = tuple(fig._layout.view_selector.options)
+    assert tuple(label for label, _ in options) == ("main", "alt")
+    assert tuple(value for _, value in options) == ("main", "alt")
 
 
-def test_set_active_view_does_not_rebuild_tab_children() -> None:
+def test_set_active_view_does_not_rebuild_stage_children() -> None:
     fig = Figure()
     fig.add_view("frequency")
 
-    first_children = fig._layout.view_tabs.children
+    first_children = fig._layout.view_stage.children
     fig.set_active_view("frequency")
 
-    assert fig._layout.view_tabs.children is first_children
-    assert fig.active_view_id == "frequency"
+    assert fig._layout.view_stage.children is first_children
+    assert fig.views.current_id == "frequency"

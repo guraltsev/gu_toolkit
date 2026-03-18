@@ -10,7 +10,7 @@ from gu_toolkit import Figure
 
 def _figure_with_parameter() -> tuple[Figure, sp.Symbol]:
     x, a = sp.symbols("x a")
-    fig = Figure(x_range=(-6, 6), y_range=(-3, 3))
+    fig = Figure(default_x_range=(-6, 6), default_y_range=(-3, 3))
     fig.parameter(a)
     fig.plot(a * sp.sin(x), x, id="a_sin")
     return fig, a

@@ -10,11 +10,11 @@ def test_view_context_manager_scopes_plot_and_restores_active_view() -> None:
     fig = Figure()
     fig.add_view("alt")
 
-    with fig.view("alt"):
+    with fig.views["alt"]:
         fig.plot(sp.cos(x), x, id="cos_alt")
-        assert fig.active_view_id == "alt"
+        assert fig.views.current_id == "alt"
 
-    assert fig.active_view_id == "main"
+    assert fig.views.current_id == "main"
     assert fig.plots["cos_alt"].views == ("alt",)
 
 
@@ -72,7 +72,7 @@ def test_view_scoped_plot_uses_isolated_figure_widgets() -> None:
     fig.add_view("frequency")
 
     fig.plot(sp.sin(x), x, id="main-wave", view="main")
-    with fig.view("frequency"):
+    with fig.views["frequency"]:
         fig.plot(sp.cos(x), x, id="freq-only", view="frequency")
 
     main_widget = fig.figure_widget_for("main")
@@ -84,14 +84,19 @@ def test_view_scoped_plot_uses_isolated_figure_widgets() -> None:
     assert freq_widget.data[0].name == "freq-only"
 
 
-def test_multi_view_layout_embeds_plot_widget_inside_active_tab() -> None:
+def test_multi_view_layout_embeds_plot_widget_inside_active_page() -> None:
     fig = Figure()
     fig.add_view("frequency")
 
-    active_idx = fig._layout.view_tabs.selected_index
-    assert active_idx is not None
-    assert fig._layout.plot_container.layout.display == "none"
-    assert fig._layout.view_tabs.children[active_idx].children[0] is fig.pane.widget
+    main_page = fig._layout._view_pages["main"].host_box
+    freq_page = fig._layout._view_pages["frequency"].host_box
+
+    assert fig._layout.view_selector.layout.display == "flex"
+    assert fig._layout.view_selector.value == "main"
+    assert fig._layout.view_stage.children == (main_page, freq_page)
+    assert main_page.layout.display == "flex"
+    assert freq_page.layout.display == "none"
+    assert main_page.children[0] is fig.pane.widget
 
 
 def test_view_scoped_plots_use_per_view_traces_without_extra_handles() -> None:

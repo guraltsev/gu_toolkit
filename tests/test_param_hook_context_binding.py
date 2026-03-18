@@ -7,8 +7,8 @@ from gu_toolkit import Figure, parameters
 
 def test_param_change_hooks_run_inside_triggering_figure_context() -> None:
     x, a, c = sp.symbols("x a c")
-    fig1 = Figure(x_range=(-6, 6), y_range=(-3, 3))
-    fig2 = Figure(x_range=(-4, 4), y_range=(-2, 2))
+    fig1 = Figure(default_x_range=(-6, 6), default_y_range=(-3, 3))
+    fig2 = Figure(default_x_range=(-4, 4), default_y_range=(-2, 2))
 
     with fig1:
         fig1.parameter(a)

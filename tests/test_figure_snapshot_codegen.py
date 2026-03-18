@@ -8,7 +8,7 @@ from gu_toolkit import CodegenOptions, Figure, sympy_to_code
 
 def _build_exportable_figure(*, include_dynamic_info: bool) -> Figure:
     x, a, b = sp.symbols("x a b")
-    fig = Figure(x_range=(-5, 5), y_range=(-3, 3), sampling_points=256)
+    fig = Figure(default_x_range=(-5, 5), default_y_range=(-3, 3), sampling_points=256)
     fig.title = "Snapshot demo"
     fig.parameter(a, min=-2, max=2, value=0.75, step=0.05)
     fig.parameter(b, min=-1, max=1, value=-0.25, step=0.05)

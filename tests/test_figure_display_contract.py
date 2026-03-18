@@ -30,11 +30,11 @@ def test_ipython_display_marks_figure_as_displayed_once() -> None:
     assert isinstance(mocked_display.call_args.args[0], OneShotOutput)
 
 
-def test_figure_constructor_display_true_forces_immediate_display() -> None:
-    """Constructor display=True should trigger immediate rich display."""
+def test_figure_constructor_show_true_forces_immediate_display() -> None:
+    """Constructor show=True should trigger immediate rich display."""
     module = sys.modules[Figure.__module__]
     with patch.object(module, "display") as mocked_display:
-        fig = Figure(display=True)
+        fig = Figure(show=True)
 
     assert fig._has_been_displayed is True
     mocked_display.assert_called_once()
