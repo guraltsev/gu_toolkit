@@ -306,6 +306,7 @@ class Figure:
         )
         self._info = InfoPanelManager(self._layout.info_box)
         self._info.bind_figure(self)
+        self._info.bind_layout_change_callback(self._on_info_panel_structure_changed)
         self._legend = LegendPanelManager(self._layout.legend_box)
 
         # 3. Figure-level relayout debouncer + layout observers
@@ -724,6 +725,17 @@ class Figure:
         )
         self._emit_layout_event("sidebar_visibility_sync", source="Figure", phase="completed", changed=changed, params_visible=self._parameter_manager.has_params, info_visible=self._info.has_info, legend_visible=self._legend.has_legend)
         return changed
+
+    def _on_info_panel_structure_changed(self, reason: str) -> None:
+        """Resync sidebar layout after direct ``info_manager`` mutations."""
+        self._emit_layout_event(
+            "info_panel_structure_changed",
+            source="Figure",
+            phase="completed",
+            reason=reason,
+        )
+        if self._sync_sidebar_visibility():
+            self._request_active_view_reflow("sidebar_visibility")
 
 
     # --- Layout ---

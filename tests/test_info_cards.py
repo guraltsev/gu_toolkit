@@ -15,6 +15,35 @@ class _ImmediateDebouncer:
         self._callback(*args, **kwargs)
 
 
+def test_raw_info_output_activates_sidebar_visibility() -> None:
+    fig = Figure()
+
+    out = fig.info_manager.get_output("summary", height="90px")
+
+    assert fig.info_manager.has_info is True
+    assert fig._layout.sidebar_container.layout.display == "flex"
+    assert fig._layout.info_header.layout.display == "block"
+    assert fig._layout.info_box.layout.display == "flex"
+    assert fig._layout.params_box.layout.display == "none"
+    assert out in fig._layout.info_box.children
+    assert getattr(out, "id", None) == "summary"
+    assert out.layout.height == "90px"
+
+
+def test_raw_info_output_requests_reflow_when_sidebar_appears() -> None:
+    fig = Figure()
+    reasons: list[str] = []
+
+    def _capture(reason: str) -> None:
+        reasons.append(reason)
+
+    fig._request_active_view_reflow = _capture  # type: ignore[method-assign]
+
+    fig.info_manager.get_output("summary")
+
+    assert reasons == ["sidebar_visibility"]
+
+
 def test_info_auto_id_and_replacement() -> None:
     original = figure_info_module.QueuedDebouncer
     try:

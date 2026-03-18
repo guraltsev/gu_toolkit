@@ -106,6 +106,26 @@ class InfoPanelManager:
         self._simple_counter = 0
         self._update_seq = 0
         self._active_view_id: str | None = None
+        self._layout_change_callback: Callable[[str], Any] | None = None
+
+    def bind_layout_change_callback(
+        self, callback: Callable[[str], Any] | None
+    ) -> None:
+        """Bind a figure-owned callback notified when info widgets change.
+
+        Parameters
+        ----------
+        callback : callable or None
+            Invoked with a short reason string when the info panel structure
+            changes in a way that can affect figure layout, such as creating the
+            first raw output widget.
+        """
+        self._layout_change_callback = callback
+
+    def _notify_layout_change(self, reason: str) -> None:
+        callback = self._layout_change_callback
+        if callback is not None:
+            callback(reason)
 
     def get_output(
         self, id: Hashable | None = None, **layout_kwargs: Any
@@ -155,6 +175,7 @@ class InfoPanelManager:
 
         self._outputs[id] = out
         self._layout_box.children += (out,)
+        self._notify_layout_change("output_created")
         return out
 
     def add_component(self, id: Hashable, component_inst: Any) -> None:
