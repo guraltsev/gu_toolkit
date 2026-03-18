@@ -24,7 +24,7 @@ These become the official mental model:
 * `Figure.x_range` / `Figure.y_range` remain **current-view** shorthands.
 * Constructor `x_range` / `y_range` should become `default_x_range` / `default_y_range` so they do not read like runtime setters.
 
-I would keep `sampling_points` as-is. It already reads naturally and is not ambiguous in the same way as `x_range`.
+I would keep `samples` as-is. It already reads naturally and is not ambiguous in the same way as `x_range`.
 
 ---
 
@@ -292,7 +292,7 @@ I would make the constructor explicit but routed.
 Figure(
     *,
     title: str = "",
-    sampling_points: int = 500,
+    samples: int = 500,
     default_x_range: RangeLike = (-4, 4),
     default_y_range: RangeLike = (-3, 3),
     x_label: str = "",
@@ -321,7 +321,7 @@ I would remove or finish deprecating:
 
 It keeps the student-facing API light, but it still makes the routing explicit:
 
-* figure-level: `title`, `show`, `sampling_points`
+* figure-level: `title`, `show`, `samples`
 * main-view seeded values: `default_x_range`, `default_y_range`, `x_label`, `y_label`
 
 That is much clearer than overloading constructor `x_range` to mean something different from runtime `fig.x_range`.

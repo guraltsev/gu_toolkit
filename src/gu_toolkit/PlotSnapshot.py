@@ -33,7 +33,7 @@ class PlotSnapshot:
         Plot visibility state.
     x_domain : tuple[float, float] or None
         Explicit domain override, or ``None`` for figure default.
-    sampling_points : int or None
+    samples : int or None
         Per-plot sample count override, or ``None`` for figure default.
     color : str or None
         Line color.
@@ -54,7 +54,7 @@ class PlotSnapshot:
     label: str
     visible: bool
     x_domain: tuple[float, float] | None
-    sampling_points: int | None
+    samples: int | None
     color: str | None
     thickness: float | None
     dash: str | None

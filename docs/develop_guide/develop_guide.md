@@ -67,7 +67,7 @@ A `View` owns one plotting workspace and one stable widget runtime for its whole
 - `id`
 - `title`
 - `x_label`, `y_label`
-- `default_x_range`, `default_y_range`
+- `default_x_range`, `default_y_range` (constructor `x_range`, `y_range` are accepted aliases)
 - `viewport_x_range`, `viewport_y_range`
 - `is_active`, `is_stale`
 - `figure_widget`

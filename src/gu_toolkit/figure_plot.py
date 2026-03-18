@@ -24,7 +24,7 @@ context management) are outside this module.
 Important gotchas
 -----------------
 - ``parameters`` defaults are immutable tuples to avoid cross-instance leakage.
-- ``sampling_points`` can be ``None`` to inherit figure defaults.
+- ``samples`` can be ``None`` to inherit figure defaults.
 - ``render()`` updates an existing trace in-place; consumers should not assume
   a new trace object is created on each render.
 
@@ -35,7 +35,7 @@ Examples
 >>> x = sp.symbols("x")
 >>> fig = Figure()
 >>> p = fig.plot(x, sp.sin(x), id="sin")  # doctest: +SKIP
->>> p.sampling_points = 800  # doctest: +SKIP
+>>> p.samples = 800  # doctest: +SKIP
 
 Discoverability
 ---------------
@@ -104,7 +104,7 @@ class Plot:
         smart_figure: Figure,
         parameters: Sequence[Symbol] = (),
         x_domain: RangeLike | None = None,
-        sampling_points: int | str | None = None,
+        samples: int | str | None = None,
         label: str = "",
         visible: VisibleSpec = True,
         color: str | None = None,
@@ -133,7 +133,7 @@ class Plot:
             Parameter symbols used in the expression.
         x_domain : RangeLike or None, optional
             Optional domain override for this plot.
-        sampling_points : int or str, optional
+        samples : int or str, optional
             Number of samples; use ``"figure_default"`` to inherit from the figure.
         label : str, optional
             Trace label shown in the legend.
@@ -203,9 +203,9 @@ class Plot:
             )
         self.x_domain = x_domain
 
-        if _is_figure_default(sampling_points):
-            sampling_points = None
-        self.sampling_points = sampling_points
+        if _is_figure_default(samples):
+            samples = None
+        self.samples = samples
 
         self._suspend_render = False
 
@@ -403,7 +403,7 @@ class Plot:
             label=self.label,
             visible=self.visible,
             x_domain=self.x_domain,
-            sampling_points=self.sampling_points,
+            samples=self.samples,
             color=self.color,
             thickness=self.thickness,
             dash=self.dash,
@@ -655,7 +655,7 @@ class Plot:
         self.render()
 
     @property
-    def sampling_points(self) -> int | None:
+    def samples(self) -> int | None:
         """Return the number of sampling points for this plot.
 
         Returns
@@ -667,18 +667,18 @@ class Plot:
         --------
         >>> x = sp.symbols("x")  # doctest: +SKIP
         >>> fig = Figure()  # doctest: +SKIP
-        >>> plot = Plot(x, sp.sin(x), fig, sampling_points=200)  # doctest: +SKIP
-        >>> plot.sampling_points  # doctest: +SKIP
+        >>> plot = Plot(x, sp.sin(x), fig, samples=200)  # doctest: +SKIP
+        >>> plot.samples  # doctest: +SKIP
         200
 
         See Also
         --------
-        Figure.sampling_points : Figure-level default sampling.
+        Figure.samples : Figure-level default sampling.
         """
-        return self._sampling_points
+        return self._samples
 
-    @sampling_points.setter
-    def sampling_points(self, value: int | str | _FigureDefaultSentinel | None) -> None:
+    @samples.setter
+    def samples(self, value: int | str | _FigureDefaultSentinel | None) -> None:
         """Set the number of sampling points for this plot.
 
         Parameters
@@ -696,18 +696,30 @@ class Plot:
         >>> x = sp.symbols("x")  # doctest: +SKIP
         >>> fig = Figure()  # doctest: +SKIP
         >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
-        >>> plot.sampling_points = 400  # doctest: +SKIP
+        >>> plot.samples = 400  # doctest: +SKIP
 
         See Also
         --------
-        sampling_points : Read the current sampling density.
+        samples : Read the current sampling density.
         """
-        self._sampling_points = (
+        self._samples = (
             int(InputConvert(value, int))
             if value is not None and not _is_figure_default(value)
             else None
         )
         self.render()
+
+    @property
+    def sampling_points(self) -> int | None:
+        raise AttributeError(
+            "Plot.sampling_points was renamed to Plot.samples."
+        )
+
+    @sampling_points.setter
+    def sampling_points(self, _value: object) -> None:
+        raise TypeError(
+            "Plot.sampling_points was renamed to Plot.samples."
+        )
 
     @property
     def visible(self) -> VisibleSpec:
@@ -802,7 +814,7 @@ class Plot:
             x_max = max(float(viewport[1]), float(self.x_domain[1]))
 
         # 2. Determine Sampling
-        num = self.sampling_points or fig.sampling_points or 500
+        num = self.samples or fig.samples or 500
 
         # 3. Compute
         x_values = np.linspace(x_min, x_max, num=int(num))
@@ -862,7 +874,7 @@ class Plot:
         Parameters
         ----------
         **kwargs : Any
-            Supported keys include ``label``, ``x_domain``, ``sampling_points``,
+            Supported keys include ``label``, ``x_domain``, ``samples``,
             ``visible``, ``var``, ``func``, ``parameters``, ``color``, ``thickness``/``width``, ``dash``,
             ``opacity``/``alpha``, ``line``, and ``trace``.
 
@@ -882,6 +894,11 @@ class Plot:
         This method is used internally by :meth:`Figure.plot` when
         updating an existing plot.
         """
+        if "sampling_points" in kwargs:
+            raise TypeError(
+                "Plot.update() got unexpected keyword argument 'sampling_points'; use 'samples' instead."
+            )
+
         if "label" in kwargs:
             self.label = kwargs["label"]
 
@@ -900,15 +917,15 @@ class Plot:
                 x_max = InputConvert(val[1], float)
                 self.x_domain = (x_min, x_max)
 
-        if "sampling_points" in kwargs:
-            val = kwargs["sampling_points"]
+        if "samples" in kwargs:
+            val = kwargs["samples"]
             if val is None:
                 # None means "no change" during in-place updates.
                 pass
             elif _is_figure_default(val):
-                self.sampling_points = None
+                self.samples = None
             else:
-                self.sampling_points = InputConvert(val, int)
+                self.samples = InputConvert(val, int)
 
         if "view" in kwargs:
             requested = kwargs["view"]

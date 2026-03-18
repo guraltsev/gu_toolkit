@@ -164,12 +164,12 @@ def get_y_range() -> tuple[float, float]:
     return _require_current_figure().y_range
 
 
-def set_sampling_points(value: int | str | object | None) -> None:
-    _require_current_figure().sampling_points = value
+def set_samples(value: int | str | object | None) -> None:
+    _require_current_figure().samples = value
 
 
-def get_sampling_points() -> int | None:
-    return _require_current_figure().sampling_points
+def get_samples() -> int | None:
+    return _require_current_figure().samples
 
 
 def plot_style_options() -> dict[str, str]:
@@ -202,7 +202,7 @@ def plot(
     label: str | None = None,
     visible: bool = True,
     x_domain: tuple[int | float | str, int | float | str] | None = None,
-    sampling_points: int | str | None = None,
+    samples: int | str | None = None,
     color: str | None = None,
     thickness: int | float | None = None,
     width: int | float | None = None,
@@ -229,7 +229,7 @@ def plot(
         label=label,
         visible=visible,
         x_domain=x_domain,
-        sampling_points=sampling_points,
+        samples=samples,
         color=color,
         thickness=thickness,
         width=width,
@@ -244,7 +244,7 @@ def plot(
 
 
 __all__ = [
-    "get_sampling_points",
+    "get_samples",
     "get_title",
     "get_x_range",
     "get_y_range",
@@ -255,7 +255,7 @@ __all__ = [
     "plots",
     "plot_style_options",
     "render",
-    "set_sampling_points",
+    "set_samples",
     "set_title",
     "set_x_range",
     "set_y_range",

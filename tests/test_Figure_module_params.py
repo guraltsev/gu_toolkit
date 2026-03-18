@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 import sympy as sp
+import warnings
 
 import gu_toolkit.debouncing as debouncing_module
 from gu_toolkit import Figure, parameter, parameters, plot, plot_style_options
@@ -122,6 +123,54 @@ def test_context_plot_autodetects_expression_parameters_for_module_helper() -> N
     assert b in fig.parameters
 
 
+def test_constructor_x_range_and_y_range_are_supported_aliases() -> None:
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        fig = Figure(x_range=(-8, 8), y_range=(-2, 2))
+
+    assert fig.x_range == (-8.0, 8.0)
+    assert fig.y_range == (-2.0, 2.0)
+    assert not any(
+        "x_range" in str(w.message) or "y_range" in str(w.message)
+        for w in caught
+    )
+
+
+def test_constructor_x_range_and_default_x_range_conflict_is_rejected() -> None:
+    with pytest.raises(ValueError, match="default_x_range=.*x_range"):
+        Figure(default_x_range=(-4, 4), x_range=(-3, 3))
+
+    with pytest.raises(ValueError, match="default_y_range=.*y_range"):
+        Figure(default_y_range=(-2, 2), y_range=(-1, 1))
+
+
+def test_removed_sampling_points_api_is_rejected() -> None:
+    x = sp.symbols("x")
+    fig = Figure()
+    plot_ref = fig.plot(sp.sin(x), x, id="sin")
+
+    with pytest.raises(TypeError, match="sampling_points"):
+        Figure(sampling_points=20)  # type: ignore[call-arg]
+
+    with pytest.raises(TypeError, match="sampling_points"):
+        fig.plot(sp.sin(x), x, id="sin2", sampling_points=20)  # type: ignore[call-arg]
+
+    with pytest.raises(AttributeError, match="sampling_points"):
+        _ = fig.sampling_points
+
+    with pytest.raises(TypeError, match="sampling_points"):
+        fig.sampling_points = 20  # type: ignore[attr-defined]
+
+    with pytest.raises(AttributeError, match="sampling_points"):
+        _ = plot_ref.sampling_points
+
+    with pytest.raises(TypeError, match="sampling_points"):
+        plot_ref.sampling_points = 20
+
+    with pytest.raises(TypeError, match="sampling_points"):
+        plot_ref.update(sampling_points=20)
+
+
 def test_plot_update_accepts_visible_kwarg() -> None:
     x = sp.symbols("x")
     fig = Figure()
@@ -162,7 +211,7 @@ def test_plot_render_replaces_cached_samples() -> None:
     assert first_x is not None
     assert first_y is not None
 
-    plot.sampling_points = 25
+    plot.samples = 25
 
     second_x = plot.x_data
     second_y = plot.y_data

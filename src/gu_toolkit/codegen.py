@@ -272,8 +272,8 @@ def _plot_call(
         args.append(
             f"x_domain=({_fmt_float(ps.x_domain[0])}, {_fmt_float(ps.x_domain[1])})"
         )
-    if ps.sampling_points is not None:
-        args.append(f"sampling_points={ps.sampling_points}")
+    if ps.samples is not None:
+        args.append(f"samples={ps.samples}")
     if ps.color is not None:
         args.append(f"color={ps.color!r}")
     if ps.thickness is not None:
@@ -376,7 +376,7 @@ def figure_to_code(
     if options.include_imports:
         lines.append("import sympy as sp")
         if options.interface_style == "context_manager":
-            lines.append("from gu_toolkit import Figure, parameter, plot, info")
+            lines.append("from gu_toolkit import Figure, parameter, plot, info, set_title")
         else:
             lines.append("from gu_toolkit import Figure")
         lines.append("from IPython.display import display")
@@ -403,7 +403,7 @@ def figure_to_code(
         f"default_x_range=({_fmt_float(main_x_range[0])}, {_fmt_float(main_x_range[1])}), "
         f"default_y_range=({_fmt_float(main_y_range[0])}, {_fmt_float(main_y_range[1])}), "
         f"x_label={main_x_label!r}, y_label={main_y_label!r}, "
-        f"sampling_points={snapshot.sampling_points})"
+        f"samples={snapshot.samples})"
     )
 
     if main_view is not None and main_view.title != "main":
@@ -440,6 +440,11 @@ def figure_to_code(
 
     # -- operation body -----------------------------------------------------
     body_lines: list[str] = []
+
+    if options.interface_style == "context_manager" and snapshot.title:
+        body_lines.append("# Title")
+        body_lines.append(f"set_title({snapshot.title!r})")
+        body_lines.append("")
 
     if len(snapshot.parameters) > 0:
         body_lines.append("# Parameters")
