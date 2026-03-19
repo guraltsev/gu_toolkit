@@ -537,6 +537,25 @@ def _build_call_signature(
     return tuple(out)
 
 
+def _build_runtime_name_map(
+    raw_names: Iterable[str], reserved_names: set[str]
+) -> dict[str, str]:
+    """Allocate valid Python identifiers for runtime-only names."""
+
+    used = set(reserved_names)
+    mapping: dict[str, str] = {}
+    for raw_name in raw_names:
+        base = raw_name if _is_valid_parameter_name(raw_name) else _mangle_base_name(raw_name)
+        candidate = base
+        suffix = 0
+        while candidate in used or not _is_valid_parameter_name(candidate):
+            candidate = f"{base}__{suffix}"
+            suffix += 1
+        used.add(candidate)
+        mapping[raw_name] = candidate
+    return mapping
+
+
 def _numpify_uncached(
     expr: Any,
     *,
@@ -661,11 +680,37 @@ def _numpify_uncached(
     reserved_names = (
         set(keyword.kwlist) | set(dir(builtins)) | {"numpy", "np", "_sym_bindings"}
     )
-    reserved_names |= set(sym_bindings.keys()) | set(func_bindings.keys())
+    reserved_names |= {
+        _mangle_base_name(name) for name in (*sym_bindings.keys(), *func_bindings.keys())
+    }
     call_signature = _build_call_signature(vars_tuple, reserved_names)
     arg_names = [name for _, name in call_signature]
     replacement = {sym: sp.Symbol(name) for sym, name in call_signature}
     expr_codegen = expr.xreplace(replacement)
+
+    runtime_reserved = reserved_names | set(arg_names)
+    sym_binding_names = _build_runtime_name_map(sorted(sym_bindings.keys()), runtime_reserved)
+    runtime_reserved |= set(sym_binding_names.values())
+    func_binding_names = _build_runtime_name_map(sorted(func_bindings.keys()), runtime_reserved)
+
+    if sym_binding_names:
+        bound_symbol_replacements = {
+            sym: sp.Symbol(sym_binding_names[sym.name])
+            for sym in expr_codegen.free_symbols
+            if sym.name in sym_binding_names
+        }
+        if bound_symbol_replacements:
+            expr_codegen = expr_codegen.xreplace(bound_symbol_replacements)
+
+    if func_binding_names:
+        bound_function_replacements = {}
+        for app in expr_codegen.atoms(sp.Function):
+            raw_name = app.func.__name__
+            if raw_name in func_binding_names:
+                alias_func = sp.Function(func_binding_names[raw_name])
+                bound_function_replacements[app] = alias_func(*app.args)
+        if bound_function_replacements:
+            expr_codegen = expr_codegen.xreplace(bound_function_replacements)
 
     # "Lambdification"-like code generation step: SymPy -> NumPy expression string.
     t_codegen0: float | None = time.perf_counter() if log_debug else None
@@ -680,9 +725,10 @@ def _numpify_uncached(
         for nm in arg_names:
             lines.append(f"    {nm} = numpy.asarray({nm})")
 
-    # Inject symbol bindings by name
-    for nm in sorted(sym_bindings.keys()):
-        lines.append(f"    {nm} = _sym_bindings[{nm!r}]")
+    # Inject symbol bindings by name.
+    for raw_name in sorted(sym_bindings.keys()):
+        alias_name = sym_binding_names[raw_name]
+        lines.append(f"    {alias_name} = _sym_bindings[{raw_name!r}]")
 
     if vectorize and is_constant and len(arg_names) > 0:
         lines.append(f"    _shape = numpy.broadcast({', '.join(arg_names)}).shape")
@@ -697,7 +743,7 @@ def _numpify_uncached(
     glb: dict[str, Any] = {
         "numpy": np,
         "_sym_bindings": sym_bindings,
-        **func_bindings,  # function names like "G" -> callable
+        **{func_binding_names[name]: func_bindings[name] for name in sorted(func_bindings)},
     }
     t_dict_s = (time.perf_counter() - t_dict0) if t_dict0 is not None else None
 

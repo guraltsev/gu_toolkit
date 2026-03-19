@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
+import keyword
 from typing import Literal
 
 import sympy as sp
@@ -38,16 +39,16 @@ from .PlotSnapshot import PlotSnapshot
 class _SpPrefixedPrinter(StrPrinter):
     """StrPrinter variant that prefixes SymPy functions/constants with ``sp.``.
 
-    Symbols are printed as bare names (they are expected to be defined as
-    local variables in the generated script).  Everything else that requires
-    SymPy is qualified with ``sp.`` so the output is valid with just
-    ``import sympy as sp``.
+    Symbols with valid Python identifiers are printed as bare names. Symbols
+    with non-Python names (for example ``\alpha``) are inlined as
+    ``sp.Symbol(...)`` expressions so the generated source remains executable.
+    Everything else that requires SymPy is qualified with ``sp.``.
     """
 
     # -- atoms / constants --------------------------------------------------
 
     def _print_Symbol(self, expr: Symbol) -> str:  # noqa: N802
-        return expr.name
+        return _symbol_ref(expr)
 
     def _print_Pi(self, expr: Basic) -> str:  # noqa: N802
         return "sp.pi"
@@ -89,9 +90,11 @@ class _SpPrefixedPrinter(StrPrinter):
     # -- generic function fallback ------------------------------------------
 
     def _print_Function(self, expr: Basic) -> str:  # noqa: N802
-        func_name = type(expr).__name__
+        func_name = expr.func.__name__
         args = ", ".join(self._print(a) for a in expr.args)
-        return f"sp.{func_name}({args})"
+        if hasattr(sp, func_name) and getattr(sp, func_name) is expr.func:
+            return f"sp.{func_name}({args})"
+        return f"sp.Function({func_name!r})({args})"
 
     # -- common operations that the base printer handles but need care ------
 
@@ -127,6 +130,18 @@ class _SpPrefixedPrinter(StrPrinter):
 _printer = _SpPrefixedPrinter()
 
 
+def _is_valid_python_name(name: str) -> bool:
+    """Return whether *name* is a safe bare identifier in generated code."""
+
+    return bool(name) and name.isidentifier() and not keyword.iskeyword(name)
+
+
+def _symbol_ref(sym: Symbol) -> str:
+    """Return an executable Python reference for a SymPy symbol."""
+
+    return sym.name if _is_valid_python_name(sym.name) else f"sp.Symbol({sym.name!r})"
+
+
 @dataclass(frozen=True)
 class CodegenOptions:
     """Configuration knobs for :func:`figure_to_code`.
@@ -160,10 +175,10 @@ class CodegenOptions:
 def sympy_to_code(expr: Expr) -> str:
     """Convert a SymPy expression to a Python source fragment.
 
-    The returned string is valid Python when evaluated in a scope where:
-    - ``import sympy as sp`` has been executed, and
-    - every :class:`~sympy.Symbol` appearing in *expr* is bound to a local
-      variable of the same name.
+    The returned string is valid Python when evaluated in a scope where
+    ``import sympy as sp`` has been executed. Symbols with valid Python names
+    are emitted as bare locals; symbols with non-Python names are emitted
+    inline as ``sp.Symbol(...)`` expressions.
 
     Parameters
     ----------
@@ -228,22 +243,24 @@ def _main_view_snapshot(snapshot: FigureSnapshot):
 
 
 def _symbol_definitions(symbols: list[Symbol]) -> str:
-    """Emit ``x = sp.Symbol('x')`` lines (or a grouped form)."""
-    if not symbols:
+    """Emit ``x = sp.Symbol('x')`` lines for valid bare Python identifiers."""
+
+    valid = [sym for sym in symbols if _is_valid_python_name(sym.name)]
+    if not valid:
         return ""
-    if len(symbols) == 1:
-        s = symbols[0]
-        return f'{s.name} = sp.Symbol("{s.name}")'
-    names = ", ".join(s.name for s in symbols)
-    quoted = " ".join(s.name for s in symbols)
-    return f'{names} = sp.symbols("{quoted}")'
+    if len(valid) == 1:
+        s = valid[0]
+        return f"{s.name} = sp.Symbol({s.name!r})"
+    names = ", ".join(s.name for s in valid)
+    quoted = " ".join(s.name for s in valid)
+    return f"{names} = sp.symbols({quoted!r})"
 
 
 def _parameter_call(
     sym: Symbol, meta: dict, *, style: Literal["figure_methods", "context_manager"]
 ) -> str:
     """Emit one parameter registration call."""
-    parts = [sym.name]
+    parts = [_symbol_ref(sym)]
     for key in ("value", "min", "max", "step"):
         if key in meta:
             parts.append(f"{key}={_fmt_float(float(meta[key]))}")
@@ -263,7 +280,7 @@ def _plot_call(
 
     args = [
         f"{expr_code}",
-        f"{ps.var.name}",
+        f"{_symbol_ref(ps.var)}",
         f"id={ps.id!r}",
         f"label={ps.label!r}",
     ]
@@ -394,9 +411,11 @@ def figure_to_code(
     # -- symbols ------------------------------------------------------------
     symbols = _collect_symbols(snapshot)
     if symbols and options.include_symbol_definitions:
-        lines.append("# Symbols")
-        lines.append(_symbol_definitions(symbols))
-        lines.append("")
+        symbol_defs = _symbol_definitions(symbols)
+        if symbol_defs:
+            lines.append("# Symbols")
+            lines.append(symbol_defs)
+            lines.append("")
 
     # -- figure construction ------------------------------------------------
     lines.append("# Figure")

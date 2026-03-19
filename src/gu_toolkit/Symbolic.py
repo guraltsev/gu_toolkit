@@ -14,12 +14,16 @@ readable:
   :data:`lt`, :data:`le`, :data:`gt`, :data:`ge`) provide pipe-based infix
   syntax such as ``a |eq| b`` for relational construction.
 
-All helpers are deterministic and internally cached by index tuple, so
-repeating the same index returns the same symbolic object instance.
+Names are normalized into LaTeX-oriented SymPy names by default. This means
+Greek identifiers such as ``"alpha"`` become ``"\\alpha"``, indexed symbols
+use explicit braces (for example ``x_{1}``), and multi-letter function names
+are wrapped in ``\\operatorname{...}`` unless the user already supplied an
+explicit LaTeX form.
 """
 
 from __future__ import annotations
 
+from numbers import Integral
 from typing import Any
 
 import sympy as sp
@@ -34,6 +38,93 @@ def _create_family(factory, source, **kwargs):
         mapped = (_create_family(factory, item, **kwargs) for item in source)
         return type(source)(mapped)
     return factory(str(source), **kwargs)
+
+
+def _escape_latex_text(text: str) -> str:
+    """Escape plain text for safe use inside ``\text{...}``."""
+
+    replacements = {
+        "\\": r"\textbackslash{}",
+        "{": r"\{",
+        "}": r"\}",
+        "$": r"\$",
+        "&": r"\&",
+        "%": r"\%",
+        "#": r"\#",
+        "_": r"\_",
+        "^": r"\textasciicircum{}",
+        "~": r"\textasciitilde{}",
+    }
+    return "".join(replacements.get(ch, ch) for ch in text)
+
+
+def _normalize_symbol_name(name: Any) -> str:
+    """Return the canonical LaTeX-oriented SymPy name for a symbol base."""
+
+    text = str(name)
+    if not text:
+        return text
+    return sp.latex(sp.Symbol(text))
+
+
+def _normalize_function_name(name: Any) -> str:
+    """Return the canonical LaTeX-oriented SymPy name for a function base.
+
+    Rules
+    -----
+    - User-supplied ``\\operatorname{...}`` is preserved exactly.
+    - Existing explicit LaTeX names (for example ``\alpha``) are preserved.
+    - Greek letter names are converted to their LaTeX macro forms.
+    - One-letter plain names remain plain.
+    - Other multi-letter plain names are wrapped in ``\\operatorname{...}``.
+    """
+
+    text = str(name)
+    if not text:
+        return text
+
+    if "\\operatorname{" in text:
+        return text
+
+    if "\\" in text or "{" in text or "}" in text:
+        return text
+
+    latexified = _normalize_symbol_name(text)
+    if latexified != text:
+        return latexified
+
+    if len(text) == 1:
+        return text
+
+    return rf"\operatorname{{{text}}}"
+
+
+def _format_index_component(value: Any) -> str:
+    """Render one index component as a LaTeX subscript fragment."""
+
+    if isinstance(value, sp.Integer):
+        return str(int(value))
+    if isinstance(value, Integral) and not isinstance(value, bool):
+        return str(int(value))
+    if isinstance(value, str):
+        return rf"\text{{{_escape_latex_text(value)}}}"
+    if isinstance(value, sp.Basic):
+        return sp.latex(value)
+    return str(value)
+
+
+def _build_indexed_name(base_name: str, indices: tuple[Any, ...]) -> str:
+    """Combine a base LaTeX name with one or more indexed components."""
+
+    rendered = ",".join(_format_index_component(value) for value in indices)
+    return f"{base_name}_{{{rendered}}}"
+
+
+def _latex_function_application(self, printer) -> str:
+    """Render applied undefined functions without ``\\left``/``\\right``."""
+
+    args = ", ".join(printer._print(arg) for arg in self.args)
+    return f"{self.func.__name__}({args})"
 
 
 def symbols(names, *, cls=sp.Symbol, **args) -> Any:
@@ -51,10 +142,10 @@ def symbols(names, *, cls=sp.Symbol, **args) -> Any:
     --------
     >>> x, y = symbols("x y")
     >>> x[1], y[2]
-    (x_1, y_2)
+    (x_{1}, y_{2})
     >>> f, g = symbols("f g", cls=sp.Function)
     >>> f(sp.Symbol("t")), g[0](sp.Symbol("t"))
-    (f(t), g_0(t))
+    (f(t), g_{0}(t))
     >>> n = symbols("n", integer=True)
     >>> n[3].is_integer
     True
@@ -81,6 +172,8 @@ class SymbolFamily(sp.Symbol):
     ----------
     name:
         Base symbol name used for the family root (for example ``"x"``).
+        The stored SymPy name is normalized to a LaTeX-oriented form, so
+        ``"alpha"`` becomes ``"\\alpha"``.
     **kwargs:
         SymPy symbol assumptions (for example ``integer=True`` or
         ``positive=True``). The same assumptions are propagated to all indexed
@@ -90,17 +183,20 @@ class SymbolFamily(sp.Symbol):
     -----
     * ``SymbolFamily`` is itself a valid SymPy symbol and can be used directly
       in expressions.
-    * Indexed children are named ``"{base}_{i,j,...}"`` where the index values
-      are converted with :class:`str` and joined by commas.
+    * Indexed children are named ``"{base}_{i,j,...}"`` with explicit braces.
+      String indices are rendered as ``\text{...}``.
     * Child objects are cached per index tuple, so ``x[1] is x[1]`` is ``True``.
 
     Examples
     --------
     >>> x = SymbolFamily("x")
     >>> x[0]
-    x_0
+    x_{0}
     >>> x[1, 2]
-    x_1,2
+    x_{1,2}
+    >>> alpha = SymbolFamily("alpha")
+    >>> alpha.name
+    '\\alpha'
     >>> n = SymbolFamily("n", integer=True)
     >>> n[3].is_integer
     True
@@ -108,7 +204,9 @@ class SymbolFamily(sp.Symbol):
 
     def __new__(cls, name, **kwargs):
         """Create the family root symbol and initialize child caches."""
-        obj = super().__new__(cls, name, **kwargs)
+
+        latex_name = _normalize_symbol_name(name)
+        obj = super().__new__(cls, latex_name, **kwargs)
         obj._family_cache = {}
         obj._family_kwargs = kwargs
         return obj
@@ -127,11 +225,11 @@ class SymbolFamily(sp.Symbol):
             Cached or newly-created child symbol named with ``self.name`` and
             the provided indices.
         """
+
         if not isinstance(k, tuple):
             k = (k,)
         if k not in self._family_cache:
-            sub = ",".join(map(str, k))
-            child_name = f"{self.name}_{sub}"
+            child_name = _build_indexed_name(self.name, k)
             self._family_cache[k] = sp.Symbol(child_name, **self._family_kwargs)
         return self._family_cache[k]
 
@@ -143,6 +241,9 @@ class FunctionFamily:
     ----------
     name:
         Base function name used for the root function and indexed variants.
+        Single-letter plain names remain plain, while multi-letter plain names
+        are wrapped in ``\\operatorname{...}``. Existing explicit LaTeX names
+        are preserved.
     **kwargs:
         Optional keyword arguments forwarded to :func:`sympy.Function`.
 
@@ -151,6 +252,7 @@ class FunctionFamily:
     * Calling the family object directly (for example ``f(x)``) delegates to
       the base function ``Function(name)``.
     * Indexing creates function symbols named ``"{base}_{i,j,...}"``.
+    * Applied functions render in LaTeX without ``\\left``/``\\right``.
     * Function symbols are cached by index tuple.
 
     Examples
@@ -158,15 +260,23 @@ class FunctionFamily:
     >>> f = FunctionFamily("f")
     >>> f(sp.Symbol("x"))
     f(x)
-    >>> f[1](sp.Symbol("x"))
-    f_1(x)
+    >>> g = FunctionFamily("foo")
+    >>> g.name
+    '\\operatorname{foo}'
+    >>> g[1](sp.Symbol("x"))
+    \\operatorname{foo}_{1}(x)
     """
 
     def __init__(self, name, **kwargs):
         """Initialize the base function and index cache."""
-        self.name = name
+
+        self.name = _normalize_function_name(name)
         self._kwargs = kwargs
-        self._base = sp.Function(name, **kwargs)
+        self._base = sp.Function(
+            self.name,
+            __dict__={"_latex": _latex_function_application},
+            **kwargs,
+        )
         self._cache = {}
 
     def __getitem__(self, k):
@@ -182,27 +292,36 @@ class FunctionFamily:
         sympy.FunctionClass
             Cached or newly-created undefined function class.
         """
+
         if not isinstance(k, tuple):
             k = (k,)
         if k not in self._cache:
-            sub = ",".join(map(str, k))
-            self._cache[k] = sp.Function(f"{self.name}_{sub}", **self._kwargs)
+            indexed_name = _build_indexed_name(self.name, k)
+            self._cache[k] = sp.Function(
+                indexed_name,
+                __dict__={"_latex": _latex_function_application},
+                **self._kwargs,
+            )
         return self._cache[k]
 
     def __call__(self, *args):
         """Call the base undefined function with positional arguments."""
+
         return self._base(*args)
 
     def _sympy_(self):
         """Return the wrapped SymPy object for SymPy protocol interop."""
+
         return self._base
 
     def __str__(self):
         """Return the string representation of the base function."""
+
         return str(self._base)
 
     def __repr__(self):
         """Return the repr of the base function."""
+
         return repr(self._base)
 
 
@@ -224,10 +343,12 @@ class Infix:
 
     def __init__(self, func):
         """Store the callable used to evaluate infix expressions."""
+
         self.func = func
 
     def __ror__(self, left):
         """Capture the left operand and return a partial infix object."""
+
         return _InfixPartial(self.func, left)
 
 
@@ -242,6 +363,7 @@ class _InfixPartial:
 
     def __or__(self, right):
         """Apply the wrapped binary callable to ``(left, right)``."""
+
         return self.func(self.left, right)
 
 
