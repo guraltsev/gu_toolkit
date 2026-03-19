@@ -74,6 +74,7 @@ from .layout_logging import (
 from .debouncing import QueuedDebouncer
 from .figure_plot_normalization import PlotVarsSpec, normalize_plot_inputs
 from .figure_plot_style import plot_style_option_docs, validate_style_kwargs
+from .figure_color import color_for_trace_index, explicit_style_color
 from .FigureSnapshot import FigureSnapshot, ViewSnapshot
 
 from .InputConvert import InputConvert
@@ -200,6 +201,18 @@ class Figure:
             if value is not None and not _is_figure_default(value)
             else None
         )
+
+
+    def _auto_plot_color(self, *, plot_id: str | None = None) -> str:
+        """Return a stable explicit color for a new or existing plot id."""
+        if plot_id is None:
+            trace_index = len(self.plots)
+        else:
+            plot_order = tuple(self.plots.keys())
+            trace_index = (
+                plot_order.index(str(plot_id)) if str(plot_id) in plot_order else len(plot_order)
+            )
+        return color_for_trace_index(self.figure_widget, trace_index)
 
     def __init__(
         self,
@@ -1216,10 +1229,15 @@ class Figure:
             self._request_active_view_reflow("sidebar_visibility")
 
         # Create or Update Plot
+        requested_color = explicit_style_color(color=color, line=line, trace=trace)
         if id in self.plots:
             update_dont_create = True
+            if requested_color is None and self.plots[id].color is None:
+                color = self._auto_plot_color(plot_id=id)
         else:
             update_dont_create = False
+            if requested_color is None:
+                color = self._auto_plot_color()
 
         if update_dont_create:
             update_kwargs: dict[str, Any] = {

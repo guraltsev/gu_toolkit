@@ -50,7 +50,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import ipywidgets as widgets
-from plotly.colors import DEFAULT_PLOTLY_COLORS
+from .figure_color import color_for_trace_index
 
 
 @dataclass
@@ -311,11 +311,7 @@ class LegendPanelManager:
         except ValueError:
             return ""
 
-        colorway = tuple(getattr(getattr(parent, "layout", None), "colorway", ()) or ())
-        palette = colorway if colorway else tuple(DEFAULT_PLOTLY_COLORS)
-        if not palette:
-            return ""
-        return str(palette[trace_index % len(palette)])
+        return color_for_trace_index(parent, trace_index, fallback="")
 
     @staticmethod
     def _coerce_visible_to_bool(value: Any) -> bool:

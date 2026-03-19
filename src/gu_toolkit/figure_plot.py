@@ -225,6 +225,7 @@ class Plot:
 
     def _create_trace_handle(self, *, view_id: str, label: str) -> PlotHandle:
         """Create and register a per-view Plotly trace handle."""
+        style_source = self._reference_trace_handle()
         figure_widget = self._smart_figure.views[view_id].figure_widget
         figure_widget.add_scatter(
             x=[],
@@ -234,6 +235,12 @@ class Plot:
             visible=self._visible,
         )
         trace_handle = figure_widget.data[-1]
+        if style_source is not None:
+            style_payload = self._trace_style_payload(style_source)
+            if style_payload:
+                trace_handle.update(**style_payload)
+            trace_handle.name = label
+            trace_handle.visible = self._visible
         handle = PlotHandle(plot_id=self.id, view_id=view_id, trace_handle=trace_handle)
         self._handles[view_id] = handle
         return handle
@@ -245,6 +252,16 @@ class Plot:
             for handle in self._handles.values()
             if handle.trace_handle is not None
         )
+
+    @staticmethod
+    def _trace_style_payload(trace_handle: go.Scatter) -> dict[str, Any]:
+        """Return visual style fields that should be cloned across views."""
+        payload = trace_handle.to_plotly_json()
+        return {
+            key: value
+            for key, value in payload.items()
+            if key not in {"name", "type", "uid", "visible", "x", "y"}
+        }
 
     def _reference_trace_handle(self) -> go.Scatter | None:
         """Return a representative trace handle for style/property reads."""
@@ -526,10 +543,19 @@ class Plot:
     @property
     def color(self) -> str | None:
         """Return the current line color for this plot."""
+        candidates: list[go.Scatter] = []
         ref = self._reference_trace_handle()
-        if ref is None or ref.line is None:
-            return None
-        return ref.line.color
+        if ref is not None:
+            candidates.append(ref)
+        for trace_handle in self._iter_trace_handles():
+            if trace_handle not in candidates:
+                candidates.append(trace_handle)
+        for candidate in candidates:
+            line_obj = getattr(candidate, "line", None)
+            line_color = getattr(line_obj, "color", None)
+            if line_color is not None:
+                return line_color
+        return None
 
     @color.setter
     def color(self, value: str | None) -> None:

@@ -148,7 +148,8 @@ def test_toggle_marker_uses_plotly_default_color_when_color_unspecified() -> Non
         def _reference_trace_handle(self) -> go.Scatter:
             return self._trace
 
-    fig = go.FigureWidget()
+    fig = go.Figure()
+    fig.update_layout(template=None)
     fig.add_scatter(x=[0, 1], y=[0, 1], mode="lines", name="first")
     fig.add_scatter(x=[0, 1], y=[1, 2], mode="lines", name="second")
 
