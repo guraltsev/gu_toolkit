@@ -242,7 +242,7 @@ The decomposition from project-022 already extracted normalization, style resolu
 - ~80 lines: view lifecycle methods (delegating to `ViewManager` + runtime wiring)
 - ~50 lines: relayout debouncing plumbing
 - ~22 lines: `render()` method (loop + hooks + info scheduling)
-- ~200 lines: property accessors/facades (x_range, y_range, viewport, samples, etc.)
+- ~200 lines: property accessors/facades (x_range, y_range, viewport, sampling_points, etc.)
 - ~100 lines: hooks, snapshot, codegen, info delegates
 - ~50 lines: display lifecycle and context manager
 - ~60 lines: imports, type aliases, `_ViewRuntime` NamedTuple, module-level re-exports

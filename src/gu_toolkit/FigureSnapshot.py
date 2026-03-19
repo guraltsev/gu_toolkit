@@ -78,7 +78,7 @@ class FigureSnapshot:
         Default x-axis range for the main view.
     y_range : tuple[float, float]
         Default y-axis range for the main view.
-    samples : int
+    sampling_points : int
         Default sample count.
     title : str
         Figure title text.
@@ -96,7 +96,7 @@ class FigureSnapshot:
 
     x_range: tuple[float, float]
     y_range: tuple[float, float]
-    samples: int
+    sampling_points: int
     title: str
     parameters: ParameterSnapshot
     plots: dict[str, PlotSnapshot]

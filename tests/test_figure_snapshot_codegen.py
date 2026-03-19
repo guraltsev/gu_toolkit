@@ -8,7 +8,7 @@ from gu_toolkit import CodegenOptions, Figure, sympy_to_code
 
 def _build_exportable_figure(*, include_dynamic_info: bool) -> Figure:
     x, a, b = sp.symbols("x a b")
-    fig = Figure(default_x_range=(-5, 5), default_y_range=(-3, 3), samples=256)
+    fig = Figure(default_x_range=(-5, 5), default_y_range=(-3, 3), sampling_points=256)
     fig.title = "Snapshot demo"
     fig.parameter(a, min=-2, max=2, value=0.75, step=0.05)
     fig.parameter(b, min=-1, max=1, value=-0.25, step=0.05)
@@ -19,7 +19,7 @@ def _build_exportable_figure(*, include_dynamic_info: bool) -> Figure:
         label="model(a,b)",
         visible=False,
         x_domain=(-2, 2),
-        samples=64,
+        sampling_points=64,
         color="purple",
         thickness=2.5,
         dash="dash",
@@ -41,7 +41,7 @@ def test_snapshot_captures_parameters_plots_and_info_cards() -> None:
     snap = fig.snapshot()
     assert snap.x_range == (-5.0, 5.0)
     assert snap.y_range == (-3.0, 3.0)
-    assert snap.samples == 256
+    assert snap.sampling_points == 256
     assert snap.title == "Snapshot demo"
 
     assert list(snap.parameters) == [a, b]
@@ -55,7 +55,7 @@ def test_snapshot_captures_parameters_plots_and_info_cards() -> None:
     assert plot.parameters == (a, b)
     assert plot.visible is False
     assert plot.x_domain == (-2.0, 2.0)
-    assert plot.samples == 64
+    assert plot.sampling_points == 64
     assert plot.color == "purple"
     assert plot.thickness == 2.5
     assert plot.dash == "dash"
@@ -95,7 +95,7 @@ def test_to_code_supports_figure_methods_style_and_round_trip() -> None:
     rebuilt_snapshot = rebuilt.snapshot()  # type: ignore[attr-defined]
     assert rebuilt_snapshot.x_range == original.x_range
     assert rebuilt_snapshot.y_range == original.y_range
-    assert rebuilt_snapshot.samples == original.samples
+    assert rebuilt_snapshot.sampling_points == original.sampling_points
     assert rebuilt_snapshot.title == original.title
     assert rebuilt_snapshot.parameters == original.parameters
 

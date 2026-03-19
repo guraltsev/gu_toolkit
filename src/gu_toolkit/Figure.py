@@ -131,20 +131,16 @@ class Figure:
     ----------
     title : str, optional
         Figure title shown above the widget tree.
-    samples : int, optional
+    sampling_points : int, optional
         Default sample count used when a plot does not set its own override.
     default_x_range, default_y_range : RangeLike, optional
         Initial default ranges seeded into the main view.
-    x_range, y_range : RangeLike, optional
-        Constructor aliases for ``default_x_range`` and ``default_y_range``.
-        When both names are provided, their values must match.
     x_label, y_label : str, optional
         Initial axis labels for the main view.
     show : bool, optional
         If ``True``, display immediately in IPython/Jupyter.
-    display : bool, optional
-        Deprecated compatibility alias for ``show`` accepted for one
-        transition cycle.
+    display, x_range, y_range : optional
+        Deprecated compatibility aliases accepted for one transition cycle.
 
     Attributes
     ----------
@@ -170,7 +166,7 @@ class Figure:
         "_legend",
         "_view_manager",
         "_views",
-        "_samples",
+        "_sampling_points",
         "_render_info_last_log_t",
         "_render_debug_last_log_t",
         "_print_capture",
@@ -189,7 +185,7 @@ class Figure:
         self,
         *,
         title: str = "",
-        samples: int = 500,
+        sampling_points: int = 500,
         default_x_range: RangeLike | None = None,
         default_y_range: RangeLike | None = None,
         x_label: str = "",
@@ -235,22 +231,32 @@ class Figure:
             )
 
         if x_range is not None:
+            warnings.warn(
+                "Figure(x_range=...) is deprecated; use Figure(default_x_range=...) instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
             if default_x_range is not None and not _same_range(x_range, default_x_range):
                 raise ValueError(
-                    "Figure() received both default_x_range= and x_range= with different values; use only one value for the x-range."
+                    "Figure() received both default_x_range= and deprecated x_range= with different values; use only default_x_range=."
                 )
             default_x_range = x_range
 
         if y_range is not None:
+            warnings.warn(
+                "Figure(y_range=...) is deprecated; use Figure(default_y_range=...) instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
             if default_y_range is not None and not _same_range(y_range, default_y_range):
                 raise ValueError(
-                    "Figure() received both default_y_range= and y_range= with different values; use only one value for the y-range."
+                    "Figure() received both default_y_range= and deprecated y_range= with different values; use only default_y_range=."
                 )
             default_y_range = y_range
 
         if display is not None:
             warnings.warn(
-                "Figure(display=...) is deprecated; use Figure(show=...) instead.",
+                "Figure(show=...) is deprecated; use Figure(show=...) instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -265,7 +271,7 @@ class Figure:
         if default_y_range is None:
             default_y_range = (-3, 3)
 
-        self._samples = samples
+        self._sampling_points = sampling_points
         self.plots: dict[str, Plot] = {}
         self._print_capture: ExitStack | None = None
         self._context_depth = 0
@@ -335,7 +341,7 @@ class Figure:
         if self._sync_sidebar_visibility():
             self._request_active_view_reflow("sidebar_visibility")
 
-        self._emit_layout_event("figure_created", source="Figure", phase="completed", level=logging.INFO, title=title, samples=samples)
+        self._emit_layout_event("figure_created", source="Figure", phase="completed", level=logging.INFO, title=title, sampling_points=sampling_points)
 
         # 6. Logging state
         self._render_info_last_log_t = 0.0
@@ -1003,7 +1009,7 @@ class Figure:
         return self._viewport_y_range
 
     @property
-    def samples(self) -> int | None:
+    def sampling_points(self) -> int | None:
         """Return the default number of sampling points per plot.
 
         Returns
@@ -1013,18 +1019,18 @@ class Figure:
 
         Examples
         --------
-        >>> fig = Figure(samples=300)  # doctest: +SKIP
-        >>> fig.samples  # doctest: +SKIP
+        >>> fig = Figure(sampling_points=300)  # doctest: +SKIP
+        >>> fig.sampling_points  # doctest: +SKIP
         300
 
         See Also
         --------
-        Plot.samples : Per-plot overrides.
+        Plot.sampling_points : Per-plot overrides.
         """
-        return self._samples
+        return self._sampling_points
 
-    @samples.setter
-    def samples(self, val: int | str | _FigureDefaultSentinel | None) -> None:
+    @sampling_points.setter
+    def sampling_points(self, val: int | str | _FigureDefaultSentinel | None) -> None:
         """Set the default number of sampling points per plot.
 
         Parameters
@@ -1040,29 +1046,17 @@ class Figure:
         Examples
         --------
         >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.samples = 200  # doctest: +SKIP
+        >>> fig.sampling_points = 200  # doctest: +SKIP
 
         Notes
         -----
         Use ``None``/``"figure_default"``/``"FIGURE_DEFAULT"``/``FIGURE_DEFAULT``
         to clear the override.
         """
-        self._samples = (
+        self._sampling_points = (
             int(InputConvert(val, int))
             if isinstance(val, (int, float, str)) and not _is_figure_default(val)
             else None
-        )
-
-    @property
-    def sampling_points(self) -> int | None:
-        raise AttributeError(
-            "Figure.sampling_points was renamed to Figure.samples."
-        )
-
-    @sampling_points.setter
-    def sampling_points(self, _value: object) -> None:
-        raise TypeError(
-            "Figure.sampling_points was renamed to Figure.samples."
         )
 
     # --- Public API ---
@@ -1086,7 +1080,7 @@ class Figure:
         label: str | None = None,
         visible: VisibleSpec = True,
         x_domain: RangeLike | None = None,
-        samples: int | str | None = None,
+        sampling_points: int | str | None = None,
         color: str | None = None,
         thickness: int | float | None = None,
         width: int | float | None = None,
@@ -1123,7 +1117,7 @@ class Figure:
             Visibility state for the trace. Hidden traces skip sampling until
             shown.
 
-        samples : int or str, optional
+        sampling_points : int or str, optional
             Number of sampling points for this plot. Use ``"figure_default"``
             to inherit from the figure setting.
         color : str or None, optional
@@ -1267,7 +1261,7 @@ class Figure:
                 "parameters": parameters,
                 "visible": visible,
                 "x_domain": x_domain,
-                "samples": samples,
+                "sampling_points": sampling_points,
                 "color": color,
                 "thickness": thickness,
                 "dash": dash,
@@ -1301,7 +1295,7 @@ class Figure:
                 smart_figure=self,
                 parameters=parameters,
                 x_domain=x_domain,
-                samples=samples,
+                sampling_points=sampling_points,
                 label=(id if label is None else label),
                 visible=visible,
                 color=color,
@@ -1451,7 +1445,7 @@ class Figure:
         return FigureSnapshot(
             x_range=main_view.x_range,
             y_range=main_view.y_range,
-            samples=self.samples or 500,
+            sampling_points=self.sampling_points or 500,
             title=self.title or "",
             parameters=self._parameter_manager.snapshot(full=True),
             plots={pid: p.snapshot(id=pid) for pid, p in self.plots.items()},
@@ -1774,7 +1768,7 @@ class Figure:
 
 from . import figure_api as _figure_api
 
-get_samples = _figure_api.get_samples
+get_sampling_points = _figure_api.get_sampling_points
 get_title = _figure_api.get_title
 get_x_range = _figure_api.get_x_range
 get_y_range = _figure_api.get_y_range
@@ -1785,7 +1779,7 @@ plot = _figure_api.plot
 plots = _figure_api.plots
 plot_style_options = _figure_api.plot_style_options
 render = _figure_api.render
-set_samples = _figure_api.set_samples
+set_sampling_points = _figure_api.set_sampling_points
 set_title = _figure_api.set_title
 set_x_range = _figure_api.set_x_range
 set_y_range = _figure_api.set_y_range
@@ -1810,8 +1804,8 @@ __all__ = [
     "parameters",
     "info",
     "render",
-    "get_samples",
-    "set_samples",
+    "get_sampling_points",
+    "set_sampling_points",
     "get_x_range",
     "set_x_range",
     "get_y_range",

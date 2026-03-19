@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import ipywidgets as widgets
 
-from gu_toolkit.PlotlyPane import PlotlyPane, PlotlyPaneStyle, _apply_default_fill_hints
+from gu_toolkit.PlotlyPane import (
+    PlotlyPane,
+    PlotlyPaneStyle,
+    PlotlyResizeDriver,
+    _apply_default_fill_hints,
+)
 from gu_toolkit.figure_layout import FigureLayout
 
 
@@ -25,6 +30,41 @@ def test_plotlypane_reflow_delegates_to_driver() -> None:
     ]
 
 
+def test_plotlyresize_driver_reflow_uses_trait_queue_only() -> None:
+    driver = PlotlyResizeDriver()
+    sent: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    driver.send = lambda *args, **kwargs: sent.append((args, dict(kwargs)))  # type: ignore[method-assign]
+
+    request_id = driver.reflow(
+        reason="manual_check",
+        request_id="req-demo",
+        view_id="view-1",
+        figure_id="figure-1",
+        pane_id="pane-1",
+        force=True,
+    )
+
+    assert request_id == "req-demo"
+    assert sent == []
+    assert driver.reflow_token == 1
+    assert driver.pending_reason == "manual_check"
+    assert driver.pending_request_id == "req-demo"
+    assert driver.view_id == "view-1"
+    assert driver.figure_id == "figure-1"
+    assert driver.pane_id == "pane-1"
+
+
+
+def test_plotlypane_reflow_only_increments_driver_token_once() -> None:
+    pane = PlotlyPane(widgets.Label("x"))
+
+    initial_token = pane.driver.reflow_token
+    request_id = pane.reflow(reason="manual_check", request_id="req-demo", force=True)
+
+    assert request_id == "req-demo"
+    assert pane.driver.reflow_token == initial_token + 1
+    assert pane.driver.pending_reason == "manual_check"
+    assert pane.driver.pending_request_id == "req-demo"
 
 
 def test_plotlypane_sets_default_fill_hints_on_inner_widget() -> None:

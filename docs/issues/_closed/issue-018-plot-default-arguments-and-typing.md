@@ -9,11 +9,11 @@ Closed (Resolved 2026-02-15)
 ## Evidence
 - `Plot.__init__`: `parameters: Sequence[Symbol] = ()`
 - `Plot.set_func`: `parameters: Sequence[Symbol] = ()`
-- `Plot.__init__`: `samples: Optional[Union[int, str]] = None`
+- `Plot.__init__`: `sampling_points: Optional[Union[int, str]] = None`
 
 ## TODO
 - [x] Replace mutable list defaults with immutable defaults (`()` or `None`).
-- [x] Fix malformed union typing for `samples`.
+- [x] Fix malformed union typing for `sampling_points`.
 - [x] Add/adjust regression tests around constructor defaults.
 
 ## Exit Criteria

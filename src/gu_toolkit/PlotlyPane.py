@@ -14,15 +14,27 @@ only ipywidgets layout traits.
 
 from __future__ import annotations
 
-import inspect
+
 import logging
 import uuid
 from dataclasses import asdict, dataclass
 from typing import Any
 
-import anywidget
 import ipywidgets as W
 import traitlets
+
+try:
+    import anywidget
+except ModuleNotFoundError:  # pragma: no cover - dependency fallback for tests
+    class _FallbackAnyWidget(W.Widget):
+        """Minimal ``anywidget.AnyWidget`` fallback used in test environments."""
+
+        _esm = ""
+
+    class _AnywidgetModule:
+        AnyWidget = _FallbackAnyWidget
+
+    anywidget = _AnywidgetModule()
 
 from .layout_logging import LOGGER_NAME, new_debug_id, new_request_id
 
@@ -224,16 +236,6 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
       return host.querySelector(".js-plotly-plot");
     }
 
-    function collectAncestorChain(startEl, limit) {
-      const out = [];
-      let el = startEl;
-      while (el && el.parentElement && out.length < limit) {
-        el = el.parentElement;
-        out.push(el);
-      }
-      return out;
-    }
-
     function findClipAncestor(startEl) {
       let el = startEl;
       while (el && el.parentElement) {
@@ -345,15 +347,10 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
         let clip = null;
         let roHost = null;
         let roClip = null;
-        let moHost = null;
-        let moAncestors = null;
         let ioHost = null;
-        let follow1 = null;
-        let follow2 = null;
-        let recoveryTimers = [];
-        let recoveryToken = 0;
-        let transitionTargets = [];
-        let lastApplied = { w: 0, h: 0 };
+        let debounceTimer = null;
+        let retryTimer = null;
+        let settleTimer = null;
         let revealed = false;
         let didAutorangeOnce = false;
         let resizeCount = 0;
@@ -361,6 +358,9 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
         let lastIntersection = null;
         let destroyed = false;
         let handledReflowToken = 0;
+        let requestSeq = 0;
+        let activeRequest = null;
+        let lastApplied = { w: 0, h: 0 };
 
         function identity() {
           return {
@@ -368,6 +368,14 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
             view_id: model.get("view_id") || "",
             pane_id: model.get("pane_id") || "",
           };
+        }
+
+        function waitRetryDelays() {
+          return [
+            40,
+            Math.max(40, clampInt(model.get("followup_ms_1"), 80)),
+            Math.max(80, clampInt(model.get("followup_ms_2"), 250)),
+          ];
         }
 
         function resolveHost() {
@@ -390,69 +398,26 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
           }
         }
 
-        function clearTransitionTargets() {
-          for (const target of transitionTargets) {
-            try { target.removeEventListener("transitionend", onTransitionEnd); } catch (e) {}
-          }
-          transitionTargets = [];
-        }
-
-        function bindTransitionTargets(targets) {
-          clearTransitionTargets();
-          for (const target of targets) {
-            try {
-              target.addEventListener("transitionend", onTransitionEnd);
-              transitionTargets.push(target);
-            } catch (e) {}
-          }
-        }
-
         function disconnectObservers() {
           try { if (roHost) roHost.disconnect(); } catch (e) {}
           try { if (roClip) roClip.disconnect(); } catch (e) {}
-          try { if (moHost) moHost.disconnect(); } catch (e) {}
-          try { if (moAncestors) moAncestors.disconnect(); } catch (e) {}
           try { if (ioHost) ioHost.disconnect(); } catch (e) {}
           roHost = null;
           roClip = null;
-          moHost = null;
-          moAncestors = null;
           ioHost = null;
-          clearTransitionTargets();
         }
 
-        function clearFollowups() {
-          if (follow1) clearTimeout(follow1);
-          if (follow2) clearTimeout(follow2);
-          follow1 = null;
-          follow2 = null;
+        function clearTimers() {
+          if (debounceTimer) clearTimeout(debounceTimer);
+          if (retryTimer) clearTimeout(retryTimer);
+          if (settleTimer) clearTimeout(settleTimer);
+          debounceTimer = null;
+          retryTimer = null;
+          settleTimer = null;
         }
 
-        function clearRecovery() {
-          recoveryToken += 1;
-          for (const timerId of recoveryTimers) {
-            clearTimeout(timerId);
-          }
-          recoveryTimers = [];
-        }
-
-        function scheduleRecovery(reason, requestId) {
-          clearRecovery();
-          const token = recoveryToken;
-          const delays = [0, 40, 120, 240, 500, 900, 1500];
-          recoveryTimers = delays.map((delay, index) => {
-            return setTimeout(() => {
-              if (destroyed || token !== recoveryToken) return;
-              debouncedResize({
-                reason: `${reason}:recovery${index + 1}`,
-                requestId: requestId || null,
-                force: true,
-              });
-              if (index === delays.length - 1) {
-                recoveryTimers = [];
-              }
-            }, delay);
-          });
+        function isActiveToken(token) {
+          return !destroyed && !!activeRequest && activeRequest.token === token;
         }
 
         function refreshObservers() {
@@ -476,21 +441,6 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
             roClip = new ResizeObserver(() => schedule("ResizeObserver:clip", null, false));
             roClip.observe(clip);
           }
-
-          moHost = new MutationObserver(() => schedule("MutationObserver:host", null, true));
-          moHost.observe(host, { childList: true, subtree: true });
-
-          const ancestorTargets = [host, ...collectAncestorChain(host, 12)];
-          moAncestors = new MutationObserver(() => schedule("MutationObserver:ancestor", null, true));
-          for (const target of ancestorTargets) {
-            try {
-              moAncestors.observe(target, {
-                attributes: true,
-                attributeFilter: ["style", "class", "hidden", "open", "aria-hidden", "aria-expanded"],
-              });
-            } catch (e) {}
-          }
-          bindTransitionTargets(ancestorTargets);
 
           if (typeof IntersectionObserver === "function") {
             ioHost = new IntersectionObserver((entries) => {
@@ -556,11 +506,12 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
             effective_h: geometry.measured_height,
             failure_count: failureCount,
           }));
-          scheduleRecovery(reason || outcome, requestId || null);
-          return false;
+          return "waiting";
         }
 
-        async function doResize(reason, requestId, force) {
+        async function doResize(reason, requestId, force, token) {
+          if (!isActiveToken(token)) return "cancelled";
+
           emit(model, debug, "resize_attempt_started", "started", Object.assign(identity(), {
             reason: reason || "",
             request_id: requestId || null,
@@ -569,6 +520,7 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
 
           refreshObservers();
           if (!host) {
+            failureCount += 1;
             publishState("waiting_for_host", {
               frontend_ready: true,
               host_connected: false,
@@ -587,8 +539,7 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
               reason: reason || "",
               request_id: requestId || null,
             }));
-            scheduleRecovery(reason || "waiting_for_host", requestId || null);
-            return false;
+            return "waiting";
           }
 
           clip = findClipAncestor(host);
@@ -610,7 +561,6 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
           const dw = Math.abs(geometry.measured_width - lastApplied.w);
           const dh = Math.abs(geometry.measured_height - lastApplied.h);
           if (!force && revealed && dw < minDelta && dh < minDelta) {
-            clearRecovery();
             publishState("ready", Object.assign({}, geometry, {
               last_completed_reason: reason || model.get("last_completed_reason") || "",
               last_completed_request_id: requestId || model.get("last_completed_request_id") || "",
@@ -630,7 +580,7 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
               effective_w: geometry.measured_width,
               effective_h: geometry.measured_height,
             }));
-            return true;
+            return "skipped";
           }
 
           lastApplied = { w: geometry.measured_width, h: geometry.measured_height };
@@ -650,16 +600,21 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
             );
           }
 
+          if (!isActiveToken(token)) return "cancelled";
+
           const mode = model.get("autorange_mode") || "none";
           didAutorangeOnce = await maybeAutorange(plotEl, mode, didAutorangeOnce, debug);
+
+          if (!isActiveToken(token)) return "cancelled";
 
           if (!revealed) {
             setHostHidden(false);
             revealed = true;
           }
-          clearRecovery();
           resizeCount += 1;
-          publishState("ready", Object.assign({}, geometry, {
+          const finalGeometry = currentGeometry(reason, requestId, plotEl);
+          lastApplied = { w: finalGeometry.measured_width, h: finalGeometry.measured_height };
+          publishState("ready", Object.assign({}, finalGeometry, {
             last_completed_reason: reason || model.get("last_completed_reason") || "",
             last_completed_request_id: requestId || model.get("last_completed_request_id") || "",
             last_outcome: "resized",
@@ -674,87 +629,75 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
             reason: reason || "",
             request_id: requestId || null,
             force: !!force,
-            host_w: geometry.host_width,
-            host_h: geometry.host_height,
-            clip_w: geometry.clip_width,
-            clip_h: geometry.clip_height,
-            effective_w: geometry.measured_width,
-            effective_h: geometry.measured_height,
+            host_w: finalGeometry.host_width,
+            host_h: finalGeometry.host_height,
+            clip_w: finalGeometry.clip_width,
+            clip_h: finalGeometry.clip_height,
+            effective_w: finalGeometry.measured_width,
+            effective_h: finalGeometry.measured_height,
             resize_count: resizeCount,
           }));
-          return true;
+          return "resized";
         }
 
-        function createQueuedDebouncer(callback, getExecuteEveryMs, dropOverflow) {
-          let queue = [];
-          let timer = null;
+        async function runRequest(token) {
+          if (!isActiveToken(token)) return;
+          debounceTimer = null;
+          retryTimer = null;
+          settleTimer = null;
 
-          function runTick() {
-            timer = null;
-            if (!queue.length) return;
+          const req = activeRequest;
+          const outcome = await doResize(req.reason, req.requestId, !!req.force, token);
+          if (!isActiveToken(token)) return;
 
-            if (dropOverflow && queue.length > 1) {
-              queue = [queue[queue.length - 1]];
+          if (outcome === "waiting") {
+            const delays = waitRetryDelays();
+            if (req.retryIndex < delays.length) {
+              const delay = delays[req.retryIndex];
+              req.retryIndex += 1;
+              retryTimer = setTimeout(() => runRequest(token), delay);
+            } else {
+              activeRequest = null;
             }
-
-            const next = queue.shift();
-            callback(next);
-
-            if (queue.length) {
-              timer = setTimeout(runTick, getExecuteEveryMs());
-            }
+            return;
           }
 
-          const enqueue = (eventPayload) => {
-            queue.push(eventPayload);
-            if (!timer) {
-              timer = setTimeout(runTick, getExecuteEveryMs());
-            }
-          };
+          if (outcome === "resized" && !!req.force && !req.settleDone) {
+            req.force = false;
+            req.settleDone = true;
+            const delay = Math.max(0, clampInt(model.get("followup_ms_1"), 80));
+            settleTimer = setTimeout(() => runRequest(token), delay);
+            return;
+          }
 
-          enqueue.cancel = () => {
-            if (timer) clearTimeout(timer);
-            timer = null;
-            queue = [];
-          };
-
-          return enqueue;
+          activeRequest = null;
         }
 
         function schedule(reason, requestId, force) {
-          clearFollowups();
-          const wait = clampInt(model.get("debounce_ms"), 60);
-          const t1 = clampInt(model.get("followup_ms_1"), 80);
-          const t2 = clampInt(model.get("followup_ms_2"), 250);
-
-          debouncedResize({ reason, requestId: requestId || null, force: !!force });
-          follow1 = setTimeout(() => {
-            debouncedResize({ reason: `${reason}:follow1`, requestId: requestId || null, force: true });
-          }, wait + t1);
-          follow2 = setTimeout(() => {
-            debouncedResize({ reason: `${reason}:follow2`, requestId: requestId || null, force: true });
-          }, wait + t2);
+          const nextReason = reason || "reflow";
+          const nextRequestId = requestId || null;
+          clearTimers();
+          requestSeq += 1;
+          activeRequest = {
+            token: requestSeq,
+            reason: nextReason,
+            requestId: nextRequestId,
+            force: !!force,
+            retryIndex: 0,
+            settleDone: false,
+          };
+          syncTraits(model, {
+            pending_reason: nextReason,
+            pending_request_id: nextRequestId || "",
+            last_reason: nextReason,
+            last_request_id: nextRequestId || "",
+            last_outcome: "queued",
+            last_error: "",
+          });
+          const wait = Math.max(0, clampInt(model.get("debounce_ms"), 60));
+          debounceTimer = setTimeout(() => runRequest(activeRequest.token), wait);
         }
 
-        const debouncedResize = createQueuedDebouncer(
-          (payload) => {
-            doResize(payload.reason, payload.requestId, !!payload.force);
-          },
-          () => clampInt(model.get("debounce_ms"), 60),
-          true,
-        );
-
-        const onMsg = (msg) => {
-          if (msg && msg.type === "reflow") {
-            syncTraits(model, {
-              pending_reason: msg.reason || "msg:reflow",
-              pending_request_id: msg.request_id || "",
-              last_reason: msg.reason || "msg:reflow",
-              last_request_id: msg.request_id || "",
-            });
-            schedule(msg.reason || "msg:reflow", msg.request_id || null, msg.force !== false);
-          }
-        };
         const onAutorangeChange = () => schedule("change:autorange_mode", null, true);
         const onRevealChange = () => {
           if (!model.get("defer_reveal")) {
@@ -780,9 +723,7 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
         };
         const onWindowResize = () => schedule("window:resize", null, false);
         const onVisibilityChange = () => schedule("document:visibilitychange", null, true);
-        const onTransitionEnd = () => schedule("transitionend", null, true);
 
-        model.on("msg:custom", onMsg);
         model.on("change:autorange_mode", onAutorangeChange);
         model.on("change:defer_reveal", onRevealChange);
         model.on("change:debug_js", onDebugChange);
@@ -814,11 +755,8 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
 
         return () => {
           destroyed = true;
-          clearFollowups();
-          clearRecovery();
-          try { debouncedResize.cancel(); } catch (e) {}
+          clearTimers();
           disconnectObservers();
-          try { model.off("msg:custom", onMsg); } catch (e) {}
           try { model.off("change:autorange_mode", onAutorangeChange); } catch (e) {}
           try { model.off("change:defer_reveal", onRevealChange); } catch (e) {}
           try { model.off("change:debug_js", onDebugChange); } catch (e) {}
@@ -832,7 +770,6 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
       }
     };
     """
-
     def geometry_snapshot(self) -> PlotlyPaneGeometry:
         """Return the latest browser-side geometry snapshot."""
         return PlotlyPaneGeometry.from_driver(self)
@@ -843,15 +780,23 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
 
     def queue_reflow(self, *, reason: str = "manual", request_id: str | None = None) -> str:
         """Persist one reflow request so it survives frontend mount timing."""
-        resolved_request_id = request_id or new_request_id()
-        self.pending_reason = str(reason)
-        self.pending_request_id = str(resolved_request_id)
-        self.last_reason = str(reason)
-        self.last_request_id = str(resolved_request_id)
+        resolved_request_id = str(request_id or new_request_id())
+        reason_text = str(reason)
+        if (
+            self.pending_reason == reason_text
+            and self.pending_request_id == resolved_request_id
+            and self.last_outcome == "queued"
+        ):
+            return resolved_request_id
+        self.pending_reason = reason_text
+        self.pending_request_id = resolved_request_id
+        self.last_reason = reason_text
+        self.last_request_id = resolved_request_id
         self.last_outcome = "queued"
         self.last_error = ""
         self.reflow_token = int(self.reflow_token or 0) + 1
-        return str(resolved_request_id)
+        return resolved_request_id
+
 
     def reflow(
         self,
@@ -864,20 +809,22 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
         force: bool = True,
         persist: bool = True,
     ) -> str:
-        """Request a resize/reflow from the frontend and return the request id."""
-        resolved_request_id = self.queue_reflow(reason=reason, request_id=request_id) if persist else (request_id or new_request_id())
-        self.send(
-            {
-                "type": "reflow",
-                "reason": reason,
-                "request_id": resolved_request_id,
-                "view_id": view_id or self.view_id,
-                "figure_id": figure_id or self.figure_id,
-                "pane_id": pane_id or self.pane_id,
-                "force": bool(force),
-            }
-        )
-        return str(resolved_request_id)
+        """Request a resize/reflow from the frontend and return the request id.
+
+        The request is carried entirely by synced traits. This keeps the reflow
+        path simple, survives frontend mount timing, and avoids the duplicate
+        scheduling that happens when a custom message and a trait change both
+        describe the same request.
+        """
+        del force, persist
+        if view_id is not None:
+            self.view_id = str(view_id)
+        if figure_id is not None:
+            self.figure_id = str(figure_id)
+        if pane_id is not None:
+            self.pane_id = str(pane_id)
+        resolved_request_id = str(request_id or new_request_id())
+        return self.queue_reflow(reason=reason, request_id=resolved_request_id)
 
 
 @dataclass(frozen=True)
@@ -1064,10 +1011,7 @@ class PlotlyPane:
         force: bool = True,
     ) -> str:
         """Trigger a programmatic resize/reflow and return the request id."""
-        resolved_request_id = self.driver.queue_reflow(
-            reason=reason,
-            request_id=(request_id or new_request_id()),
-        )
+        resolved_request_id = request_id or new_request_id()
         self._emit_layout_event(
             "reflow_message_sent",
             source="PlotlyPane",
@@ -1078,42 +1022,13 @@ class PlotlyPane:
             figure_id=figure_id,
             force=force,
         )
-        reflow_callable = self.driver.reflow
-        try:
-            parameters = inspect.signature(reflow_callable).parameters
-        except (TypeError, ValueError):
-            parameters = None
-
-        accepts_kwargs = (
-            parameters is None
-            or any(
-                param.kind is inspect.Parameter.VAR_KEYWORD
-                for param in parameters.values()
-            )
-            or any(
-                name in parameters
-                for name in (
-                    "reason",
-                    "request_id",
-                    "view_id",
-                    "figure_id",
-                    "pane_id",
-                    "force",
-                    "persist",
-                )
-            )
-        )
-        if accepts_kwargs:
-            reflow_callable(
+        return str(
+            self.driver.reflow(
                 reason=reason,
                 request_id=resolved_request_id,
                 view_id=view_id,
                 figure_id=figure_id,
                 pane_id=(pane_id or self.debug_pane_id),
                 force=force,
-                persist=False,
             )
-            return str(resolved_request_id)
-
-        reflow_callable()
-        return str(resolved_request_id)
+        )

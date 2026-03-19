@@ -7,7 +7,7 @@ from gu_toolkit import Figure
 
 def test_figure_render_pipeline_updates_trace_data() -> None:
     x, a = sp.symbols("x a")
-    fig = Figure(samples=30)
+    fig = Figure(sampling_points=30)
     pref = fig.parameter(a, value=2.0)
     fig.parameter(a)
     plot = fig.plot(a * x, x, id="line")
