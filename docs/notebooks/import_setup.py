@@ -9,8 +9,12 @@ except NameError:
     _start = Path.cwd().resolve()
 
 _repo_root = _start
-while _repo_root != _repo_root.parent and not (_repo_root / "pyproject.toml").exists():
+while _repo_root != _repo_root.parent and not (_repo_root / ".root").exists():
     _repo_root = _repo_root.parent
 
+sys.path.insert(0,str(_repo_root))
+
 _src = _repo_root / "src"
-sys.path.insert(0, str(_src if _src.exists() else _repo_root))
+if _src.exists():
+    sys.path.insert(0, str(_src))
+

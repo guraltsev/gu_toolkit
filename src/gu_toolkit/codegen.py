@@ -253,7 +253,10 @@ def _parameter_call(
 
 
 def _plot_call(
-    ps: PlotSnapshot, *, style: Literal["figure_methods", "context_manager"]
+    ps: PlotSnapshot,
+    *,
+    style: Literal["figure_methods", "context_manager"],
+    figure_snapshot: FigureSnapshot | None = None,
 ) -> str:
     """Emit one plot call."""
     expr_code = sympy_to_code(ps.func)
@@ -273,7 +276,13 @@ def _plot_call(
             f"x_domain=({_fmt_float(ps.x_domain[0])}, {_fmt_float(ps.x_domain[1])})"
         )
     if ps.sampling_points is not None:
-        args.append(f"sampling_points={ps.sampling_points}")
+        args.append(f"samples={ps.sampling_points}")
+    elif (
+        figure_snapshot is not None
+        and getattr(figure_snapshot, "default_samples", figure_snapshot.samples)
+        != figure_snapshot.samples
+    ):
+        args.append("samples='figure_default'")
     if ps.color is not None:
         args.append(f"color={ps.color!r}")
     if ps.thickness is not None:
@@ -400,11 +409,22 @@ def figure_to_code(
     lines.append(
         "fig = Figure("
         f"title={snapshot.title!r}, "
-        f"default_x_range=({_fmt_float(main_x_range[0])}, {_fmt_float(main_x_range[1])}), "
-        f"default_y_range=({_fmt_float(main_y_range[0])}, {_fmt_float(main_y_range[1])}), "
+        f"x_range=({_fmt_float(main_x_range[0])}, {_fmt_float(main_x_range[1])}), "
+        f"y_range=({_fmt_float(main_y_range[0])}, {_fmt_float(main_y_range[1])}), "
         f"x_label={main_x_label!r}, y_label={main_y_label!r}, "
-        f"sampling_points={snapshot.sampling_points})"
+        f"samples={snapshot.samples})"
     )
+
+    if getattr(snapshot, "default_x_range", main_x_range) != main_x_range:
+        lines.append(
+            f"fig.default_x_range = ({_fmt_float(snapshot.default_x_range[0])}, {_fmt_float(snapshot.default_x_range[1])})"
+        )
+    if getattr(snapshot, "default_y_range", main_y_range) != main_y_range:
+        lines.append(
+            f"fig.default_y_range = ({_fmt_float(snapshot.default_y_range[0])}, {_fmt_float(snapshot.default_y_range[1])})"
+        )
+    if getattr(snapshot, "default_samples", snapshot.samples) != snapshot.samples:
+        lines.append(f"fig.default_samples = {snapshot.default_samples}")
 
     if main_view is not None and main_view.title != "main":
         lines.append(f"fig.views['main'].title = {main_view.title!r}")
@@ -451,7 +471,7 @@ def figure_to_code(
     if snapshot.plots:
         body_lines.append("# Plots")
         for ps in snapshot.plots.values():
-            body_lines.append(_plot_call(ps, style=options.interface_style))
+            body_lines.append(_plot_call(ps, style=options.interface_style, figure_snapshot=snapshot))
         body_lines.append("")
 
     info_lines: list[str] = []

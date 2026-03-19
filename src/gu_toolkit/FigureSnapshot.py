@@ -79,7 +79,7 @@ class FigureSnapshot:
     y_range : tuple[float, float]
         Default y-axis range for the main view.
     sampling_points : int
-        Default sample count.
+        Current figure sample count used by inherited plots.
     title : str
         Figure title text.
     parameters : ParameterSnapshot
@@ -92,6 +92,12 @@ class FigureSnapshot:
         Workspace view definitions.
     active_view_id : str
         Currently selected view id.
+    default_x_range : tuple[float, float] or None
+        Figure-level default x-range used for new views.
+    default_y_range : tuple[float, float] or None
+        Figure-level default y-range used for new views.
+    default_samples : int or None
+        Figure-level default samples used for newly created plots.
     """
 
     x_range: tuple[float, float]
@@ -103,6 +109,22 @@ class FigureSnapshot:
     info_cards: tuple[InfoCardSnapshot, ...]
     views: tuple[ViewSnapshot, ...] = field(default_factory=tuple)
     active_view_id: str = "main"
+    default_x_range: tuple[float, float] | None = None
+    default_y_range: tuple[float, float] | None = None
+    default_samples: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.default_x_range is None:
+            object.__setattr__(self, "default_x_range", self.x_range)
+        if self.default_y_range is None:
+            object.__setattr__(self, "default_y_range", self.y_range)
+        if self.default_samples is None:
+            object.__setattr__(self, "default_samples", self.sampling_points)
+
+    @property
+    def samples(self) -> int:
+        """Compatibility alias for :attr:`sampling_points`."""
+        return self.sampling_points
 
     def __repr__(self) -> str:
         return (

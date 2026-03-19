@@ -156,6 +156,14 @@ def get_x_range() -> tuple[float, float]:
     return _require_current_figure().x_range
 
 
+def set_default_x_range(value: tuple[int | float | str, int | float | str]) -> None:
+    _require_current_figure().default_x_range = value
+
+
+def get_default_x_range() -> tuple[float, float]:
+    return _require_current_figure().default_x_range
+
+
 def set_y_range(value: tuple[int | float | str, int | float | str]) -> None:
     _require_current_figure().y_range = value
 
@@ -164,12 +172,36 @@ def get_y_range() -> tuple[float, float]:
     return _require_current_figure().y_range
 
 
+def set_default_y_range(value: tuple[int | float | str, int | float | str]) -> None:
+    _require_current_figure().default_y_range = value
+
+
+def get_default_y_range() -> tuple[float, float]:
+    return _require_current_figure().default_y_range
+
+
+def set_samples(value: int | str | object | None) -> None:
+    _require_current_figure().samples = value
+
+
+def get_samples() -> int | None:
+    return _require_current_figure().samples
+
+
+def set_default_samples(value: int | str | object | None) -> None:
+    _require_current_figure().default_samples = value
+
+
+def get_default_samples() -> int | None:
+    return _require_current_figure().default_samples
+
+
 def set_sampling_points(value: int | str | object | None) -> None:
-    _require_current_figure().sampling_points = value
+    set_samples(value)
 
 
 def get_sampling_points() -> int | None:
-    return _require_current_figure().sampling_points
+    return get_samples()
 
 
 def plot_style_options() -> dict[str, str]:
@@ -202,7 +234,7 @@ def plot(
     label: str | None = None,
     visible: bool = True,
     x_domain: tuple[int | float | str, int | float | str] | None = None,
-    sampling_points: int | str | None = None,
+    sampling_points: int | str | object | None = None,
     color: str | None = None,
     thickness: int | float | None = None,
     width: int | float | None = None,
@@ -213,6 +245,7 @@ def plot(
     trace: Mapping[str, Any] | None = None,
     view: str | Sequence[str] | None = None,
     vars: PlotVarsSpec | None = None,
+    samples: int | str | object | None = None,
 ) -> Plot:
     """Plot on the current figure, auto-creating one when needed."""
     fig = _current_figure()
@@ -240,10 +273,15 @@ def plot(
         trace=trace,
         view=view,
         vars=vars,
+        samples=samples,
     )
 
 
 __all__ = [
+    "get_default_samples",
+    "get_default_x_range",
+    "get_default_y_range",
+    "get_samples",
     "get_sampling_points",
     "get_title",
     "get_x_range",
@@ -255,6 +293,10 @@ __all__ = [
     "plots",
     "plot_style_options",
     "render",
+    "set_default_samples",
+    "set_default_x_range",
+    "set_default_y_range",
+    "set_samples",
     "set_sampling_points",
     "set_title",
     "set_x_range",

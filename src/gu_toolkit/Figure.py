@@ -167,6 +167,9 @@ class Figure:
         "_view_manager",
         "_views",
         "_sampling_points",
+        "_default_x_range",
+        "_default_y_range",
+        "_default_samples",
         "_render_info_last_log_t",
         "_render_debug_last_log_t",
         "_print_capture",
@@ -181,11 +184,30 @@ class Figure:
         "_has_been_displayed",
     ]
 
+    @staticmethod
+    def _coerce_range_tuple(value: RangeLike) -> tuple[float, float]:
+        return (
+            float(InputConvert(value[0], float)),
+            float(InputConvert(value[1], float)),
+        )
+
+    @staticmethod
+    def _coerce_samples_value(
+        value: int | str | _FigureDefaultSentinel | None,
+    ) -> int | None:
+        return (
+            int(InputConvert(value, int))
+            if value is not None and not _is_figure_default(value)
+            else None
+        )
+
     def __init__(
         self,
         *,
         title: str = "",
-        sampling_points: int = 500,
+        samples: int | str | _FigureDefaultSentinel | None = None,
+        default_samples: int | str | _FigureDefaultSentinel | None = None,
+        sampling_points: int | str | _FigureDefaultSentinel | None = None,
         default_x_range: RangeLike | None = None,
         default_y_range: RangeLike | None = None,
         x_label: str = "",
@@ -200,7 +222,13 @@ class Figure:
         # the public constructor.
 
         def _same_range(lhs: RangeLike, rhs: RangeLike) -> bool:
-            return tuple(lhs) == tuple(rhs)
+            return self._coerce_range_tuple(lhs) == self._coerce_range_tuple(rhs)
+
+        def _same_samples(
+            lhs: int | str | _FigureDefaultSentinel | None,
+            rhs: int | str | _FigureDefaultSentinel | None,
+        ) -> bool:
+            return self._coerce_samples_value(lhs) == self._coerce_samples_value(rhs)
 
         debug = bool(_deprecated_kwargs.pop("debug", False))
         default_view_id = _deprecated_kwargs.pop("default_view_id", None)
@@ -231,28 +259,36 @@ class Figure:
             )
 
         if x_range is not None:
-            warnings.warn(
-                "Figure(x_range=...) is deprecated; use Figure(default_x_range=...) instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
             if default_x_range is not None and not _same_range(x_range, default_x_range):
                 raise ValueError(
-                    "Figure() received both default_x_range= and deprecated x_range= with different values; use only default_x_range=."
+                    "Figure() received both x_range= and default_x_range= with different values; use only one initial x-range keyword."
                 )
             default_x_range = x_range
 
         if y_range is not None:
-            warnings.warn(
-                "Figure(y_range=...) is deprecated; use Figure(default_y_range=...) instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
             if default_y_range is not None and not _same_range(y_range, default_y_range):
                 raise ValueError(
-                    "Figure() received both default_y_range= and deprecated y_range= with different values; use only default_y_range=."
+                    "Figure() received both y_range= and default_y_range= with different values; use only one initial y-range keyword."
                 )
             default_y_range = y_range
+
+        if samples is not None:
+            if default_samples is not None and not _same_samples(samples, default_samples):
+                raise ValueError(
+                    "Figure() received both samples= and default_samples= with different values; use only one initial samples keyword."
+                )
+            if sampling_points is not None and not _same_samples(samples, sampling_points):
+                raise ValueError(
+                    "Figure() received both samples= and sampling_points= with different values; use only one initial samples keyword."
+                )
+            default_samples = samples
+            sampling_points = samples
+        elif default_samples is not None:
+            if sampling_points is not None and not _same_samples(default_samples, sampling_points):
+                raise ValueError(
+                    "Figure() received both default_samples= and sampling_points= with different values; use only one initial samples keyword."
+                )
+            sampling_points = default_samples
 
         if display is not None:
             warnings.warn(
@@ -271,7 +307,14 @@ class Figure:
         if default_y_range is None:
             default_y_range = (-3, 3)
 
-        self._sampling_points = sampling_points
+        resolved_samples = self._coerce_samples_value(sampling_points)
+        if resolved_samples is None:
+            resolved_samples = 500
+
+        self._sampling_points = resolved_samples
+        self._default_x_range = self._coerce_range_tuple(default_x_range)
+        self._default_y_range = self._coerce_range_tuple(default_y_range)
+        self._default_samples = None
         self.plots: dict[str, Plot] = {}
         self._print_capture: ExitStack | None = None
         self._context_depth = 0
@@ -341,7 +384,7 @@ class Figure:
         if self._sync_sidebar_visibility():
             self._request_active_view_reflow("sidebar_visibility")
 
-        self._emit_layout_event("figure_created", source="Figure", phase="completed", level=logging.INFO, title=title, sampling_points=sampling_points)
+        self._emit_layout_event("figure_created", source="Figure", phase="completed", level=logging.INFO, title=title, samples=self.samples, default_samples=self.default_samples)
 
         # 6. Logging state
         self._render_info_last_log_t = 0.0
@@ -491,8 +534,8 @@ class Figure:
             title=(str(view_id) if title is None else str(title)),
             x_label=(x_label or ""),
             y_label=(y_label or ""),
-            default_x_range=(x_range if x_range is not None else (-4, 4)),
-            default_y_range=(y_range if y_range is not None else (-3, 3)),
+            default_x_range=(x_range if x_range is not None else self.default_x_range),
+            default_y_range=(y_range if y_range is not None else self.default_y_range),
             figure_widget=figure_widget,
             pane=pane,
         )
@@ -854,93 +897,41 @@ class Figure:
 
     @property
     def x_range(self) -> tuple[float, float]:
-        """Return the default x-axis range.
-
-        Returns
-        -------
-        tuple[float, float]
-            Default x-axis range restored on double-click.
-
-        Examples
-        --------
-        >>> fig = Figure(default_x_range=(-2, 2))  # doctest: +SKIP
-        >>> fig.x_range  # doctest: +SKIP
-        (-2.0, 2.0)
-
-        See Also
-        --------
-        y_range : The default y-axis range.
-        """
+        """Return the current view's default x-axis range."""
         return self.views.current.x_range
 
     @x_range.setter
     def x_range(self, value: RangeLike) -> None:
-        """Set the default x-axis range.
-
-        Parameters
-        ----------
-        value : RangeLike
-            New axis range (min, max).
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.x_range = (-5, 5)  # doctest: +SKIP
-
-        Notes
-        -----
-        This updates the default Plotly axis range and the visible viewport immediately.
-        """
+        """Set the current view's default x-axis range."""
         self.views.current.x_range = value
 
     @property
+    def default_x_range(self) -> tuple[float, float]:
+        """Return the figure-level default x-range used for new views."""
+        return self._default_x_range
+
+    @default_x_range.setter
+    def default_x_range(self, value: RangeLike) -> None:
+        self._default_x_range = self._coerce_range_tuple(value)
+
+    @property
     def y_range(self) -> tuple[float, float]:
-        """Return the default y-axis range.
-
-        Returns
-        -------
-        tuple[float, float]
-            Default y-axis range.
-
-        Examples
-        --------
-        >>> fig = Figure(default_y_range=(-1, 1))  # doctest: +SKIP
-        >>> fig.y_range  # doctest: +SKIP
-        (-1.0, 1.0)
-
-        See Also
-        --------
-        x_range : The default x-axis range.
-        """
+        """Return the current view's default y-axis range."""
         return self.views.current.y_range
 
     @y_range.setter
     def y_range(self, value: RangeLike) -> None:
-        """Set the default y-axis range.
-
-        Parameters
-        ----------
-        value : RangeLike
-            New axis range (min, max).
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.y_range = (-2, 2)  # doctest: +SKIP
-
-        Notes
-        -----
-        This updates the default Plotly axis range and the visible viewport immediately.
-        """
+        """Set the current view's default y-axis range."""
         self.views.current.y_range = value
+
+    @property
+    def default_y_range(self) -> tuple[float, float]:
+        """Return the figure-level default y-range used for new views."""
+        return self._default_y_range
+
+    @default_y_range.setter
+    def default_y_range(self, value: RangeLike) -> None:
+        self._default_y_range = self._coerce_range_tuple(value)
 
     @property
     def _viewport_x_range(self) -> tuple[float, float] | None:
@@ -970,94 +961,46 @@ class Figure:
 
     @property
     def current_x_range(self) -> tuple[float, float] | None:
-        """Return the current viewport x-range.
-
-        Returns
-        -------
-        tuple[float, float] or None
-            Current Plotly x-axis range, or ``None`` if not set.
-
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.current_x_range  # doctest: +SKIP
-
-        Notes
-        -----
-        This reflects the Plotly widget state after panning or zooming.
-        """
+        """Return the current viewport x-range."""
         return self._viewport_x_range
 
     @property
     def current_y_range(self) -> tuple[float, float] | None:
-        """Return the current viewport y-range (read-only).
-
-        Returns
-        -------
-        tuple[float, float] or None
-            Current Plotly y-axis range, or ``None`` if not set.
-
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.current_y_range  # doctest: +SKIP
-
-        Notes
-        -----
-        This reflects the Plotly widget state after panning or zooming.
-        """
+        """Return the current viewport y-range (read-only)."""
         return self._viewport_y_range
 
     @property
-    def sampling_points(self) -> int | None:
-        """Return the default number of sampling points per plot.
-
-        Returns
-        -------
-        int or None
-            Default sample count, or ``None`` for Plotly defaults.
-
-        Examples
-        --------
-        >>> fig = Figure(sampling_points=300)  # doctest: +SKIP
-        >>> fig.sampling_points  # doctest: +SKIP
-        300
-
-        See Also
-        --------
-        Plot.sampling_points : Per-plot overrides.
-        """
+    def samples(self) -> int | None:
+        """Return the figure's current sample count for inherited plots."""
         return self._sampling_points
+
+    @samples.setter
+    def samples(self, val: int | str | _FigureDefaultSentinel | None) -> None:
+        """Set the figure's current sample count for inherited plots."""
+        self._sampling_points = self._coerce_samples_value(val)
+
+    @property
+    def default_samples(self) -> int | None:
+        """Return the default sample count used for newly created plots."""
+        if self._default_samples is None:
+            return self.samples
+        return self._default_samples
+
+    @default_samples.setter
+    def default_samples(self, val: int | str | _FigureDefaultSentinel | None) -> None:
+        if val is None or _is_figure_default(val):
+            self._default_samples = None
+            return
+        self._default_samples = self._coerce_samples_value(val)
+
+    @property
+    def sampling_points(self) -> int | None:
+        """Compatibility alias for :attr:`samples`."""
+        return self.samples
 
     @sampling_points.setter
     def sampling_points(self, val: int | str | _FigureDefaultSentinel | None) -> None:
-        """Set the default number of sampling points per plot.
-
-        Parameters
-        ----------
-        val : int, str, FIGURE_DEFAULT, or None
-            Sample count, or ``None``/``"figure_default"``/``"FIGURE_DEFAULT"``/``FIGURE_DEFAULT``
-            to clear.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.sampling_points = 200  # doctest: +SKIP
-
-        Notes
-        -----
-        Use ``None``/``"figure_default"``/``"FIGURE_DEFAULT"``/``FIGURE_DEFAULT``
-        to clear the override.
-        """
-        self._sampling_points = (
-            int(InputConvert(val, int))
-            if isinstance(val, (int, float, str)) and not _is_figure_default(val)
-            else None
-        )
+        self.samples = val
 
     # --- Public API ---
 
@@ -1080,7 +1023,7 @@ class Figure:
         label: str | None = None,
         visible: VisibleSpec = True,
         x_domain: RangeLike | None = None,
-        sampling_points: int | str | None = None,
+        sampling_points: int | str | _FigureDefaultSentinel | None = None,
         color: str | None = None,
         thickness: int | float | None = None,
         width: int | float | None = None,
@@ -1091,6 +1034,7 @@ class Figure:
         trace: Mapping[str, Any] | None = None,
         view: str | Sequence[str] | None = None,
         vars: PlotVarsSpec | None = None,
+        samples: int | str | _FigureDefaultSentinel | None = None,
     ) -> Plot:
         """
         Plot an expression/callable on the figure (and keep it “live”).
@@ -1216,6 +1160,29 @@ class Figure:
         if isinstance(var, tuple) and len(var) == 3:
             x_domain = (var[1], var[2])
 
+        if samples is not None and sampling_points is not None:
+            lhs = (
+                None if _is_figure_default(samples) else self._coerce_samples_value(samples)
+            )
+            rhs = (
+                None
+                if _is_figure_default(sampling_points)
+                else self._coerce_samples_value(sampling_points)
+            )
+            if lhs != rhs:
+                raise ValueError(
+                    "plot() received both samples= and sampling_points= with different values; use only one samples keyword."
+                )
+
+        samples_supplied = samples is not None or sampling_points is not None
+        requested_samples = samples if samples is not None else sampling_points
+        if requested_samples is None:
+            explicit_plot_samples: int | str | _FigureDefaultSentinel | None = None
+        elif _is_figure_default(requested_samples):
+            explicit_plot_samples = "figure_default"
+        else:
+            explicit_plot_samples = self._coerce_samples_value(requested_samples)
+
         style_kwargs = validate_style_kwargs(
             {
                 "color": color,
@@ -1261,7 +1228,7 @@ class Figure:
                 "parameters": parameters,
                 "visible": visible,
                 "x_domain": x_domain,
-                "sampling_points": sampling_points,
+                "samples": (explicit_plot_samples if samples_supplied else None),
                 "color": color,
                 "thickness": thickness,
                 "dash": dash,
@@ -1289,13 +1256,21 @@ class Figure:
                     else (self.views.current_id,)
                 )
             )
+            create_plot_samples: int | str | _FigureDefaultSentinel | None = explicit_plot_samples
+            if (
+                not samples_supplied
+                and self._default_samples is not None
+                and self.default_samples != self.samples
+            ):
+                create_plot_samples = self.default_samples
+
             plot = Plot(
                 var=normalized_var,
                 func=normalized_func,
                 smart_figure=self,
                 parameters=parameters,
                 x_domain=x_domain,
-                sampling_points=sampling_points,
+                samples=create_plot_samples,
                 label=(id if label is None else label),
                 visible=visible,
                 color=color,
@@ -1445,7 +1420,7 @@ class Figure:
         return FigureSnapshot(
             x_range=main_view.x_range,
             y_range=main_view.y_range,
-            sampling_points=self.sampling_points or 500,
+            sampling_points=self.samples or 500,
             title=self.title or "",
             parameters=self._parameter_manager.snapshot(full=True),
             plots={pid: p.snapshot(id=pid) for pid, p in self.plots.items()},
@@ -1464,6 +1439,9 @@ class Figure:
                 for view in self.views.values()
             ),
             active_view_id=self.views.current_id,
+            default_x_range=self.default_x_range,
+            default_y_range=self.default_y_range,
+            default_samples=self.default_samples or self.samples or 500,
         )
 
     def to_code(self, *, options: CodegenOptions | None = None) -> str:
@@ -1768,6 +1746,10 @@ class Figure:
 
 from . import figure_api as _figure_api
 
+get_default_samples = _figure_api.get_default_samples
+get_default_x_range = _figure_api.get_default_x_range
+get_default_y_range = _figure_api.get_default_y_range
+get_samples = _figure_api.get_samples
 get_sampling_points = _figure_api.get_sampling_points
 get_title = _figure_api.get_title
 get_x_range = _figure_api.get_x_range
@@ -1779,6 +1761,10 @@ plot = _figure_api.plot
 plots = _figure_api.plots
 plot_style_options = _figure_api.plot_style_options
 render = _figure_api.render
+set_default_samples = _figure_api.set_default_samples
+set_default_x_range = _figure_api.set_default_x_range
+set_default_y_range = _figure_api.set_default_y_range
+set_samples = _figure_api.set_samples
 set_sampling_points = _figure_api.set_sampling_points
 set_title = _figure_api.set_title
 set_x_range = _figure_api.set_x_range
@@ -1804,7 +1790,15 @@ __all__ = [
     "parameters",
     "info",
     "render",
+    "get_default_samples",
+    "get_default_x_range",
+    "get_default_y_range",
+    "get_samples",
     "get_sampling_points",
+    "set_default_samples",
+    "set_default_x_range",
+    "set_default_y_range",
+    "set_samples",
     "set_sampling_points",
     "get_x_range",
     "set_x_range",

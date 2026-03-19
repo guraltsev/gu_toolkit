@@ -61,6 +61,11 @@ class PlotSnapshot:
     opacity: float | None
     views: tuple[str, ...] = ()
 
+    @property
+    def samples(self) -> int | None:
+        """Compatibility alias for :attr:`sampling_points`."""
+        return self.sampling_points
+
     def __repr__(self) -> str:
         return (
             f"PlotSnapshot(id={self.id!r}, var={self.var!r}, "
