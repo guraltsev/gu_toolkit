@@ -7,7 +7,7 @@ step/default) and helper APIs for parameter-reference integration.
 from collections.abc import Sequence
 from typing import Any, cast
 
-import ipywidgets as widgets
+from ._widget_stubs import widgets
 import traitlets
 
 from .InputConvert import InputConvert

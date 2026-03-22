@@ -44,6 +44,7 @@ def test_parameter_change_marks_inactive_view_stale_until_activation() -> None:
     fig.parameter(a, value=1.0)
     fig.set_active_view("main")
     fig.parameter(a).value = 2.0
+    fig.flush_render_queue()
 
     assert fig.views["alt"].is_stale is True
     fig.set_active_view("alt")

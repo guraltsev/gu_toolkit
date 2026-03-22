@@ -40,6 +40,7 @@ def test_replacing_same_hook_id_overwrites_callback() -> None:
     assert hook_id_2 == hook_id
 
     fig.parameter(a).value = 2.0
+    fig.flush_render_queue()
     assert calls == ["second"]
 
 
@@ -67,6 +68,7 @@ def test_non_string_hashable_hook_id_is_supported() -> None:
 
     assert returned == tuple_id
     fig.parameter(a).value = 1.75
+    fig.flush_render_queue()
     assert calls[-1] == pytest.approx(1.75)
 
 
@@ -93,6 +95,7 @@ def test_failing_hook_warns_without_blocking_other_hooks() -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         fig.parameter(a).value = 2.5
+        fig.flush_render_queue()
 
     assert ok_calls[-1] == pytest.approx(2.5)
     assert any("Hook fail-hook failed" in str(w.message) for w in caught)

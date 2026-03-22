@@ -20,21 +20,9 @@ import uuid
 from dataclasses import asdict, dataclass
 from typing import Any
 
-import ipywidgets as W
+from ._widget_stubs import anywidget, widgets as W
 import traitlets
 
-try:
-    import anywidget
-except ModuleNotFoundError:  # pragma: no cover - dependency fallback for tests
-    class _FallbackAnyWidget(W.Widget):
-        """Minimal ``anywidget.AnyWidget`` fallback used in test environments."""
-
-        _esm = ""
-
-    class _AnywidgetModule:
-        AnyWidget = _FallbackAnyWidget
-
-    anywidget = _AnywidgetModule()
 
 from .layout_logging import LOGGER_NAME, new_debug_id, new_request_id
 

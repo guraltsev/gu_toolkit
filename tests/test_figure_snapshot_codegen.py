@@ -72,12 +72,12 @@ def test_to_code_default_is_context_manager_with_dynamic_info_comment_block() ->
     code = fig.to_code()
 
     assert "import sympy as sp" in code
-    assert "from gu_toolkit import Figure, parameter, plot, info, set_title" in code
+    assert "from gu_toolkit import Figure, parameter, plot, info" in code
     assert "from IPython.display import display" in code
     assert "fig = Figure(" in code
     assert "display(fig)" in code
     assert "with fig:" in code
-    assert "set_title('Snapshot demo')" in code
+    assert "title='Snapshot demo'" in code
     assert "parameter(a, value=0.75, min=-2.0, max=2.0, step=0.05)" in code
     assert "plot(" in code
     assert "# info('<b>Static</b>', id='status')" in code

@@ -59,8 +59,25 @@ class ViewManager:
         self._views[key] = view
         return view
 
-    def set_active_view(self, view_id: str) -> tuple[View, View] | None:
-        """Switch the active view id and update per-view active flags."""
+    def set_active_view(
+        self,
+        view_id: str,
+        *,
+        current_viewport_x: tuple[float, float] | None = None,
+        current_viewport_y: tuple[float, float] | None = None,
+    ) -> tuple[View, View] | None:
+        """Switch the active view id and update per-view active flags.
+
+        Parameters
+        ----------
+        view_id : str
+            Target active view id.
+        current_viewport_x, current_viewport_y : tuple[float, float] or None, optional
+            When provided, remember the outgoing view's last live viewport just
+            before the manager switches to ``view_id``. This keeps the registry
+            layer usable in isolation from the full :class:`Figure` runtime and
+            supports unit tests that exercise stale-policy transitions directly.
+        """
         key = str(view_id)
         if key not in self._views:
             raise KeyError(f"Unknown view: {key}")
@@ -68,6 +85,10 @@ class ViewManager:
             return None
 
         current = self.active_view()
+        if current_viewport_x is not None:
+            current.viewport_x_range = tuple(float(v) for v in current_viewport_x)
+        if current_viewport_y is not None:
+            current.viewport_y_range = tuple(float(v) for v in current_viewport_y)
         current.is_active = False
 
         self._active_view_id = key

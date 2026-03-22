@@ -33,6 +33,8 @@ def test_param_change_hooks_run_inside_triggering_figure_context() -> None:
 
     fig1.parameter(a).value = 2
     fig2.parameter(c).value = 3
+    fig1.flush_render_queue()
+    fig2.flush_render_queue()
 
     assert log[0] == ("fig1", 2.0, 2.0)
     assert log[1] == ("fig2", 3.0, 3.0)

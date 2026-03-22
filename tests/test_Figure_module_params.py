@@ -272,7 +272,8 @@ def test_relayout_debounce_delays_first_event_until_timer() -> None:
     original_render = Figure.render
     calls = []
 
-    def _render_spy(self, reason="manual", trigger=None):
+    def _render_spy(self, reason="manual", trigger=None, *, force=False):
+        del trigger, force
         calls.append(reason)
 
     try:
@@ -301,7 +302,8 @@ def test_relayout_debounce_drop_overflow_keeps_final_event() -> None:
     original_render = Figure.render
     calls = []
 
-    def _render_spy(self, reason="manual", trigger=None):
+    def _render_spy(self, reason="manual", trigger=None, *, force=False):
+        del trigger, force
         calls.append(reason)
 
     try:

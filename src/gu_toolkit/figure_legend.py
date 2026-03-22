@@ -23,7 +23,7 @@ Architecture notes
 
 Examples
 --------
->>> import ipywidgets as widgets
+>>> from ._widget_stubs import widgets
 >>> from gu_toolkit.figure_legend import LegendPanelManager
 >>> class _P:  # doctest: +SKIP
 ...     def __init__(self):
@@ -49,7 +49,7 @@ import html
 from dataclasses import dataclass
 from typing import Any
 
-import ipywidgets as widgets
+from ._widget_stubs import widgets
 from .figure_color import color_for_trace_index
 
 

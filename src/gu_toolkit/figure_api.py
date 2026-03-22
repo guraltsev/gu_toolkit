@@ -128,8 +128,14 @@ def get_title() -> str:
     return _require_current_figure().title
 
 
-def render(reason: str = "manual", trigger: ParamEvent | None = None) -> None:
-    _require_current_figure().render(reason=reason, trigger=trigger)
+def render(
+    reason: str = "manual",
+    trigger: ParamEvent | None = None,
+    *,
+    force: bool = False,
+) -> None:
+    """Queue or synchronously execute a render on the current figure."""
+    _require_current_figure().render(reason=reason, trigger=trigger, force=force)
 
 
 def info(

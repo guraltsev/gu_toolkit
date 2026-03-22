@@ -32,16 +32,11 @@ def test_raw_info_output_activates_sidebar_visibility() -> None:
 
 def test_raw_info_output_requests_reflow_when_sidebar_appears() -> None:
     fig = Figure()
-    reasons: list[str] = []
-
-    def _capture(reason: str) -> None:
-        reasons.append(reason)
-
-    fig._request_active_view_reflow = _capture  # type: ignore[method-assign]
 
     fig.info_manager.get_output("summary")
 
-    assert reasons == ["sidebar_visibility"]
+    assert fig.pane.driver.pending_reason == "sidebar_visibility"
+    assert fig.pane.driver.pending_request_id
 
 
 def test_info_auto_id_and_replacement() -> None:
@@ -79,9 +74,9 @@ def test_info_dynamic_updates_on_all_render_reasons() -> None:
             return f"<code>{ctx.reason}</code>"
 
         fig.info(["static", _dynamic], id="reasons")
-        fig.render(reason="manual")
-        fig.render(reason="relayout")
-        fig.render(reason="param_change", trigger={"k": "v"})
+        fig.render(reason="manual", force=True)
+        fig.render(reason="relayout", force=True)
+        fig.render(reason="param_change", trigger={"k": "v"}, force=True)
 
         assert seen[:4] == ["manual", "manual", "relayout", "param_change"]
 
