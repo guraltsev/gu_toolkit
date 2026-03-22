@@ -326,6 +326,7 @@ class Plot:
         # Store
         self._var = var
         self._func = func
+        self._rebind_numeric_expressions()
 
     def set_numeric_function(
         self,
@@ -362,6 +363,38 @@ class Plot:
             self._func = self._func
         else:
             self._func = sp.Symbol("f_numeric")
+        self._rebind_numeric_expressions()
+
+    def _rebind_numeric_expressions(self) -> None:
+        """Cache live and render-bound numeric callables for this plot.
+
+        The base compiled :class:`NumericFunction` stays shared/cached. This
+        helper only derives the binding layers that supply dynamic parameter
+        values. Those wrappers are created when the plot function changes rather
+        than during every render, which keeps the hot render loop allocation
+        free on the numeric-function side.
+        """
+        dynamic_symbols = tuple(
+            sym for sym in self._numpified.all_vars if sym != self._var
+        )
+        if dynamic_symbols:
+            dynamic_expression = self._numpified.freeze(
+                {sym: DYNAMIC_PARAMETER for sym in dynamic_symbols}
+            )
+            parameter_manager = self._smart_figure.parameters
+            live_context = parameter_manager.parameter_context
+            render_context = getattr(
+                parameter_manager, "render_parameter_context", live_context
+            )
+            self._live_numeric_expression = dynamic_expression.set_parameter_context(
+                live_context
+            )
+            self._render_numeric_expression = dynamic_expression.set_parameter_context(
+                render_context
+            )
+        else:
+            self._live_numeric_expression = self._numpified
+            self._render_numeric_expression = self._numpified
 
     @property
     def symbolic_expression(self) -> Expr:
@@ -442,16 +475,12 @@ class Plot:
 
     @property
     def numeric_expression(self) -> NumericFunction:
-        """Return a live :class:`NumericFunction` bound to the figure parameter context."""
-        return self._numpified.set_parameter_context(
-            self._smart_figure.parameters.parameter_context
-        ).freeze(
-            {
-                sym: DYNAMIC_PARAMETER
-                for sym in self._numpified.all_vars
-                if sym != self._var
-            }
-        )
+        """Return the cached live :class:`NumericFunction` for this plot.
+
+        The returned object keeps a stable identity across repeated accesses and
+        reads current parameter values from the figure's live parameter manager.
+        """
+        return self._live_numeric_expression
 
     @property
     def x_data(self) -> np.ndarray | None:
@@ -765,10 +794,27 @@ class Plot:
         if value is True:
             self.render()
 
-    def render(self, view_id: str | None = None) -> None:
-        """
-        Compute (x, y) samples and update the Plotly trace.
-        Skips computation if the plot is hidden.
+    def render(
+        self,
+        view_id: str | None = None,
+        *,
+        use_batch_update: bool = True,
+        refresh_parameter_snapshot: bool = True,
+    ) -> None:
+        """Compute samples and update the Plotly trace for one view membership.
+
+        Parameters
+        ----------
+        view_id : str | None, optional
+            Target view id. Defaults to the figure's active view.
+        use_batch_update : bool, default=True
+            If ``True``, wrap this trace update in its own Plotly
+            ``batch_update()`` context. Figure-level batched renders pass
+            ``False`` and manage one outer batch context for all plots.
+        refresh_parameter_snapshot : bool, default=True
+            If ``True``, refresh the figure's reusable render-parameter snapshot
+            before evaluation. Figure-level batched renders refresh once up
+            front and pass ``False`` for all nested plot renders.
 
         Returns
         -------
@@ -778,7 +824,7 @@ class Plot:
         --------
         >>> x = sp.symbols("x")  # doctest: +SKIP
         >>> fig = Figure()  # doctest: +SKIP
-        >>> plot = Plot(x, sp.sin(x), fig)  # doctest: +SKIP
+        >>> plot = fig.plot(sp.sin(x), x, id="sin")  # doctest: +SKIP
         >>> plot.render()  # doctest: +SKIP
 
         Notes
@@ -793,8 +839,13 @@ class Plot:
         if self._suspend_render or self._visible is not True:
             return
 
-        # Phase 2 keeps concrete rendering pinned to active view only.
         fig = self._smart_figure
+        if refresh_parameter_snapshot:
+            refresh_context = getattr(fig.parameters, "refresh_render_parameter_context", None)
+            if callable(refresh_context):
+                refresh_context()
+
+        # Phase 2 keeps concrete rendering pinned to active view only.
         if target_view != fig.views.current_id:
             fig.views[target_view].is_stale = True
             return
@@ -813,7 +864,7 @@ class Plot:
 
         # 3. Compute
         x_values = np.linspace(x_min, x_max, num=int(num))
-        y_values = np.asarray(self.numeric_expression(x_values))
+        y_values = np.asarray(self._render_numeric_expression(x_values))
         self._x_data = x_values.copy()
         self._y_data = y_values.copy()
 
@@ -821,9 +872,16 @@ class Plot:
         target_handle = self._handles[target_view].trace_handle
         if target_handle is None:
             return
-        with fig.views[target_view].figure_widget.batch_update():
+
+        def _apply_trace_update() -> None:
             target_handle.x = x_values
             target_handle.y = y_values
+
+        if use_batch_update:
+            with fig.views[target_view].figure_widget.batch_update():
+                _apply_trace_update()
+        else:
+            _apply_trace_update()
 
     def _update_line_style(
         self,
@@ -889,104 +947,119 @@ class Plot:
         This method is used internally by :meth:`Figure.plot` when
         updating an existing plot.
         """
-        if "label" in kwargs:
-            self.label = kwargs["label"]
+        render_requested = False
+        previous_suspend = self._suspend_render
+        self._suspend_render = True
+        try:
+            if "label" in kwargs:
+                self.label = kwargs["label"]
 
-        if "visible" in kwargs:
-            self.visible = kwargs["visible"]
+            if "visible" in kwargs:
+                self.visible = kwargs["visible"]
+                render_requested = render_requested or kwargs["visible"] is True
 
-        if "x_domain" in kwargs:
-            val = kwargs["x_domain"]
-            if val is None:
-                # None means "no change" during in-place updates.
-                pass
-            elif _is_figure_default(val):
-                self.x_domain = None
-            else:
-                x_min = InputConvert(val[0], float)
-                x_max = InputConvert(val[1], float)
-                self.x_domain = (x_min, x_max)
+            if "x_domain" in kwargs:
+                val = kwargs["x_domain"]
+                if val is None:
+                    # None means "no change" during in-place updates.
+                    pass
+                elif _is_figure_default(val):
+                    self.x_domain = None
+                    render_requested = True
+                else:
+                    x_min = InputConvert(val[0], float)
+                    x_max = InputConvert(val[1], float)
+                    self.x_domain = (x_min, x_max)
+                    render_requested = True
 
-        samples_key_present = "samples" in kwargs
-        sampling_points_key_present = "sampling_points" in kwargs
-        if samples_key_present and sampling_points_key_present:
-            left = kwargs["samples"]
-            right = kwargs["sampling_points"]
-            lhs = None if _is_figure_default(left) else (
-                None if left is None else int(InputConvert(left, int))
+            samples_key_present = "samples" in kwargs
+            sampling_points_key_present = "sampling_points" in kwargs
+            if samples_key_present and sampling_points_key_present:
+                left = kwargs["samples"]
+                right = kwargs["sampling_points"]
+                lhs = None if _is_figure_default(left) else (
+                    None if left is None else int(InputConvert(left, int))
+                )
+                rhs = None if _is_figure_default(right) else (
+                    None if right is None else int(InputConvert(right, int))
+                )
+                if lhs != rhs:
+                    raise ValueError(
+                        "Plot.update() received both samples= and sampling_points= with different values; use only one samples keyword."
+                    )
+
+            if samples_key_present or sampling_points_key_present:
+                val = kwargs["samples"] if samples_key_present else kwargs["sampling_points"]
+                if val is None:
+                    # None means "no change" during in-place updates.
+                    pass
+                elif _is_figure_default(val):
+                    self.samples = None
+                    render_requested = True
+                else:
+                    self.samples = InputConvert(val, int)
+                    render_requested = True
+
+            if "view" in kwargs:
+                requested = kwargs["view"]
+                if requested is not None:
+                    render_requested = True
+                    requested_views = (
+                        {requested} if isinstance(requested, str) else set(requested)
+                    )
+                    for view_id in tuple(self._view_ids):
+                        if view_id not in requested_views:
+                            self.remove_from_view(view_id)
+                    for view_id in requested_views:
+                        self.add_to_view(view_id)
+
+            style_kwargs = validate_style_kwargs(
+                {
+                    "color": kwargs.get("color"),
+                    "thickness": kwargs.get("thickness"),
+                    "width": kwargs.get("width"),
+                    "dash": kwargs.get("dash"),
+                    "line": kwargs.get("line"),
+                    "opacity": kwargs.get("opacity"),
+                    "alpha": kwargs.get("alpha"),
+                    "trace": kwargs.get("trace"),
+                },
+                caller="Plot.update()",
             )
-            rhs = None if _is_figure_default(right) else (
-                None if right is None else int(InputConvert(right, int))
+
+            self._update_line_style(
+                color=style_kwargs.get("color"),
+                thickness=style_kwargs.get("thickness"),
+                dash=style_kwargs.get("dash"),
+                line=style_kwargs.get("line"),
             )
-            if lhs != rhs:
-                raise ValueError(
-                    "Plot.update() received both samples= and sampling_points= with different values; use only one samples keyword."
-                )
+            if "opacity" in kwargs or "alpha" in kwargs:
+                self.opacity = style_kwargs.get("opacity")
+            if style_kwargs.get("trace"):
+                trace_update = dict(style_kwargs["trace"])
+                for trace_handle in self._iter_trace_handles():
+                    trace_handle.update(**trace_update)
 
-        if samples_key_present or sampling_points_key_present:
-            val = kwargs["samples"] if samples_key_present else kwargs["sampling_points"]
-            if val is None:
-                # None means "no change" during in-place updates.
-                pass
-            elif _is_figure_default(val):
-                self.samples = None
-            else:
-                self.samples = InputConvert(val, int)
+            # Function update
+            if any(k in kwargs for k in ("var", "func", "parameters", "numeric_function")):
+                render_requested = True
+                v = kwargs.get("var", self._var)
+                f = kwargs.get("func", self._func)
+                p = kwargs.get("parameters", self.parameters)
+                numeric_fn = kwargs.get("numeric_function")
+                if numeric_fn is not None:
+                    self.set_numeric_function(
+                        v,
+                        numeric_fn,
+                        parameters=p,
+                        symbolic_expression=f,
+                    )
+                else:
+                    self.set_func(v, f, p)
+        finally:
+            self._suspend_render = previous_suspend
 
-        if "view" in kwargs:
-            requested = kwargs["view"]
-            if requested is not None:
-                requested_views = (
-                    {requested} if isinstance(requested, str) else set(requested)
-                )
-                for view_id in tuple(self._view_ids):
-                    if view_id not in requested_views:
-                        self.remove_from_view(view_id)
-                for view_id in requested_views:
-                    self.add_to_view(view_id)
-
-        style_kwargs = validate_style_kwargs(
-            {
-                "color": kwargs.get("color"),
-                "thickness": kwargs.get("thickness"),
-                "width": kwargs.get("width"),
-                "dash": kwargs.get("dash"),
-                "line": kwargs.get("line"),
-                "opacity": kwargs.get("opacity"),
-                "alpha": kwargs.get("alpha"),
-                "trace": kwargs.get("trace"),
-            },
-            caller="Plot.update()",
-        )
-
-        self._update_line_style(
-            color=style_kwargs.get("color"),
-            thickness=style_kwargs.get("thickness"),
-            dash=style_kwargs.get("dash"),
-            line=style_kwargs.get("line"),
-        )
-        if "opacity" in kwargs or "alpha" in kwargs:
-            self.opacity = style_kwargs.get("opacity")
-        if style_kwargs.get("trace"):
-            trace_update = dict(style_kwargs["trace"])
-            for trace_handle in self._iter_trace_handles():
-                trace_handle.update(**trace_update)
-
-        # Function update
-        if any(k in kwargs for k in ("var", "func", "parameters", "numeric_function")):
-            v = kwargs.get("var", self._var)
-            f = kwargs.get("func", self._func)
-            p = kwargs.get("parameters", self.parameters)
-            numeric_fn = kwargs.get("numeric_function")
-            if numeric_fn is not None:
-                self.set_numeric_function(
-                    v,
-                    numeric_fn,
-                    parameters=p,
-                    symbolic_expression=f,
-                )
-            else:
-                self.set_func(v, f, p)
+        if render_requested:
             self.render()
 
 

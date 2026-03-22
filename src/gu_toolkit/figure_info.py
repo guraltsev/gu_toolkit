@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
-import ipywidgets as widgets
+from ._widget_stubs import widgets
 from IPython.display import display
 
 from .debouncing import QueuedDebouncer

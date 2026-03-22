@@ -13,7 +13,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-import ipywidgets as widgets
+from ._widget_stubs import widgets
 from IPython.display import display
 
 from .layout_logging import layout_value_snapshot

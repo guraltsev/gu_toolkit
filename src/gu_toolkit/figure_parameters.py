@@ -6,7 +6,7 @@ import re
 from collections.abc import Callable, Hashable, Iterator, Mapping, Sequence
 from typing import Any
 
-import ipywidgets as widgets
+from ._widget_stubs import widgets
 import sympy as sp
 from sympy.core.symbol import Symbol
 
@@ -30,6 +30,36 @@ class _ParameterContextView(Mapping[Symbol, Any]):
 
     def __len__(self) -> int:
         return len(self._refs)
+
+
+class _RenderParameterContext(Mapping[Symbol, Any]):
+    """Mutable snapshot-backed parameter provider reused across render passes.
+
+    ``NumericFunction`` instances can bind to this mapping once and then read a
+    consistent value snapshot for every actual render. The mapping object keeps
+    a stable identity while :meth:`replace` updates its stored values in place,
+    which avoids recreating bound numeric-callable wrappers on every frame.
+    """
+
+    def __init__(self) -> None:
+        self._values: dict[Symbol, Any] = {}
+
+    def replace(self, values: Mapping[Symbol, Any]) -> None:
+        """Replace the stored snapshot with a detached copy of ``values``."""
+        self._values.clear()
+        self._values.update(dict(values))
+
+    def __getitem__(self, key: Symbol) -> Any:
+        return self._values[key]
+
+    def __iter__(self) -> Iterator[Symbol]:
+        return iter(self._values)
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+    def __repr__(self) -> str:
+        return f"_RenderParameterContext({self._values!r})"
 
 
 # SECTION: ParameterManager (The Model for Parameters) [id: ParameterManager]
@@ -85,6 +115,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         """
         self._refs: dict[Symbol, ParamRef] = {}
         self._parameter_context_view = _ParameterContextView(self._refs)
+        self._render_parameter_context = _RenderParameterContext()
         self._controls: list[Any] = []
         self._hooks: dict[Hashable, Callable[[ParamEvent], Any]] = {}
         self._hook_counter: int = 0
@@ -248,6 +279,30 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
     def parameter_context(self) -> Mapping[Symbol, Any]:
         """Live Mapping[Symbol, value] view for numeric evaluation contexts."""
         return self._parameter_context_view
+
+    @property
+    def render_parameter_context(self) -> Mapping[Symbol, Any]:
+        """Snapshot-backed Mapping[Symbol, value] used during actual renders.
+
+        The returned object keeps a stable identity so plots can bind a
+        ``NumericFunction`` to it once. Its contents are refreshed only when
+        :meth:`refresh_render_parameter_context` runs, typically right before a
+        coalesced figure render is executed.
+        """
+        return self._render_parameter_context
+
+    def refresh_render_parameter_context(self) -> Mapping[Symbol, Any]:
+        """Capture current live parameter values into the reusable render provider.
+
+        Returns
+        -------
+        Mapping[Symbol, Any]
+            The stable snapshot provider object after it has been refreshed.
+        """
+        self._render_parameter_context.replace(
+            {symbol: ref.value for symbol, ref in self._refs.items()}
+        )
+        return self._render_parameter_context
 
     @property
     def has_params(self) -> bool:

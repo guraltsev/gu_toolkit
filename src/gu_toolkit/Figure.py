@@ -58,7 +58,7 @@ from collections.abc import Callable, Hashable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from typing import Any
 
-import ipywidgets as widgets
+from ._widget_stubs import widgets
 import plotly.graph_objects as go
 from IPython.display import display
 from sympy.core.symbol import Symbol
@@ -72,6 +72,7 @@ from .layout_logging import (
     new_request_id,
 )
 from .debouncing import QueuedDebouncer
+from .figure_render_scheduler import FigureRenderScheduler, RenderRequest
 from .figure_plot_normalization import PlotVarsSpec, normalize_plot_inputs
 from .figure_plot_style import plot_style_option_docs, validate_style_kwargs
 from .figure_color import color_for_trace_index, explicit_style_color
@@ -89,6 +90,9 @@ from .figure_types import RangeLike, VisibleSpec
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     logger.addHandler(logging.NullHandler())
+
+
+RENDER_TARGET_INTERVAL_MS = 16
 
 
 from .figure_context import (
@@ -175,6 +179,7 @@ class Figure:
         "_render_debug_last_log_t",
         "_print_capture",
         "_context_depth",
+        "_render_scheduler",
         "_relayout_debouncer",
         "_pending_relayout_view_id",
         "_layout_debug_figure_id",
@@ -364,11 +369,19 @@ class Figure:
         self._info.bind_figure(self)
         self._info.bind_layout_change_callback(self._on_info_panel_structure_changed)
         self._legend = LegendPanelManager(self._layout.legend_box)
+        self._render_scheduler = FigureRenderScheduler(
+            self._perform_render_request,
+            execute_every_ms=RENDER_TARGET_INTERVAL_MS,
+            name="Figure.render",
+            event_sink=(
+                self._emit_layout_event if self._layout_debug_enabled else None
+            ),
+        )
 
         # 3. Figure-level relayout debouncer + layout observers
         self._relayout_debouncer = QueuedDebouncer(
             self._dispatch_relayout,
-            execute_every_ms=500,
+            execute_every_ms=RENDER_TARGET_INTERVAL_MS,
             drop_overflow=True,
             name="Figure.relayout",
             event_sink=(self._emit_layout_event if self._layout_debug_enabled else (lambda **_kwargs: None)),
@@ -528,7 +541,13 @@ class Figure:
         y_label: str | None = None,
     ) -> View:
         """Create one public :class:`View` object with its stable runtime."""
-        figure_widget = go.FigureWidget()
+        try:
+            figure_widget = go.FigureWidget()
+        except ImportError:
+            # Plotly >=6 delegates FigureWidget transport to anywidget. Fall
+            # back to a plain Figure in minimal/offline test environments where
+            # the Python-side API surface used by the toolkit remains available.
+            figure_widget = go.Figure()
         figure_widget.update_layout(**self._default_figure_layout())
         pane = PlotlyPane(
             figure_widget,
@@ -734,9 +753,7 @@ class Figure:
         self._emit_layout_event("active_view_changed", source="Figure", phase="completed", level=logging.INFO, view_id=view_id, previous_view_id=current_view.id)
         self._emit_layout_event("viewport_restored", source="Figure", phase="completed", view_id=view_id, viewport_x_range=nxt.viewport_x_range, viewport_y_range=nxt.viewport_y_range)
         self._request_active_view_reflow("view_activated")
-
-        for plot in self.plots.values():
-            plot.render(view_id=self.views.current_id)
+        self.render(reason="view_switch", force=True)
         if nxt.is_stale:
             self._view_manager.clear_stale(self.views.current_id)
 
@@ -1347,19 +1364,29 @@ class Figure:
             self._request_active_view_reflow("sidebar_visibility")
         return result
 
-    def render(self, reason: str = "manual", trigger: ParamEvent | None = None) -> None:
-        """
-        Render all plots on the figure.
+    def render(
+        self,
+        reason: str = "manual",
+        trigger: Any = None,
+        *,
+        force: bool = False,
+    ) -> None:
+        """Queue or synchronously execute a figure render.
 
-        This is a *hot* method: it is called during slider drags and (throttled)
-        pan/zoom relayout events.
+        This is a *hot* method: slider drags, explicit refresh requests, and
+        relayout events all funnel through the same coalescing scheduler.
 
         Parameters
         ----------
         reason : str, optional
-            Reason for rendering (e.g., ``"manual"``, ``"param_change"``, ``"relayout"``).
+            Reason for rendering (for example ``"manual"``, ``"param_change"``,
+            ``"relayout"``, ``"view_switch"``).
         trigger : Any, optional
             Change payload from the event that triggered rendering.
+        force : bool, default=False
+            If ``False`` (default), queue a coalesced render targeting roughly
+            60 Hz. If ``True``, merge any pending request into this one and
+            render synchronously now.
 
         Returns
         -------
@@ -1369,40 +1396,86 @@ class Figure:
         --------
         >>> fig = Figure()  # doctest: +SKIP
         >>> fig.render()  # doctest: +SKIP
+        >>> fig.render(force=True)  # doctest: +SKIP
 
         Notes
         -----
-        When called due to a parameter change, hooks registered via
-        :meth:`add_param_change_hook` are invoked after plotting.
+        Coalesced batches preserve the latest trigger payload while also
+        remembering whether any queued request represented a parameter change.
+        Parameter hooks therefore still run once after the actual render that
+        materializes the latest queued parameter state.
         """
-        self._emit_layout_event("render_started", source="Figure", phase="started", level=logging.INFO, reason=reason, trigger_type=(type(trigger).__name__ if trigger is not None else None))
+        self._render_scheduler.request(reason=reason, trigger=trigger, force=force)
+
+    def flush_render_queue(self) -> None:
+        """Synchronously execute the newest pending queued render, if any.
+
+        This is primarily useful for deterministic tests and notebook code that
+        needs up-to-date sampled data immediately after a burst of queued state
+        changes.
+        """
+        self._render_scheduler.flush()
+
+    def _perform_render_request(self, request: RenderRequest) -> None:
+        """Execute one coalesced render request immediately."""
+        reason = request.reason
+        trigger = request.trigger
+        param_trigger = (
+            request.latest_param_change_trigger
+            if request.includes_param_change
+            else None
+        )
+        self._emit_layout_event(
+            "render_started",
+            source="Figure",
+            phase="started",
+            level=logging.INFO,
+            reason=reason,
+            queued_count=request.queued_count,
+            includes_param_change=request.includes_param_change,
+            trigger_type=(type(trigger).__name__ if trigger is not None else None),
+        )
         self._log_render(reason, trigger)
 
-        # 1. Update active-view plots
         current_view_id = self.views.current_id
+        self._parameter_manager.refresh_render_parameter_context()
+        current_widget = self.views[current_view_id].figure_widget
+        with current_widget.batch_update():
+            for plot in self.plots.values():
+                plot.render(
+                    view_id=current_view_id,
+                    use_batch_update=False,
+                    refresh_parameter_snapshot=False,
+                )
 
-        for plot in self.plots.values():
-            plot.render(view_id=current_view_id)
-
-        # 1b. Mark inactive memberships stale on parameter changes.
-        if reason == "param_change":
+        # Mark inactive memberships stale when any queued request represented a
+        # parameter change, even if a later manual/view-switch request became the
+        # batch's visible reason.
+        if request.includes_param_change:
             for plot in self.plots.values():
                 for view_id in plot.views:
                     if view_id != current_view_id:
                         self._view_manager.mark_stale(view_id=view_id)
 
-        # 2. Run hooks (if triggered by parameter change)
-        # Note: ParameterManager triggers this render, then we run hooks.
-        if reason == "param_change" and trigger:
+        if request.includes_param_change and param_trigger is not None:
             hooks = self._parameter_manager.get_hooks()
             for h_id, callback in list(hooks.items()):
                 try:
-                    callback(trigger)
+                    callback(param_trigger)
                 except Exception as e:
                     warnings.warn(f"Hook {h_id} failed: {e}", stacklevel=2)
 
         self._info.schedule_info_update(reason=reason, trigger=trigger)
-        self._emit_layout_event("render_completed", source="Figure", phase="completed", level=logging.INFO, reason=reason, view_id=current_view_id)
+        self._emit_layout_event(
+            "render_completed",
+            source="Figure",
+            phase="completed",
+            level=logging.INFO,
+            reason=reason,
+            queued_count=request.queued_count,
+            includes_param_change=request.includes_param_change,
+            view_id=current_view_id,
+        )
 
     def snapshot(self) -> FigureSnapshot:
         """Return an immutable snapshot of the entire figure state.
@@ -1607,7 +1680,7 @@ class Figure:
 
         if run_now:
             try:
-                self.render(reason="manual", trigger=None)
+                self.render(reason="manual", trigger=None, force=True)
                 _wrapped(None)
             except Exception as e:
                 warnings.warn(f"Hook failed on init: {e}", stacklevel=2)
@@ -1615,6 +1688,11 @@ class Figure:
         return hook_id
 
     # --- Internal / Plumbing ---
+
+    def _throttled_relayout(self) -> None:
+        """Compatibility shim for the debounced relayout trigger."""
+        target_view_id = self.views.current_id if self._view_manager.views else ""
+        self._queue_relayout(target_view_id)
 
     def _queue_relayout(self, view_id: str, *_: Any) -> None:
         """Queue a relayout event on the figure-level debouncer."""
@@ -1634,7 +1712,7 @@ class Figure:
             return
         if target_view == self.views.current_id:
             self._emit_layout_event("plotly_relayout_dispatched", source="Figure", phase="completed", view_id=target_view)
-            self.render(reason="relayout")
+            self.render(reason="relayout", force=True)
         else:
             self._view_manager.mark_stale(view_id=target_view)
             self._emit_layout_event("inactive_view_marked_stale", source="Figure", phase="completed", view_id=target_view)
