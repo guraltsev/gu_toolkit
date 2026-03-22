@@ -141,8 +141,38 @@ class ParamRef(Protocol):
         Returns
         -------
         Sequence[str]
-            Zero or more of: ``default_value``, ``min``, ``max``, ``step``.
+            Zero or more of: ``default_value``, ``min``, ``max``, ``step``,
+            ``animation_time``, ``animation_mode``, ``animation_running``.
         """
+
+    @property
+    def animation_time(self) -> Any:
+        """Return the configured animation duration if supported."""
+
+    @animation_time.setter
+    def animation_time(self, value: Any) -> None:
+        """Set the configured animation duration if supported."""
+
+    @property
+    def animation_mode(self) -> Any:
+        """Return the configured animation mode if supported."""
+
+    @animation_mode.setter
+    def animation_mode(self, value: Any) -> None:
+        """Set the configured animation mode if supported."""
+
+    @property
+    def animation_running(self) -> Any:
+        """Return whether animation is active if supported."""
+
+    def start_animation(self) -> None:
+        """Start animation if the underlying control supports it."""
+
+    def stop_animation(self) -> None:
+        """Stop animation if the underlying control supports it."""
+
+    def toggle_animation(self) -> None:
+        """Toggle animation if the underlying control supports it."""
 
 
 class ProxyParamRef:
@@ -157,9 +187,9 @@ class ProxyParamRef:
 
     Notes
     -----
-    Optional attributes such as ``min``/``max``/``step`` and ``default_value``
-    are exposed when the underlying widget supports them. Use
-    :attr:`capabilities` to feature-detect support at runtime.
+    Optional attributes such as ``min``/``max``/``step``, ``default_value``,
+    and animation metadata are exposed when the underlying widget supports
+    them. Use :attr:`capabilities` to feature-detect support at runtime.
     """
 
     def __init__(self, parameter: Symbol, widget: Any) -> None:
@@ -424,7 +454,8 @@ class ProxyParamRef:
         Returns
         -------
         Sequence[str]
-            Zero or more of: ``default_value``, ``min``, ``max``, ``step``.
+            Zero or more of: ``default_value``, ``min``, ``max``, ``step``,
+            ``animation_time``, ``animation_mode``, ``animation_running``.
 
         Examples
         --------
@@ -440,7 +471,15 @@ class ProxyParamRef:
         This is useful for generic code that supports multiple widget types.
         """
         supported = []
-        for name in ("default_value", "min", "max", "step"):
+        for name in (
+            "default_value",
+            "min",
+            "max",
+            "step",
+            "animation_time",
+            "animation_mode",
+            "animation_running",
+        ):
             if hasattr(self._widget, name):
                 supported.append(name)
         return tuple(supported)
@@ -469,9 +508,20 @@ class ProxyParamRef:
             "observe",
             "reset",
             "capabilities",
+            "start_animation",
+            "stop_animation",
+            "toggle_animation",
         }
         optional = []
-        for name in ("default_value", "min", "max", "step"):
+        for name in (
+            "default_value",
+            "min",
+            "max",
+            "step",
+            "animation_time",
+            "animation_mode",
+            "animation_running",
+        ):
             if hasattr(self._widget, name):
                 optional.append(name)
         base.update(optional)
@@ -599,3 +649,50 @@ class ProxyParamRef:
         if not hasattr(self._widget, "step"):
             raise AttributeError("step not supported for this control.")
         self._widget.step = value
+
+    @property
+    def animation_time(self) -> Any:
+        """Return the animation duration if supported."""
+        return self._require_attr("animation_time")
+
+    @animation_time.setter
+    def animation_time(self, value: Any) -> None:
+        """Set the animation duration if supported."""
+        if not hasattr(self._widget, "animation_time"):
+            raise AttributeError("animation_time not supported for this control.")
+        self._widget.animation_time = value
+
+    @property
+    def animation_mode(self) -> Any:
+        """Return the animation mode if supported."""
+        return self._require_attr("animation_mode")
+
+    @animation_mode.setter
+    def animation_mode(self, value: Any) -> None:
+        """Set the animation mode if supported."""
+        if not hasattr(self._widget, "animation_mode"):
+            raise AttributeError("animation_mode not supported for this control.")
+        self._widget.animation_mode = value
+
+    @property
+    def animation_running(self) -> Any:
+        """Return whether animation is active if supported."""
+        return self._require_attr("animation_running")
+
+    def start_animation(self) -> None:
+        """Start animation if the widget supports it."""
+        if not hasattr(self._widget, "start_animation"):
+            raise AttributeError("start_animation not supported for this control.")
+        self._widget.start_animation()
+
+    def stop_animation(self) -> None:
+        """Stop animation if the widget supports it."""
+        if not hasattr(self._widget, "stop_animation"):
+            raise AttributeError("stop_animation not supported for this control.")
+        self._widget.stop_animation()
+
+    def toggle_animation(self) -> None:
+        """Toggle animation if the widget supports it."""
+        if not hasattr(self._widget, "toggle_animation"):
+            raise AttributeError("toggle_animation not supported for this control.")
+        self._widget.toggle_animation()

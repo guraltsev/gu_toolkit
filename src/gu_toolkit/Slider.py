@@ -11,14 +11,15 @@ import ipywidgets as widgets
 import traitlets
 
 from .InputConvert import InputConvert
+from .animation import DEFAULT_ANIMATION_TIME, AnimationController
 
 
 class FloatSlider(widgets.VBox):
     """
     A FloatSlider with:
       - a *single editable numeric field* (Text) that accepts expressions via InputConvert,
-      - reset + settings buttons,
-      - a small settings panel (min/max/step + live update toggle).
+      - play/pause, reset, and settings buttons,
+      - a small settings panel (min/max/step + live update toggle + animation options).
 
     Design notes
     ------------
@@ -51,7 +52,7 @@ class FloatSlider(widgets.VBox):
         description: str = "Value:",
         **kwargs: Any,
     ) -> None:
-        """Create a slider with a single editable numeric field and settings panel.
+        """Create a slider with a single editable numeric field, animation button, and settings panel.
 
         Parameters
         ----------
@@ -89,8 +90,9 @@ class FloatSlider(widgets.VBox):
         # Remember defaults for reset
         self._defaults = {"value": value, "min": min, "max": max, "step": step}
 
-        # Internal guard to prevent circular updates (slider -> text -> slider -> ...)
+        # Internal guards to prevent circular updates.
         self._syncing = False
+        self._syncing_animation_settings = False
 
         # --- Main controls ----------------------------------------------------
         self.slider = widgets.FloatSlider(
@@ -212,6 +214,11 @@ class FloatSlider(widgets.VBox):
             layout=widgets.Layout(width="70px"),
         )
 
+        self.btn_animate = widgets.Button(
+            description="▶",
+            tooltip="Start animation",
+            layout=widgets.Layout(width="22px", height="22px", padding="0px"),
+        )
         self.btn_reset = widgets.Button(
             description="↺",
             tooltip="Reset",
@@ -247,6 +254,21 @@ class FloatSlider(widgets.VBox):
             indent=False,
             layout=widgets.Layout(width="120px"),
         )
+        self.set_animation_time = widgets.BoundedFloatText(
+            value=DEFAULT_ANIMATION_TIME,
+            min=0.001,
+            step=0.1,
+            description="Anim:",
+            tooltip="Seconds to traverse the current range once.",
+            **style_args,
+        )
+        self.set_animation_mode = widgets.Dropdown(
+            options=(("Loop (>>)", ">>"), ("Once (>)", ">"), ("Bounce (<>)", "<>")),
+            value=">>",
+            description="Mode:",
+            tooltip="Animation mode for this parameter.",
+            **style_args,
+        )
 
         self.btn_close_settings = widgets.Button(
             description="✕",
@@ -272,9 +294,11 @@ class FloatSlider(widgets.VBox):
                 settings_header,
                 widgets.HBox([self.set_step]),
                 widgets.HBox([self.set_live]),
+                widgets.HBox([self.set_animation_time]),
+                widgets.HBox([self.set_animation_mode]),
             ],
             layout=widgets.Layout(
-                width="230px",
+                width="240px",
                 display="none",
                 border="1px solid #ddd",
                 padding="8px",
@@ -314,6 +338,7 @@ class FloatSlider(widgets.VBox):
                 self.slider,
                 self.set_max,
                 self.number,
+                self.btn_animate,
                 self.btn_reset,
                 self.btn_settings,
             ],
@@ -335,6 +360,7 @@ class FloatSlider(widgets.VBox):
         self.set_max.observe(self._commit_max_value, names="value")
 
         # Buttons
+        self.btn_animate.on_click(self._toggle_animation)
         self.btn_reset.on_click(self._reset)
         self.btn_settings.on_click(self._toggle_settings)
         self.btn_close_settings.on_click(self._toggle_settings)
@@ -347,6 +373,21 @@ class FloatSlider(widgets.VBox):
         self.value = value
         self._sync_number_text(self.value)
         self._sync_limit_texts(None)
+
+        self._animation = AnimationController(
+            self,
+            animation_time=float(self.set_animation_time.value),
+            animation_mode=str(self.set_animation_mode.value),
+            state_change_callback=self._sync_animation_button,
+        )
+        self.observe(self._handle_animation_value_change, names="value")
+        self.slider.observe(
+            self._handle_animation_domain_change,
+            names=["min", "max", "step"],
+        )
+        self.set_animation_time.observe(self._commit_animation_time, names="value")
+        self.set_animation_mode.observe(self._commit_animation_mode, names="value")
+        self._sync_animation_button(self._animation.running)
 
     # --- Helpers --------------------------------------------------------------
 
@@ -545,6 +586,36 @@ class FloatSlider(widgets.VBox):
             "value"
         ]  # slider sync + slider observer updates text
 
+    def _toggle_animation(self, _: Any) -> None:
+        """Toggle animation from the small play/pause button."""
+        self.toggle_animation()
+
+    def _sync_animation_button(self, running: bool) -> None:
+        """Refresh the animation button state from the controller."""
+        self.btn_animate.description = "⏸" if running else "▶"
+        self.btn_animate.tooltip = "Pause animation" if running else "Start animation"
+        self.btn_animate.button_style = "info" if running else ""
+
+    def _handle_animation_value_change(self, change: Any) -> None:
+        """Forward external value changes to the animation controller."""
+        self._animation.handle_value_change(float(change.new))
+
+    def _handle_animation_domain_change(self, change: Any) -> None:
+        """Forward range/step edits to the animation controller."""
+        self._animation.handle_domain_change()
+
+    def _commit_animation_time(self, change: Any) -> None:
+        """Commit the animation duration from the settings panel."""
+        if self._syncing_animation_settings:
+            return
+        self._animation.animation_time = float(change.new)
+
+    def _commit_animation_mode(self, change: Any) -> None:
+        """Commit the animation mode from the settings panel."""
+        if self._syncing_animation_settings:
+            return
+        self._animation.animation_mode = str(change.new)
+
     @property
     def default_value(self) -> float:
         """Return the stored default value used by reset.
@@ -726,6 +797,51 @@ class FloatSlider(widgets.VBox):
         This uses the stored ``default_value``.
         """
         self._reset(None)
+
+    @property
+    def animation_time(self) -> float:
+        """Seconds needed to traverse the current numeric range once."""
+        return float(self._animation.animation_time)
+
+    @animation_time.setter
+    def animation_time(self, value: float) -> None:
+        self._animation.animation_time = float(value)
+        self._syncing_animation_settings = True
+        try:
+            self.set_animation_time.value = float(self._animation.animation_time)
+        finally:
+            self._syncing_animation_settings = False
+
+    @property
+    def animation_mode(self) -> str:
+        """Animation mode token for this slider."""
+        return str(self._animation.animation_mode)
+
+    @animation_mode.setter
+    def animation_mode(self, value: str) -> None:
+        self._animation.animation_mode = str(value)
+        self._syncing_animation_settings = True
+        try:
+            self.set_animation_mode.value = str(self._animation.animation_mode)
+        finally:
+            self._syncing_animation_settings = False
+
+    @property
+    def animation_running(self) -> bool:
+        """Whether the slider is currently animating."""
+        return bool(self._animation.running)
+
+    def start_animation(self) -> None:
+        """Start animating the slider value."""
+        self._animation.start()
+
+    def stop_animation(self) -> None:
+        """Stop animating the slider value."""
+        self._animation.stop()
+
+    def toggle_animation(self) -> None:
+        """Toggle the slider animation state."""
+        self._animation.toggle()
 
     def make_refs(self, symbols: Sequence[Any]) -> dict[Any, Any]:
         """Create ParamRef mappings for provided symbols.

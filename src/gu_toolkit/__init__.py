@@ -64,6 +64,12 @@ from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .ParseLaTeX import parse_latex
 from .PlotSnapshot import PlotSnapshot
+from .animation import (
+    AnimationClock,
+    AnimationController,
+    DEFAULT_ANIMATION_HZ,
+    DEFAULT_ANIMATION_TIME,
+)
 from .Slider import FloatSlider
 
 # Keep toolkit helpers authoritative after notebook namespace wildcard imports.
