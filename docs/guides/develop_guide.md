@@ -40,12 +40,29 @@ fields and branches to `Figure`.**
 | Widget tree and layout | `FigureLayout` | Title bar, selector bar, persistent view hosts, sidebar, output area |
 | Public view state + runtime | `View` | Axis labels, default ranges, remembered viewport, `FigureWidget`, `PlotlyPane` |
 | View registry and selection policy | `ViewManager` | Registration, active id, stale flags, removal rules |
-| Parameters and hooks | `ParameterManager` | Symbol -> `ParamRef`, control reuse, hooks, snapshots |
+| Parameters and hooks | `ParameterManager` | Parameter-name -> `ParamRef`, symbol aliases via `symbol.name`, control reuse, hooks, snapshots |
 | One plotted curve | `Plot` | Numeric compilation, sampling, trace updates, styling |
 | Info section | `InfoPanelManager` | Raw outputs, simple cards, view scoping |
 | Legend sidebar | `LegendPanelManager` | Rows filtered by active view |
 | Serializable state | `FigureSnapshot`, `PlotSnapshot`, `ParameterSnapshot` | Immutable snapshots |
 | Recreated source code | `codegen.py` | Converts snapshots into Python |
+
+---
+
+### Parameter identity rule
+
+Parameter-facing APIs are **name-authoritative**. The canonical identity of a
+parameter is its string name (`symbol.name`), not the exact `Symbol` object
+instance.
+
+That means:
+
+- mapping-like parameter registries iterate names,
+- symbol inputs are normalized to their `.name` before lookup, and
+- same-name symbols share one logical parameter/control entry.
+
+Representative `Symbol` objects are still retained where needed for expression
+round-tripping and code generation, but they are not the primary lookup key.
 
 ---
 

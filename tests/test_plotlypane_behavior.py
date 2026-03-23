@@ -113,6 +113,15 @@ def test_plotlypane_applies_style_to_wrapper() -> None:
     assert pane.widget.layout.border == "1px solid red"
 
 
+def test_plotlypane_adds_scoped_css_classes_for_overflow_control() -> None:
+    pane = PlotlyPane(widgets.Label("x"))
+
+    assert "gu-plotly-pane-wrap" in pane._wrap._dom_classes
+    assert "gu-plotly-pane-host" in pane._host._dom_classes
+    assert "gu-plotly-pane-slot" in pane._plot_slot._dom_classes
+    assert ".gu-plotly-pane-wrap .js-plotly-plot" in pane._style_widget.value
+
+
 def test_plotlypane_geometry_snapshot_defaults_are_visible_from_python() -> None:
     pane = PlotlyPane(widgets.Label("x"))
 

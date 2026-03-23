@@ -1,9 +1,14 @@
-"""Parameter manager for Figure."""
+"""Parameter manager for Figure.
+
+Parameter identity is name-authoritative: the canonical key for a parameter is
+its string name (``symbol.name``). SymPy symbols remain accepted throughout the
+API, but are normalized to their name before lookup, storage, or snapshotting.
+"""
 
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Hashable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Hashable, Iterator, Mapping
 from typing import Any
 
 from ._widget_stubs import widgets
@@ -14,49 +19,69 @@ from .ParameterSnapshot import ParameterSnapshot, ParameterValueSnapshot
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .Slider import FloatSlider
+from .parameter_keys import (
+    ParameterKey,
+    ParameterKeyOrKeys,
+    normalize_parameter_sequence,
+    parameter_name,
+    parameter_symbol,
+)
 
 
-class _ParameterContextView(Mapping[Symbol, Any]):
-    """Live Mapping[Symbol, value] view over ParameterManager refs."""
+class _ParameterContextView(Mapping[str, Any]):
+    """Live name-keyed view over parameter values.
 
-    def __init__(self, refs: dict[Symbol, ParamRef]) -> None:
+    Symbol keys remain accepted as aliases. Iteration exposes canonical string
+    names because parameter names are the authoritative identifiers.
+    """
+
+    def __init__(self, refs: Mapping[str, ParamRef]) -> None:
         self._refs = refs
 
-    def __getitem__(self, key: Symbol) -> Any:
-        return self._refs[key].value
+    def __getitem__(self, key: ParameterKey) -> Any:
+        return self._refs[parameter_name(key, role="parameter")].value
 
-    def __iter__(self) -> Iterator[Symbol]:
+    def __iter__(self) -> Iterator[str]:
         return iter(self._refs)
 
     def __len__(self) -> int:
         return len(self._refs)
 
+    def __contains__(self, key: object) -> bool:  # pragma: no cover - simple
+        try:
+            name = parameter_name(key, role="parameter")  # type: ignore[arg-type]
+        except TypeError:
+            return False
+        return name in self._refs
 
-class _RenderParameterContext(Mapping[Symbol, Any]):
-    """Mutable snapshot-backed parameter provider reused across render passes.
 
-    ``NumericFunction`` instances can bind to this mapping once and then read a
-    consistent value snapshot for every actual render. The mapping object keeps
-    a stable identity while :meth:`replace` updates its stored values in place,
-    which avoids recreating bound numeric-callable wrappers on every frame.
-    """
+class _RenderParameterContext(Mapping[str, Any]):
+    """Stable snapshot-backed parameter provider reused across render passes."""
 
     def __init__(self) -> None:
-        self._values: dict[Symbol, Any] = {}
+        self._values: dict[str, Any] = {}
 
-    def replace(self, values: Mapping[Symbol, Any]) -> None:
+    def replace(self, values: Mapping[ParameterKey, Any]) -> None:
         """Replace the stored snapshot with a detached copy of ``values``."""
         self._values.clear()
-        self._values.update(dict(values))
+        for raw_key, value in values.items():
+            self._values[parameter_name(raw_key, role="parameter")] = value
 
-    def __getitem__(self, key: Symbol) -> Any:
-        return self._values[key]
+    def __getitem__(self, key: ParameterKey) -> Any:
+        return self._values[parameter_name(key, role="parameter")]
 
-    def __iter__(self) -> Iterator[Symbol]:
+    def __iter__(self) -> Iterator[str]:
         return iter(self._values)
 
     def __len__(self) -> int:
         return len(self._values)
+
+    def __contains__(self, key: object) -> bool:  # pragma: no cover - simple
+        try:
+            name = parameter_name(key, role="parameter")  # type: ignore[arg-type]
+        except TypeError:
+            return False
+        return name in self._values
 
     def __repr__(self) -> str:
         return f"_RenderParameterContext({self._values!r})"
@@ -66,20 +91,11 @@ class _RenderParameterContext(Mapping[Symbol, Any]):
 # =============================================================================
 
 
-class ParameterManager(Mapping[Symbol, ParamRef]):
-    """
-    Manages the collection of parameter sliders and change hooks.
+class ParameterManager(Mapping[str, ParamRef]):
+    """Manage parameter controls, refs, snapshots, and hooks.
 
-    Responsibilities:
-    - Creating and reusing parameter controls.
-    - Storing parameter refs.
-    - Executing hooks when parameters change.
-    - Acts like a dictionary so `fig.parameters[sym]` works.
-
-    Design Note:
-    ------------
-    By centralizing parameter logic here, we decouple the "state" of the math
-    from the "rendering" of the figure.
+    Public lookup is name-authoritative: ``fig.parameters["a"]`` and
+    ``fig.parameters[sp.Symbol("a")]`` address the same logical entry.
     """
 
     def __init__(
@@ -88,105 +104,89 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         layout_box: widgets.Box,
         modal_host: widgets.Box | None = None,
     ) -> None:
-        """Initialize the manager with a render callback and layout container.
-
-        Parameters
-        ----------
-        render_callback : callable
-            Function invoked when parameters change. Signature: ``(reason, event)``.
-        layout_box : ipywidgets.Box
-            Container where slider widgets will be added.
-        modal_host : ipywidgets.Box, optional
-            Host container used by controls that support full-layout modal overlays.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-
-        Notes
-        -----
-        ``render_callback`` is invoked by :meth:`_on_param_change` whenever any
-        parameter value updates.
-        """
-        self._refs: dict[Symbol, ParamRef] = {}
+        self._refs: dict[str, ParamRef] = {}
+        self._symbols: dict[str, Symbol] = {}
         self._parameter_context_view = _ParameterContextView(self._refs)
         self._render_parameter_context = _RenderParameterContext()
         self._controls: list[Any] = []
         self._hooks: dict[Hashable, Callable[[ParamEvent], Any]] = {}
         self._hook_counter: int = 0
         self._render_callback = render_callback
-        self._layout_box = layout_box  # The VBox where sliders live
+        self._layout_box = layout_box
         self._modal_host = modal_host
+
+    def _resolve_name(self, key: ParameterKey) -> str:
+        name = parameter_name(key, role="parameter")
+        if name not in self._refs:
+            raise KeyError(name)
+        return name
+
+    @staticmethod
+    def _lookup_control_ref(
+        refs: Mapping[object, ParamRef],
+        *,
+        name: str,
+        symbol: Symbol,
+    ) -> ParamRef:
+        """Extract the control ref for ``name`` from a custom control mapping."""
+        if name in refs:
+            ref = refs[name]
+        elif symbol in refs:
+            ref = refs[symbol]
+        else:
+            matches: list[ParamRef] = []
+            for raw_key, ref_candidate in refs.items():
+                try:
+                    raw_name = parameter_name(raw_key, role="parameter")  # type: ignore[arg-type]
+                except TypeError:
+                    continue
+                if raw_name == name:
+                    matches.append(ref_candidate)
+            if not matches:
+                raise KeyError(
+                    f"Control did not provide a ref for parameter {name!r}."
+                )
+            if len(matches) > 1 and len({id(ref) for ref in matches}) > 1:
+                raise KeyError(
+                    f"Control provided multiple refs for parameter name {name!r}."
+                )
+            ref = matches[0]
+
+        ref_symbol = getattr(ref, "parameter", symbol)
+        if isinstance(ref_symbol, Symbol) and ref_symbol.name != name:
+            raise ValueError(
+                f"Control ref parameter {ref_symbol!r} does not match requested name {name!r}."
+            )
+        return ref
 
     def parameter(
         self,
-        symbols: Symbol | Sequence[Symbol],
+        symbols: ParameterKeyOrKeys,
         *,
         control: Any | None = None,
         **control_kwargs: Any,
-    ):
+    ) -> ParamRef | dict[str, ParamRef]:
+        """Create or reuse parameter references for the given keys.
+
+        Parameters may be supplied as strings or SymPy symbols. The canonical
+        storage key is always the string name.
         """
-        Create or reuse parameter references for the given symbols.
+        requested, single = normalize_parameter_sequence(symbols, role="parameter")
 
-        Parameters
-        ----------
-        symbols : sympy.Symbol or sequence[sympy.Symbol]
-            Parameter symbol(s) to ensure.
-        control : Any, optional
-            Optional control instance (or compatible) to use. When provided, the
-            control must implement ``make_refs`` and return a mapping for the
-            requested symbol(s).
-        **control_kwargs :
-            Control configuration (min, max, value, step). These are applied to
-            the resulting :class:`ParamRef` objects.
-
-        Returns
-        -------
-        ParamRef or dict[Symbol, ParamRef]
-            ParamRef for a single symbol, or mapping for multiple symbols.
-
-        Examples
-        --------
-        Create a single slider and fetch its ref:
-
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> ref = mgr.parameter(a, min=-2, max=2)  # doctest: +SKIP
-        >>> ref.symbol  # doctest: +SKIP
-        a
-
-        Notes
-        -----
-        For custom controls, pass ``control`` with a ``make_refs`` method that
-        returns a ``{Symbol: ParamRef}`` mapping.
-        """
-        if isinstance(symbols, Symbol):
-            symbols = [symbols]
-            single = True
-        else:
-            symbols = list(symbols)
-            single = False
-
-        existing = [s for s in symbols if s in self._refs]
-        missing = [s for s in symbols if s not in self._refs]
+        existing = [(name, symbol) for name, symbol in requested if name in self._refs]
+        missing = [(name, symbol) for name, symbol in requested if name not in self._refs]
 
         if control is not None and existing:
-            for symbol in existing:
-                if self._refs[symbol].widget is not control:
+            for name, _symbol in existing:
+                if self._refs[name].widget is not control:
                     raise ValueError(
-                        f"Symbol {symbol} is already bound to a different control."
+                        f"Parameter {name!r} is already bound to a different control."
                     )
 
         defaults = {"value": 0.0, "min": -1.0, "max": 1.0, "step": 0.01}
 
         if control is None:
-            for symbol in missing:
+            for name, symbol in missing:
                 config = {**defaults, **control_kwargs}
                 new_control = FloatSlider(
                     description=f"${sp.latex(symbol)}$",
@@ -197,53 +197,37 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
                 )
                 self._attach_modal_host(new_control)
                 refs = new_control.make_refs([symbol])
-                if symbol not in refs:
-                    raise KeyError(
-                        f"Control did not provide a ref for symbol {symbol}."
-                    )
-                ref = refs[symbol]
+                ref = self._lookup_control_ref(refs, name=name, symbol=symbol)
                 ref.observe(self._on_param_change)
-                self._refs[symbol] = ref
+                self._refs[name] = ref
+                self._symbols.setdefault(name, symbol)
                 if new_control not in self._controls:
                     self._controls.append(new_control)
                     self._layout_box.children += (new_control,)
         elif missing:
             self._attach_modal_host(control)
-            refs = control.make_refs(missing)
-            for symbol in missing:
-                if symbol not in refs:
-                    raise KeyError(
-                        f"Control did not provide a ref for symbol {symbol}."
-                    )
-                ref = refs[symbol]
+            refs = control.make_refs([symbol for _, symbol in missing])
+            for name, symbol in missing:
+                ref = self._lookup_control_ref(refs, name=name, symbol=symbol)
                 ref.observe(self._on_param_change)
-                self._refs[symbol] = ref
+                self._refs[name] = ref
+                self._symbols.setdefault(name, symbol)
             if control not in self._controls:
                 self._controls.append(control)
                 self._layout_box.children += (control,)
 
-        for symbol in symbols:
-            ref = self._refs[symbol]
-            for name, value in control_kwargs.items():
-                setattr(ref, name, value)
+        for name, symbol in requested:
+            ref = self._refs[name]
+            self._symbols.setdefault(name, symbol)
+            for attr_name, value in control_kwargs.items():
+                setattr(ref, attr_name, value)
 
         if single:
-            return self._refs[symbols[0]]
-        return {symbol: self._refs[symbol] for symbol in symbols}
+            return self._refs[requested[0][0]]
+        return {name: self._refs[name] for name, _ in requested}
 
     def _attach_modal_host(self, control: Any) -> None:
-        """Attach modal host to controls that support it.
-
-        Parameters
-        ----------
-        control : Any
-            Candidate control widget.
-
-        Returns
-        -------
-        None
-            Applies host binding when supported.
-        """
+        """Attach modal host to controls that support it."""
         if self._modal_host is None:
             return
         attach_fn = getattr(control, "set_modal_host", None)
@@ -253,77 +237,41 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
     def snapshot(
         self, *, full: bool = False
     ) -> ParameterValueSnapshot | ParameterSnapshot:
-        """Return parameter values or a full immutable metadata snapshot.
-
-        Parameters
-        ----------
-        full : bool, default=False
-            If False, return a detached ``dict[Symbol, value]``.
-            If True, return a full :class:`ParameterSnapshot` including metadata.
-        """
-        entries: dict[Symbol, dict[str, Any]] = {}
-        for symbol, ref in self._refs.items():
+        """Return parameter values or a full immutable metadata snapshot."""
+        entries: dict[str, dict[str, Any]] = {}
+        for name, ref in self._refs.items():
             entry: dict[str, Any] = {"value": ref.value}
             caps = list(ref.capabilities)
             entry["capabilities"] = caps
-            for name in caps:
-                entry[name] = getattr(ref, name)
-            entries[symbol] = entry
+            for cap_name in caps:
+                entry[cap_name] = getattr(ref, cap_name)
+            entries[name] = entry
 
-        snapshot = ParameterSnapshot(entries)
+        snapshot = ParameterSnapshot(entries, symbols=self._symbols)
         if full:
             return snapshot
         return snapshot.value_map()
 
     @property
-    def parameter_context(self) -> Mapping[Symbol, Any]:
-        """Live Mapping[Symbol, value] view for numeric evaluation contexts."""
+    def parameter_context(self) -> Mapping[str, Any]:
+        """Live name-keyed view for numeric evaluation contexts."""
         return self._parameter_context_view
 
     @property
-    def render_parameter_context(self) -> Mapping[Symbol, Any]:
-        """Snapshot-backed Mapping[Symbol, value] used during actual renders.
-
-        The returned object keeps a stable identity so plots can bind a
-        ``NumericFunction`` to it once. Its contents are refreshed only when
-        :meth:`refresh_render_parameter_context` runs, typically right before a
-        coalesced figure render is executed.
-        """
+    def render_parameter_context(self) -> Mapping[str, Any]:
+        """Stable snapshot-backed mapping used during actual renders."""
         return self._render_parameter_context
 
-    def refresh_render_parameter_context(self) -> Mapping[Symbol, Any]:
-        """Capture current live parameter values into the reusable render provider.
-
-        Returns
-        -------
-        Mapping[Symbol, Any]
-            The stable snapshot provider object after it has been refreshed.
-        """
+    def refresh_render_parameter_context(self) -> Mapping[str, Any]:
+        """Capture current live values into the reusable render provider."""
         self._render_parameter_context.replace(
-            {symbol: ref.value for symbol, ref in self._refs.items()}
+            {name: ref.value for name, ref in self._refs.items()}
         )
         return self._render_parameter_context
 
     @property
     def has_params(self) -> bool:
-        """Whether any parameters have been created.
-
-        Returns
-        -------
-        bool
-            ``True`` if at least one slider exists.
-
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> mgr.has_params
-        False
-
-        See Also
-        --------
-        parameter : Create or reuse parameter controls.
-        """
+        """Whether any parameters have been created."""
         return len(self._refs) > 0
 
     def add_hook(
@@ -331,31 +279,7 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
         callback: Callable[[ParamEvent | None], Any],
         hook_id: Hashable | None = None,
     ) -> Hashable:
-        """
-        Register a parameter change hook.
-
-        Parameters
-        ----------
-        callback: Callable
-            The function to call (signature: (event)).
-        hook_id: Hashable, optional
-            Optional unique identifier.
-        Returns
-        -------
-        Hashable
-            The hook ID.
-
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> hook_id = mgr.add_hook(lambda *_: None)  # doctest: +SKIP
-
-        Notes
-        -----
-        Hooks are called after :class:`Figure` re-renders on parameter
-        updates.
-        """
+        """Register a parameter change hook."""
         if hook_id is None:
             self._hook_counter += 1
             hook_id = f"hook:{self._hook_counter}"
@@ -364,305 +288,77 @@ class ParameterManager(Mapping[Symbol, ParamRef]):
             if match is not None:
                 self._hook_counter = max(self._hook_counter, int(match.group(1)))
         self._hooks[hook_id] = callback
-
         return hook_id
 
     def fire_hook(self, hook_id: Hashable, event: ParamEvent | None) -> None:
-        """Fire a specific hook with a ParamEvent.
-
-        Parameters
-        ----------
-        hook_id : hashable
-            Identifier for the hook to invoke.
-        event : ParamEvent or None
-            Event payload to forward to the callback.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> hook_id = mgr.add_hook(lambda *_: None)  # doctest: +SKIP
-        >>> mgr.fire_hook(hook_id, None)  # doctest: +SKIP
-
-        Notes
-        -----
-        Use :meth:`add_hook` to register callbacks before firing them.
-        """
+        """Fire a specific hook with a ParamEvent."""
         callback = self._hooks.get(hook_id)
         if callback is None:
             return
         callback(event)
 
     def _on_param_change(self, event: ParamEvent) -> None:
-        """Handle parameter changes by triggering the render callback.
-
-        Parameters
-        ----------
-        event : ParamEvent
-            Parameter change payload.
-
-        Returns
-        -------
-        None
-        """
+        """Handle parameter changes by triggering the render callback."""
         self._render_callback("param_change", event)
 
     def get_hooks(self) -> dict[Hashable, Callable]:
-        """Return a copy of the registered hook dictionary.
-
-        Returns
-        -------
-        dict
-            Mapping of hook IDs to callbacks.
-
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> isinstance(mgr.get_hooks(), dict)
-        True
-
-        Notes
-        -----
-        The returned mapping is a shallow copy; mutating it will not affect
-        internal registrations.
-        """
+        """Return a shallow copy of the registered hook dictionary."""
         return self._hooks.copy()
 
-    # --- Dict-like Interface for Backward Compatibility ---
-    # This allows `fig.parameters[symbol]` to work in user hooks.
+    def __getitem__(self, key: ParameterKey) -> ParamRef:
+        """Return the param ref for ``key`` (string-authoritative)."""
+        return self._refs[self._resolve_name(key)]
 
-    def __getitem__(self, key: Symbol) -> ParamRef:
-        """Return the param ref for the given symbol.
+    def __contains__(self, key: object) -> bool:  # pragma: no cover - simple
+        try:
+            name = parameter_name(key, role="parameter")  # type: ignore[arg-type]
+        except TypeError:
+            return False
+        return name in self._refs
 
-        Parameters
-        ----------
-        key : sympy.Symbol
-            Parameter symbol.
+    def items(self) -> Iterator[tuple[str, ParamRef]]:
+        """Iterate over ``(name, ParamRef)`` pairs."""
+        return iter(self._refs.items())
 
-        Returns
-        -------
-        ParamRef
-            Ref associated with the symbol.
+    def keys(self) -> Iterator[str]:
+        """Iterate over canonical parameter names."""
+        return iter(self._refs.keys())
 
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> mgr.parameter(a)  # doctest: +SKIP
-        >>> mgr[a]  # doctest: +SKIP
+    def symbols(self) -> tuple[Symbol, ...]:
+        """Return canonical symbols in insertion order."""
+        return tuple(self._symbols[name] for name in self._refs)
 
-        See Also
-        --------
-        get : Safe lookup with a default.
-        """
-        return self._refs[key]
-
-    def __contains__(self, key: Symbol) -> bool:
-        """Check if a slider exists for a symbol.
-
-        Parameters
-        ----------
-        key : sympy.Symbol
-            Parameter symbol.
-
-        Returns
-        -------
-        bool
-            ``True`` if the symbol is present.
-
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> a in mgr
-        False
-
-        See Also
-        --------
-        has_params : Determine whether any parameters exist.
-        """
-        return key in self._refs
-
-    def items(self) -> Iterator[tuple[Symbol, ParamRef]]:
-        """Iterate over ``(Symbol, ParamRef)`` pairs.
-
-        Returns
-        -------
-        iterator
-            Iterator over the internal ref mapping.
-
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> list(mgr.items())
-        []
-
-        Notes
-        -----
-        This mirrors the behavior of ``dict.items`` for compatibility.
-        """
-        return self._refs.items()
-
-    def keys(self) -> Iterator[Symbol]:
-        """Iterate over parameter symbols.
-
-        Returns
-        -------
-        iterator
-            Iterator over parameter symbols.
-
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> list(mgr.keys())
-        []
-
-        See Also
-        --------
-        values : Iterate over parameter references.
-        """
-        return self._refs.keys()
+    def symbol_for_name(self, key: ParameterKey) -> Symbol:
+        """Return the representative symbol registered for ``key``."""
+        name = self._resolve_name(key)
+        return self._symbols[name]
 
     def values(self) -> Iterator[ParamRef]:
-        """Iterate over param refs.
+        """Iterate over parameter refs."""
+        return iter(self._refs.values())
 
-        Returns
-        -------
-        iterator
-            Iterator over param refs.
+    def get(self, key: ParameterKey, default: Any = None) -> Any:
+        """Return a param ref if present; otherwise return ``default``."""
+        try:
+            name = parameter_name(key, role="parameter")
+        except TypeError:
+            return default
+        return self._refs.get(name, default)
 
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> list(mgr.values())
-        []
-
-        See Also
-        --------
-        keys : Iterate over parameter symbols.
-        """
-        return self._refs.values()
-
-    def get(self, key: Symbol, default: Any = None) -> Any:
-        """Return a param ref if present; otherwise return a default.
-
-        Parameters
-        ----------
-        key : sympy.Symbol
-            Parameter symbol.
-        default : Any, optional
-            Default value returned if no slider exists.
-
-        Returns
-        -------
-        Any
-            Param ref or the default value.
-
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> mgr.get(a) is None
-        True
-
-        Notes
-        -----
-        This mirrors ``dict.get`` semantics for compatibility.
-        """
-        return self._refs.get(key, default)
-
-    def __iter__(self) -> Iterator[Symbol]:
-        """Iterate over parameter symbols.
-
-        Returns
-        -------
-        iterator
-            Iterator over parameter symbols.
-
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> list(iter(mgr))
-        []
-        """
+    def __iter__(self) -> Iterator[str]:
+        """Iterate over canonical parameter names."""
         return iter(self._refs)
 
     def __len__(self) -> int:
-        """Return the number of stored parameter refs.
-
-        Returns
-        -------
-        int
-            Number of parameter refs in the manager.
-
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> len(mgr)
-        0
-        """
+        """Return the number of stored parameter refs."""
         return len(self._refs)
 
-    def widget(self, symbol: Symbol) -> Any:
-        """Return the widget/control for a symbol.
-
-        Parameters
-        ----------
-        symbol : sympy.Symbol
-            Parameter symbol.
-
-        Returns
-        -------
-        Any
-            The underlying widget/control instance.
-
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> mgr.parameter(a)  # doctest: +SKIP
-        >>> mgr.widget(a)  # doctest: +SKIP
-
-        See Also
-        --------
-        __getitem__ : Retrieve the :class:`ParamRef` for a symbol.
-        """
-        return self._refs[symbol].widget
+    def widget(self, symbol: ParameterKey) -> Any:
+        """Return the widget/control for ``symbol`` or parameter name."""
+        return self[self._resolve_name(symbol)].widget
 
     def widgets(self) -> list[Any]:
-        """Return unique widgets/controls suitable for display.
-
-        Returns
-        -------
-        list
-            Unique control instances created by the manager.
-
-        Examples
-        --------
-        >>> layout = widgets.VBox()  # doctest: +SKIP
-        >>> mgr = ParameterManager(lambda *_: None, layout)  # doctest: +SKIP
-        >>> mgr.widgets()  # doctest: +SKIP
-        []
-
-        Notes
-        -----
-        Use this when you need to manually lay out controls outside the default
-        sidebar.
-        """
+        """Return unique widgets/controls suitable for display."""
         return list(self._controls)
 
 

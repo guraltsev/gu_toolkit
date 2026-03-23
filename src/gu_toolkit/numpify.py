@@ -102,6 +102,8 @@ import sympy as sp
 from sympy.core.function import FunctionClass
 from sympy.printing.numpy import NumPyPrinter
 
+from .parameter_keys import ParameterKey
+
 __all__ = [
     "numpify",
     "numpify_cached",
@@ -137,7 +139,7 @@ DYNAMIC_PARAMETER = _Sentinel("DYNAMIC_PARAMETER")
 UNFREEZE = _Sentinel("UNFREEZE")
 
 
-ParameterContext: TypeAlias = Mapping[sp.Symbol, Any]
+ParameterContext: TypeAlias = Mapping[ParameterKey, Any]
 
 
 _VarsInput = (
@@ -179,8 +181,40 @@ class _VarsView:
         return repr(self._positional)
 
 
+def _binding_values_match(lhs: Any, rhs: Any) -> bool:
+    """Return whether two binding values should be treated as equivalent."""
+    if lhs is rhs:
+        return True
+    try:
+        result = lhs == rhs
+    except Exception:
+        return False
+    if isinstance(result, np.ndarray):
+        try:
+            return bool(np.all(result))
+        except Exception:
+            return False
+    try:
+        return bool(result)
+    except Exception:
+        return False
+
+
+def _try_mapping_lookup(mapping: Mapping[Any, Any], key: Any) -> tuple[bool, Any]:
+    """Lookup helper that avoids relying on ``Mapping.__contains__`` semantics."""
+    try:
+        return True, mapping[key]
+    except (LookupError, TypeError, ValueError):
+        return False, None
+
+
 class NumericFunction:
-    """Compiled SymPy->NumPy callable with optional frozen/dynamic bindings."""
+    """Compiled SymPy->NumPy callable with optional frozen/dynamic bindings.
+
+    Parameter binding is name-authoritative: the logical key for a variable is
+    always ``symbol.name``. Symbol inputs remain accepted, but they are first
+    normalized to their string name before binding state is updated.
+    """
 
     __slots__ = (
         "_fn",
@@ -194,6 +228,8 @@ class NumericFunction:
         "_vars_view",
         "name_for_symbol",
         "symbol_for_name",
+        "_parameter_name_for_symbol",
+        "_symbols_for_parameter_name",
         "_parameter_context",
         "_frozen",
         "_dynamic",
@@ -210,8 +246,8 @@ class NumericFunction:
         keyed_symbols: tuple[tuple[str, sp.Symbol], ...] | None = None,
         vars_spec: Any = None,
         parameter_context: ParameterContext | None = None,
-        frozen: Mapping[sp.Symbol, Any] | None = None,
-        dynamic: Iterable[sp.Symbol] | None = None,
+        frozen: Mapping[ParameterKey, Any] | None = None,
+        dynamic: Iterable[ParameterKey] | None = None,
     ) -> None:
         if call_signature is None:
             normalized = _normalize_vars(
@@ -240,9 +276,24 @@ class NumericFunction:
         )
         self.name_for_symbol = dict(call_signature)
         self.symbol_for_name = {name: sym for sym, name in call_signature}
+        self._parameter_name_for_symbol = {sym: sym.name for sym, _ in call_signature}
+
+        grouped_parameter_symbols: dict[str, list[sp.Symbol]] = {}
+        for sym, _ in call_signature:
+            grouped_parameter_symbols.setdefault(sym.name, []).append(sym)
+        self._symbols_for_parameter_name = {
+            name: tuple(group) for name, group in grouped_parameter_symbols.items()
+        }
+
         self._parameter_context = parameter_context
-        self._frozen: dict[sp.Symbol, Any] = dict(frozen or {})
-        self._dynamic: set[sp.Symbol] = set(dynamic or ())
+        self._frozen: dict[str, Any] = {}
+        self._dynamic: set[str] = set()
+        if frozen:
+            self._frozen.update(self._normalize_bindings(frozen, {}))
+        if dynamic:
+            self._dynamic.update(self._resolve_binding_name(key) for key in dynamic)
+            for name in self._dynamic:
+                self._frozen.pop(name, None)
 
     def _clone(self) -> NumericFunction:
         return NumericFunction(
@@ -257,29 +308,34 @@ class NumericFunction:
             dynamic=self._dynamic,
         )
 
-    def _resolve_key(self, key: sp.Symbol | str) -> sp.Symbol:
+    def _resolve_binding_name(self, key: ParameterKey) -> str:
         if isinstance(key, sp.Symbol):
-            if key not in self.name_for_symbol:
-                raise KeyError(f"Unknown symbol key: {key!r}")
-            return key
+            name = key.name
+            if name not in self._symbols_for_parameter_name:
+                raise KeyError(f"Unknown parameter symbol name: {name!r}")
+            return name
+
         if isinstance(key, str):
+            if key in self._symbols_for_parameter_name:
+                return key
             if key in self._symbol_for_key:
-                return self._symbol_for_key[key]
-            if key not in self.symbol_for_name:
-                raise KeyError(f"Unknown var name: {key!r}")
-            return self.symbol_for_name[key]
+                return self._symbol_for_key[key].name
+            if key in self.symbol_for_name:
+                return self.symbol_for_name[key].name
+            raise KeyError(f"Unknown parameter name or alias: {key!r}")
+
         raise TypeError(
             f"Parameter key must be Symbol or str, got {type(key).__name__}"
         )
 
     def _normalize_bindings(
         self,
-        bindings: Mapping[sp.Symbol | str, Any]
-        | Iterable[tuple[sp.Symbol | str, Any]]
+        bindings: Mapping[ParameterKey, Any]
+        | Iterable[tuple[ParameterKey, Any]]
         | None,
         kwargs: Mapping[str, Any],
-    ) -> dict[sp.Symbol, Any]:
-        items: list[tuple[sp.Symbol | str, Any]] = []
+    ) -> dict[str, Any]:
+        items: list[tuple[ParameterKey, Any]] = []
         if bindings is None:
             pass
         elif isinstance(bindings, Mapping):
@@ -288,16 +344,57 @@ class NumericFunction:
             items.extend(tuple(bindings))
         items.extend(kwargs.items())
 
-        resolved: dict[sp.Symbol, Any] = {}
+        resolved: dict[str, Any] = {}
         for key, value in items:
-            sym = self._resolve_key(key)
-            if sym in resolved:
-                var_name = self.name_for_symbol[sym]
-                raise ValueError(
-                    f"Duplicate binding for symbol {sym!r} (var '{var_name}')"
+            name = self._resolve_binding_name(key)
+            if name in resolved:
+                if _binding_values_match(resolved[name], value):
+                    continue
+                symbols = ", ".join(
+                    self.name_for_symbol[sym]
+                    for sym in self._symbols_for_parameter_name[name]
                 )
-            resolved[sym] = value
+                raise ValueError(
+                    f"Duplicate binding for parameter name {name!r} (vars: {symbols})"
+                )
+            resolved[name] = value
         return resolved
+
+    def _lookup_parameter_context_value(
+        self,
+        parameter_name: str,
+        *,
+        sym: sp.Symbol,
+        var_name: str,
+    ) -> Any:
+        if self._parameter_context is None:
+            raise ValueError(
+                f"Dynamic var {sym!r} ('{var_name}') requires parameter_context at call time"
+            )
+
+        candidates: list[Any] = [parameter_name]
+        candidates.extend(self._symbols_for_parameter_name.get(parameter_name, (sym,)))
+
+        key_alias = self._key_for_symbol.get(sym)
+        if key_alias is not None and key_alias not in candidates:
+            candidates.append(key_alias)
+        if var_name not in candidates:
+            candidates.append(var_name)
+
+        seen: set[tuple[type[Any], Any]] = set()
+        for candidate in candidates:
+            marker = (type(candidate), candidate)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            found, value = _try_mapping_lookup(self._parameter_context, candidate)
+            if found:
+                return value
+
+        raise KeyError(
+            "parameter_context is missing parameter "
+            f"{parameter_name!r} for symbol {sym!r} ('{var_name}')"
+        )
 
     def __call__(self, *positional_args: Any, **keyed_args: Any) -> Any:
         if not self._frozen and not self._dynamic:
@@ -321,20 +418,19 @@ class NumericFunction:
 
         for sym, _ in self.call_signature:
             var_name = self.name_for_symbol[sym]
-            if sym in self._frozen:
-                full_values.append(self._frozen[sym])
+            canonical_name = self._parameter_name_for_symbol[sym]
+            if canonical_name in self._frozen:
+                full_values.append(self._frozen[canonical_name])
                 continue
 
-            if sym in self._dynamic:
-                if self._parameter_context is None:
-                    raise ValueError(
-                        f"Dynamic var {sym!r} ('{var_name}') requires parameter_context at call time"
+            if canonical_name in self._dynamic:
+                full_values.append(
+                    self._lookup_parameter_context_value(
+                        canonical_name,
+                        sym=sym,
+                        var_name=var_name,
                     )
-                if sym not in self._parameter_context:
-                    raise KeyError(
-                        f"parameter_context is missing symbol {sym!r} ('{var_name}')"
-                    )
-                full_values.append(self._parameter_context[sym])
+                )
                 continue
 
             if sym in self._symbol_for_key:
@@ -377,59 +473,49 @@ class NumericFunction:
 
     def freeze(
         self,
-        bindings: Mapping[sp.Symbol | str, Any]
-        | Iterable[tuple[sp.Symbol | str, Any]]
+        bindings: Mapping[ParameterKey, Any]
+        | Iterable[tuple[ParameterKey, Any]]
         | None = None,
         /,
         **kwargs: Any,
     ) -> NumericFunction:
         """Return a clone with updated frozen/dynamic variable bindings.
 
-        Parameters
-        ----------
-        bindings:
-            Mapping or iterable of ``(key, value)`` entries. Keys resolve using
-            the same aliasing contract as plotting variable specs:
+        Binding resolution is name-authoritative:
 
-            - ``Symbol`` keys target that exact symbol.
-            - ``str`` keys resolve first against keyed vars from ``vars=``
-              mapping inputs, then against generated call parameter names.
+        - ``Symbol`` keys resolve via ``symbol.name``.
+        - ``str`` keys resolve first as canonical parameter names, then fall
+          back to keyed ``vars=`` aliases and generated call-parameter names
+          for backward compatibility.
 
-            Values may be concrete values, :data:`DYNAMIC_PARAMETER`, or
-            :data:`UNFREEZE`.
-        **kwargs:
-            Convenience alias for string-keyed ``bindings`` entries.
+        Values may be concrete values, :data:`DYNAMIC_PARAMETER`, or
+        :data:`UNFREEZE`.
         """
         updates = self._normalize_bindings(bindings, kwargs)
         out = self._clone()
-        for sym, value in updates.items():
+        for name, value in updates.items():
             if value is DYNAMIC_PARAMETER:
-                out._dynamic.add(sym)
-                out._frozen.pop(sym, None)
+                out._dynamic.add(name)
+                out._frozen.pop(name, None)
             elif value is UNFREEZE:
-                out._dynamic.discard(sym)
-                out._frozen.pop(sym, None)
+                out._dynamic.discard(name)
+                out._frozen.pop(name, None)
             else:
-                out._frozen[sym] = value
-                out._dynamic.discard(sym)
+                out._frozen[name] = value
+                out._dynamic.discard(name)
         return out
 
-    def unfreeze(self, *keys: sp.Symbol | str) -> NumericFunction:
-        """Return a clone with selected frozen/dynamic bindings removed.
-
-        Parameters
-        ----------
-        *keys:
-            Optional symbol/string keys resolved with the same contract as
-            :meth:`freeze`. If omitted, all frozen/dynamic bindings are cleared.
-        """
+    def unfreeze(self, *keys: ParameterKey) -> NumericFunction:
+        """Return a clone with selected frozen/dynamic bindings removed."""
         if not keys:
-            bound_symbols = tuple(
-                sym
-                for sym in self.all_vars
-                if sym in self._frozen or sym in self._dynamic
-            )
-            return self.freeze(dict.fromkeys(bound_symbols, UNFREEZE))
+            bound_names: list[str] = []
+            seen: set[str] = set()
+            for sym in self.all_vars:
+                name = self._parameter_name_for_symbol[sym]
+                if (name in self._frozen or name in self._dynamic) and name not in seen:
+                    bound_names.append(name)
+                    seen.add(name)
+            return self.freeze(dict.fromkeys(bound_names, UNFREEZE))
         return self.freeze(dict.fromkeys(keys, UNFREEZE))
 
     def set_parameter_context(self, ctx: ParameterContext) -> NumericFunction:
@@ -447,7 +533,8 @@ class NumericFunction:
         return tuple(
             sym
             for sym in self.all_vars
-            if sym not in self._frozen and sym not in self._dynamic
+            if self._parameter_name_for_symbol[sym] not in self._frozen
+            and self._parameter_name_for_symbol[sym] not in self._dynamic
         )
 
     @property
@@ -470,7 +557,6 @@ class NumericFunction:
     def __repr__(self) -> str:
         vars_str = ", ".join(name for _, name in self.call_signature)
         return f"NumericFunction({self.symbolic!r}, vars=({vars_str}))"
-
 
 def numpify(
     expr: Any,

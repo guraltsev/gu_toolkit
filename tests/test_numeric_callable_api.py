@@ -178,3 +178,38 @@ def test_compiled_numeric_function_supports_vectorized_output() -> None:
     compiled = numpify_module.numpify(a * x, vars=(x, a), cache=False).freeze({a: 2.5})
     values = compiled(np.array([1.0, 2.0, 4.0]))
     assert np.allclose(values, np.array([2.5, 5.0, 10.0]))
+
+
+def test_freeze_by_name_binds_all_symbols_with_that_name() -> None:
+    x = sp.Symbol("x")
+    q_real = sp.Symbol("q", real=True)
+    q_integer = sp.Symbol("q", integer=True)
+    compiled = numpify_module.numpify(
+        q_real * x + q_integer,
+        vars=(x, q_real, q_integer),
+        cache=False,
+    )
+
+    frozen = compiled.freeze({q_integer: 2.0})
+
+    assert frozen.free_vars == (x,)
+    assert frozen(3.0) == 8.0
+    assert frozen.unfreeze("q")(3.0, 4.0, 5.0) == 17.0
+
+
+def test_dynamic_parameter_context_accepts_string_authoritative_keys() -> None:
+    x = sp.Symbol("x")
+    q_real = sp.Symbol("q", real=True)
+    q_integer = sp.Symbol("q", integer=True)
+    compiled = numpify_module.numpify(
+        q_real * x + q_integer,
+        vars=(x, q_real, q_integer),
+        cache=False,
+    )
+
+    dynamic = compiled.set_parameter_context({"q": 1.5}).freeze(
+        {"q": numpify_module.DYNAMIC_PARAMETER}
+    )
+
+    assert dynamic.free_vars == (x,)
+    assert dynamic(2.0) == 4.5

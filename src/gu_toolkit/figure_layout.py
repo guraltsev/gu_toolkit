@@ -60,6 +60,37 @@ class _ViewPage:
 class FigureLayout:
     """Own the widget tree used by a figure instance."""
 
+    _STYLE_HTML = (
+        "<style>"
+        ".gu-figure-root,"
+        ".gu-figure-content,"
+        ".gu-figure-left-panel,"
+        ".gu-figure-view-stage,"
+        ".gu-figure-view-page,"
+        ".gu-figure-sidebar,"
+        ".gu-figure-panel-box,"
+        ".gu-figure-print-output {"
+        "box-sizing: border-box !important;"
+        "min-width: 0 !important;"
+        "}"
+        ".gu-figure-view-stage,"
+        ".gu-figure-view-page {"
+        "overflow: hidden !important;"
+        "}"
+        ".gu-figure-sidebar {"
+        "overflow-x: hidden !important;"
+        "overflow-y: auto !important;"
+        "}"
+        ".gu-figure-panel-box,"
+        ".gu-figure-panel-box > *,"
+        ".gu-figure-print-output {"
+        "box-sizing: border-box !important;"
+        "width: 100% !important;"
+        "min-width: 0 !important;"
+        "}"
+        "</style>"
+    )
+
     def __init__(self, title: str = "") -> None:
         self._view_pages: dict[str, _ViewPage] = {}
         self._layout_event_emitter: Callable[..., Any] | None = None
@@ -111,6 +142,7 @@ class FigureLayout:
                 overflow="hidden",
             ),
         )
+        self.view_stage.add_class("gu-figure-view-stage")
 
         # 3. Controls sidebar
         self.params_header = widgets.HTML(
@@ -126,6 +158,7 @@ class FigureLayout:
                 border_radius="10px",
             )
         )
+        self.params_box.add_class("gu-figure-panel-box")
 
         self.info_header = widgets.HTML(
             "<b>Info</b>", layout=widgets.Layout(display="none", margin="10px 0 0 0")
@@ -139,6 +172,7 @@ class FigureLayout:
                 border_radius="10px",
             )
         )
+        self.info_box.add_class("gu-figure-panel-box")
 
         self.legend_header = widgets.HTML(
             "<b>Legend</b>", layout=widgets.Layout(display="none", margin="0")
@@ -152,6 +186,7 @@ class FigureLayout:
                 border_radius="10px",
             )
         )
+        self.legend_box.add_class("gu-figure-panel-box")
 
         self.sidebar_container = widgets.VBox(
             [
@@ -173,6 +208,7 @@ class FigureLayout:
                 box_sizing="border-box",
             ),
         )
+        self.sidebar_container.add_class("gu-figure-sidebar")
 
         # 4. Main content wrapper
         self.left_panel = widgets.VBox(
@@ -185,6 +221,7 @@ class FigureLayout:
                 padding="0px",
             ),
         )
+        self.left_panel.add_class("gu-figure-left-panel")
 
         self.content_wrapper = widgets.Box(
             [self.left_panel, self.sidebar_container],
@@ -198,6 +235,7 @@ class FigureLayout:
                 gap="8px",
             ),
         )
+        self.content_wrapper.add_class("gu-figure-content")
 
         # 5. Output area below the figure
         self.print_header = widgets.HTML(
@@ -213,15 +251,22 @@ class FigureLayout:
                 overflow="auto",
             )
         )
+        self.print_output.add_class("gu-figure-print-output")
         self.print_area = widgets.VBox(
             [self.print_header, self.print_output],
             layout=widgets.Layout(width="100%", margin="6px 0 0 0"),
         )
 
+        self._style_widget = widgets.HTML(
+            self._STYLE_HTML,
+            layout=widgets.Layout(width="0px", height="0px", margin="0px"),
+        )
+
         self.root_widget = widgets.VBox(
-            [self._titlebar, self.content_wrapper, self.print_area],
+            [self._style_widget, self._titlebar, self.content_wrapper, self.print_area],
             layout=widgets.Layout(width="100%", min_width="0", position="relative"),
         )
+        self.root_widget.add_class("gu-figure-root")
 
         self.full_width_checkbox.observe(self._on_full_width_change, names="value")
         self._apply_content_layout_mode(is_full=self.full_width_checkbox.value)
@@ -366,6 +411,7 @@ class FigureLayout:
                     overflow="hidden",
                 ),
             )
+            host_box.add_class("gu-figure-view-page")
             page = _ViewPage(
                 view_id=key,
                 title=str(title),

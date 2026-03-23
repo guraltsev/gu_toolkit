@@ -82,6 +82,7 @@ from .InputConvert import InputConvert
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
+from .parameter_keys import ParameterKeyOrKeys, expand_parameter_keys_to_symbols
 from .figure_types import RangeLike, VisibleSpec
 
 # Module logger
@@ -1048,7 +1049,7 @@ class Figure:
         self,
         func: Any,
         var: Any,
-        parameters: Sequence[Symbol] | None = None,
+        parameters: ParameterKeyOrKeys | None = None,
         id: str | None = None,
         label: str | None = None,
         visible: VisibleSpec = True,
@@ -1075,9 +1076,11 @@ class Figure:
             Function/expression to plot.
         var : sympy.Symbol or tuple
             Plot variable ``x`` or ``(x, min, max)`` range tuple.
-        parameters : list[sympy.Symbol] or None, optional
-            Explicit parameter symbols to ensure. If omitted, symbols are
-            inferred from the expression.
+        parameters : str or sympy.Symbol or sequence, optional
+            Explicit parameter identifiers to ensure. Parameter names are
+            authoritative, so strings and symbols resolve by ``symbol.name``.
+            When a provided name matches multiple symbols in the expression or
+            numeric callable, that one logical parameter binds all of them.
         x_domain : RangeLike or None, optional
             Domain of the independent variable (e.g. ``(-10, 10)``).
             If "figure_default", the figure's range is used when plotting.
@@ -1233,13 +1236,21 @@ class Figure:
         opacity = style_kwargs.get("opacity")
         trace = style_kwargs.get("trace")
 
-        # Parameter Autodetection
+        # Parameter normalization
         if parameters is None:
-            parameters = list(inferred_parameters)
+            requested_parameter_keys: ParameterKeyOrKeys = tuple(inferred_parameters)
+            plot_parameters = tuple(inferred_parameters)
+        else:
+            requested_parameter_keys = parameters
+            plot_parameters = expand_parameter_keys_to_symbols(
+                parameters,
+                inferred_parameters,
+                role="plot parameters",
+            )
 
         # Ensure Parameters Exist (Delegate to Manager)
-        if parameters:
-            self.parameter(parameters)
+        if requested_parameter_keys:
+            self.parameter(requested_parameter_keys)
 
         # Update UI visibility
         if self._sync_sidebar_visibility():
@@ -1260,7 +1271,7 @@ class Figure:
             update_kwargs: dict[str, Any] = {
                 "var": normalized_var,
                 "func": normalized_func,
-                "parameters": parameters,
+                "parameters": plot_parameters,
                 "visible": visible,
                 "x_domain": x_domain,
                 "samples": (explicit_plot_samples if samples_supplied else None),
@@ -1303,7 +1314,7 @@ class Figure:
                 var=normalized_var,
                 func=normalized_func,
                 smart_figure=self,
-                parameters=parameters,
+                parameters=plot_parameters,
                 x_domain=x_domain,
                 samples=create_plot_samples,
                 label=(id if label is None else label),
@@ -1327,7 +1338,7 @@ class Figure:
 
     def parameter(
         self,
-        symbols: Symbol | Sequence[Symbol],
+        symbols: ParameterKeyOrKeys,
         *,
         control: Any | None = None,
         **control_kwargs: Any,
@@ -1337,8 +1348,9 @@ class Figure:
 
         Parameters
         ----------
-        symbols : sympy.Symbol or sequence[sympy.Symbol]
-            Parameter symbol(s) to ensure.
+        symbols : str or sympy.Symbol or sequence
+            Parameter identifiers to ensure. The canonical lookup key is the
+            parameter name string (``symbol.name``).
         control : Any, optional
             Optional control instance to use for the parameter(s).
         **control_kwargs : Any
@@ -1346,8 +1358,9 @@ class Figure:
 
         Returns
         -------
-        ParamRef or dict[Symbol, ParamRef]
-            ParamRef for a single symbol, or mapping for multiple symbols.
+        ParamRef or dict[str, ParamRef]
+            ParamRef for a single parameter, or a name-keyed mapping for
+            multiple parameters.
 
         Examples
         --------

@@ -95,16 +95,19 @@ def test_render_parameter_context_is_a_stable_snapshot_provider(
 
     snapshot_provider = fig.parameters.render_parameter_context
     assert fig.parameters.render_parameter_context is snapshot_provider
+    assert snapshot_provider["a"] == pytest.approx(1.0)
     assert snapshot_provider[a] == pytest.approx(1.0)
 
     ref.value = 2.5
 
+    assert fig.parameters.parameter_context["a"] == pytest.approx(2.5)
     assert fig.parameters.parameter_context[a] == pytest.approx(2.5)
     assert snapshot_provider[a] == pytest.approx(1.0)
 
     fig.flush_render_queue()
 
     assert fig.parameters.render_parameter_context is snapshot_provider
+    assert snapshot_provider["a"] == pytest.approx(2.5)
     assert snapshot_provider[a] == pytest.approx(2.5)
 
 

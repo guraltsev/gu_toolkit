@@ -46,6 +46,22 @@ All plots rendered in that pass then evaluate against that same frozen view of
 parameter values. This prevents mid-render drift and avoids recreating bound
 `NumericFunction` wrappers on every frame.
 
+## Name-authoritative parameter keys
+
+Parameter snapshots and render contexts are now **name-authoritative**:
+
+- iteration yields parameter names such as `"a"`,
+- lookup still accepts either `"a"` or `sp.Symbol("a")`, and
+- same-name symbols collapse to one logical parameter entry.
+
+This matters for render batching because the reusable render snapshot provider
+now stores one value per parameter name. A render pass therefore sees one
+consistent value for every logical parameter even when multiple SymPy symbols
+with different assumptions share the same name.
+
+When plots bind `NumericFunction` instances dynamically, those bindings also
+resolve parameter state through the canonical name first.
+
 ## Compilation and numeric-function reuse
 
 The symbolic-to-numeric compilation path is unchanged:

@@ -16,6 +16,15 @@ This folder uses a lightweight lifecycle model:
 
 ---
 
+## Selected guides
+
+- `guides/develop_guide.md`: architecture ownership map and maintenance rules.
+- `guides/render-batching-and-snapshots.md`: render queue + snapshot pipeline.
+- `guides/parameter-animation.md`: animation behavior and public API.
+- `guides/parameter-key-semantics.md`: name-authoritative parameter identity rules.
+
+---
+
 ## Issue workflow (`docs/issues`)
 
 ### Issue naming

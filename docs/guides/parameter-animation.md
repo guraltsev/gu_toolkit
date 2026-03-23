@@ -29,4 +29,4 @@ For standard slider-backed parameters, `ParamRef` now exposes:
 - `stop_animation()`
 - `toggle_animation()`
 
-Animation metadata also appears in `ParameterManager.snapshot(full=True)` when the backing control supports it.
+Animation metadata also appears in `ParameterManager.snapshot(full=True)` when the backing control supports it. Snapshot entries are keyed by parameter name strings, while symbol lookups remain accepted as aliases through `symbol.name`.

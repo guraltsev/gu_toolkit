@@ -210,7 +210,7 @@ def _collect_symbols(snapshot: FigureSnapshot) -> list[Symbol]:
     seen: OrderedDict[str, Symbol] = OrderedDict()
 
     # Parameters first (in snapshot iteration order)
-    for sym in snapshot.parameters:
+    for sym in snapshot.parameters.symbols:
         seen[sym.name] = sym
 
     # Plot variables and parameter lists
@@ -482,8 +482,8 @@ def figure_to_code(
 
     if len(snapshot.parameters) > 0:
         body_lines.append("# Parameters")
-        for sym in snapshot.parameters:
-            meta = dict(snapshot.parameters[sym])
+        for sym, meta_view in snapshot.parameters.symbol_items():
+            meta = dict(meta_view)
             body_lines.append(_parameter_call(sym, meta, style=options.interface_style))
         body_lines.append("")
 

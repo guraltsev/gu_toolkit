@@ -33,8 +33,8 @@ def test_inputconvert_int_exactness_and_string_sympy_path() -> None:
     assert InputConvert("sqrt(16)", int, truncate=False) == 4
 
 
-def test_parameter_snapshot_name_resolution_and_ambiguity() -> None:
-    """String lookup should work for unambiguous names and fail when ambiguous."""
+def test_parameter_snapshot_name_resolution_and_duplicate_name_rejection() -> None:
+    """Snapshots are keyed by canonical parameter names."""
     x_real = sp.Symbol("x", real=True)
     y = sp.Symbol("y")
     snapshot = ParameterSnapshot(
@@ -44,19 +44,19 @@ def test_parameter_snapshot_name_resolution_and_ambiguity() -> None:
         }
     )
 
+    assert list(snapshot) == ["x", "y"]
     assert snapshot["x"]["value"] == 2.0
+    assert snapshot[x_real]["value"] == 2.0
     assert snapshot.value_map()["y"] == 5.0
 
     x_positive = sp.Symbol("x", positive=True)
-    ambiguous_snapshot = ParameterSnapshot(
-        {
-            x_real: {"value": 1.0},
-            x_positive: {"value": 2.0},
-        }
-    )
-
-    with pytest.raises(KeyError, match="Ambiguous parameter name"):
-        _ = ambiguous_snapshot["x"]
+    with pytest.raises(ValueError, match="Duplicate parameter name"):
+        ParameterSnapshot(
+            {
+                x_real: {"value": 1.0},
+                x_positive: {"value": 2.0},
+            }
+        )
 
 
 def test_normalize_vars_mapping_and_tuple_plus_mapping_forms() -> None:

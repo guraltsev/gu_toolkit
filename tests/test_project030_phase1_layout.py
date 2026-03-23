@@ -36,3 +36,13 @@ def test_update_sidebar_visibility_hides_sidebar_when_all_sections_empty() -> No
     layout.update_sidebar_visibility(has_params=False, has_info=False, has_legend=False)
 
     assert layout.sidebar_container.layout.display == "none"
+
+
+def test_layout_adds_css_classes_for_box_sizing_and_scroll_control() -> None:
+    layout = FigureLayout()
+
+    assert "gu-figure-root" in layout.root_widget._dom_classes
+    assert "gu-figure-sidebar" in layout.sidebar_container._dom_classes
+    assert "gu-figure-panel-box" in layout.params_box._dom_classes
+    assert "gu-figure-print-output" in layout.print_output._dom_classes
+    assert ".gu-figure-sidebar" in layout._style_widget.value

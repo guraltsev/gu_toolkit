@@ -8,6 +8,7 @@ Run (from the repo root):
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 import sympy as sp
 
@@ -364,3 +365,45 @@ def test_viewport_range_controls_support_reset_to_defaults() -> None:
 
     assert fig.current_x_range == (-7.0, 7.0)
     assert fig.current_y_range == (-4.0, 4.0)
+
+
+def test_parameter_creation_accepts_string_names_and_multi_return_is_name_keyed() -> None:
+    a = sp.Symbol("a")
+    fig = Figure()
+
+    with fig:
+        ref = parameter("a")
+        created = fig.parameter((a, "b"))
+
+    assert fig.parameters["a"] is ref
+    assert fig.parameters[a] is ref
+    assert set(created) == {"a", "b"}
+    assert created["a"] is ref
+    assert fig.parameters[sp.Symbol("b")] is created["b"]
+
+
+def test_same_name_symbols_share_one_parameter_entry() -> None:
+    q_real = sp.Symbol("q", real=True)
+    q_integer = sp.Symbol("q", integer=True)
+    fig = Figure()
+
+    first = fig.parameter(q_real, value=1.0)
+    second = fig.parameter(q_integer, value=2.0)
+
+    assert first is second
+    assert list(fig.parameters) == ["q"]
+    assert fig.parameters["q"].value == pytest.approx(2.0)
+
+
+def test_plot_explicit_parameter_name_expands_to_same_name_symbols() -> None:
+    x = sp.Symbol("x")
+    q_real = sp.Symbol("q", real=True)
+    q_integer = sp.Symbol("q", integer=True)
+    fig = Figure()
+
+    plot_ref = fig.plot(q_real * x + q_integer, x, parameters="q", id="qline")
+    fig.parameters["q"].value = 3.0
+
+    assert plot_ref.parameters == (q_real, q_integer)
+    assert len(fig.parameters) == 1
+    assert np.allclose(plot_ref.numeric_expression(np.array([1.0, 2.0])), np.array([6.0, 9.0]))

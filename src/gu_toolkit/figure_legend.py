@@ -148,7 +148,7 @@ class LegendPanelManager:
         """Create a legend row widget bundle with toggle and label controls."""
         toggle = widgets.ToggleButton(
             value=False,
-            description="",
+            description="Toggle plot visibility",
             tooltip="Toggle plot visibility",
             layout=widgets.Layout(
                 width="30px",
@@ -165,16 +165,58 @@ class LegendPanelManager:
         style_widget = widgets.HTML(
             value=(
                 "<style>"
+                ".gu-legend-row {"
+                "overflow: hidden !important;"
+                "}"
                 ".gu-legend-toggle,"
                 ".gu-legend-toggle:hover,"
                 ".gu-legend-toggle:focus,"
+                ".gu-legend-toggle:active,"
                 ".gu-legend-toggle.mod-active,"
                 ".gu-legend-toggle.mod-active:hover,"
-                ".gu-legend-toggle.mod-active:focus {"
+                ".gu-legend-toggle.mod-active:focus,"
+                ".gu-legend-toggle button,"
+                ".gu-legend-toggle button:hover,"
+                ".gu-legend-toggle button:focus,"
+                ".gu-legend-toggle button:active,"
+                ".gu-legend-toggle .widget-button,"
+                ".gu-legend-toggle .widget-button:hover,"
+                ".gu-legend-toggle .widget-button:focus,"
+                ".gu-legend-toggle .jupyter-button,"
+                ".gu-legend-toggle .jupyter-button:hover,"
+                ".gu-legend-toggle .jupyter-button:focus {"
                 "background: transparent !important;"
                 "background-color: transparent !important;"
                 "background-image: none !important;"
+                "border: none !important;"
                 "box-shadow: none !important;"
+                "outline: none !important;"
+                "}"
+                ".gu-legend-toggle {"
+                "position: relative !important;"
+                "overflow: hidden !important;"
+                "border-radius: 999px !important;"
+                "font-size: 0 !important;"
+                "line-height: 0 !important;"
+                "}"
+                ".gu-legend-toggle::before {"
+                "display: inline-flex !important;"
+                "align-items: center !important;"
+                "justify-content: center !important;"
+                "width: 100% !important;"
+                "height: 100% !important;"
+                "font-size: 15px !important;"
+                "line-height: 1 !important;"
+                "}"
+                ".gu-legend-toggle.mod-visible::before {"
+                "content: '●';"
+                "}"
+                ".gu-legend-toggle.mod-hidden::before {"
+                "content: '⊘';"
+                "}"
+                ".gu-legend-toggle:hover,"
+                ".gu-legend-toggle:focus-visible {"
+                "background-color: rgba(15, 23, 42, 0.06) !important;"
                 "}"
                 "</style>"
             ),
@@ -186,6 +228,7 @@ class LegendPanelManager:
                 width="100%", align_items="center", margin="0", gap="6px"
             ),
         )
+        container.add_class("gu-legend-row")
         toggle.observe(
             lambda change, pid=plot_id: self._on_toggle_changed(pid, change),
             names="value",
@@ -206,6 +249,11 @@ class LegendPanelManager:
 
         target_value = self._coerce_visible_to_bool(getattr(plot, "visible", True))
         marker_color = self._resolve_plot_color(plot)
+        self._sync_toggle_accessibility(
+            toggle=row.toggle,
+            plot_label=self._accessible_plot_label(plot, row.plot_id),
+            is_visible=target_value,
+        )
         self._style_toggle_marker(
             toggle=row.toggle, is_visible=target_value, marker_color=marker_color
         )
@@ -234,6 +282,11 @@ class LegendPanelManager:
             is_visible=plot.visible is True,
             marker_color=self._resolve_plot_color(plot),
         )
+        self._sync_toggle_accessibility(
+            toggle=row.toggle,
+            plot_label=self._accessible_plot_label(plot, plot_id),
+            is_visible=plot.visible is True,
+        )
 
     @staticmethod
     def _style_toggle_marker(
@@ -246,6 +299,40 @@ class LegendPanelManager:
         toggle.style.button_color = "transparent"
         toggle.layout.border = "none"
         toggle.layout.opacity = "1" if is_visible else "0.6"
+        add_class = getattr(toggle, "add_class", None)
+        remove_class = getattr(toggle, "remove_class", None)
+        if callable(remove_class):
+            remove_class("mod-visible")
+            remove_class("mod-hidden")
+        if is_visible:
+            if callable(add_class):
+                add_class("mod-visible")
+        elif callable(add_class):
+            add_class("mod-hidden")
+
+    @staticmethod
+    def _sync_toggle_accessibility(
+        *, toggle: widgets.ToggleButton, plot_label: str, is_visible: bool
+    ) -> None:
+        """Provide a descriptive, stateful accessible name for the toggle."""
+        action = "Hide" if is_visible else "Show"
+        label = plot_label.strip() or "plot"
+        description = f"{action} plot {label}"
+        toggle.description = description
+        toggle.tooltip = description
+
+    @classmethod
+    def _accessible_plot_label(cls, plot: Any, default_plot_id: str) -> str:
+        """Return a plain-text plot label suitable for accessibility metadata."""
+        raw_label = cls._safe_attr_str(plot, "label").strip()
+        if raw_label:
+            return raw_label
+
+        raw_plot_id = cls._safe_attr_str(plot, "id").strip()
+        if raw_plot_id:
+            return raw_plot_id
+
+        return default_plot_id
 
     @classmethod
     def _resolve_plot_color(cls, plot: Any) -> str:

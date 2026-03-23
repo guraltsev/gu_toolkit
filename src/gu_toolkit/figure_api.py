@@ -42,6 +42,7 @@ from .figure_context import _current_figure, _require_current_figure
 from .ParameterSnapshot import ParameterSnapshot, ParameterValueSnapshot
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
+from .parameter_keys import ParameterKeyOrKeys
 
 if TYPE_CHECKING:
     from .Figure import Figure
@@ -75,11 +76,11 @@ class _CurrentParametersProxy(Mapping):
 
     def parameter(
         self,
-        symbols: Symbol | Sequence[Symbol],
+        symbols: ParameterKeyOrKeys,
         *,
         control: str | None = None,
         **kwargs: Any,
-    ) -> ParamRef | dict[Symbol, ParamRef]:
+    ) -> ParamRef | dict[str, ParamRef]:
         return self._mgr().parameter(symbols, control=control, **kwargs)
 
     def snapshot(
@@ -223,11 +224,11 @@ def plot_style_options() -> dict[str, str]:
 
 
 def parameter(
-    symbols: Symbol | Sequence[Symbol],
+    symbols: ParameterKeyOrKeys,
     *,
     control: str | None = None,
     **kwargs: Any,
-) -> ParamRef | dict[Symbol, ParamRef]:
+) -> ParamRef | dict[str, ParamRef]:
     fig = _require_current_figure()
     return fig.parameters.parameter(symbols, control=control, **kwargs)
 
@@ -235,7 +236,7 @@ def parameter(
 def plot(
     func: Any,
     var: Any,
-    parameters: Sequence[Symbol] | None = None,
+    parameters: ParameterKeyOrKeys | None = None,
     id: str | None = None,
     label: str | None = None,
     visible: bool = True,

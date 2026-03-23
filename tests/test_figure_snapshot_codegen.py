@@ -44,7 +44,8 @@ def test_snapshot_captures_parameters_plots_and_info_cards() -> None:
     assert snap.sampling_points == 256
     assert snap.title == "Snapshot demo"
 
-    assert list(snap.parameters) == [a, b]
+    assert list(snap.parameters) == ["a", "b"]
+    assert snap.parameters.symbols == (a, b)
     assert snap.parameters[a]["value"] == 0.75
     assert snap.parameters[a]["min"] == -2.0
     assert snap.parameters[b]["max"] == 1.0

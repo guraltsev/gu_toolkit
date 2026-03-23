@@ -378,7 +378,13 @@ def test_domain_change_clamps_internal_position_when_it_falls_outside_range() ->
 def test_float_slider_exposes_animation_controls_with_default_values() -> None:
     slider = FloatSlider()
 
-    assert slider.btn_animate.description == "▶"
+    assert slider.layout.width == "100%"
+    assert slider.slider.layout.flex == "1 1 auto"
+    assert slider.description_label.layout.width == "auto"
+    assert slider.btn_animate.description == "Start animation"
+    assert slider.btn_animate.tooltip == "Start animation"
+    assert "smart-slider-root" in slider._classes
+    assert "smart-slider-top-row" in slider._top_row._classes
     assert slider.set_animation_time.value == pytest.approx(DEFAULT_ANIMATION_TIME)
     assert slider.set_animation_mode.value == ">>"
     assert slider.animation_running is False
@@ -393,14 +399,16 @@ def test_float_slider_animation_button_toggles_running_state() -> None:
 
     slider.btn_animate.click()
     assert slider.animation_running is True
-    assert slider.btn_animate.description == "⏸"
+    assert slider.btn_animate.description == "Pause animation"
+    assert "mod-running" in slider.btn_animate._classes
 
     clock.advance(0.6)
     assert slider.value == pytest.approx(0.6)
 
     slider.btn_animate.click()
     assert slider.animation_running is False
-    assert slider.btn_animate.description == "▶"
+    assert slider.btn_animate.description == "Start animation"
+    assert "mod-running" not in slider.btn_animate._classes
 
 
 

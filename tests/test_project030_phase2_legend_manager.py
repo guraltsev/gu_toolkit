@@ -121,9 +121,12 @@ def test_toggle_marker_reflects_plot_color_and_visibility_state() -> None:
     assert row.toggle.style.text_color == "#123456"
     assert row.toggle.style.button_color == "transparent"
     assert "gu-legend-toggle" in row.toggle._dom_classes
+    assert "mod-visible" in row.toggle._dom_classes
     assert row.toggle.layout.width == "30px"
     assert row.toggle.layout.height == "30px"
     assert row.toggle.layout.opacity == "1"
+    assert row.toggle.description == "Hide plot P1"
+    assert row.toggle.tooltip == "Hide plot P1"
 
     row.toggle.value = False
 
@@ -131,6 +134,9 @@ def test_toggle_marker_reflects_plot_color_and_visibility_state() -> None:
     assert row.toggle.style.text_color == "#123456"
     assert row.toggle.style.button_color == "transparent"
     assert row.toggle.layout.opacity == "0.6"
+    assert "mod-hidden" in row.toggle._dom_classes
+    assert row.toggle.description == "Show plot P1"
+    assert row.toggle.tooltip == "Show plot P1"
 
 
 def test_toggle_marker_uses_plotly_default_color_when_color_unspecified() -> None:
@@ -165,3 +171,16 @@ def test_toggle_marker_uses_plotly_default_color_when_color_unspecified() -> Non
 
     assert manager._rows[first.id].toggle.style.text_color == "rgb(31, 119, 180)"
     assert manager._rows[second.id].toggle.style.text_color == "rgb(255, 127, 14)"
+
+
+def test_toggle_accessibility_falls_back_to_plot_id_when_label_missing() -> None:
+    box = widgets.VBox()
+    manager = LegendPanelManager(box)
+    manager.set_active_view("main")
+
+    plot = _FakePlot(id="plot-1", label="", visible=False, views=("main",))
+    manager.on_plot_added(plot)
+
+    row = manager._rows[plot.id]
+    assert row.toggle.description == "Show plot plot-1"
+    assert row.toggle.tooltip == "Show plot plot-1"

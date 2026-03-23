@@ -271,6 +271,8 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
       plotEl.style.minWidth = "0";
       plotEl.style.maxWidth = `${wPx}px`;
       plotEl.style.boxSizing = "border-box";
+      plotEl.style.overflowX = "hidden";
+      plotEl.style.overflowY = "hidden";
 
       const pc = plotEl.querySelector(".plot-container");
       if (pc) {
@@ -278,6 +280,16 @@ class PlotlyResizeDriver(anywidget.AnyWidget):
         pc.style.minWidth = "0";
         pc.style.maxWidth = `${wPx}px`;
         pc.style.boxSizing = "border-box";
+        pc.style.overflowX = "hidden";
+        pc.style.overflowY = "hidden";
+      }
+
+      const svgContainer = plotEl.querySelector(".svg-container");
+      if (svgContainer) {
+        svgContainer.style.maxWidth = `${wPx}px`;
+        svgContainer.style.boxSizing = "border-box";
+        svgContainer.style.overflowX = "hidden";
+        svgContainer.style.overflowY = "hidden";
       }
     }
 
@@ -828,6 +840,37 @@ class PlotlyPaneStyle:
 class PlotlyPane:
     """Styled, responsive plot area for a Plotly ``FigureWidget``."""
 
+    _STYLE_HTML = (
+        "<style>"
+        ".gu-plotly-pane-wrap,"
+        ".gu-plotly-pane-host,"
+        ".gu-plotly-pane-slot {"
+        "box-sizing: border-box !important;"
+        "min-width: 0 !important;"
+        "min-height: 0 !important;"
+        "overflow: hidden !important;"
+        "}"
+        ".gu-plotly-pane-slot > * {"
+        "width: 100% !important;"
+        "height: 100% !important;"
+        "min-width: 0 !important;"
+        "min-height: 0 !important;"
+        "box-sizing: border-box !important;"
+        "}"
+        ".gu-plotly-pane-wrap .js-plotly-plot,"
+        ".gu-plotly-pane-wrap .plot-container,"
+        ".gu-plotly-pane-wrap .svg-container {"
+        "max-width: 100% !important;"
+        "box-sizing: border-box !important;"
+        "overflow-x: hidden !important;"
+        "}"
+        ".gu-plotly-pane-wrap .plot-container,"
+        ".gu-plotly-pane-wrap .svg-container {"
+        "overflow-y: hidden !important;"
+        "}"
+        "</style>"
+    )
+
     def __init__(
         self,
         figw: W.Widget,
@@ -842,6 +885,11 @@ class PlotlyPane:
         self.debug_pane_id = new_debug_id("pane")
         self._layout_event_emitter = None
         self._layout_debug_context: dict[str, Any] = {"pane_id": self.debug_pane_id}
+
+        self._style_widget = W.HTML(
+            self._STYLE_HTML,
+            layout=W.Layout(width="0px", height="0px", margin="0px"),
+        )
 
         _apply_default_fill_hints(figw)
 
@@ -874,9 +922,10 @@ class PlotlyPane:
                 align_self="stretch",
             ),
         )
+        self._plot_slot.add_class("gu-plotly-pane-slot")
 
         self._host = W.Box(
-            [self._plot_slot, self.driver],
+            [self._style_widget, self._plot_slot, self.driver],
             layout=W.Layout(
                 width="100%",
                 height="100%",
@@ -887,6 +936,7 @@ class PlotlyPane:
                 overflow="hidden",
             ),
         )
+        self._host.add_class("gu-plotly-pane-host")
 
         self.driver.on_msg(self._handle_driver_message)
 
@@ -904,6 +954,7 @@ class PlotlyPane:
                 box_sizing="border-box",
             ),
         )
+        self._wrap.add_class("gu-plotly-pane-wrap")
 
     def bind_layout_debug(self, emitter: Any, **context: Any) -> None:
         self._layout_event_emitter = emitter

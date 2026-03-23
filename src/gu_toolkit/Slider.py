@@ -94,6 +94,10 @@ class FloatSlider(widgets.VBox):
         self._syncing = False
         self._syncing_animation_settings = False
 
+        root_layout = kwargs.pop("layout", None)
+        if root_layout is None:
+            root_layout = widgets.Layout(width="100%", min_width="0")
+
         # --- Main controls ----------------------------------------------------
         self.slider = widgets.FloatSlider(
             value=value,
@@ -104,13 +108,15 @@ class FloatSlider(widgets.VBox):
             continuous_update=True,
             readout=False,  # IMPORTANT: no built-in numeric field
             style={"description_width": "initial"},
-            layout=widgets.Layout(width="50%"),
+            layout=widgets.Layout(flex="1 1 auto", width="auto", min_width="0"),
         )
+        self.slider.add_class("smart-slider-track")
 
         self.description_label = widgets.HTMLMath(
             value=description,
-            layout=widgets.Layout(width="60px"),
+            layout=widgets.Layout(width="auto", min_width="0", margin="0 1px 0 0"),
         )
+        self.description_label.add_class("smart-slider-label")
 
         # self._limit_style = widgets.HTML(
         #    "<style>"
@@ -129,6 +135,45 @@ class FloatSlider(widgets.VBox):
 
         self._limit_style = widgets.HTML(r"""
 <style>
+/* Root sizing keeps parameter rows inside the sidebar without phantom x-scroll. */
+.smart-slider-root,
+.smart-slider-top-row,
+.smart-slider-track,
+.smart-slider-label,
+.smart-slider-value-input,
+.smart-slider-settings-panel,
+.smart-slider-settings-modal {
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+}
+
+.smart-slider-root,
+.smart-slider-top-row {
+  width: 100% !important;
+}
+
+.smart-slider-top-row {
+  align-items: center !important;
+  column-gap: 3px !important;
+}
+
+.smart-slider-label {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  margin-right: 1px !important;
+  white-space: nowrap !important;
+}
+
+.smart-slider-track {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+
+.smart-slider-value-input {
+  width: 64px !important;
+}
+
 /* ============================================================
    Min/Max look like small non-editable text until focus,
    but remain fully editable on click.
@@ -139,6 +184,11 @@ class FloatSlider(widgets.VBox):
 .smart-slider-limit,
 .smart-slider-limit * {
   min-height: 0 !important;
+}
+
+.smart-slider-limit {
+  width: 40px !important;
+  box-sizing: border-box !important;
 }
 
 /* The actual editable element(s): handle both input + textarea. */
@@ -176,9 +226,89 @@ class FloatSlider(widgets.VBox):
   background: rgba(0,0,0,0.04) !important;
 }
 
+/* Icon-only action buttons keep text for assistive tech but show symbols via CSS. */
+.smart-slider-icon-button,
+.smart-slider-icon-button:hover,
+.smart-slider-icon-button:focus,
+.smart-slider-icon-button:active,
+.smart-slider-icon-button.mod-active,
+.smart-slider-icon-button.mod-active:hover,
+.smart-slider-icon-button.mod-active:focus,
+.smart-slider-icon-button button,
+.smart-slider-icon-button button:hover,
+.smart-slider-icon-button button:focus,
+.smart-slider-icon-button button:active,
+.smart-slider-icon-button .widget-button,
+.smart-slider-icon-button .widget-button:hover,
+.smart-slider-icon-button .widget-button:focus,
+.smart-slider-icon-button .jupyter-button,
+.smart-slider-icon-button .jupyter-button:hover,
+.smart-slider-icon-button .jupyter-button:focus {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.smart-slider-icon-button {
+  position: relative !important;
+  overflow: hidden !important;
+  border-radius: 6px !important;
+  color: var(--jp-ui-font-color1, #334155) !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+}
+
+.smart-slider-icon-button::before {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
+}
+
+.smart-slider-icon-button:hover,
+.smart-slider-icon-button:focus-visible {
+  background-color: rgba(15, 23, 42, 0.06) !important;
+}
+
+.smart-slider-animate-button::before {
+  content: "▶";
+}
+
+.smart-slider-animate-button.mod-running {
+  color: var(--jp-brand-color1, #0b76d1) !important;
+  background-color: rgba(11, 118, 209, 0.08) !important;
+}
+
+.smart-slider-animate-button.mod-running::before {
+  content: "⏸";
+}
+
+.smart-slider-reset-button::before {
+  content: "↺";
+}
+
+.smart-slider-settings-button::before {
+  content: "⚙";
+}
+
+.smart-slider-close-button::before {
+  content: "✕";
+}
+
 /* Modal overlay and panel styling */
 .smart-slider-settings-modal {
   z-index: 99999 !important;
+  box-sizing: border-box !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow-x: hidden !important;
+  overflow-y: hidden !important;
 }
 
 .smart-slider-settings-modal-hosted {
@@ -186,6 +316,7 @@ class FloatSlider(widgets.VBox):
   inset: 0 !important;
   width: 100% !important;
   height: 100% !important;
+  padding: 12px !important;
 }
 
 .smart-slider-settings-modal-global {
@@ -193,6 +324,7 @@ class FloatSlider(widgets.VBox):
   inset: 0 !important;
   width: 100vw !important;
   height: 100vh !important;
+  padding: 12px !important;
 }
 
 .smart-slider-modal-host {
@@ -204,31 +336,48 @@ class FloatSlider(widgets.VBox):
   border-radius: 10px !important;
   opacity: 1 !important;
   background: #ffffff !important;
+  box-sizing: border-box !important;
+  width: 240px !important;
+  max-width: calc(100% - 24px) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.smart-slider-settings-panel > * {
+  min-width: 0 !important;
 }
 </style>
 """)
+        self._limit_style.layout = widgets.Layout(width="0px", height="0px", margin="0px")
         # The *only* numeric field (editable; accepts expressions)
         self.number = widgets.Text(
             value=str(value),
             continuous_update=False,  # commit on Enter (and typically blur)
-            layout=widgets.Layout(width="70px"),
+            layout=widgets.Layout(width="64px", min_width="0"),
         )
+        self.number.add_class("smart-slider-value-input")
 
         self.btn_animate = widgets.Button(
-            description="▶",
+            description="Start animation",
             tooltip="Start animation",
-            layout=widgets.Layout(width="22px", height="22px", padding="0px"),
+            layout=widgets.Layout(width="24px", min_width="24px", height="24px", padding="0px"),
         )
+        self.btn_animate.add_class("smart-slider-icon-button")
+        self.btn_animate.add_class("smart-slider-animate-button")
         self.btn_reset = widgets.Button(
-            description="↺",
-            tooltip="Reset",
-            layout=widgets.Layout(width="22px", height="22px", padding="0px"),
+            description="Reset parameter",
+            tooltip="Reset parameter",
+            layout=widgets.Layout(width="24px", min_width="24px", height="24px", padding="0px"),
         )
+        self.btn_reset.add_class("smart-slider-icon-button")
+        self.btn_reset.add_class("smart-slider-reset-button")
         self.btn_settings = widgets.Button(
-            description="⚙",
-            tooltip="Settings",
-            layout=widgets.Layout(width="22px", height="22px", padding="0px"),
+            description="Open slider settings",
+            tooltip="Open slider settings",
+            layout=widgets.Layout(width="24px", min_width="24px", height="24px", padding="0px"),
         )
+        self.btn_settings.add_class("smart-slider-icon-button")
+        self.btn_settings.add_class("smart-slider-settings-button")
 
         # --- Settings panel ---------------------------------------------------
         style_args = {
@@ -238,15 +387,22 @@ class FloatSlider(widgets.VBox):
         self.set_min = widgets.Text(
             value=f"{min:.4g}",
             continuous_update=False,
-            layout=widgets.Layout(width="40px", height="16px"),
+            layout=widgets.Layout(width="40px", min_width="0", height="16px"),
         )
         self.set_min.add_class("smart-slider-limit")
         self.set_max = widgets.Text(
             value=f"{max:.4g}",
             continuous_update=False,
-            layout=widgets.Layout(width="40px", height="16px"),
+            layout=widgets.Layout(width="40px", min_width="0", height="16px"),
         )
         self.set_max.add_class("smart-slider-limit")
+        for field, placeholder in (
+            (self.number, "value"),
+            (self.set_min, "min"),
+            (self.set_max, "max"),
+        ):
+            if hasattr(field, "placeholder"):
+                setattr(field, "placeholder", placeholder)
         self.set_step = widgets.FloatText(value=step, description="Step:", **style_args)
         self.set_live = widgets.Checkbox(
             value=True,
@@ -271,10 +427,12 @@ class FloatSlider(widgets.VBox):
         )
 
         self.btn_close_settings = widgets.Button(
-            description="✕",
-            tooltip="Close settings",
+            description="Close slider settings",
+            tooltip="Close slider settings",
             layout=widgets.Layout(width="24px", height="24px", padding="0px"),
         )
+        self.btn_close_settings.add_class("smart-slider-icon-button")
+        self.btn_close_settings.add_class("smart-slider-close-button")
         self.settings_title = widgets.HBox(
             [
                 widgets.HTML("<b>Slider settings:</b>"),
@@ -342,10 +500,12 @@ class FloatSlider(widgets.VBox):
                 self.btn_reset,
                 self.btn_settings,
             ],
-            layout=widgets.Layout(align_items="center", gap="4px"),
+            layout=widgets.Layout(width="100%", min_width="0", align_items="center"),
         )
+        top_row.add_class("smart-slider-top-row")
         self._top_row = top_row
-        super().__init__([top_row, self.settings_modal], **kwargs)
+        super().__init__([top_row, self.settings_modal], layout=root_layout, **kwargs)
+        self.add_class("smart-slider-root")
 
         # --- Wiring -----------------------------------------------------------
         # Keep self.value and slider.value in sync
@@ -390,6 +550,18 @@ class FloatSlider(widgets.VBox):
         self._sync_animation_button(self._animation.running)
 
     # --- Helpers --------------------------------------------------------------
+
+    @staticmethod
+    def _set_class_state(widget: Any, class_name: str, enabled: bool) -> None:
+        """Add or remove a CSS class when the widget supports class helpers."""
+        add_class = getattr(widget, "add_class", None)
+        remove_class = getattr(widget, "remove_class", None)
+        if enabled:
+            if callable(add_class):
+                add_class(class_name)
+            return
+        if callable(remove_class):
+            remove_class(class_name)
 
     def _sync_number_text(self, val: float) -> None:
         """Set the text field from a numeric value without triggering parse logic.
@@ -592,9 +764,14 @@ class FloatSlider(widgets.VBox):
 
     def _sync_animation_button(self, running: bool) -> None:
         """Refresh the animation button state from the controller."""
-        self.btn_animate.description = "⏸" if running else "▶"
-        self.btn_animate.tooltip = "Pause animation" if running else "Start animation"
-        self.btn_animate.button_style = "info" if running else ""
+        self.btn_animate.description = (
+            "Pause animation" if running else "Start animation"
+        )
+        self.btn_animate.tooltip = (
+            "Pause animation" if running else "Start animation"
+        )
+        self.btn_animate.button_style = ""
+        self._set_class_state(self.btn_animate, "mod-running", running)
 
     def _handle_animation_value_change(self, change: Any) -> None:
         """Forward external value changes to the animation controller."""
@@ -946,3 +1123,8 @@ class FloatSlider(widgets.VBox):
         is_open = self.settings_modal.layout.display == "flex"
         self.settings_modal.layout.display = "none" if is_open else "flex"
         self.settings_panel.layout.display = "none" if is_open else "flex"
+        next_description = (
+            "Open slider settings" if is_open else "Close slider settings"
+        )
+        self.btn_settings.description = next_description
+        self.btn_settings.tooltip = next_description
