@@ -139,6 +139,11 @@ def render(
     _require_current_figure().render(reason=reason, trigger=trigger, force=force)
 
 
+def sound_generation_enabled(enabled: bool | None = None) -> bool:
+    """Query or set sound generation on the current figure."""
+    return _require_current_figure().sound_generation_enabled(enabled)
+
+
 def info(
     spec: str
     | Callable[[Figure, Any], str]
@@ -299,6 +304,7 @@ __all__ = [
     "plot",
     "plots",
     "plot_style_options",
+    "sound_generation_enabled",
     "render",
     "set_default_samples",
     "set_default_x_range",

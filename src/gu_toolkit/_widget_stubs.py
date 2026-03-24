@@ -435,16 +435,6 @@ _widgets_module.dlink = traitlets.dlink
 _widgets_module.Widget.widget_types = {}
 
 
-class _FallbackAnyWidget(Widget):
-    """Small ``anywidget.AnyWidget`` substitute used in tests."""
-
-    _esm = ""
-
-
-_anywidget_module = types.ModuleType("anywidget")
-_anywidget_module.AnyWidget = _FallbackAnyWidget
-
-
 try:  # pragma: no cover - exercised only when real dependency exists
     import ipywidgets as widgets  # type: ignore[import-not-found]
 except ModuleNotFoundError:  # pragma: no cover - covered via unit tests
@@ -454,6 +444,28 @@ except ModuleNotFoundError:  # pragma: no cover - covered via unit tests
 try:  # pragma: no cover - exercised only when real dependency exists
     import anywidget  # type: ignore[import-not-found]
 except ModuleNotFoundError:  # pragma: no cover - covered via unit tests
+    if widgets is _widgets_module:
+        class _FallbackAnyWidget(Widget):
+            """Small ``anywidget.AnyWidget`` substitute used in tests."""
+
+            _esm = ""
+    else:
+        class _FallbackAnyWidget(widgets.DOMWidget):  # type: ignore[misc, valid-type]
+            """Fallback ``anywidget.AnyWidget`` compatible with real ipywidgets."""
+
+            _esm = ""
+            _view_name = traitlets.Unicode("FallbackAnyWidgetView").tag(sync=True)
+            _model_name = traitlets.Unicode("FallbackAnyWidgetModel").tag(sync=True)
+            _view_module = traitlets.Unicode("@jupyter-widgets/base").tag(sync=True)
+            _model_module = traitlets.Unicode("@jupyter-widgets/base").tag(sync=True)
+            _view_module_version = traitlets.Unicode("*").tag(sync=True)
+            _model_module_version = traitlets.Unicode("*").tag(sync=True)
+
+            def _emit_msg(self, content: Any = None, buffers: Any = None) -> None:
+                self._handle_custom_msg(content if content is not None else {}, buffers)
+
+    _anywidget_module = types.ModuleType("anywidget")
+    _anywidget_module.AnyWidget = _FallbackAnyWidget
     anywidget = _anywidget_module
 
 

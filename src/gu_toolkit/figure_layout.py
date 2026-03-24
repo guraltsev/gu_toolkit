@@ -209,6 +209,7 @@ class FigureLayout:
         self.legend_header = widgets.HTML(
             "<b>Legend</b>", layout=widgets.Layout(display="none", margin="0")
         )
+        self.legend_header.add_class("gu-figure-legend-area")
         self.legend_box = widgets.VBox(
             layout=widgets.Layout(
                 width="100%",
@@ -220,6 +221,7 @@ class FigureLayout:
             )
         )
         self.legend_box.add_class("gu-figure-panel-box")
+        self.legend_box.add_class("gu-figure-legend-area")
 
         self.sidebar_container = widgets.VBox(
             [

@@ -794,6 +794,21 @@ class Plot:
         if value is True:
             self.render()
 
+    def sound(self, run: bool = True) -> None:
+        """Start, stop, or restart streaming playback for this plot.
+
+        Parameters
+        ----------
+        run : bool, default=True
+            ``True`` starts playback from ``x=0`` and restarts when already
+            active. ``False`` stops playback for this plot and resets it to
+            ``x=0``.
+        """
+        sound_manager = getattr(self._smart_figure, "_sound", None)
+        if sound_manager is None:
+            raise RuntimeError("Figure sound manager is unavailable.")
+        sound_manager.sound(self.id, run=bool(run))
+
     def render(
         self,
         view_id: str | None = None,

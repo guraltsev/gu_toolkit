@@ -24,17 +24,15 @@ _DASH_STYLE_VALUES = frozenset(value for _, value in _DASH_STYLE_OPTIONS)
 
 
 class _LegendInteractionBridge(anywidget.AnyWidget):
-    """Frontend bridge for legend right-click handling and dialog UX.
+    """Frontend bridge for legend context menus and dialog UX.
 
-    The legend style editor is rendered from Python widgets but still needs a
-    thin browser-side layer for two things Python cannot observe directly:
+    The legend still uses Python widgets for the visible rows and style editor,
+    but browser-side glue is needed for two interactions Python cannot observe
+    directly:
 
-    - intercepting right-clicks on legend markers inside the figure root
-    - handling modal affordances such as Escape-to-close, backdrop clicks, and
-      focus restoration
-
-    Keeping those behaviors in one bridge makes the dialog interaction policy
-    easier to reason about and keeps the Python manager focused on state.
+    - custom right-click handling inside the legend area,
+    - modal affordances such as Escape-to-close, backdrop clicks, and focus
+      restoration.
     """
 
     root_class = traitlets.Unicode("").tag(sync=True)
@@ -42,6 +40,7 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
     dialog_open = traitlets.Bool(False).tag(sync=True)
     dialog_label = traitlets.Unicode("Legend style settings").tag(sync=True)
     plot_label = traitlets.Unicode("plot").tag(sync=True)
+    sound_enabled = traitlets.Bool(False).tag(sync=True)
 
     _esm = r"""
     function q(node, selector) {
@@ -90,7 +89,9 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
 
         const dialogId = `gu-legend-style-dialog-${Math.random().toString(16).slice(2)}`;
         const titleId = `${dialogId}-title`;
+        const menuId = `gu-legend-context-menu-${Math.random().toString(16).slice(2)}`;
         let returnFocusEl = null;
+        let menuPlotId = "";
 
         function rootEl() {
           const rootClass = model.get("root_class") || "";
@@ -146,6 +147,121 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
               ...(payload || {}),
             });
           } catch (e) {}
+        }
+
+        function ensureContextMenu() {
+          if (el.__guLegendContextMenu instanceof HTMLElement) {
+            return el.__guLegendContextMenu;
+          }
+
+          const menu = document.createElement("div");
+          menu.id = menuId;
+          menu.className = "gu-legend-context-menu";
+          menu.setAttribute("role", "menu");
+          menu.style.display = "none";
+
+          const checkboxLabel = document.createElement("label");
+          checkboxLabel.className = "gu-legend-context-menu-item gu-legend-context-menu-checkbox";
+          checkboxLabel.setAttribute("role", "menuitemcheckbox");
+
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.className = "gu-legend-context-menu-sound-checkbox";
+
+          const checkboxText = document.createElement("span");
+          checkboxText.textContent = "Sound generation";
+
+          checkboxLabel.appendChild(checkbox);
+          checkboxLabel.appendChild(checkboxText);
+
+          const styleButton = document.createElement("button");
+          styleButton.type = "button";
+          styleButton.className = "gu-legend-context-menu-item gu-legend-context-menu-style-button";
+          styleButton.textContent = "Line style settings…";
+          styleButton.setAttribute("role", "menuitem");
+
+          menu.appendChild(checkboxLabel);
+          menu.appendChild(styleButton);
+          document.body.appendChild(menu);
+
+          checkbox.addEventListener("change", () => {
+            sendRequest("set_sound_enabled", { enabled: !!checkbox.checked });
+          });
+          styleButton.addEventListener("click", () => {
+            if (menuPlotId) {
+              sendRequest("open_style_dialog", { plot_id: menuPlotId });
+            }
+            hideContextMenu();
+          });
+          menu.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          });
+
+          el.__guLegendContextMenu = menu;
+          el.__guLegendContextMenuCheckbox = checkbox;
+          el.__guLegendContextMenuStyleButton = styleButton;
+          return menu;
+        }
+
+        function contextMenuEl() {
+          return ensureContextMenu();
+        }
+
+        function menuCheckboxEl() {
+          return el.__guLegendContextMenuCheckbox || ensureContextMenu().querySelector("input");
+        }
+
+        function menuStyleButtonEl() {
+          return el.__guLegendContextMenuStyleButton || q(contextMenuEl(), "button");
+        }
+
+        function contextMenuVisible() {
+          const menu = contextMenuEl();
+          return menu instanceof HTMLElement && menu.style.display !== "none";
+        }
+
+        function syncContextMenu() {
+          const checkbox = menuCheckboxEl();
+          const styleButton = menuStyleButtonEl();
+          if (checkbox) {
+            checkbox.checked = !!model.get("sound_enabled");
+          }
+          if (styleButton) {
+            styleButton.style.display = menuPlotId ? "flex" : "none";
+          }
+        }
+
+        function hideContextMenu() {
+          const menu = contextMenuEl();
+          if (!(menu instanceof HTMLElement)) return;
+          menu.style.display = "none";
+          menu.setAttribute("aria-hidden", "true");
+          menuPlotId = "";
+        }
+
+        function showContextMenu(clientX, clientY) {
+          const menu = contextMenuEl();
+          if (!(menu instanceof HTMLElement)) return;
+          syncContextMenu();
+          menu.style.display = "flex";
+          menu.setAttribute("aria-hidden", "false");
+          menu.style.left = `${Math.max(8, Number(clientX) || 0)}px`;
+          menu.style.top = `${Math.max(8, Number(clientY) || 0)}px`;
+          requestAnimationFrame(() => {
+            const rect = menu.getBoundingClientRect();
+            const maxLeft = Math.max(8, window.innerWidth - rect.width - 8);
+            const maxTop = Math.max(8, window.innerHeight - rect.height - 8);
+            menu.style.left = `${Math.min(Math.max(8, Number(clientX) || 0), maxLeft)}px`;
+            menu.style.top = `${Math.min(Math.max(8, Number(clientY) || 0), maxTop)}px`;
+          });
+        }
+
+        function legendTargetOf(target) {
+          if (!(target instanceof HTMLElement)) return null;
+          return target.closest(
+            ".gu-figure-legend-area, .gu-legend-row, .gu-legend-toggle, .gu-legend-sound-toggle"
+          );
         }
 
         function applyDialogLabels() {
@@ -229,6 +345,7 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
 
         function syncFromModel() {
           applyDialogLabels();
+          syncContextMenu();
           const isOpen = !!model.get("dialog_open");
           const panel = panelEl();
           if (isOpen) {
@@ -277,17 +394,18 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
           detachContext();
           const handler = (event) => {
             const target = event.target;
-            if (!(target instanceof HTMLElement)) return;
-            const governed = target.closest(".gu-figure-context-governed");
-            if (!(governed instanceof HTMLElement)) return;
+            const legendTarget = legendTargetOf(target);
+            if (!(legendTarget instanceof HTMLElement)) return;
             event.preventDefault();
             event.stopPropagation();
-            const marker = target.closest(".gu-legend-toggle");
-            if (!(marker instanceof HTMLElement)) return;
-            const plotId = parsePlotIdFromClasses(marker);
-            if (!plotId) return;
-            returnFocusEl = qButton(marker) || marker;
-            sendRequest("open_style_dialog", { plot_id: plotId });
+            const owner = target instanceof HTMLElement
+              ? target.closest(".gu-legend-row, .gu-legend-toggle, .gu-legend-sound-toggle")
+              : null;
+            const plotId = parsePlotIdFromClasses(owner || legendTarget || target);
+            const marker = target instanceof HTMLElement ? target.closest(".gu-legend-toggle") : null;
+            returnFocusEl = qButton(marker || owner || legendTarget) || owner || legendTarget;
+            menuPlotId = plotId || "";
+            showContextMenu(event.clientX, event.clientY);
           };
           root.addEventListener("contextmenu", handler, true);
           el.__guLegendRoot = root;
@@ -295,6 +413,13 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
         }
 
         function onKeydown(event) {
+          if (event.key === "Escape" && contextMenuVisible()) {
+            event.preventDefault();
+            event.stopPropagation();
+            hideContextMenu();
+            return;
+          }
+
           if (!model.get("dialog_open")) return;
           const panel = panelEl();
           if (!(panel instanceof HTMLElement)) return;
@@ -338,10 +463,18 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
         }
 
         function onDocumentClick(event) {
+          const target = event.target;
+          const menu = contextMenuEl();
+          if (contextMenuVisible() && menu instanceof HTMLElement) {
+            if (!(target instanceof HTMLElement) || !menu.contains(target)) {
+              hideContextMenu();
+            }
+          }
+
           if (!model.get("dialog_open")) return;
           const modal = modalEl();
           if (!modal) return;
-          if (event.target === modal) {
+          if (target === modal) {
             sendRequest("close_style_dialog", { reason: "backdrop" });
           }
         }
@@ -349,15 +482,19 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
         const onRootChange = () => {
           attachContext();
           applyDialogLabels();
+          syncContextMenu();
         };
         const onDialogOpenChange = () => syncFromModel();
         const onLabelChange = () => applyDialogLabels();
+        const onSoundEnabledChange = () => syncContextMenu();
 
         model.on("change:root_class", onRootChange);
         model.on("change:modal_class", onRootChange);
         model.on("change:dialog_open", onDialogOpenChange);
         model.on("change:dialog_label", onLabelChange);
         model.on("change:plot_label", onLabelChange);
+        model.on("change:sound_enabled", onSoundEnabledChange);
+        ensureContextMenu();
         attachContext();
         document.addEventListener("keydown", onKeydown, true);
         document.addEventListener("click", onDocumentClick, true);
@@ -369,14 +506,20 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
           try { model.off("change:dialog_open", onDialogOpenChange); } catch (e) {}
           try { model.off("change:dialog_label", onLabelChange); } catch (e) {}
           try { model.off("change:plot_label", onLabelChange); } catch (e) {}
+          try { model.off("change:sound_enabled", onSoundEnabledChange); } catch (e) {}
           try { document.removeEventListener("keydown", onKeydown, true); } catch (e) {}
           try { document.removeEventListener("click", onDocumentClick, true); } catch (e) {}
+          try {
+            const menu = el.__guLegendContextMenu;
+            if (menu instanceof HTMLElement && menu.parentElement) {
+              menu.parentElement.removeChild(menu);
+            }
+          } catch (e) {}
           detachContext();
         };
       },
     };
     """
-
 
 @dataclass
 class LegendRowModel:
@@ -386,6 +529,7 @@ class LegendRowModel:
     container: widgets.HBox
     toggle: widgets.ToggleButton
     label_widget: widgets.HTMLMath
+    sound_button: widgets.Button
     style_widget: widgets.HTML
     css_plot_id: str
     is_visible_for_active_view: bool = False
@@ -425,12 +569,18 @@ class LegendPanelManager:
         self._ordered_plot_ids: list[str] = []
         self._active_view_id: str | None = None
         self._suspended_plot_ids: set[str] = set()
+        self._sound_generation_enabled = False
+        self._sound_playing_plot_id: str | None = None
+        self._sound_enabled_handler: Any = None
         self._settings_open = False
         self._settings_plot_id: str | None = None
         self._dialog_loaded_style: LegendStyleDialogState | None = None
 
         self._root_css_class = f"gu-figure-context-root-{uuid.uuid4().hex[:8]}"
         self._dialog_modal_class = f"{self._root_css_class}-legend-style-modal"
+        add_layout_class = getattr(self._layout_box, "add_class", None)
+        if callable(add_layout_class):
+            add_layout_class("gu-figure-legend-area")
         if root_widget is not None:
             add_class = getattr(root_widget, "add_class", None)
             if callable(add_class):
@@ -442,6 +592,7 @@ class LegendPanelManager:
             dialog_open=False,
             dialog_label="Legend style settings",
             plot_label="plot",
+            sound_enabled=False,
             layout=widgets.Layout(width="0px", height="0px", margin="0px"),
         )
         self._context_bridge.on_msg(self._handle_context_bridge_message)
@@ -601,6 +752,21 @@ class LegendPanelManager:
         """Return ``True`` when at least one row is visible for the active view."""
         return any(row.is_visible_for_active_view for row in self._rows.values())
 
+    def bind_sound_enabled_handler(self, callback: Any) -> None:
+        """Bind the figure-level sound enable/disable handler."""
+        self._sound_enabled_handler = callback
+
+    def set_sound_generation_enabled(self, enabled: bool) -> None:
+        """Show or hide per-row sound controls."""
+        self._sound_generation_enabled = bool(enabled)
+        self._context_bridge.sound_enabled = self._sound_generation_enabled
+        self.refresh(reason="sound_generation_toggled")
+
+    def set_sound_playing_plot(self, plot_id: str | None) -> None:
+        """Mark the row whose sound button should show the playing state."""
+        self._sound_playing_plot_id = None if plot_id is None else str(plot_id)
+        self.refresh(reason="sound_playback_state_changed")
+
     def on_plot_added(self, plot: Any) -> None:
         """Register a plot and create a row if needed."""
         plot_id = self._normalize_plot_id(getattr(plot, "id", None), fallback_prefix="plot")
@@ -628,6 +794,8 @@ class LegendPanelManager:
         removed = self._rows.pop(key, None)
         if removed is not None:
             removed.toggle.unobserve_all()
+        if self._sound_playing_plot_id == key:
+            self._sound_playing_plot_id = None
         if self._settings_plot_id == key:
             self._set_style_dialog_open(False)
             self._dialog_loaded_style = None
@@ -682,7 +850,27 @@ class LegendPanelManager:
         )
         toggle.add_class("gu-legend-toggle")
         toggle.add_class(f"gu-legend-plot-id-{css_plot_id}")
-        label_widget = widgets.HTMLMath(value="", layout=widgets.Layout(margin="0", width="100%"))
+
+        label_widget = widgets.HTMLMath(
+            value="",
+            layout=widgets.Layout(margin="0", width="100%", flex="1 1 auto", min_width="0"),
+        )
+
+        sound_button = widgets.Button(
+            description="Play sound",
+            tooltip="Play sound",
+            layout=widgets.Layout(
+                width="24px",
+                min_width="24px",
+                height="24px",
+                margin="0",
+                padding="0",
+                display="none",
+            ),
+        )
+        sound_button.add_class("gu-legend-sound-toggle")
+        sound_button.add_class(f"gu-legend-plot-id-{css_plot_id}")
+
         style_widget = widgets.HTML(
             value=(
                 "<style>"
@@ -691,31 +879,42 @@ class LegendPanelManager:
                 ".gu-legend-toggle.mod-active,.gu-legend-toggle.mod-active:hover,.gu-legend-toggle.mod-active:focus,"
                 ".gu-legend-toggle button,.gu-legend-toggle button:hover,.gu-legend-toggle button:focus,.gu-legend-toggle button:active,"
                 ".gu-legend-toggle .widget-button,.gu-legend-toggle .widget-button:hover,.gu-legend-toggle .widget-button:focus,"
-                ".gu-legend-toggle .jupyter-button,.gu-legend-toggle .jupyter-button:hover,.gu-legend-toggle .jupyter-button:focus {"
+                ".gu-legend-toggle .jupyter-button,.gu-legend-toggle .jupyter-button:hover,.gu-legend-toggle .jupyter-button:focus,"
+                ".gu-legend-sound-toggle,.gu-legend-sound-toggle:hover,.gu-legend-sound-toggle:focus,.gu-legend-sound-toggle:active,"
+                ".gu-legend-sound-toggle button,.gu-legend-sound-toggle button:hover,.gu-legend-sound-toggle button:focus,.gu-legend-sound-toggle button:active,"
+                ".gu-legend-sound-toggle .widget-button,.gu-legend-sound-toggle .widget-button:hover,.gu-legend-sound-toggle .widget-button:focus,"
+                ".gu-legend-sound-toggle .jupyter-button,.gu-legend-sound-toggle .jupyter-button:hover,.gu-legend-sound-toggle .jupyter-button:focus {"
                 "background: transparent !important;background-color: transparent !important;background-image: none !important;"
                 "border: none !important;box-shadow: none !important;outline: none !important;}"
-                ".gu-legend-toggle {position: relative !important;overflow: hidden !important;border-radius: 999px !important;font-size: 0 !important;line-height: 0 !important;}"
-                ".gu-legend-toggle::before {display: inline-flex !important;align-items: center !important;justify-content: center !important;width: 100% !important;height: 100% !important;font-size: 15px !important;line-height: 1 !important;}"
+                ".gu-legend-toggle,.gu-legend-sound-toggle {position: relative !important;overflow: hidden !important;border-radius: 999px !important;font-size: 0 !important;line-height: 0 !important;}"
+                ".gu-legend-toggle::before,.gu-legend-sound-toggle::before {display: inline-flex !important;align-items: center !important;justify-content: center !important;width: 100% !important;height: 100% !important;line-height: 1 !important;}"
+                ".gu-legend-toggle::before {font-size: 15px !important;}"
+                ".gu-legend-sound-toggle::before {font-size: 14px !important;}"
                 ".gu-legend-toggle.mod-visible::before {content: '●';}"
                 ".gu-legend-toggle.mod-hidden::before {content: '⊘';}"
-                ".gu-legend-toggle:hover,.gu-legend-toggle:focus-visible {background-color: rgba(15, 23, 42, 0.06) !important;}"
+                ".gu-legend-sound-toggle.mod-muted::before {content: '🔇';}"
+                ".gu-legend-sound-toggle.mod-playing::before {content: '🔊';}"
+                ".gu-legend-toggle:hover,.gu-legend-toggle:focus-visible,.gu-legend-sound-toggle:hover,.gu-legend-sound-toggle:focus-visible {background-color: rgba(15, 23, 42, 0.06) !important;}"
                 "</style>"
             ),
             layout=widgets.Layout(display="none", width="0", height="0"),
         )
+
         container = widgets.HBox(
-            [toggle, label_widget, style_widget],
+            [toggle, label_widget, sound_button, style_widget],
             layout=widgets.Layout(width="100%", align_items="center", margin="0", gap="6px"),
         )
         container.add_class("gu-legend-row")
         container.add_class("gu-figure-context-governed")
         container.add_class(f"gu-legend-plot-id-{css_plot_id}")
         toggle.observe(lambda change, pid=plot_id: self._on_toggle_changed(pid, change), names="value")
+        sound_button.on_click(lambda _button, pid=plot_id: self._on_sound_button_clicked(pid))
         return LegendRowModel(
             plot_id=plot_id,
             container=container,
             toggle=toggle,
             label_widget=label_widget,
+            sound_button=sound_button,
             style_widget=style_widget,
             css_plot_id=css_plot_id,
         )
@@ -728,18 +927,77 @@ class LegendPanelManager:
 
         target_value = self._coerce_visible_to_bool(getattr(plot, "visible", True))
         marker_color = self._resolve_plot_color(plot)
+        plot_label = self._accessible_plot_label(plot, row.plot_id)
         self._sync_toggle_accessibility(
             toggle=row.toggle,
-            plot_label=self._accessible_plot_label(plot, row.plot_id),
+            plot_label=plot_label,
             is_visible=target_value,
         )
         self._style_toggle_marker(toggle=row.toggle, is_visible=target_value, marker_color=marker_color)
+        self._sync_sound_button_accessibility(
+            button=row.sound_button,
+            plot_label=plot_label,
+            is_enabled=self._sound_generation_enabled,
+            is_playing=self._sound_playing_plot_id == row.plot_id,
+        )
+        self._style_sound_button(
+            button=row.sound_button,
+            is_enabled=self._sound_generation_enabled,
+            is_playing=self._sound_playing_plot_id == row.plot_id,
+        )
         if row.toggle.value != target_value:
             self._suspended_plot_ids.add(row.plot_id)
             try:
                 row.toggle.value = target_value
             finally:
                 self._suspended_plot_ids.discard(row.plot_id)
+
+    def _on_sound_button_clicked(self, plot_id: str) -> None:
+        """Toggle streaming sound playback for the requested plot."""
+        if not self._sound_generation_enabled:
+            return
+        plot = self._plots.get(plot_id)
+        if plot is None:
+            return
+        sound_method = getattr(plot, "sound", None)
+        if not callable(sound_method):
+            return
+        sound_method(run=self._sound_playing_plot_id != plot_id)
+
+    @staticmethod
+    def _style_sound_button(*, button: widgets.Button, is_enabled: bool, is_playing: bool) -> None:
+        """Render the sound control as a muted or playing speaker icon."""
+        button.icon = ""
+        button.button_style = ""
+        button.style.button_color = "transparent"
+        button.layout.border = "none"
+        button.layout.display = "inline-flex" if is_enabled else "none"
+        button.layout.opacity = "1" if is_playing else "0.8"
+        add_class = getattr(button, "add_class", None)
+        remove_class = getattr(button, "remove_class", None)
+        if callable(remove_class):
+            remove_class("mod-muted")
+            remove_class("mod-playing")
+        if callable(add_class):
+            add_class("mod-playing" if is_playing else "mod-muted")
+
+    @staticmethod
+    def _sync_sound_button_accessibility(
+        *,
+        button: widgets.Button,
+        plot_label: str,
+        is_enabled: bool,
+        is_playing: bool,
+    ) -> None:
+        """Provide descriptive accessible copy for the sound button."""
+        label = plot_label.strip() or "plot"
+        if not is_enabled:
+            description = f"Sound generation disabled for plot {label}"
+        else:
+            action = "Stop" if is_playing else "Play"
+            description = f"{action} sound for plot {label}"
+        button.description = description
+        button.tooltip = description
 
     def _on_toggle_changed(self, plot_id: str, change: dict[str, Any]) -> None:
         """Propagate user checkbox toggles to bound plot visibility."""
@@ -916,7 +1174,11 @@ class LegendPanelManager:
             ".smart-slider-icon-button,.smart-slider-icon-button:hover,.smart-slider-icon-button:focus,.smart-slider-icon-button:active,"
             ".smart-slider-icon-button button,.smart-slider-icon-button button:hover,.smart-slider-icon-button button:focus,.smart-slider-icon-button button:active,"
             ".smart-slider-icon-button .widget-button,.smart-slider-icon-button .widget-button:hover,.smart-slider-icon-button .widget-button:focus,"
-            ".smart-slider-icon-button .jupyter-button,.smart-slider-icon-button .jupyter-button:hover,.smart-slider-icon-button .jupyter-button:focus {"
+            ".smart-slider-icon-button .jupyter-button,.smart-slider-icon-button .jupyter-button:hover,.smart-slider-icon-button .jupyter-button:focus,"
+            ".gu-legend-context-menu-item,"
+            ".gu-legend-context-menu-item:hover,"
+            ".gu-legend-context-menu-item:focus,"
+            ".gu-legend-context-menu-item:active {"
             "background: transparent !important;background-color: transparent !important;background-image: none !important;border: none !important;box-shadow: none !important;outline: none !important;}"
             ".smart-slider-icon-button {position: relative !important;overflow: hidden !important;border-radius: 999px !important;font-size: 0 !important;line-height: 0 !important;}"
             ".smart-slider-icon-button::before {display: inline-flex !important;align-items: center !important;justify-content: center !important;width: 100% !important;height: 100% !important;font-size: 13px !important;line-height: 1 !important;}"
@@ -925,7 +1187,12 @@ class LegendPanelManager:
             ".smart-slider-settings-title {flex: 1 1 auto !important;min-width: 0 !important;flex-wrap: wrap !important;}"
             ".smart-slider-settings-title-text,.smart-slider-settings-title-subject {min-width: 0 !important;}"
             ".smart-slider-settings-title-subject {overflow-wrap: anywhere !important;}"
-            ".smart-slider-settings-panel :is(input, textarea, select, button):focus-visible {outline: 2px solid var(--jp-brand-color1, #0b76d1) !important;outline-offset: 1px !important;}"
+            ".smart-slider-settings-panel :is(input, textarea, select, button):focus-visible,"
+            ".gu-legend-context-menu :is(input, button):focus-visible {outline: 2px solid var(--jp-brand-color1, #0b76d1) !important;outline-offset: 1px !important;}"
+            ".gu-legend-context-menu {position: fixed !important;display: none;flex-direction: column;gap: 4px;min-width: 196px;padding: 6px;background: white;border: 1px solid rgba(15, 23, 42, 0.12);border-radius: 8px;box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22);z-index: 1001;}"
+            ".gu-legend-context-menu-item {display: flex !important;align-items: center !important;gap: 8px !important;width: 100% !important;padding: 6px 8px !important;border-radius: 6px !important;color: #111827 !important;cursor: pointer !important;text-align: left !important;font: inherit !important;}"
+            ".gu-legend-context-menu-checkbox input {margin: 0 !important;}"
+            ".gu-legend-context-menu-item:hover,.gu-legend-context-menu-item:focus-visible {background: rgba(15, 23, 42, 0.06) !important;}"
             "</style>"
         )
 
@@ -937,6 +1204,13 @@ class LegendPanelManager:
         action = content.get("action")
         if action == "close_style_dialog":
             self._dismiss_style_dialog(None)
+            return
+        if action == "set_sound_enabled":
+            enabled = bool(content.get("enabled"))
+            if callable(self._sound_enabled_handler):
+                self._sound_enabled_handler(enabled)
+            else:
+                self.set_sound_generation_enabled(enabled)
             return
         if action != "open_style_dialog":
             return

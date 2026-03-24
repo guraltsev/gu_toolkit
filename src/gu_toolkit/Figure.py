@@ -108,6 +108,7 @@ from .figure_info import InfoPanelManager
 from .figure_layout import FigureLayout
 from .figure_legend import LegendPanelManager
 from .figure_parameters import ParameterManager
+from .figure_sound import FigureSoundManager
 from .figure_plot import Plot
 from .figure_view import FigureViews, View
 from .figure_view_manager import ViewManager
@@ -170,6 +171,7 @@ class Figure:
         "_parameter_manager",
         "_info",
         "_legend",
+        "_sound",
         "_view_manager",
         "_views",
         "_sampling_points",
@@ -372,6 +374,11 @@ class Figure:
         self._legend = LegendPanelManager(
             self._layout.legend_box,
             modal_host=self._layout.root_widget,
+            root_widget=self._layout.root_widget,
+        )
+        self._sound = FigureSoundManager(
+            self,
+            self._legend,
             root_widget=self._layout.root_widget,
         )
         self._render_scheduler = FigureRenderScheduler(
@@ -1475,6 +1482,12 @@ class Figure:
                         self._view_manager.mark_stale(view_id=view_id)
 
         if request.includes_param_change and param_trigger is not None:
+            sound_change_handler = getattr(self, "_sound", None)
+            if sound_change_handler is not None:
+                try:
+                    sound_change_handler.on_parameter_change(param_trigger)
+                except Exception as e:
+                    warnings.warn(f"Sound refresh failed: {e}", stacklevel=2)
             hooks = self._parameter_manager.get_hooks()
             for h_id, callback in list(hooks.items()):
                 try:
@@ -1623,6 +1636,18 @@ class Figure:
         to_code : Keyword-only variant used internally.
         """
         return self.to_code(options=options)
+
+    def sound_generation_enabled(self, enabled: bool | None = None) -> bool:
+        """Query or set the figure-level sound generation toggle.
+
+        Parameters
+        ----------
+        enabled : bool | None, optional
+            ``True`` shows per-plot sound controls and allows playback.
+            ``False`` hides them and stops any active playback. When omitted,
+            the current state is returned without changing it.
+        """
+        return self._sound.sound_generation_enabled(enabled)
 
     def info(
         self,
@@ -1874,6 +1899,7 @@ plot = _figure_api.plot
 plots = _figure_api.plots
 plot_style_options = _figure_api.plot_style_options
 render = _figure_api.render
+sound_generation_enabled = _figure_api.sound_generation_enabled
 set_default_samples = _figure_api.set_default_samples
 set_default_x_range = _figure_api.set_default_x_range
 set_default_y_range = _figure_api.set_default_y_range
@@ -1920,4 +1946,5 @@ __all__ = [
     "get_title",
     "set_title",
     "plot_style_options",
+    "sound_generation_enabled",
 ]

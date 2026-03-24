@@ -33,6 +33,7 @@ from .Figure import (
     parameters,
     plots,
     render,
+    sound_generation_enabled,
     set_default_samples,
     set_default_x_range,
     set_default_y_range,
