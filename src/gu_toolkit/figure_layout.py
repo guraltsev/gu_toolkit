@@ -172,6 +172,7 @@ class FigureLayout:
             ),
         )
         self.view_stage.add_class("gu-figure-view-stage")
+        self.view_stage.add_class("gu-figure-context-governed")
 
         # 3. Controls sidebar
         self.params_header = widgets.HTML(
@@ -242,6 +243,7 @@ class FigureLayout:
             ),
         )
         self.sidebar_container.add_class("gu-figure-sidebar")
+        self.sidebar_container.add_class("gu-figure-context-governed")
 
         # 4. Main content wrapper
         self.left_panel = widgets.VBox(
@@ -304,6 +306,7 @@ class FigureLayout:
             [self.print_header, self.print_panel],
             layout=widgets.Layout(width="100%", margin="6px 0 0 0"),
         )
+        self.print_area.add_class("gu-figure-context-governed")
 
         self._style_widget = widgets.HTML(
             self._STYLE_HTML,

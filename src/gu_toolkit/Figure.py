@@ -369,7 +369,11 @@ class Figure:
         self._info = InfoPanelManager(self._layout.info_box)
         self._info.bind_figure(self)
         self._info.bind_layout_change_callback(self._on_info_panel_structure_changed)
-        self._legend = LegendPanelManager(self._layout.legend_box)
+        self._legend = LegendPanelManager(
+            self._layout.legend_box,
+            modal_host=self._layout.root_widget,
+            root_widget=self._layout.root_widget,
+        )
         self._render_scheduler = FigureRenderScheduler(
             self._perform_render_request,
             execute_every_ms=RENDER_TARGET_INTERVAL_MS,
