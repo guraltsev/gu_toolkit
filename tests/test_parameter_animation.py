@@ -385,9 +385,24 @@ def test_float_slider_exposes_animation_controls_with_default_values() -> None:
     assert slider.btn_animate.tooltip == "Start animation"
     assert "smart-slider-root" in slider._classes
     assert "smart-slider-top-row" in slider._top_row._classes
+    assert "mod-mode-loop" in slider.btn_animate._classes
     assert slider.set_animation_time.value == pytest.approx(DEFAULT_ANIMATION_TIME)
     assert slider.set_animation_mode.value == ">>"
     assert slider.animation_running is False
+
+
+def test_float_slider_animation_mode_updates_button_glyph_class() -> None:
+    slider = FloatSlider()
+
+    slider.animation_mode = ">"
+    assert "mod-mode-once" in slider.btn_animate._classes
+    assert "mod-mode-loop" not in slider.btn_animate._classes
+    assert "mod-mode-bounce" not in slider.btn_animate._classes
+
+    slider.set_animation_mode.value = "<>"
+    assert "mod-mode-bounce" in slider.btn_animate._classes
+    assert "mod-mode-once" not in slider.btn_animate._classes
+    assert "mod-mode-loop" not in slider.btn_animate._classes
 
 
 def test_float_slider_animation_button_toggles_running_state() -> None:
@@ -401,6 +416,7 @@ def test_float_slider_animation_button_toggles_running_state() -> None:
     assert slider.animation_running is True
     assert slider.btn_animate.description == "Pause animation"
     assert "mod-running" in slider.btn_animate._classes
+    assert "mod-mode-loop" in slider.btn_animate._classes
 
     clock.advance(0.6)
     assert slider.value == pytest.approx(0.6)

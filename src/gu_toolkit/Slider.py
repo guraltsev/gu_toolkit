@@ -17,6 +17,11 @@ from .InputConvert import InputConvert
 from .animation import DEFAULT_ANIMATION_TIME, AnimationController
 
 
+_ANIMATION_MODE_BUTTON_CLASSES = {
+    ">": "mod-mode-once",
+    ">>": "mod-mode-loop",
+    "<>": "mod-mode-bounce",
+}
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 _WHITESPACE_RE = re.compile(r"\s+")
 
@@ -620,7 +625,19 @@ class FloatSlider(widgets.VBox):
 }
 
 .smart-slider-animate-button::before {
-  content: "▶";
+  content: ">>";
+}
+
+.smart-slider-animate-button.mod-mode-once::before {
+  content: ">";
+}
+
+.smart-slider-animate-button.mod-mode-loop::before {
+  content: ">>";
+}
+
+.smart-slider-animate-button.mod-mode-bounce::before {
+  content: "<>";
 }
 
 .smart-slider-animate-button.mod-running {
@@ -1206,6 +1223,12 @@ class FloatSlider(widgets.VBox):
         """Toggle animation from the small play/pause button."""
         self.toggle_animation()
 
+    def _sync_animation_mode_button_classes(self) -> None:
+        """Apply the idle-mode glyph class used by the animation button."""
+        current_mode = str(self._animation.animation_mode)
+        for mode, class_name in _ANIMATION_MODE_BUTTON_CLASSES.items():
+            self._set_class_state(self.btn_animate, class_name, mode == current_mode)
+
     def _sync_animation_button(self, running: bool) -> None:
         """Refresh the animation button state from the controller."""
         self.btn_animate.description = (
@@ -1215,6 +1238,7 @@ class FloatSlider(widgets.VBox):
             "Pause animation" if running else "Start animation"
         )
         self.btn_animate.button_style = ""
+        self._sync_animation_mode_button_classes()
         self._set_class_state(self.btn_animate, "mod-running", running)
 
     def _handle_animation_value_change(self, change: Any) -> None:
@@ -1236,6 +1260,7 @@ class FloatSlider(widgets.VBox):
         if self._syncing_animation_settings:
             return
         self._animation.animation_mode = str(change.new)
+        self._sync_animation_button(self._animation.running)
 
     @property
     def default_value(self) -> float:
@@ -1446,6 +1471,7 @@ class FloatSlider(widgets.VBox):
             self.set_animation_mode.value = str(self._animation.animation_mode)
         finally:
             self._syncing_animation_settings = False
+        self._sync_animation_button(self._animation.running)
 
     @property
     def animation_running(self) -> bool:

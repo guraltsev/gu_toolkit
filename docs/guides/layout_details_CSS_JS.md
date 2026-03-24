@@ -197,7 +197,8 @@ Figure
     │       └── info_box
     └── print_area
         ├── print_header
-        └── print_output
+        └── print_panel
+            └── print_output
 ```
 
 ### The pane subtree for one view

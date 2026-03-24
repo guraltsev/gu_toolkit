@@ -44,7 +44,8 @@ def test_layout_adds_css_classes_for_box_sizing_and_scroll_control() -> None:
     assert "gu-figure-root" in layout.root_widget._dom_classes
     assert "gu-figure-sidebar" in layout.sidebar_container._dom_classes
     assert "gu-figure-panel-box" in layout.params_box._dom_classes
-    assert "gu-figure-print-output" in layout.print_output._dom_classes
+    assert "gu-figure-output-panel" in layout.print_panel._dom_classes
+    assert "gu-figure-output-widget" in layout.print_output._dom_classes
     assert ".gu-figure-sidebar" in layout._style_widget.value
 
 
@@ -56,6 +57,8 @@ def test_layout_defaults_hide_horizontal_scrollbars_in_sidebar_and_output() -> N
     assert layout.info_box.layout.overflow_x == "hidden"
     assert layout.params_box.layout.overflow_x == "hidden"
     assert layout.legend_box.layout.overflow_x == "hidden"
-    assert layout.print_output.layout.overflow_x == "hidden"
-    assert layout.print_output.layout.overflow_y == "auto"
-    assert ".gu-figure-print-output .output_scroll" in layout._style_widget.value
+    assert layout.print_panel.layout.overflow_x == "hidden"
+    assert layout.print_panel.layout.overflow_y == "auto"
+    assert layout.print_output.layout.margin == "0px"
+    assert layout.print_output.layout.padding == "0px"
+    assert ".gu-figure-output-panel :is(.jupyter-widgets-output-area" in layout._style_widget.value

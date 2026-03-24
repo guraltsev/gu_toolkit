@@ -69,8 +69,9 @@ class FigureLayout:
         ".gu-figure-view-page,"
         ".gu-figure-sidebar,"
         ".gu-figure-panel-box,"
+        ".gu-figure-output-panel,"
         ".gu-figure-info-output,"
-        ".gu-figure-print-output {"
+        ".gu-figure-output-widget {"
         "box-sizing: border-box !important;"
         "min-width: 0 !important;"
         "}"
@@ -84,33 +85,35 @@ class FigureLayout:
         "}"
         ".gu-figure-panel-box,"
         ".gu-figure-panel-box > *,"
+        ".gu-figure-output-panel,"
+        ".gu-figure-output-panel > *,"
         ".gu-figure-info-output,"
         ".gu-figure-info-output > *,"
-        ".gu-figure-print-output,"
-        ".gu-figure-print-output > * {"
+        ".gu-figure-output-widget,"
+        ".gu-figure-output-widget > * {"
         "box-sizing: border-box !important;"
         "width: 100% !important;"
         "max-width: 100% !important;"
         "min-width: 0 !important;"
         "}"
         ".gu-figure-panel-box,"
+        ".gu-figure-output-panel,"
         ".gu-figure-info-output,"
-        ".gu-figure-print-output {"
+        ".gu-figure-output-widget {"
         "overflow-x: hidden !important;"
         "}"
-        ".gu-figure-panel-box .jupyter-widgets-output-area,"
-        ".gu-figure-panel-box .output_scroll,"
-        ".gu-figure-info-output .jupyter-widgets-output-area,"
-        ".gu-figure-info-output .output_scroll,"
-        ".gu-figure-print-output .jupyter-widgets-output-area,"
-        ".gu-figure-print-output .output_scroll {"
+        ".gu-figure-info-output :is(.jupyter-widgets-output-area, .output_scroll, .jp-OutputArea, .jp-OutputArea-output, .jp-OutputArea-child),"
+        ".gu-figure-output-panel :is(.jupyter-widgets-output-area, .output_scroll, .jp-OutputArea, .jp-OutputArea-output, .jp-OutputArea-child),"
+        ".gu-figure-output-widget :is(.jupyter-widgets-output-area, .output_scroll, .jp-OutputArea, .jp-OutputArea-output, .jp-OutputArea-child) {"
+        "box-sizing: border-box !important;"
         "max-width: 100% !important;"
+        "margin: 0 !important;"
         "overflow-x: hidden !important;"
-        "overflow-y: auto !important;"
         "}"
         ".gu-figure-panel-box pre,"
         ".gu-figure-info-output pre,"
-        ".gu-figure-print-output pre {"
+        ".gu-figure-output-panel pre,"
+        ".gu-figure-output-widget pre {"
         "white-space: pre-wrap !important;"
         "overflow-wrap: anywhere !important;"
         "}"
@@ -275,17 +278,30 @@ class FigureLayout:
             layout=widgets.Layout(
                 width="100%",
                 min_width="0",
+                min_height="32px",
+                margin="0px",
+                padding="0px",
+            )
+        )
+        self.print_output.add_class("gu-figure-output-widget")
+        self.print_panel = widgets.VBox(
+            [self.print_output],
+            layout=widgets.Layout(
+                width="100%",
+                min_width="0",
                 min_height="48px",
                 padding="8px",
                 border="1px solid rgba(15,23,42,0.08)",
                 border_radius="10px",
                 overflow_x="hidden",
                 overflow_y="auto",
-            )
+                box_sizing="border-box",
+            ),
         )
-        self.print_output.add_class("gu-figure-print-output")
+        self.print_panel.add_class("gu-figure-panel-box")
+        self.print_panel.add_class("gu-figure-output-panel")
         self.print_area = widgets.VBox(
-            [self.print_header, self.print_output],
+            [self.print_header, self.print_panel],
             layout=widgets.Layout(width="100%", margin="6px 0 0 0"),
         )
 

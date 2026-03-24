@@ -56,6 +56,18 @@ def coerce_symbol(value: Any, *, role: str) -> Symbol:
     )
 
 
+def _expression_symbol_sort_key(symbol: Symbol) -> tuple[Any, ...]:
+    """Return a deterministic sort key for expression-derived symbols.
+
+    SymPy's ``sort_key()`` deliberately ignores assumption metadata for symbols
+    that share the same name. Adding a small tie-break on assumption payload
+    keeps parameter expansion stable when an expression mixes same-name symbols
+    such as ``Symbol("q", real=True)`` and ``Symbol("q", integer=True)``.
+    """
+    assumptions = tuple(sorted(symbol.assumptions0.items()))
+    return (symbol.sort_key(), len(assumptions), assumptions)
+
+
 def rebind_numeric_function_vars(
     numeric_fn: NumericFunction,
     *,
@@ -110,7 +122,7 @@ def normalize_plot_inputs(
 
     if isinstance(f, Expr):
         expr = f
-        call_symbols = tuple(sorted(expr.free_symbols, key=lambda s: s.sort_key()))
+        call_symbols = tuple(sorted(expr.free_symbols, key=_expression_symbol_sort_key))
     elif isinstance(f, NumericFunction):
         numeric_fn = f
         source_callable = f._fn
