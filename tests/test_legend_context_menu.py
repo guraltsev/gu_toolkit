@@ -44,7 +44,31 @@ def test_context_bridge_opens_style_dialog_for_existing_plot() -> None:
     assert manager._dialog_subject.value == "Plot 1"
 
 
-def test_dialog_value_changes_update_plot_style_and_row_color() -> None:
+def test_context_bridge_decodes_encoded_plot_id_from_dom_class_payload() -> None:
+    legend_box = widgets.VBox()
+    root = widgets.VBox()
+    manager = LegendPanelManager(legend_box, modal_host=root, root_widget=root)
+    manager.set_active_view("main")
+
+    plot = _FakePlot(id="plot 1 / alt", label="Plot 1", visible=True, views=("main",))
+    manager.on_plot_added(plot)
+    encoded_plot_id = manager._rows[plot.id].css_plot_id
+
+    manager._handle_context_bridge_message(
+        None,
+        {
+            "type": "legend_context_request",
+            "action": "open_style_dialog",
+            "plot_id": encoded_plot_id,
+        },
+        None,
+    )
+
+    assert manager._settings_open is True
+    assert manager._settings_plot_id == plot.id
+
+
+def test_dialog_changes_apply_only_after_ok_and_refresh_row_color() -> None:
     legend_box = widgets.VBox()
     root = widgets.VBox()
     manager = LegendPanelManager(legend_box, modal_host=root, root_widget=root)
@@ -60,11 +84,49 @@ def test_dialog_value_changes_update_plot_style_and_row_color() -> None:
     manager._dialog_dash.value = "dashdot"
 
     row = manager._rows["plot-1"]
+    assert plot.color is None
+    assert plot.thickness == 2.0
+    assert plot.opacity == 1.0
+    assert plot.dash == "solid"
+
+    manager._apply_style_dialog(None)
+
     assert plot.color == "#123456"
     assert plot.thickness == 4.5
     assert plot.opacity == 0.4
     assert plot.dash == "dashdot"
     assert row.toggle.style.text_color == "#123456"
+
+
+def test_dialog_escape_request_closes_without_applying_pending_changes() -> None:
+    legend_box = widgets.VBox()
+    root = widgets.VBox()
+    manager = LegendPanelManager(legend_box, modal_host=root, root_widget=root)
+    manager.set_active_view("main")
+
+    plot = _FakePlot(id="plot-1", label="Plot 1", visible=True, views=("main",))
+    manager.on_plot_added(plot)
+    manager._open_style_dialog("plot-1")
+
+    manager._dialog_color.value = "#123456"
+    manager._dialog_width.value = 4.5
+
+    manager._context_bridge._emit_msg(
+        {"type": "legend_context_request", "action": "close_style_dialog", "reason": "escape"}
+    )
+
+    assert manager._settings_open is False
+    assert manager._dialog_modal.layout.display == "none"
+    assert plot.color is None
+    assert plot.thickness == 2.0
+
+
+def test_dialog_exposes_graphical_color_picker_and_ok_button() -> None:
+    manager = LegendPanelManager(widgets.VBox(), modal_host=widgets.VBox(), root_widget=widgets.VBox())
+
+    assert type(manager._dialog_color).__name__ == "ColorPicker"
+    assert manager._dialog_color.concise is True
+    assert manager._dialog_ok_button.description == "OK"
 
 
 def test_legend_row_and_root_are_marked_as_figure_context_governed() -> None:

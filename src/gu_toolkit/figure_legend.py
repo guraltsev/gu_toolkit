@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import base64
 import html
-import re
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -9,7 +9,7 @@ from typing import Any
 import traitlets
 
 from ._widget_stubs import anywidget, widgets
-from .figure_color import color_for_trace_index
+from .figure_color import color_for_trace_index, color_to_picker_hex
 
 
 _DASH_STYLE_OPTIONS: tuple[tuple[str, str], ...] = (
@@ -20,25 +20,58 @@ _DASH_STYLE_OPTIONS: tuple[tuple[str, str], ...] = (
     ("Long dash", "longdash"),
     ("Long dash-dot", "longdashdot"),
 )
+_DASH_STYLE_VALUES = frozenset(value for _, value in _DASH_STYLE_OPTIONS)
 
 
-class _LegendContextMenuBridge(anywidget.AnyWidget):
-    """Frontend bridge for figure-owned right-click handling.
+class _LegendInteractionBridge(anywidget.AnyWidget):
+    """Frontend bridge for legend right-click handling and dialog UX.
 
-    The bridge listens for ``contextmenu`` events inside the figure root and
-    suppresses Jupyter's default browser menu for figure-governed regions. When
-    the right-click lands on a legend marker it sends a Python-side message so
-    the legend style dialog can open for the matching plot.
+    The legend style editor is rendered from Python widgets but still needs a
+    thin browser-side layer for two things Python cannot observe directly:
+
+    - intercepting right-clicks on legend markers inside the figure root
+    - handling modal affordances such as Escape-to-close, backdrop clicks, and
+      focus restoration
+
+    Keeping those behaviors in one bridge makes the dialog interaction policy
+    easier to reason about and keeps the Python manager focused on state.
     """
 
     root_class = traitlets.Unicode("").tag(sync=True)
+    modal_class = traitlets.Unicode("").tag(sync=True)
+    dialog_open = traitlets.Bool(False).tag(sync=True)
+    dialog_label = traitlets.Unicode("Legend style settings").tag(sync=True)
+    plot_label = traitlets.Unicode("plot").tag(sync=True)
 
     _esm = r"""
-    function sameClassSet(node, value) {
-      const current = node.__guLegendRootClass || "";
-      if (current === value) return true;
-      node.__guLegendRootClass = value || "";
-      return false;
+    function q(node, selector) {
+      return node ? node.querySelector(selector) : null;
+    }
+
+    function qInput(node) {
+      return q(node, "input, textarea, select") || node;
+    }
+
+    function qButton(node) {
+      return q(node, "button, .widget-button, .jupyter-button") || node;
+    }
+
+    function focusables(root) {
+      if (!root) return [];
+      const selector = [
+        "button:not([disabled])",
+        "input:not([disabled])",
+        "select:not([disabled])",
+        "textarea:not([disabled])",
+        "a[href]",
+        "[tabindex]:not([tabindex='-1'])",
+      ].join(",");
+      return Array.from(root.querySelectorAll(selector)).filter((el) => {
+        if (!(el instanceof HTMLElement)) return false;
+        const style = window.getComputedStyle(el);
+        if (style.display === "none" || style.visibility === "hidden") return false;
+        return !el.hasAttribute("disabled");
+      });
     }
 
     function parsePlotIdFromClasses(node) {
@@ -55,12 +88,176 @@ class _LegendContextMenuBridge(anywidget.AnyWidget):
       render({ model, el }) {
         el.style.display = "none";
 
+        const dialogId = `gu-legend-style-dialog-${Math.random().toString(16).slice(2)}`;
+        const titleId = `${dialogId}-title`;
+        let returnFocusEl = null;
+
         function rootEl() {
           const rootClass = model.get("root_class") || "";
           return rootClass ? document.querySelector(`.${rootClass}`) : null;
         }
 
-        function detach() {
+        function modalEl() {
+          const modalClass = model.get("modal_class") || "";
+          return modalClass ? document.querySelector(`.${modalClass}`) : null;
+        }
+
+        function panelEl() {
+          return q(modalEl(), ".gu-legend-style-dialog-panel");
+        }
+
+        function titleEl() {
+          return q(panelEl(), ".gu-legend-style-dialog-title-text");
+        }
+
+        function closeButtonEl() {
+          return qButton(q(panelEl(), ".smart-slider-close-button"));
+        }
+
+        function cancelButtonEl() {
+          return qButton(q(panelEl(), ".gu-legend-style-dialog-cancel-button"));
+        }
+
+        function okButtonEl() {
+          return qButton(q(panelEl(), ".gu-legend-style-dialog-ok-button"));
+        }
+
+        function colorInputEl() {
+          return qInput(q(panelEl(), ".gu-legend-style-dialog-color"));
+        }
+
+        function widthInputEl() {
+          return qInput(q(panelEl(), ".gu-legend-style-dialog-width"));
+        }
+
+        function opacityInputEl() {
+          return qInput(q(panelEl(), ".gu-legend-style-dialog-opacity"));
+        }
+
+        function dashInputEl() {
+          return qInput(q(panelEl(), ".gu-legend-style-dialog-dash"));
+        }
+
+        function sendRequest(action, payload) {
+          try {
+            model.send({
+              type: "legend_context_request",
+              action,
+              ...(payload || {}),
+            });
+          } catch (e) {}
+        }
+
+        function applyDialogLabels() {
+          const dialogLabel = model.get("dialog_label") || "Legend style settings";
+          const plotLabel = model.get("plot_label") || "plot";
+          const isOpen = !!model.get("dialog_open");
+          const modal = modalEl();
+          const panel = panelEl();
+          const title = titleEl();
+          const closeButton = closeButtonEl();
+          const cancelButton = cancelButtonEl();
+          const okButton = okButtonEl();
+          const colorInput = colorInputEl();
+          const widthInput = widthInputEl();
+          const opacityInput = opacityInputEl();
+          const dashInput = dashInputEl();
+
+          if (title) {
+            title.id = titleId;
+          }
+
+          if (panel) {
+            panel.id = dialogId;
+            panel.setAttribute("role", "dialog");
+            panel.setAttribute("aria-modal", "true");
+            panel.setAttribute("tabindex", "-1");
+            panel.setAttribute("aria-hidden", isOpen ? "false" : "true");
+            if (title) {
+              panel.setAttribute("aria-labelledby", titleId);
+            } else {
+              panel.setAttribute("aria-label", dialogLabel);
+            }
+          }
+
+          if (modal) {
+            modal.setAttribute("aria-hidden", isOpen ? "false" : "true");
+          }
+
+          if (closeButton) {
+            closeButton.setAttribute("aria-controls", dialogId);
+          }
+
+          if (cancelButton) {
+            cancelButton.setAttribute("aria-controls", dialogId);
+          }
+
+          if (okButton) {
+            okButton.setAttribute("aria-controls", dialogId);
+          }
+
+          if (colorInput) {
+            colorInput.setAttribute("aria-label", `${plotLabel} color`);
+          }
+
+          if (widthInput) {
+            widthInput.setAttribute("aria-label", `${plotLabel} line width`);
+            widthInput.setAttribute("inputmode", "decimal");
+          }
+
+          if (opacityInput) {
+            opacityInput.setAttribute("aria-label", `${plotLabel} opacity`);
+            opacityInput.setAttribute("inputmode", "decimal");
+          }
+
+          if (dashInput) {
+            dashInput.setAttribute("aria-label", `${plotLabel} line style`);
+          }
+        }
+
+        function focusDialog() {
+          const panel = panelEl();
+          if (!panel || !model.get("dialog_open")) return;
+          const items = focusables(panel);
+          const target = items[0] || panel;
+          try {
+            target.focus({ preventScroll: true });
+          } catch (e) {
+            try { target.focus(); } catch (err) {}
+          }
+        }
+
+        function syncFromModel() {
+          applyDialogLabels();
+          const isOpen = !!model.get("dialog_open");
+          const panel = panelEl();
+          if (isOpen) {
+            if (!(returnFocusEl instanceof HTMLElement)) {
+              const active = document.activeElement;
+              if (active instanceof HTMLElement) {
+                returnFocusEl = active;
+              }
+            }
+            requestAnimationFrame(() => focusDialog());
+            return;
+          }
+
+          if (returnFocusEl instanceof HTMLElement && document.documentElement.contains(returnFocusEl)) {
+            try {
+              returnFocusEl.focus({ preventScroll: true });
+            } catch (e) {
+              try { returnFocusEl.focus(); } catch (err) {}
+            }
+          }
+
+          if (panel instanceof HTMLElement) {
+            panel.blur();
+          }
+
+          returnFocusEl = null;
+        }
+
+        function detachContext() {
           const oldRoot = el.__guLegendRoot;
           const oldHandler = el.__guLegendContextHandler;
           if (oldRoot && oldHandler) {
@@ -70,14 +267,14 @@ class _LegendContextMenuBridge(anywidget.AnyWidget):
           el.__guLegendContextHandler = null;
         }
 
-        function attach() {
+        function attachContext() {
           const root = rootEl();
           if (!(root instanceof HTMLElement)) {
-            detach();
+            detachContext();
             return;
           }
           if (el.__guLegendRoot === root) return;
-          detach();
+          detachContext();
           const handler = (event) => {
             const target = event.target;
             if (!(target instanceof HTMLElement)) return;
@@ -89,29 +286,92 @@ class _LegendContextMenuBridge(anywidget.AnyWidget):
             if (!(marker instanceof HTMLElement)) return;
             const plotId = parsePlotIdFromClasses(marker);
             if (!plotId) return;
-            try {
-              model.send({
-                type: "legend_context_request",
-                action: "open_style_dialog",
-                plot_id: decodeURIComponent(plotId),
-              });
-            } catch (e) {}
+            returnFocusEl = qButton(marker) || marker;
+            sendRequest("open_style_dialog", { plot_id: plotId });
           };
           root.addEventListener("contextmenu", handler, true);
           el.__guLegendRoot = root;
           el.__guLegendContextHandler = handler;
         }
 
-        function onRootChange() {
-          attach();
+        function onKeydown(event) {
+          if (!model.get("dialog_open")) return;
+          const panel = panelEl();
+          if (!(panel instanceof HTMLElement)) return;
+
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            sendRequest("close_style_dialog", { reason: "escape" });
+            return;
+          }
+
+          if (event.key !== "Tab") return;
+
+          const items = focusables(panel);
+          if (!items.length) {
+            event.preventDefault();
+            try { panel.focus({ preventScroll: true }); } catch (e) {}
+            return;
+          }
+
+          const first = items[0];
+          const last = items[items.length - 1];
+          const active = document.activeElement;
+
+          if (!panel.contains(active)) {
+            event.preventDefault();
+            try { first.focus({ preventScroll: true }); } catch (e) { try { first.focus(); } catch (err) {} }
+            return;
+          }
+
+          if (event.shiftKey && active === first) {
+            event.preventDefault();
+            try { last.focus({ preventScroll: true }); } catch (e) { try { last.focus(); } catch (err) {} }
+            return;
+          }
+
+          if (!event.shiftKey && active === last) {
+            event.preventDefault();
+            try { first.focus({ preventScroll: true }); } catch (e) { try { first.focus(); } catch (err) {} }
+          }
         }
 
+        function onDocumentClick(event) {
+          if (!model.get("dialog_open")) return;
+          const modal = modalEl();
+          if (!modal) return;
+          if (event.target === modal) {
+            sendRequest("close_style_dialog", { reason: "backdrop" });
+          }
+        }
+
+        const onRootChange = () => {
+          attachContext();
+          applyDialogLabels();
+        };
+        const onDialogOpenChange = () => syncFromModel();
+        const onLabelChange = () => applyDialogLabels();
+
         model.on("change:root_class", onRootChange);
-        attach();
+        model.on("change:modal_class", onRootChange);
+        model.on("change:dialog_open", onDialogOpenChange);
+        model.on("change:dialog_label", onLabelChange);
+        model.on("change:plot_label", onLabelChange);
+        attachContext();
+        document.addEventListener("keydown", onKeydown, true);
+        document.addEventListener("click", onDocumentClick, true);
+        requestAnimationFrame(() => syncFromModel());
 
         return () => {
           try { model.off("change:root_class", onRootChange); } catch (e) {}
-          detach();
+          try { model.off("change:modal_class", onRootChange); } catch (e) {}
+          try { model.off("change:dialog_open", onDialogOpenChange); } catch (e) {}
+          try { model.off("change:dialog_label", onLabelChange); } catch (e) {}
+          try { model.off("change:plot_label", onLabelChange); } catch (e) {}
+          try { document.removeEventListener("keydown", onKeydown, true); } catch (e) {}
+          try { document.removeEventListener("click", onDocumentClick, true); } catch (e) {}
+          detachContext();
         };
       },
     };
@@ -129,6 +389,22 @@ class LegendRowModel:
     style_widget: widgets.HTML
     css_plot_id: str
     is_visible_for_active_view: bool = False
+
+
+@dataclass(frozen=True)
+class LegendStyleDialogState:
+    """Snapshot of the dialog controls loaded from a plot.
+
+    The dialog now behaves like a traditional modal editor: the user can adjust
+    fields, confirm with **OK**, or dismiss with Escape / backdrop / close.
+    Capturing the loaded state lets the manager preserve untouched plot fields
+    exactly as they were instead of rewriting them on every widget edit.
+    """
+
+    picker_color: str
+    width: float
+    opacity: float
+    dash: str
 
 
 class LegendPanelManager:
@@ -151,16 +427,21 @@ class LegendPanelManager:
         self._suspended_plot_ids: set[str] = set()
         self._settings_open = False
         self._settings_plot_id: str | None = None
-        self._suspend_settings_observers = False
+        self._dialog_loaded_style: LegendStyleDialogState | None = None
 
         self._root_css_class = f"gu-figure-context-root-{uuid.uuid4().hex[:8]}"
+        self._dialog_modal_class = f"{self._root_css_class}-legend-style-modal"
         if root_widget is not None:
             add_class = getattr(root_widget, "add_class", None)
             if callable(add_class):
                 add_class(self._root_css_class)
                 add_class("gu-figure-context-governed")
-        self._context_bridge = _LegendContextMenuBridge(
+        self._context_bridge = _LegendInteractionBridge(
             root_class=self._root_css_class,
+            modal_class=self._dialog_modal_class,
+            dialog_open=False,
+            dialog_label="Legend style settings",
+            plot_label="plot",
             layout=widgets.Layout(width="0px", height="0px", margin="0px"),
         )
         self._context_bridge.on_msg(self._handle_context_bridge_message)
@@ -169,19 +450,20 @@ class LegendPanelManager:
             value=self._dialog_style_html(),
             layout=widgets.Layout(width="0px", height="0px", margin="0px"),
         )
-        self._dialog_color = widgets.Text(
-            value="",
+        self._dialog_color = widgets.ColorPicker(
+            value="#636efa",
             description="Color:",
-            placeholder="#636efa or red",
-            continuous_update=False,
+            concise=True,
             layout=widgets.Layout(width="100%", min_width="0"),
         )
+        self._dialog_color.add_class("gu-legend-style-dialog-color")
         self._dialog_width = widgets.BoundedFloatText(
             value=2.0,
             min=0.0,
             description="Width:",
             layout=widgets.Layout(width="100%", min_width="0"),
         )
+        self._dialog_width.add_class("gu-legend-style-dialog-width")
         self._dialog_opacity = widgets.BoundedFloatText(
             value=1.0,
             min=0.0,
@@ -189,20 +471,22 @@ class LegendPanelManager:
             description="Opacity:",
             layout=widgets.Layout(width="100%", min_width="0"),
         )
+        self._dialog_opacity.add_class("gu-legend-style-dialog-opacity")
         self._dialog_dash = widgets.Dropdown(
             options=_DASH_STYLE_OPTIONS,
             value="solid",
             description="Style:",
             layout=widgets.Layout(width="100%", min_width="0"),
         )
+        self._dialog_dash.add_class("gu-legend-style-dialog-dash")
         self._dialog_close_button = widgets.Button(
-            description="Close legend style settings",
-            tooltip="Close legend style settings",
+            description="Cancel legend style settings",
+            tooltip="Cancel legend style settings",
             layout=widgets.Layout(width="24px", height="24px", padding="0px"),
         )
         self._dialog_close_button.add_class("smart-slider-icon-button")
         self._dialog_close_button.add_class("smart-slider-close-button")
-        self._dialog_close_button.on_click(self._close_style_dialog)
+        self._dialog_close_button.on_click(self._dismiss_style_dialog)
         self._dialog_title_text = widgets.HTML("<b>Legend style</b>")
         self._dialog_subject = widgets.HTMLMath(
             value="",
@@ -221,11 +505,36 @@ class LegendPanelManager:
         self._dialog_title.add_class("smart-slider-settings-title")
         self._dialog_subject.add_class("smart-slider-settings-title-subject")
         self._dialog_title_text.add_class("smart-slider-settings-title-text")
+        self._dialog_title_text.add_class("gu-legend-style-dialog-title-text")
+        self._dialog_cancel_button = widgets.Button(
+            description="Cancel",
+            tooltip="Discard legend style changes",
+            layout=widgets.Layout(width="auto", min_width="72px"),
+        )
+        self._dialog_cancel_button.add_class("gu-legend-style-dialog-cancel-button")
+        self._dialog_cancel_button.on_click(self._dismiss_style_dialog)
+        self._dialog_ok_button = widgets.Button(
+            description="OK",
+            tooltip="Apply legend style changes",
+            layout=widgets.Layout(width="auto", min_width="72px"),
+        )
+        self._dialog_ok_button.add_class("gu-legend-style-dialog-ok-button")
+        self._dialog_ok_button.on_click(self._apply_style_dialog)
         dialog_header = widgets.HBox(
             [self._dialog_title, self._dialog_close_button],
             layout=widgets.Layout(
                 justify_content="space-between",
                 align_items="flex-start",
+                gap="8px",
+                width="100%",
+                min_width="0",
+            ),
+        )
+        dialog_actions = widgets.HBox(
+            [self._dialog_cancel_button, self._dialog_ok_button],
+            layout=widgets.Layout(
+                justify_content="flex-end",
+                align_items="center",
                 gap="8px",
                 width="100%",
                 min_width="0",
@@ -238,6 +547,7 @@ class LegendPanelManager:
                 widgets.HBox([self._dialog_width], layout=widgets.Layout(width="100%", min_width="0")),
                 widgets.HBox([self._dialog_opacity], layout=widgets.Layout(width="100%", min_width="0")),
                 widgets.HBox([self._dialog_dash], layout=widgets.Layout(width="100%", min_width="0")),
+                dialog_actions,
             ],
             layout=widgets.Layout(
                 width="440px",
@@ -256,6 +566,7 @@ class LegendPanelManager:
             ),
         )
         self._dialog_panel.add_class("smart-slider-settings-panel")
+        self._dialog_panel.add_class("gu-legend-style-dialog-panel")
         self._dialog_modal = widgets.Box(
             [self._dialog_panel],
             layout=widgets.Layout(
@@ -275,14 +586,7 @@ class LegendPanelManager:
         )
         self._dialog_modal.add_class("smart-slider-settings-modal")
         self._dialog_modal.add_class("smart-slider-settings-modal-hosted")
-
-        for control in (
-            self._dialog_color,
-            self._dialog_width,
-            self._dialog_opacity,
-            self._dialog_dash,
-        ):
-            control.observe(self._on_dialog_value_changed, names="value")
+        self._dialog_modal.add_class(self._dialog_modal_class)
 
         if self._modal_host is not None:
             if self._dialog_style not in self._modal_host.children:
@@ -326,6 +630,7 @@ class LegendPanelManager:
             removed.toggle.unobserve_all()
         if self._settings_plot_id == key:
             self._set_style_dialog_open(False)
+            self._dialog_loaded_style = None
             self._settings_plot_id = None
         self.refresh(reason="plot_removed")
 
@@ -350,7 +655,8 @@ class LegendPanelManager:
         desired_children = tuple(visible_rows)
         if self._layout_box.children != desired_children:
             self._layout_box.children = desired_children
-        self._sync_dialog_from_plot_state()
+        if not self._settings_open:
+            self._sync_dialog_from_plot_state()
 
     def _plot_in_active_view(self, plot: Any) -> bool:
         """Return whether ``plot`` belongs to the current active view."""
@@ -585,11 +891,23 @@ class LegendPanelManager:
 
     @staticmethod
     def _css_safe_plot_id(plot_id: str) -> str:
-        return re.sub(r"[^a-zA-Z0-9_-]+", lambda m: "_".join(f"x{ord(ch):02x}" for ch in m.group(0)), plot_id)
+        payload = base64.urlsafe_b64encode(str(plot_id).encode("utf-8")).decode("ascii")
+        return f"b64-{payload.rstrip('=')}"
 
     @staticmethod
     def _decode_css_plot_id(css_plot_id: str) -> str:
-        return css_plot_id
+        text = str(css_plot_id or "")
+        prefix = "b64-"
+        if not text.startswith(prefix):
+            return text
+        payload = text[len(prefix):]
+        if not payload:
+            return ""
+        padding = "=" * (-len(payload) % 4)
+        try:
+            return base64.urlsafe_b64decode((payload + padding).encode("ascii")).decode("utf-8")
+        except Exception:
+            return text
 
     @staticmethod
     def _dialog_style_html() -> str:
@@ -616,31 +934,82 @@ class LegendPanelManager:
             return
         if content.get("type") != "legend_context_request":
             return
-        if content.get("action") != "open_style_dialog":
+        action = content.get("action")
+        if action == "close_style_dialog":
+            self._dismiss_style_dialog(None)
+            return
+        if action != "open_style_dialog":
             return
         raw_plot_id = content.get("plot_id")
         if not isinstance(raw_plot_id, str):
             return
-        plot = self._plots.get(raw_plot_id)
+        plot_id = self._decode_css_plot_id(raw_plot_id)
+        plot = self._plots.get(plot_id)
         if plot is None:
             return
-        self._open_style_dialog(raw_plot_id)
+        self._open_style_dialog(plot_id)
 
     def _open_style_dialog(self, plot_id: str) -> None:
         plot = self._plots.get(plot_id)
         if plot is None:
             return
         self._settings_plot_id = plot_id
-        self._sync_dialog_from_plot_state(force=True)
+        self._load_style_dialog_from_plot(plot, plot_id=plot_id)
         self._set_style_dialog_open(True)
 
-    def _close_style_dialog(self, _event: Any) -> None:
+    def _dismiss_style_dialog(self, _event: Any) -> None:
+        """Close the dialog without applying its pending edits."""
+        self._dialog_loaded_style = None
         self._set_style_dialog_open(False)
+        self._settings_plot_id = None
+
+    def _apply_style_dialog(self, _event: Any) -> None:
+        """Apply the pending dialog edits to the active plot and close."""
+        plot_id = self._settings_plot_id
+        loaded = self._dialog_loaded_style
+        if plot_id is None or loaded is None:
+            self._dismiss_style_dialog(None)
+            return
+
+        plot = self._plots.get(plot_id)
+        if plot is None:
+            self._dismiss_style_dialog(None)
+            return
+
+        has_changes = False
+
+        next_picker_color = str(self._dialog_color.value or "").strip() or loaded.picker_color
+        if next_picker_color != loaded.picker_color:
+            plot.color = next_picker_color
+            has_changes = True
+
+        next_width = float(self._dialog_width.value)
+        if next_width != loaded.width:
+            plot.thickness = next_width
+            has_changes = True
+
+        next_opacity = float(self._dialog_opacity.value)
+        if next_opacity != loaded.opacity:
+            plot.opacity = next_opacity
+            has_changes = True
+
+        next_dash = str(self._dialog_dash.value or "solid")
+        if next_dash != loaded.dash:
+            plot.dash = next_dash
+            has_changes = True
+
+        if has_changes:
+            self.on_plot_updated(plot)
+        self._dismiss_style_dialog(None)
 
     def _set_style_dialog_open(self, is_open: bool) -> None:
         self._settings_open = bool(is_open)
         self._dialog_panel.layout.display = "flex" if self._settings_open else "none"
         self._dialog_modal.layout.display = "flex" if self._settings_open else "none"
+        self._context_bridge.dialog_open = self._settings_open
+        if not self._settings_open:
+            self._context_bridge.dialog_label = "Legend style settings"
+            self._context_bridge.plot_label = "plot"
 
     def _sync_dialog_from_plot_state(self, *, force: bool = False) -> None:
         plot_id = self._settings_plot_id
@@ -648,41 +1017,40 @@ class LegendPanelManager:
             return
         plot = self._plots.get(plot_id)
         if plot is None:
+            self._dialog_loaded_style = None
             self._set_style_dialog_open(False)
             self._settings_plot_id = None
             return
-        if not force and not self._settings_open:
+        if self._settings_open and not force:
             return
+        self._load_style_dialog_from_plot(plot, plot_id=plot_id)
+
+    def _load_style_dialog_from_plot(self, plot: Any, *, plot_id: str) -> None:
+        """Populate dialog controls from ``plot`` and capture their baseline."""
+        state = self._style_dialog_state_for_plot(plot)
+        self._dialog_loaded_style = state
+        self._dialog_subject.value = self._format_label_value(plot=plot, default_plot_id=plot_id)
+        self._dialog_color.value = state.picker_color
+        self._dialog_width.value = state.width
+        self._dialog_opacity.value = state.opacity
+        self._dialog_dash.value = state.dash
+
+        plot_label = self._accessible_plot_label(plot, plot_id).strip() or plot_id
+        self._context_bridge.plot_label = plot_label
+        self._context_bridge.dialog_label = f"Legend style settings for {plot_label}"
+
+    def _style_dialog_state_for_plot(self, plot: Any) -> LegendStyleDialogState:
+        """Return the normalized style values shown in the dialog for ``plot``."""
         current_color = self._resolve_plot_color(plot)
         current_width = self._safe_float(getattr(plot, "thickness", None), default=2.0)
         current_opacity = self._safe_float(getattr(plot, "opacity", None), default=1.0)
         current_dash = self._safe_attr_str(plot, "dash").strip() or "solid"
-        self._suspend_settings_observers = True
-        try:
-            self._dialog_subject.value = self._format_label_value(plot=plot, default_plot_id=plot_id)
-            self._dialog_color.value = current_color
-            self._dialog_width.value = current_width
-            self._dialog_opacity.value = current_opacity
-            self._dialog_dash.value = current_dash if current_dash in {value for _, value in _DASH_STYLE_OPTIONS} else "solid"
-        finally:
-            self._suspend_settings_observers = False
-
-    def _on_dialog_value_changed(self, change: dict[str, Any]) -> None:
-        if change.get("name") != "value":
-            return
-        if self._suspend_settings_observers:
-            return
-        plot_id = self._settings_plot_id
-        if plot_id is None:
-            return
-        plot = self._plots.get(plot_id)
-        if plot is None:
-            return
-        plot.color = self._dialog_color.value.strip() or None
-        plot.thickness = float(self._dialog_width.value)
-        plot.opacity = float(self._dialog_opacity.value)
-        plot.dash = str(self._dialog_dash.value or "solid")
-        self.on_plot_updated(plot)
+        return LegendStyleDialogState(
+            picker_color=color_to_picker_hex(current_color, fallback="#6c757d"),
+            width=current_width,
+            opacity=current_opacity,
+            dash=current_dash if current_dash in _DASH_STYLE_VALUES else "solid",
+        )
 
     @staticmethod
     def _safe_float(value: Any, *, default: float) -> float:

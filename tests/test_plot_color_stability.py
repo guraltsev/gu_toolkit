@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 import pytest
 import sympy as sp
 
-from gu_toolkit.figure_color import color_for_trace_index, resolve_colorway
+from gu_toolkit.figure_color import color_for_trace_index, color_to_picker_hex, resolve_colorway
 from gu_toolkit.figure_legend import LegendPanelManager
 from gu_toolkit.figure_plot import Plot
 
@@ -92,6 +92,13 @@ def test_resolve_colorway_prefers_template_colorway() -> None:
     assert palette[:3] == ("#636efa", "#EF553B", "#00cc96")
     assert color_for_trace_index(fig, 0) == "#636efa"
     assert color_for_trace_index(fig, 1) == "#EF553B"
+
+
+def test_color_to_picker_hex_normalizes_common_plot_color_formats() -> None:
+    assert color_to_picker_hex("#abc") == "#aabbcc"
+    assert color_to_picker_hex("#123456") == "#123456"
+    assert color_to_picker_hex("rgb(31, 119, 180)") == "#1f77b4"
+    assert color_to_picker_hex("rgba(31, 119, 180, 0.4)") == "#1f77b4"
 
 
 def test_legend_uses_template_colorway_when_trace_color_unspecified() -> None:

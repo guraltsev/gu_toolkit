@@ -355,6 +355,30 @@ class Dropdown(Widget):
         self.value = value
 
 
+class ColorPicker(Widget):
+    """Minimal stand-in for :class:`ipywidgets.ColorPicker`."""
+
+    value = traitlets.Unicode("#000000")
+    description = traitlets.Unicode("")
+    disabled = traitlets.Bool(False)
+    concise = traitlets.Bool(False)
+
+    def __init__(
+        self,
+        value: str = "#000000",
+        *,
+        description: str = "",
+        disabled: bool = False,
+        concise: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.description = str(description)
+        self.disabled = bool(disabled)
+        self.concise = bool(concise)
+        self.value = str(value)
+
+
 class Output(Widget):
     outputs = traitlets.List(trait=traitlets.Any())
 
@@ -404,6 +428,7 @@ _widgets_module.Checkbox = Checkbox
 _widgets_module.FloatText = FloatText
 _widgets_module.BoundedFloatText = BoundedFloatText
 _widgets_module.Dropdown = Dropdown
+_widgets_module.ColorPicker = ColorPicker
 _widgets_module.Output = Output
 _widgets_module.link = traitlets.link
 _widgets_module.dlink = traitlets.dlink
