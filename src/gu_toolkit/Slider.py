@@ -4,14 +4,327 @@ Provides a synchronized slider/text control with advanced settings (min/max/
 step/default) and helper APIs for parameter-reference integration.
 """
 
+import html
+import re
+import uuid
 from collections.abc import Sequence
 from typing import Any, cast
 
-from ._widget_stubs import widgets
+from ._widget_stubs import anywidget, widgets
 import traitlets
 
 from .InputConvert import InputConvert
 from .animation import DEFAULT_ANIMATION_TIME, AnimationController
+
+
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+_WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _derive_accessibility_label(description: str, *, fallback: str = "parameter") -> str:
+    """Return a plain-text label suitable for ARIA metadata.
+
+    ``FloatSlider`` descriptions are often rich-text or LaTeX snippets. Screen
+    readers need a compact plain-text fallback that stays meaningful even when
+    the visible label is rendered via HTML/MathJax.
+    """
+
+    raw = html.unescape(str(description or ""))
+    raw = _HTML_TAG_RE.sub(" ", raw)
+    raw = raw.replace("$", " ")
+    raw = raw.replace("\\", " ")
+    raw = raw.replace("{", " ").replace("}", " ")
+    raw = _WHITESPACE_RE.sub(" ", raw).strip(" :")
+    return raw or fallback
+
+
+class _SliderModalAccessibilityBridge(anywidget.AnyWidget):
+    """Frontend bridge that adds dialog semantics and keyboard handling."""
+
+    slider_root_class = traitlets.Unicode("").tag(sync=True)
+    modal_class = traitlets.Unicode("").tag(sync=True)
+    dialog_open = traitlets.Bool(False).tag(sync=True)
+    dialog_label = traitlets.Unicode("Parameter settings").tag(sync=True)
+    control_label = traitlets.Unicode("parameter").tag(sync=True)
+
+    _esm = r"""
+    function q(node, selector) {
+      return node ? node.querySelector(selector) : null;
+    }
+
+    function qInput(node) {
+      return q(node, "input, textarea, select") || node;
+    }
+
+    function qButton(node) {
+      return q(node, "button, .widget-button, .jupyter-button") || node;
+    }
+
+    function focusables(root) {
+      if (!root) return [];
+      const selector = [
+        "button:not([disabled])",
+        "input:not([disabled])",
+        "select:not([disabled])",
+        "textarea:not([disabled])",
+        "a[href]",
+        "[tabindex]:not([tabindex='-1'])",
+      ].join(",");
+      return Array.from(root.querySelectorAll(selector)).filter((el) => {
+        if (!(el instanceof HTMLElement)) return false;
+        const style = window.getComputedStyle(el);
+        if (style.display === "none" || style.visibility === "hidden") return false;
+        return !el.hasAttribute("disabled");
+      });
+    }
+
+    export default {
+      render({ model, el }) {
+        el.style.display = "none";
+
+        const dialogId = `smart-slider-dialog-${Math.random().toString(16).slice(2)}`;
+        const titleId = `${dialogId}-title`;
+        let returnFocusEl = null;
+
+        function rootEl() {
+          const className = model.get("slider_root_class") || "";
+          return className ? document.querySelector(`.${className}`) : null;
+        }
+
+        function modalEl() {
+          const className = model.get("modal_class") || "";
+          return className ? document.querySelector(`.${className}`) : null;
+        }
+
+        function panelEl() {
+          return q(modalEl(), ".smart-slider-settings-panel");
+        }
+
+        function settingsButtonEl() {
+          return qButton(q(rootEl(), ".smart-slider-settings-button"));
+        }
+
+        function closeButtonEl() {
+          return qButton(q(modalEl(), ".smart-slider-close-button"));
+        }
+
+        function sliderInputEl() {
+          return qInput(q(rootEl(), ".smart-slider-track"));
+        }
+
+        function valueInputEl() {
+          return qInput(q(rootEl(), ".smart-slider-value-input"));
+        }
+
+        function minInputEl() {
+          const limits = rootEl() ? rootEl().querySelectorAll(".smart-slider-limit") : [];
+          return qInput(limits && limits.length > 0 ? limits[0] : null);
+        }
+
+        function maxInputEl() {
+          const limits = rootEl() ? rootEl().querySelectorAll(".smart-slider-limit") : [];
+          return qInput(limits && limits.length > 1 ? limits[1] : null);
+        }
+
+        function titleEl() {
+          return q(modalEl(), ".smart-slider-settings-title-text");
+        }
+
+        function sendClose(reason) {
+          try {
+            model.send({ type: "dialog_request", action: "close", reason: reason || "request" });
+          } catch (e) {}
+        }
+
+        function applyLabels() {
+          const controlLabel = model.get("control_label") || "parameter";
+          const dialogLabel = model.get("dialog_label") || "Parameter settings";
+          const modal = modalEl();
+          const panel = panelEl();
+          const settingsButton = settingsButtonEl();
+          const closeButton = closeButtonEl();
+          const sliderInput = sliderInputEl();
+          const valueInput = valueInputEl();
+          const minInput = minInputEl();
+          const maxInput = maxInputEl();
+          const title = titleEl();
+          const isOpen = !!model.get("dialog_open");
+
+          if (title) {
+            title.id = titleId;
+          }
+
+          if (panel) {
+            panel.id = dialogId;
+            panel.setAttribute("role", "dialog");
+            panel.setAttribute("aria-modal", "true");
+            panel.setAttribute("tabindex", "-1");
+            panel.setAttribute("aria-hidden", isOpen ? "false" : "true");
+            if (title) {
+              panel.setAttribute("aria-labelledby", titleId);
+            } else {
+              panel.setAttribute("aria-label", dialogLabel);
+            }
+          }
+
+          if (modal) {
+            modal.setAttribute("aria-hidden", isOpen ? "false" : "true");
+          }
+
+          if (settingsButton) {
+            settingsButton.setAttribute("aria-haspopup", "dialog");
+            settingsButton.setAttribute("aria-controls", dialogId);
+            settingsButton.setAttribute("aria-expanded", isOpen ? "true" : "false");
+          }
+
+          if (closeButton) {
+            closeButton.setAttribute("aria-controls", dialogId);
+          }
+
+          if (sliderInput) {
+            sliderInput.setAttribute("aria-label", `${controlLabel} slider`);
+          }
+
+          if (valueInput) {
+            valueInput.setAttribute("aria-label", `${controlLabel} value`);
+            valueInput.setAttribute("inputmode", "decimal");
+          }
+
+          if (minInput) {
+            minInput.setAttribute("aria-label", `${controlLabel} minimum`);
+            minInput.setAttribute("inputmode", "decimal");
+          }
+
+          if (maxInput) {
+            maxInput.setAttribute("aria-label", `${controlLabel} maximum`);
+            maxInput.setAttribute("inputmode", "decimal");
+          }
+        }
+
+        function focusDialog() {
+          const panel = panelEl();
+          if (!panel || !model.get("dialog_open")) return;
+          const items = focusables(panel);
+          const target = items[0] || panel;
+          try {
+            target.focus({ preventScroll: true });
+          } catch (e) {
+            try { target.focus(); } catch (err) {}
+          }
+        }
+
+        function syncFromModel() {
+          applyLabels();
+          const isOpen = !!model.get("dialog_open");
+          const panel = panelEl();
+          const settingsButton = settingsButtonEl();
+          if (isOpen) {
+            const active = document.activeElement;
+            if (active instanceof HTMLElement) {
+              returnFocusEl = active;
+            } else if (settingsButton instanceof HTMLElement) {
+              returnFocusEl = settingsButton;
+            }
+            requestAnimationFrame(() => focusDialog());
+            return;
+          }
+
+          if (returnFocusEl instanceof HTMLElement && document.documentElement.contains(returnFocusEl)) {
+            try {
+              returnFocusEl.focus({ preventScroll: true });
+            } catch (e) {
+              try { returnFocusEl.focus(); } catch (err) {}
+            }
+          } else if (settingsButton instanceof HTMLElement) {
+            try {
+              settingsButton.focus({ preventScroll: true });
+            } catch (e) {
+              try { settingsButton.focus(); } catch (err) {}
+            }
+          }
+
+          if (panel instanceof HTMLElement) {
+            panel.blur();
+          }
+        }
+
+        function onKeydown(event) {
+          if (!model.get("dialog_open")) return;
+          const panel = panelEl();
+          if (!(panel instanceof HTMLElement)) return;
+
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            sendClose("escape");
+            return;
+          }
+
+          if (event.key !== "Tab") return;
+
+          const items = focusables(panel);
+          if (!items.length) {
+            event.preventDefault();
+            try { panel.focus({ preventScroll: true }); } catch (e) {}
+            return;
+          }
+
+          const first = items[0];
+          const last = items[items.length - 1];
+          const active = document.activeElement;
+
+          if (!panel.contains(active)) {
+            event.preventDefault();
+            try { first.focus({ preventScroll: true }); } catch (e) { try { first.focus(); } catch (err) {} }
+            return;
+          }
+
+          if (event.shiftKey && active === first) {
+            event.preventDefault();
+            try { last.focus({ preventScroll: true }); } catch (e) { try { last.focus(); } catch (err) {} }
+            return;
+          }
+
+          if (!event.shiftKey && active === last) {
+            event.preventDefault();
+            try { first.focus({ preventScroll: true }); } catch (e) { try { first.focus(); } catch (err) {} }
+          }
+        }
+
+        function onDocumentClick(event) {
+          if (!model.get("dialog_open")) return;
+          const modal = modalEl();
+          if (!modal) return;
+          if (event.target === modal) {
+            sendClose("backdrop");
+          }
+        }
+
+        const onOpenChange = () => syncFromModel();
+        const onLabelChange = () => applyLabels();
+
+        model.on("change:dialog_open", onOpenChange);
+        model.on("change:dialog_label", onLabelChange);
+        model.on("change:control_label", onLabelChange);
+        model.on("change:slider_root_class", onLabelChange);
+        model.on("change:modal_class", onLabelChange);
+        document.addEventListener("keydown", onKeydown, true);
+        document.addEventListener("click", onDocumentClick, true);
+
+        requestAnimationFrame(() => syncFromModel());
+
+        return () => {
+          try { model.off("change:dialog_open", onOpenChange); } catch (e) {}
+          try { model.off("change:dialog_label", onLabelChange); } catch (e) {}
+          try { model.off("change:control_label", onLabelChange); } catch (e) {}
+          try { model.off("change:slider_root_class", onLabelChange); } catch (e) {}
+          try { model.off("change:modal_class", onLabelChange); } catch (e) {}
+          try { document.removeEventListener("keydown", onKeydown, true); } catch (e) {}
+          try { document.removeEventListener("click", onDocumentClick, true); } catch (e) {}
+        };
+      },
+    };
+    """
 
 
 class FloatSlider(widgets.VBox):
@@ -93,6 +406,14 @@ class FloatSlider(widgets.VBox):
         # Internal guards to prevent circular updates.
         self._syncing = False
         self._syncing_animation_settings = False
+        self._settings_open = False
+
+        accessibility_label = str(kwargs.pop("accessibility_label", "")).strip()
+        self._accessible_label = accessibility_label or _derive_accessibility_label(
+            description
+        )
+        self._slider_root_class = f"smart-slider-instance-{uuid.uuid4().hex[:8]}"
+        self._settings_modal_class = f"{self._slider_root_class}-modal"
 
         root_layout = kwargs.pop("layout", None)
         if root_layout is None:
@@ -154,13 +475,13 @@ class FloatSlider(widgets.VBox):
 
 .smart-slider-top-row {
   align-items: center !important;
-  column-gap: 3px !important;
+  column-gap: 2px !important;
 }
 
 .smart-slider-label {
   flex: 0 0 auto !important;
   width: auto !important;
-  margin-right: 1px !important;
+  margin-right: 0 !important;
   white-space: nowrap !important;
 }
 
@@ -168,10 +489,21 @@ class FloatSlider(widgets.VBox):
   flex: 1 1 auto !important;
   width: auto !important;
   min-width: 0 !important;
+  margin: 0 !important;
 }
 
 .smart-slider-value-input {
   width: 64px !important;
+}
+
+.smart-slider-value-input,
+.smart-slider-value-input * {
+  min-width: 0 !important;
+  margin: 0 !important;
+}
+
+.smart-slider-value-input :is(input, textarea) {
+  min-width: 0 !important;
 }
 
 /* ============================================================
@@ -187,8 +519,11 @@ class FloatSlider(widgets.VBox):
 }
 
 .smart-slider-limit {
-  width: 40px !important;
+  width: 38px !important;
+  flex: 0 0 38px !important;
   box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 /* The actual editable element(s): handle both input + textarea. */
@@ -276,6 +611,14 @@ class FloatSlider(widgets.VBox):
   background-color: rgba(15, 23, 42, 0.06) !important;
 }
 
+.smart-slider-icon-button :is(button, .widget-button, .jupyter-button):focus-visible,
+.smart-slider-value-input :is(input, textarea):focus-visible,
+.smart-slider-limit :is(input, textarea):focus-visible,
+.smart-slider-settings-panel :is(input, textarea, select, button):focus-visible {
+  outline: 2px solid var(--jp-brand-color1, #0b76d1) !important;
+  outline-offset: 1px !important;
+}
+
 .smart-slider-animate-button::before {
   content: "▶";
 }
@@ -309,6 +652,12 @@ class FloatSlider(widgets.VBox):
   justify-content: center !important;
   overflow-x: hidden !important;
   overflow-y: hidden !important;
+  background: rgba(15, 23, 42, 0.12) !important;
+}
+
+.smart-slider-settings-modal > * {
+  min-width: 0 !important;
+  max-width: 100% !important;
 }
 
 .smart-slider-settings-modal-hosted {
@@ -337,14 +686,30 @@ class FloatSlider(widgets.VBox):
   opacity: 1 !important;
   background: #ffffff !important;
   box-sizing: border-box !important;
-  width: 240px !important;
-  max-width: calc(100% - 24px) !important;
+  width: min(440px, calc(100vw - 32px)) !important;
+  min-width: min(380px, calc(100vw - 32px)) !important;
+  max-width: min(calc(100% - 24px), calc(100vw - 32px)) !important;
   overflow-x: hidden !important;
   overflow-y: auto !important;
 }
 
 .smart-slider-settings-panel > * {
   min-width: 0 !important;
+}
+
+.smart-slider-settings-title {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  flex-wrap: wrap !important;
+}
+
+.smart-slider-settings-title-text,
+.smart-slider-settings-title-subject {
+  min-width: 0 !important;
+}
+
+.smart-slider-settings-title-subject {
+  overflow-wrap: anywhere !important;
 }
 </style>
 """)
@@ -372,8 +737,8 @@ class FloatSlider(widgets.VBox):
         self.btn_reset.add_class("smart-slider-icon-button")
         self.btn_reset.add_class("smart-slider-reset-button")
         self.btn_settings = widgets.Button(
-            description="Open slider settings",
-            tooltip="Open slider settings",
+            description="Open parameter settings",
+            tooltip="Open parameter settings",
             layout=widgets.Layout(width="24px", min_width="24px", height="24px", padding="0px"),
         )
         self.btn_settings.add_class("smart-slider-icon-button")
@@ -381,19 +746,19 @@ class FloatSlider(widgets.VBox):
 
         # --- Settings panel ---------------------------------------------------
         style_args = {
-            "style": {"description_width": "36px"},
-            "layout": widgets.Layout(width="170px"),
+            "style": {"description_width": "72px"},
+            "layout": widgets.Layout(width="100%", min_width="0"),
         }
         self.set_min = widgets.Text(
             value=f"{min:.4g}",
             continuous_update=False,
-            layout=widgets.Layout(width="40px", min_width="0", height="16px"),
+            layout=widgets.Layout(width="38px", min_width="0", height="16px", margin="0px"),
         )
         self.set_min.add_class("smart-slider-limit")
         self.set_max = widgets.Text(
             value=f"{max:.4g}",
             continuous_update=False,
-            layout=widgets.Layout(width="40px", min_width="0", height="16px"),
+            layout=widgets.Layout(width="38px", min_width="0", height="16px", margin="0px"),
         )
         self.set_max.add_class("smart-slider-limit")
         for field, placeholder in (
@@ -408,7 +773,7 @@ class FloatSlider(widgets.VBox):
             value=True,
             description="Live Update",
             indent=False,
-            layout=widgets.Layout(width="120px"),
+            layout=widgets.Layout(width="100%", min_width="0"),
         )
         self.set_animation_time = widgets.BoundedFloatText(
             value=DEFAULT_ANIMATION_TIME,
@@ -427,43 +792,76 @@ class FloatSlider(widgets.VBox):
         )
 
         self.btn_close_settings = widgets.Button(
-            description="Close slider settings",
-            tooltip="Close slider settings",
+            description="Close parameter settings",
+            tooltip="Close parameter settings",
             layout=widgets.Layout(width="24px", height="24px", padding="0px"),
         )
         self.btn_close_settings.add_class("smart-slider-icon-button")
         self.btn_close_settings.add_class("smart-slider-close-button")
+        self.settings_title_text = widgets.HTML("<b>Parameter settings</b>")
+        self.settings_title_text.add_class("smart-slider-settings-title-text")
+        self.settings_subject = widgets.HTMLMath(
+            value=description,
+            layout=widgets.Layout(min_width="0", margin="0px"),
+        )
+        self.settings_subject.add_class("smart-slider-settings-title-subject")
         self.settings_title = widgets.HBox(
             [
-                widgets.HTML("<b>Slider settings:</b>"),
-                widgets.HTMLMath(value=description),
+                self.settings_title_text,
+                self.settings_subject,
             ],
-            layout=widgets.Layout(align_items="center", gap="4px"),
+            layout=widgets.Layout(
+                align_items="center",
+                gap="4px",
+                flex="1 1 auto",
+                min_width="0",
+                flex_flow="row wrap",
+            ),
         )
+        self.settings_title.add_class("smart-slider-settings-title")
         settings_header = widgets.HBox(
             [self.settings_title, self.btn_close_settings],
             layout=widgets.Layout(
-                justify_content="space-between", align_items="center"
+                justify_content="space-between",
+                align_items="flex-start",
+                gap="8px",
+                width="100%",
+                min_width="0",
             ),
         )
+
+        self._settings_accessibility = _SliderModalAccessibilityBridge(
+            slider_root_class=self._slider_root_class,
+            modal_class=self._settings_modal_class,
+            dialog_open=False,
+            dialog_label=f"Parameter settings for {self._accessible_label}",
+            control_label=self._accessible_label,
+            layout=widgets.Layout(width="0px", height="0px", margin="0px"),
+        )
+        self._settings_accessibility.on_msg(self._handle_settings_accessibility_message)
 
         self.settings_panel = widgets.VBox(
             [
                 settings_header,
-                widgets.HBox([self.set_step]),
-                widgets.HBox([self.set_live]),
-                widgets.HBox([self.set_animation_time]),
-                widgets.HBox([self.set_animation_mode]),
+                widgets.HBox([self.set_step], layout=widgets.Layout(width="100%", min_width="0")),
+                widgets.HBox([self.set_live], layout=widgets.Layout(width="100%", min_width="0")),
+                widgets.HBox([self.set_animation_time], layout=widgets.Layout(width="100%", min_width="0")),
+                widgets.HBox([self.set_animation_mode], layout=widgets.Layout(width="100%", min_width="0")),
             ],
             layout=widgets.Layout(
-                width="240px",
+                width="440px",
+                min_width="380px",
+                max_width="calc(100vw - 32px)",
                 display="none",
-                border="1px solid #ddd",
-                padding="8px",
-                gap="6px",
+                border="1px solid rgba(15, 23, 42, 0.12)",
+                padding="12px",
+                gap="8px",
                 background_color="white",
                 opacity="1",
                 box_shadow="0 10px 28px rgba(15, 23, 42, 0.28)",
+                align_items="stretch",
+                overflow_x="hidden",
+                overflow_y="auto",
             ),
         )
         self.settings_modal = widgets.Box(
@@ -477,13 +875,16 @@ class FloatSlider(widgets.VBox):
                 height="100vh",
                 align_items="center",
                 justify_content="center",
-                background_color="transparent",
+                background_color="rgba(15, 23, 42, 0.12)",
                 z_index="1000",
+                overflow_x="hidden",
+                overflow_y="hidden",
             ),
         )
         self.settings_panel.add_class("smart-slider-settings-panel")
         self.settings_modal.add_class("smart-slider-settings-modal")
         self.settings_modal.add_class("smart-slider-settings-modal-global")
+        self.settings_modal.add_class(self._settings_modal_class)
         self._top_row: widgets.HBox | None = None
         self._modal_host: widgets.Box | None = None
 
@@ -504,8 +905,13 @@ class FloatSlider(widgets.VBox):
         )
         top_row.add_class("smart-slider-top-row")
         self._top_row = top_row
-        super().__init__([top_row, self.settings_modal], layout=root_layout, **kwargs)
+        super().__init__(
+            [top_row, self._settings_accessibility, self.settings_modal],
+            layout=root_layout,
+            **kwargs,
+        )
         self.add_class("smart-slider-root")
+        self.add_class(self._slider_root_class)
 
         # --- Wiring -----------------------------------------------------------
         # Keep self.value and slider.value in sync
@@ -523,7 +929,7 @@ class FloatSlider(widgets.VBox):
         self.btn_animate.on_click(self._toggle_animation)
         self.btn_reset.on_click(self._reset)
         self.btn_settings.on_click(self._toggle_settings)
-        self.btn_close_settings.on_click(self._toggle_settings)
+        self.btn_close_settings.on_click(self._close_settings)
 
         # Settings -> slider traits
         widgets.link((self.set_step, "value"), (self.slider, "step"))
@@ -562,6 +968,44 @@ class FloatSlider(widgets.VBox):
             return
         if callable(remove_class):
             remove_class(class_name)
+
+    def _handle_settings_accessibility_message(
+        self, _widget: Any, content: Any, _buffers: Any
+    ) -> None:
+        """Handle frontend accessibility requests such as Escape-to-close."""
+
+        if not isinstance(content, dict):
+            return
+        if content.get("type") != "dialog_request":
+            return
+        if content.get("action") != "close":
+            return
+        self.close_settings()
+
+    def _set_settings_open(self, is_open: bool) -> None:
+        """Apply settings-dialog visibility and synchronized button state."""
+
+        self._settings_open = bool(is_open)
+        self.settings_modal.layout.display = "flex" if self._settings_open else "none"
+        self.settings_panel.layout.display = "flex" if self._settings_open else "none"
+        self._settings_accessibility.dialog_open = self._settings_open
+        next_description = (
+            "Close parameter settings"
+            if self._settings_open
+            else "Open parameter settings"
+        )
+        self.btn_settings.description = next_description
+        self.btn_settings.tooltip = next_description
+
+    def open_settings(self) -> None:
+        """Open the parameter settings dialog."""
+
+        self._set_settings_open(True)
+
+    def close_settings(self) -> None:
+        """Close the parameter settings dialog."""
+
+        self._set_settings_open(False)
 
     def _sync_number_text(self, val: float) -> None:
         """Set the text field from a numeric value without triggering parse logic.
@@ -1088,13 +1532,17 @@ class FloatSlider(widgets.VBox):
         if host is None:
             current_children = cast(tuple[Any, ...], self.children)
             if self.settings_modal not in current_children:
-                cast(Any, self).children = (top_row, self.settings_modal)
+                cast(Any, self).children = (
+                    top_row,
+                    self._settings_accessibility,
+                    self.settings_modal,
+                )
             if callable(modal_remove_class):
                 modal_remove_class("smart-slider-settings-modal-hosted")
             if callable(modal_add_class):
                 modal_add_class("smart-slider-settings-modal-global")
         else:
-            cast(Any, self).children = (top_row,)
+            cast(Any, self).children = (top_row, self._settings_accessibility)
             add_class = getattr(host, "add_class", None)
             if callable(add_class):
                 add_class("smart-slider-modal-host")
@@ -1106,6 +1554,11 @@ class FloatSlider(widgets.VBox):
                 modal_add_class("smart-slider-settings-modal-hosted")
 
         self._modal_host = host
+
+    def _close_settings(self, _: Any) -> None:
+        """Close the settings dialog from explicit UI actions."""
+
+        self.close_settings()
 
     def _toggle_settings(self, _: Any) -> None:
         """Toggle visibility of the settings panel.
@@ -1120,11 +1573,4 @@ class FloatSlider(widgets.VBox):
         None
             This method updates widget state in place.
         """
-        is_open = self.settings_modal.layout.display == "flex"
-        self.settings_modal.layout.display = "none" if is_open else "flex"
-        self.settings_panel.layout.display = "none" if is_open else "flex"
-        next_description = (
-            "Open slider settings" if is_open else "Close slider settings"
-        )
-        self.btn_settings.description = next_description
-        self.btn_settings.tooltip = next_description
+        self._set_settings_open(not self._settings_open)

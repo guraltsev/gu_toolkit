@@ -161,7 +161,9 @@ class InfoPanelManager:
         if id in self._outputs:
             out = self._outputs[id]
             if layout_kwargs:
-                out.layout = widgets.Layout(**layout_kwargs)
+                out.layout = widgets.Layout(
+                    **self._normalize_output_layout_kwargs(layout_kwargs)
+                )
             return out
 
         # Validate ID if string (avoids collision with auto-generated IDs)
@@ -170,13 +172,34 @@ class InfoPanelManager:
             if m:
                 self._counter = max(self._counter, int(m.group(1)))
 
-        out = widgets.Output(layout=widgets.Layout(**layout_kwargs))
+        out = widgets.Output(
+            layout=widgets.Layout(**self._normalize_output_layout_kwargs(layout_kwargs))
+        )
         out.id = id
+        add_class = getattr(out, "add_class", None)
+        if callable(add_class):
+            add_class("gu-figure-info-output")
 
         self._outputs[id] = out
         self._layout_box.children += (out,)
         self._notify_layout_change("output_created")
         return out
+
+    @staticmethod
+    def _normalize_output_layout_kwargs(
+        layout_kwargs: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Apply sane width/overflow defaults to sidebar info outputs."""
+
+        normalized = {
+            "width": "100%",
+            "min_width": "0",
+            "overflow_x": "hidden",
+            "overflow_y": "auto",
+        }
+        if layout_kwargs:
+            normalized.update(dict(layout_kwargs))
+        return normalized
 
     def add_component(self, id: Hashable, component_inst: Any) -> None:
         """Register an info component instance.
@@ -303,7 +326,12 @@ class InfoPanelManager:
         normalized = self._normalize_spec(spec)
         card = self._simple_cards.get(id)
         if card is None:
-            container = widgets.VBox(layout=widgets.Layout(gap="6px"))
+            container = widgets.VBox(
+                layout=widgets.Layout(gap="6px", width="100%", min_width="0")
+            )
+            add_class = getattr(container, "add_class", None)
+            if callable(add_class):
+                add_class("gu-figure-info-card")
             card = self._SimpleInfoCard(
                 id=id,
                 output=out,
@@ -379,11 +407,15 @@ class InfoPanelManager:
         for part in normalized:
             if isinstance(part, str):
                 widget = widgets.HTMLMath(
-                    value=part, layout=widgets.Layout(margin="0px")
+                    value=part,
+                    layout=widgets.Layout(margin="0px", width="100%", min_width="0"),
                 )
                 segments.append(self._StaticSegment(text=part, widget=widget))
             else:
-                widget = widgets.HTMLMath(value="", layout=widgets.Layout(margin="0px"))
+                widget = widgets.HTMLMath(
+                    value="",
+                    layout=widgets.Layout(margin="0px", width="100%", min_width="0"),
+                )
                 segments.append(
                     self._DynamicSegment(fn=part, widget=widget, last_text=None)
                 )
@@ -430,7 +462,7 @@ class InfoPanelManager:
         capped = "\n".join(payload.splitlines()[:20])
         safe = html.escape(capped)
         return (
-            '<pre style="max-height: 12em; overflow:auto; white-space: pre-wrap; margin:0;">'
+            '<pre style="max-height: 12em; overflow-y:auto; overflow-x:hidden; white-space: pre-wrap; overflow-wrap:anywhere; margin:0;">'
             f"{safe}"
             "</pre>"
         )

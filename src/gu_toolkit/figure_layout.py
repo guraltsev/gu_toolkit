@@ -69,6 +69,7 @@ class FigureLayout:
         ".gu-figure-view-page,"
         ".gu-figure-sidebar,"
         ".gu-figure-panel-box,"
+        ".gu-figure-info-output,"
         ".gu-figure-print-output {"
         "box-sizing: border-box !important;"
         "min-width: 0 !important;"
@@ -83,10 +84,35 @@ class FigureLayout:
         "}"
         ".gu-figure-panel-box,"
         ".gu-figure-panel-box > *,"
-        ".gu-figure-print-output {"
+        ".gu-figure-info-output,"
+        ".gu-figure-info-output > *,"
+        ".gu-figure-print-output,"
+        ".gu-figure-print-output > * {"
         "box-sizing: border-box !important;"
         "width: 100% !important;"
+        "max-width: 100% !important;"
         "min-width: 0 !important;"
+        "}"
+        ".gu-figure-panel-box,"
+        ".gu-figure-info-output,"
+        ".gu-figure-print-output {"
+        "overflow-x: hidden !important;"
+        "}"
+        ".gu-figure-panel-box .jupyter-widgets-output-area,"
+        ".gu-figure-panel-box .output_scroll,"
+        ".gu-figure-info-output .jupyter-widgets-output-area,"
+        ".gu-figure-info-output .output_scroll,"
+        ".gu-figure-print-output .jupyter-widgets-output-area,"
+        ".gu-figure-print-output .output_scroll {"
+        "max-width: 100% !important;"
+        "overflow-x: hidden !important;"
+        "overflow-y: auto !important;"
+        "}"
+        ".gu-figure-panel-box pre,"
+        ".gu-figure-info-output pre,"
+        ".gu-figure-print-output pre {"
+        "white-space: pre-wrap !important;"
+        "overflow-wrap: anywhere !important;"
         "}"
         "</style>"
     )
@@ -156,6 +182,7 @@ class FigureLayout:
                 padding="8px",
                 border="1px solid rgba(15,23,42,0.08)",
                 border_radius="10px",
+                overflow_x="hidden",
             )
         )
         self.params_box.add_class("gu-figure-panel-box")
@@ -170,6 +197,7 @@ class FigureLayout:
                 padding="8px",
                 border="1px solid rgba(15,23,42,0.08)",
                 border_radius="10px",
+                overflow_x="hidden",
             )
         )
         self.info_box.add_class("gu-figure-panel-box")
@@ -184,6 +212,7 @@ class FigureLayout:
                 padding="8px",
                 border="1px solid rgba(15,23,42,0.08)",
                 border_radius="10px",
+                overflow_x="hidden",
             )
         )
         self.legend_box.add_class("gu-figure-panel-box")
@@ -204,7 +233,8 @@ class FigureLayout:
                 min_width="260px",
                 max_width="400px",
                 display="none",
-                overflow="auto",
+                overflow_x="hidden",
+                overflow_y="auto",
                 box_sizing="border-box",
             ),
         )
@@ -244,11 +274,13 @@ class FigureLayout:
         self.print_output = widgets.Output(
             layout=widgets.Layout(
                 width="100%",
+                min_width="0",
                 min_height="48px",
                 padding="8px",
                 border="1px solid rgba(15,23,42,0.08)",
                 border_radius="10px",
-                overflow="auto",
+                overflow_x="hidden",
+                overflow_y="auto",
             )
         )
         self.print_output.add_class("gu-figure-print-output")

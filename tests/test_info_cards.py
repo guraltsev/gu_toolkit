@@ -28,6 +28,10 @@ def test_raw_info_output_activates_sidebar_visibility() -> None:
     assert out in fig._layout.info_box.children
     assert getattr(out, "id", None) == "summary"
     assert out.layout.height == "90px"
+    assert out.layout.width == "100%"
+    assert out.layout.min_width == "0"
+    assert out.layout.overflow_x == "hidden"
+    assert out.layout.overflow_y == "auto"
 
 
 def test_raw_info_output_requests_reflow_when_sidebar_appears() -> None:
@@ -104,6 +108,25 @@ def test_info_error_payload_is_bounded_and_escaped() -> None:
         assert "<pre" in dynamic_seg.widget.value
         assert "&lt;b&gt;bad&lt;/b&gt;" in dynamic_seg.widget.value
         assert "max-height: 12em" in dynamic_seg.widget.value
+        assert "overflow-x:hidden" in dynamic_seg.widget.value
+        assert "overflow-wrap:anywhere" in dynamic_seg.widget.value
+    finally:
+        figure_info_module.QueuedDebouncer = original
+
+
+def test_simple_info_cards_keep_width_constrained_to_sidebar() -> None:
+    original = figure_info_module.QueuedDebouncer
+    try:
+        figure_info_module.QueuedDebouncer = _ImmediateDebouncer
+
+        fig = Figure()
+        fig.info("hello", id="summary")
+
+        card = fig._info._simple_cards["summary"]
+        assert card.container.layout.width == "100%"
+        assert card.container.layout.min_width == "0"
+        assert all(seg.widget.layout.width == "100%" for seg in card.segments)
+        assert all(seg.widget.layout.min_width == "0" for seg in card.segments)
     finally:
         figure_info_module.QueuedDebouncer = original
 

@@ -190,6 +190,7 @@ class ParameterManager(Mapping[str, ParamRef]):
                 config = {**defaults, **control_kwargs}
                 new_control = FloatSlider(
                     description=f"${sp.latex(symbol)}$",
+                    accessibility_label=f"Parameter {symbol.name}",
                     value=float(config["value"]),
                     min=float(config["min"]),
                     max=float(config["max"]),
