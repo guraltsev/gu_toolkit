@@ -1,0 +1,635 @@
+"""Parametric curve support built on top of :mod:`gu_toolkit.figure_plot`.
+
+This module adds :class:`ParametricPlot`, a curve type for plotting points of
+``(x(t), y(t))`` sampled over an explicit parameter interval. The implementation
+intentionally reuses :class:`gu_toolkit.figure_plot.Plot` for trace ownership,
+style application, visibility handling, view membership, and most update
+semantics, while specializing only the data-generation path.
+
+Design notes
+------------
+- The base :class:`Plot` class remains the owner of the Plotly trace handle and
+  the y-component numeric expression.
+- :class:`ParametricPlot` adds an independent x-component numeric expression and
+  a dedicated parameter domain.
+- Rendering samples the parameter variable ``t`` directly and then evaluates the
+  x- and y-coordinate backends against the same parameter sample array.
+- Snapshot/code generation support is implemented through extra metadata on
+  :class:`gu_toolkit.PlotSnapshot`.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
+import sympy as sp
+from sympy.core.expr import Expr
+from sympy.core.symbol import Symbol
+
+from .figure_color import explicit_style_color
+from .figure_context import _FigureDefaultSentinel, _is_figure_default
+from .figure_plot_normalization import PlotVarsSpec, normalize_parametric_plot_inputs
+from .figure_plot_style import validate_style_kwargs
+from .figure_plot_helpers import (
+    normalize_view_ids,
+    remove_plot_from_figure,
+    resolve_plot_id,
+)
+from .figure_plot import Plot
+from .figure_types import NumberLikeOrStr, VisibleSpec
+from .InputConvert import InputConvert
+from .numpify import DYNAMIC_PARAMETER, NumericFunction, numpify_cached
+from .parameter_keys import ParameterKeyOrKeys, expand_parameter_keys_to_symbols
+from .PlotSnapshot import PlotSnapshot
+
+if TYPE_CHECKING:
+    from .Figure import Figure
+
+
+class ParametricPlot(Plot):
+    """A plot whose screen coordinates are generated from ``(x(t), y(t))``.
+
+    Parameters
+    ----------
+    parameter_var : sympy.Symbol
+        Shared sampling variable, typically ``t``.
+    x_func, y_func : sympy.Expr
+        Symbolic x- and y-coordinate expressions. When callable-backed plotting
+        is used, these expressions may be lightweight symbolic placeholders that
+        preserve labeling and snapshotting semantics.
+    smart_figure : Figure
+        Owning figure.
+    parameters : sequence[sympy.Symbol], optional
+        Figure parameters used by either coordinate expression.
+    parameter_domain : tuple[number-like, number-like]
+        Inclusive parameter interval used for sampling, e.g. ``(0, 2*pi)``.
+    sampling_points, samples : int or ``"figure_default"``, optional
+        Per-plot sample-count override. ``samples`` is the preferred spelling;
+        ``sampling_points`` is kept as a compatibility alias.
+    label, visible, color, thickness, dash, line, opacity, trace, plot_id,
+    view_ids :
+        Same semantics as :class:`~gu_toolkit.figure_plot.Plot`.
+    x_numeric_function, y_numeric_function : NumericFunction, optional
+        Optional precompiled coordinate backends used for callable-first
+        parametric plotting.
+
+    Notes
+    -----
+    ``ParametricPlot`` is normally created through
+    :meth:`gu_toolkit.Figure.Figure.parametric_plot` rather than instantiated
+    directly.
+    """
+
+    def __init__(
+        self,
+        parameter_var: Symbol,
+        x_func: Expr,
+        y_func: Expr,
+        smart_figure: Figure,
+        parameters: Sequence[Symbol] = (),
+        parameter_domain: tuple[NumberLikeOrStr, NumberLikeOrStr] = (0.0, 1.0),
+        sampling_points: int | str | _FigureDefaultSentinel | None = None,
+        label: str = "",
+        visible: VisibleSpec = True,
+        color: str | None = None,
+        thickness: int | float | None = None,
+        dash: str | None = None,
+        line: Mapping[str, Any] | None = None,
+        opacity: int | float | None = None,
+        trace: Mapping[str, Any] | None = None,
+        plot_id: str = "",
+        view_ids: Sequence[str] | None = None,
+        *,
+        x_numeric_function: NumericFunction | None = None,
+        y_numeric_function: NumericFunction | None = None,
+        samples: int | str | _FigureDefaultSentinel | None = None,
+    ) -> None:
+        self._parameter_symbols = tuple(parameters)
+        self._parameter_domain = self._coerce_parameter_domain(parameter_domain)
+        self._x_symbolic_expression = sp.sympify(x_func)
+        self._x_numpified: NumericFunction | None = None
+        self._x_live_numeric_expression: NumericFunction | None = None
+        self._x_render_numeric_expression: NumericFunction | None = None
+        self._parametric_ready = False
+
+        # ``Plot`` owns trace creation, view membership, style state, and the
+        # y-component numeric backend. Its eager ``render()`` call is suppressed
+        # by our ``_parametric_ready`` guard until the x-component has been
+        # fully initialized.
+        super().__init__(
+            var=parameter_var,
+            func=y_func,
+            smart_figure=smart_figure,
+            parameters=parameters,
+            x_domain=None,
+            sampling_points=sampling_points,
+            label=label,
+            visible=visible,
+            color=color,
+            thickness=thickness,
+            dash=dash,
+            line=line,
+            opacity=opacity,
+            trace=trace,
+            plot_id=plot_id,
+            view_ids=view_ids,
+            numeric_function=y_numeric_function,
+            samples=samples,
+        )
+
+        self._set_x_component(
+            parameter_var,
+            x_func,
+            parameters=parameters,
+            numeric_function=x_numeric_function,
+        )
+        self._parametric_ready = True
+        self.render()
+
+    @staticmethod
+    def _coerce_parameter_domain(
+        value: tuple[NumberLikeOrStr, NumberLikeOrStr]
+    ) -> tuple[float, float]:
+        """Convert a raw parameter interval into validated floats."""
+        parameter_min = float(InputConvert(value[0], float))
+        parameter_max = float(InputConvert(value[1], float))
+        if parameter_min > parameter_max:
+            raise ValueError("parametric_plot() requires parameter_min <= parameter_max")
+        return (parameter_min, parameter_max)
+
+    @staticmethod
+    def _bind_numeric_expression(
+        numeric_fn: NumericFunction,
+        *,
+        parameter_var: Symbol,
+        figure: Figure,
+    ) -> tuple[NumericFunction, NumericFunction]:
+        """Return live and render-bound numeric callables for one component."""
+        dynamic_symbols = tuple(sym for sym in numeric_fn.all_vars if sym != parameter_var)
+        if dynamic_symbols:
+            dynamic_expression = numeric_fn.freeze(
+                {sym: DYNAMIC_PARAMETER for sym in dynamic_symbols}
+            )
+            parameter_manager = figure.parameters
+            live_context = parameter_manager.parameter_context
+            render_context = getattr(
+                parameter_manager, "render_parameter_context", live_context
+            )
+            return (
+                dynamic_expression.set_parameter_context(live_context),
+                dynamic_expression.set_parameter_context(render_context),
+            )
+        return numeric_fn, numeric_fn
+
+    def _set_x_component(
+        self,
+        parameter_var: Symbol,
+        x_func: Expr,
+        *,
+        parameters: Sequence[Symbol],
+        numeric_function: NumericFunction | None,
+    ) -> None:
+        """Compile and bind the x-coordinate backend for this plot."""
+        self._parameter_symbols = tuple(parameters)
+        if numeric_function is None:
+            self._x_symbolic_expression = sp.sympify(x_func)
+            self._x_numpified = numpify_cached(
+                self._x_symbolic_expression,
+                vars=[parameter_var, *self._parameter_symbols],
+            )
+        else:
+            self._x_numpified = numeric_function
+            if numeric_function.symbolic is not None:
+                self._x_symbolic_expression = sp.sympify(numeric_function.symbolic)
+            else:
+                self._x_symbolic_expression = sp.sympify(x_func)
+
+        self._x_live_numeric_expression, self._x_render_numeric_expression = (
+            self._bind_numeric_expression(
+                self._x_numpified,
+                parameter_var=parameter_var,
+                figure=self._smart_figure,
+            )
+        )
+
+    @property
+    def parameter_var(self) -> Symbol:
+        """Return the shared sampling variable used for this curve."""
+        return self._var
+
+    @property
+    def parameter_domain(self) -> tuple[float, float]:
+        """Return the inclusive sampling interval for ``parameter_var``."""
+        return self._parameter_domain
+
+    @property
+    def x_expression(self) -> Expr:
+        """Return the symbolic x-coordinate expression."""
+        return self._x_symbolic_expression
+
+    @property
+    def y_expression(self) -> Expr:
+        """Return the symbolic y-coordinate expression."""
+        return self._func
+
+    @property
+    def symbolic_expressions(self) -> tuple[Expr, Expr]:
+        """Return ``(x_expression, y_expression)`` for introspection."""
+        return (self.x_expression, self.y_expression)
+
+    @property
+    def x_numeric_expression(self) -> NumericFunction:
+        """Return the live numeric x-coordinate expression."""
+        if self._x_live_numeric_expression is None:  # pragma: no cover - defensive
+            raise RuntimeError("Parametric plot x-expression is not initialized.")
+        return self._x_live_numeric_expression
+
+    @property
+    def y_numeric_expression(self) -> NumericFunction:
+        """Return the live numeric y-coordinate expression."""
+        return self.numeric_expression
+
+    @property
+    def parameters(self) -> tuple[Symbol, ...]:
+        """Return the union of parameter symbols used by either component."""
+        return tuple(self._parameter_symbols)
+
+    def snapshot(self, *, id: str = "") -> PlotSnapshot:
+        """Return a snapshot that round-trips this parametric curve."""
+        return PlotSnapshot(
+            id=id,
+            var=self.parameter_var,
+            func=self.y_expression,
+            parameters=tuple(self.parameters),
+            label=self.label,
+            visible=self.visible,
+            x_domain=None,
+            sampling_points=self.samples,
+            color=self.color,
+            thickness=self.thickness,
+            dash=self.dash,
+            opacity=self.opacity,
+            views=self.views,
+            kind="parametric",
+            x_func=self.x_expression,
+            parameter_domain=self.parameter_domain,
+        )
+
+    @staticmethod
+    def _coerce_component_values(
+        raw_values: Any,
+        *,
+        parameter_values: np.ndarray,
+        axis_name: str,
+    ) -> np.ndarray:
+        """Normalize one rendered coordinate array.
+
+        Scalar outputs are broadcast to the full parameter sample length. Vector
+        outputs are flattened to one dimension and must contain exactly one
+        coordinate per sampled parameter value.
+        """
+        values = np.asarray(raw_values, dtype=float)
+        if values.ndim == 0:
+            return np.full(parameter_values.shape, float(values), dtype=float)
+
+        flattened = np.ravel(values)
+        if flattened.shape[0] != parameter_values.shape[0]:
+            raise ValueError(
+                f"Parametric {axis_name}-component must evaluate to exactly one value per parameter sample."
+            )
+        return flattened.astype(float, copy=False)
+
+    def render(
+        self,
+        view_id: str | None = None,
+        *,
+        use_batch_update: bool = True,
+        refresh_parameter_snapshot: bool = True,
+    ) -> None:
+        """Compute and render the sampled parametric coordinates."""
+        if not self._parametric_ready:
+            return
+
+        target_view = view_id or self._smart_figure.views.current_id
+        self._set_visibility_for_target_view(target_view)
+        if target_view not in self._view_ids:
+            return
+        if self._suspend_render or self._visible is not True:
+            return
+
+        fig = self._smart_figure
+        if refresh_parameter_snapshot:
+            refresh_context = getattr(
+                fig.parameters, "refresh_render_parameter_context", None
+            )
+            if callable(refresh_context):
+                refresh_context()
+
+        if target_view != fig.views.current_id:
+            fig.views[target_view].is_stale = True
+            return
+
+        num = self.samples or fig.samples or 500
+        parameter_values = np.linspace(
+            self._parameter_domain[0],
+            self._parameter_domain[1],
+            num=int(num),
+        )
+        if self._x_render_numeric_expression is None:  # pragma: no cover - defensive
+            raise RuntimeError("Parametric plot x-expression is not initialized.")
+
+        x_values = self._coerce_component_values(
+            self._x_render_numeric_expression(parameter_values),
+            parameter_values=parameter_values,
+            axis_name="x",
+        )
+        y_values = self._coerce_component_values(
+            self._render_numeric_expression(parameter_values),
+            parameter_values=parameter_values,
+            axis_name="y",
+        )
+        self._x_data = x_values.copy()
+        self._y_data = y_values.copy()
+
+        target_handle = self._handles[target_view].trace_handle
+        if target_handle is None:
+            return
+
+        def _apply_trace_update() -> None:
+            target_handle.x = x_values
+            target_handle.y = y_values
+
+        if use_batch_update:
+            with fig.views[target_view].figure_widget.batch_update():
+                _apply_trace_update()
+        else:
+            _apply_trace_update()
+
+    def update(self, **kwargs: Any) -> None:
+        """Update common plot state plus parametric-specific components.
+
+        Supported extra keys beyond :meth:`Plot.update` are:
+
+        - ``parameter_var``
+        - ``parameter_domain``
+        - ``x_func``
+        - ``y_func``
+        - ``x_numeric_function``
+        - ``y_numeric_function`` (or the compatibility alias ``numeric_function``)
+        """
+        render_requested = False
+        previous_suspend = self._suspend_render
+        self._suspend_render = True
+        try:
+            common_keys = {
+                "label",
+                "visible",
+                "samples",
+                "sampling_points",
+                "view",
+                "color",
+                "thickness",
+                "width",
+                "dash",
+                "line",
+                "opacity",
+                "alpha",
+                "trace",
+            }
+            shared_kwargs = {key: kwargs[key] for key in common_keys if key in kwargs}
+            if shared_kwargs:
+                super().update(**shared_kwargs)
+                render_requested = True
+
+            if "parameter_domain" in kwargs:
+                self._parameter_domain = self._coerce_parameter_domain(
+                    kwargs["parameter_domain"]
+                )
+                render_requested = True
+
+            function_keys = {
+                "parameter_var",
+                "parameters",
+                "x_func",
+                "y_func",
+                "x_numeric_function",
+                "y_numeric_function",
+                "numeric_function",
+            }
+            if any(key in kwargs for key in function_keys):
+                render_requested = True
+                parameter_var = kwargs.get("parameter_var", self.parameter_var)
+                parameters = tuple(kwargs.get("parameters", self.parameters))
+                x_func = kwargs.get("x_func", self.x_expression)
+                y_func = kwargs.get("y_func", self.y_expression)
+                x_numeric_function = kwargs.get("x_numeric_function")
+                y_numeric_function = kwargs.get(
+                    "y_numeric_function", kwargs.get("numeric_function")
+                )
+
+                if y_numeric_function is not None:
+                    self.set_numeric_function(
+                        parameter_var,
+                        y_numeric_function,
+                        parameters=parameters,
+                        symbolic_expression=y_func,
+                    )
+                else:
+                    self.set_func(parameter_var, y_func, parameters)
+
+                self._set_x_component(
+                    parameter_var,
+                    x_func,
+                    parameters=parameters,
+                    numeric_function=x_numeric_function,
+                )
+        finally:
+            self._suspend_render = previous_suspend
+
+        if render_requested:
+            self.render()
+
+
+def create_or_update_parametric_plot(
+    figure: Figure,
+    funcs: Sequence[Any],
+    parameter_range: tuple[Any, Any, Any],
+    parameters: ParameterKeyOrKeys | None = None,
+    id: str | None = None,
+    label: str | None = None,
+    visible: VisibleSpec = True,
+    sampling_points: int | str | _FigureDefaultSentinel | None = None,
+    color: str | None = None,
+    thickness: int | float | None = None,
+    width: int | float | None = None,
+    dash: str | None = None,
+    line: Mapping[str, Any] | None = None,
+    opacity: int | float | None = None,
+    alpha: int | float | None = None,
+    trace: Mapping[str, Any] | None = None,
+    view: str | Sequence[str] | None = None,
+    vars: PlotVarsSpec | None = None,
+    samples: int | str | _FigureDefaultSentinel | None = None,
+) -> Plot:
+    """Create or update a :class:`ParametricPlot` on ``figure``.
+
+    This helper holds the heavier implementation details outside ``Figure.py``
+    so the coordinator module can stay focused and remain below its historical
+    size budget tracked by the test suite.
+    """
+    id = resolve_plot_id(figure.plots, id)
+
+    (
+        parameter_var,
+        x_func,
+        y_func,
+        x_numeric_fn,
+        y_numeric_fn,
+        inferred_parameters,
+    ) = normalize_parametric_plot_inputs(
+        funcs,
+        parameter_range,
+        vars=vars,
+        id_hint=id,
+    )
+
+    if samples is not None and sampling_points is not None:
+        lhs = None if _is_figure_default(samples) else figure._coerce_samples_value(samples)
+        rhs = (
+            None
+            if _is_figure_default(sampling_points)
+            else figure._coerce_samples_value(sampling_points)
+        )
+        if lhs != rhs:
+            raise ValueError(
+                "parametric_plot() received both samples= and sampling_points= with different values; use only one samples keyword."
+            )
+
+    samples_supplied = samples is not None or sampling_points is not None
+    requested_samples = samples if samples is not None else sampling_points
+    if requested_samples is None:
+        explicit_plot_samples: int | str | _FigureDefaultSentinel | None = None
+    elif _is_figure_default(requested_samples):
+        explicit_plot_samples = "figure_default"
+    else:
+        explicit_plot_samples = figure._coerce_samples_value(requested_samples)
+
+    style_kwargs = validate_style_kwargs(
+        {
+            "color": color,
+            "thickness": thickness,
+            "width": width,
+            "dash": dash,
+            "line": line,
+            "opacity": opacity,
+            "alpha": alpha,
+            "trace": trace,
+        },
+        caller="parametric_plot()",
+    )
+    color = style_kwargs.get("color")
+    thickness = style_kwargs.get("thickness")
+    dash = style_kwargs.get("dash")
+    line = style_kwargs.get("line")
+    opacity = style_kwargs.get("opacity")
+    trace = style_kwargs.get("trace")
+
+    if parameters is None:
+        requested_parameter_keys: ParameterKeyOrKeys = tuple(inferred_parameters)
+        plot_parameters = tuple(inferred_parameters)
+    else:
+        requested_parameter_keys = parameters
+        plot_parameters = expand_parameter_keys_to_symbols(
+            parameters,
+            inferred_parameters,
+            role="parametric plot parameters",
+        )
+
+    if requested_parameter_keys:
+        figure.parameter(requested_parameter_keys)
+
+    if figure._sync_sidebar_visibility():
+        figure._request_active_view_reflow("sidebar_visibility")
+
+    if id in figure.plots and not isinstance(figure.plots[id], ParametricPlot):
+        remove_plot_from_figure(figure, id)
+
+    requested_color = explicit_style_color(color=color, line=line, trace=trace)
+    if id in figure.plots:
+        update_dont_create = True
+        if requested_color is None and figure.plots[id].color is None:
+            color = figure._auto_plot_color(plot_id=id)
+    else:
+        update_dont_create = False
+        if requested_color is None:
+            color = figure._auto_plot_color()
+
+    parameter_domain = (parameter_range[1], parameter_range[2])
+
+    if update_dont_create:
+        update_kwargs: dict[str, Any] = {
+            "parameter_var": parameter_var,
+            "parameter_domain": parameter_domain,
+            "x_func": x_func,
+            "y_func": y_func,
+            "parameters": plot_parameters,
+            "visible": visible,
+            "samples": (explicit_plot_samples if samples_supplied else None),
+            "color": color,
+            "thickness": thickness,
+            "dash": dash,
+            "line": line,
+            "opacity": opacity,
+            "trace": trace,
+            "view": view,
+        }
+        if x_numeric_fn is not None:
+            update_kwargs["x_numeric_function"] = x_numeric_fn
+        if y_numeric_fn is not None:
+            update_kwargs["y_numeric_function"] = y_numeric_fn
+        if label is not None:
+            update_kwargs["label"] = label
+        figure.plots[id].update(**update_kwargs)
+        plot = figure.plots[id]
+        figure._legend.on_plot_updated(plot)
+        if figure._sync_sidebar_visibility():
+            figure._request_active_view_reflow("sidebar_visibility")
+        return plot
+
+    view_ids = normalize_view_ids(view, default_view_id=figure.views.current_id)
+    create_plot_samples: int | str | _FigureDefaultSentinel | None = explicit_plot_samples
+    if (
+        not samples_supplied
+        and figure._default_samples is not None
+        and figure.default_samples != figure.samples
+    ):
+        create_plot_samples = figure.default_samples
+
+    plot = ParametricPlot(
+        parameter_var=parameter_var,
+        x_func=x_func,
+        y_func=y_func,
+        smart_figure=figure,
+        parameters=plot_parameters,
+        parameter_domain=parameter_domain,
+        samples=create_plot_samples,
+        label=(id if label is None else label),
+        visible=visible,
+        color=color,
+        thickness=thickness,
+        dash=dash,
+        line=line,
+        opacity=opacity,
+        trace=trace,
+        plot_id=id,
+        view_ids=view_ids,
+        x_numeric_function=x_numeric_fn,
+        y_numeric_function=y_numeric_fn,
+    )
+    figure.plots[id] = plot
+    figure._legend.on_plot_added(plot)
+    if figure._sync_sidebar_visibility():
+        figure._request_active_view_reflow("sidebar_visibility")
+    return plot

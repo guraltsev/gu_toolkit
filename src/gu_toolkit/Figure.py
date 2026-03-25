@@ -73,9 +73,17 @@ from .layout_logging import (
 )
 from .debouncing import QueuedDebouncer
 from .figure_render_scheduler import FigureRenderScheduler, RenderRequest
-from .figure_plot_normalization import PlotVarsSpec, normalize_plot_inputs
+from .figure_plot_normalization import (
+    PlotVarsSpec,
+    normalize_plot_inputs,
+)
 from .figure_plot_style import plot_style_option_docs, validate_style_kwargs
 from .figure_color import color_for_trace_index, explicit_style_color
+from .figure_plot_helpers import (
+    normalize_view_ids,
+    remove_plot_from_figure,
+    resolve_plot_id,
+)
 from .FigureSnapshot import FigureSnapshot, ViewSnapshot
 
 from .InputConvert import InputConvert
@@ -109,6 +117,7 @@ from .figure_layout import FigureLayout
 from .figure_legend import LegendPanelManager
 from .figure_parameters import ParameterManager
 from .figure_sound import FigureSoundManager
+from .figure_parametric_plot import ParametricPlot, create_or_update_parametric_plot
 from .figure_plot import Plot
 from .figure_view import FigureViews, View
 from .figure_view_manager import ViewManager
@@ -1177,14 +1186,7 @@ class Figure:
         plot_style_options : List supported style kwargs and meanings
             (`color`, `thickness`/`width`, `dash`, `opacity`/`alpha`, `line`, `trace`).
         """
-        # ID Generation
-        if id is None:
-            for i in range(100):
-                if f"f_{i}" not in self.plots:
-                    id = f"f_{i}"
-                    break
-            if id is None:
-                raise ValueError("Too many auto-generated IDs")
+        id = resolve_plot_id(self.plots, id)
 
         normalized_var, normalized_func, normalized_numeric_fn, inferred_parameters = (
             normalize_plot_inputs(
@@ -1267,6 +1269,9 @@ class Figure:
         if self._sync_sidebar_visibility():
             self._request_active_view_reflow("sidebar_visibility")
 
+        if id in self.plots and isinstance(self.plots[id], ParametricPlot):
+            remove_plot_from_figure(self, id)
+
         # Create or Update Plot
         requested_color = explicit_style_color(color=color, line=line, trace=trace)
         if id in self.plots:
@@ -1304,14 +1309,9 @@ class Figure:
             if self._sync_sidebar_visibility():
                 self._request_active_view_reflow("sidebar_visibility")
         else:
-            view_ids = (
-                (view,)
-                if isinstance(view, str)
-                else (
-                    tuple(view)
-                    if view is not None
-                    else (self.views.current_id,)
-                )
+            view_ids = normalize_view_ids(
+                view,
+                default_view_id=self.views.current_id,
             )
             create_plot_samples: int | str | _FigureDefaultSentinel | None = explicit_plot_samples
             if (
@@ -1346,6 +1346,50 @@ class Figure:
                 self._request_active_view_reflow("sidebar_visibility")
 
         return plot
+
+    def parametric_plot(
+        self,
+        funcs: Sequence[Any],
+        parameter_range: tuple[Any, Any, Any],
+        parameters: ParameterKeyOrKeys | None = None,
+        id: str | None = None,
+        label: str | None = None,
+        visible: VisibleSpec = True,
+        sampling_points: int | str | _FigureDefaultSentinel | None = None,
+        color: str | None = None,
+        thickness: int | float | None = None,
+        width: int | float | None = None,
+        dash: str | None = None,
+        line: Mapping[str, Any] | None = None,
+        opacity: int | float | None = None,
+        alpha: int | float | None = None,
+        trace: Mapping[str, Any] | None = None,
+        view: str | Sequence[str] | None = None,
+        vars: PlotVarsSpec | None = None,
+        samples: int | str | _FigureDefaultSentinel | None = None,
+    ) -> Plot:
+        """Plot a parametric curve ``(x(t), y(t))`` on the figure."""
+        return create_or_update_parametric_plot(
+            self,
+            funcs,
+            parameter_range,
+            parameters=parameters,
+            id=id,
+            label=label,
+            visible=visible,
+            sampling_points=sampling_points,
+            color=color,
+            thickness=thickness,
+            width=width,
+            dash=dash,
+            line=line,
+            opacity=opacity,
+            alpha=alpha,
+            trace=trace,
+            view=view,
+            vars=vars,
+            samples=samples,
+        )
 
     def parameter(
         self,
@@ -1895,6 +1939,7 @@ get_y_range = _figure_api.get_y_range
 info = _figure_api.info
 parameter = _figure_api.parameter
 parameters = _figure_api.parameters
+parametric_plot = _figure_api.parametric_plot
 plot = _figure_api.plot
 plots = _figure_api.plots
 plot_style_options = _figure_api.plot_style_options
@@ -1916,6 +1961,7 @@ __all__ = [
     "FigureViews",
     # Common collaborating types (re-exported for convenience)
     "FigureLayout",
+    "ParametricPlot",
     "Plot",
     "View",
     "FigureSnapshot",
@@ -1923,6 +1969,7 @@ __all__ = [
     # Context
     "current_figure",
     # Module-level helpers (figure_api)
+    "parametric_plot",
     "plot",
     "plots",
     "parameter",

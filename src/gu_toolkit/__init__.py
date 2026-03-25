@@ -17,6 +17,7 @@ from .Figure import (
     Figure,
     FigureViews,
     FigureLayout,
+    ParametricPlot,
     Plot,
     View,
     current_figure,
@@ -31,6 +32,7 @@ from .Figure import (
     info,
     parameter,
     parameters,
+    parametric_plot,
     plots,
     render,
     sound_generation_enabled,
@@ -42,6 +44,9 @@ from .Figure import (
     set_title,
     set_x_range,
     set_y_range,
+)
+from .Figure import (
+    parametric_plot as toolkit_parametric_plot,
 )
 from .Figure import (
     plot as toolkit_plot,
@@ -77,5 +82,6 @@ from .Slider import FloatSlider
 # ``Notebook`` intentionally exports SymPy's ``plot`` helper via
 # ``from sympy import *`` for convenience, but package-level ``plot`` should
 # resolve to gu_toolkit's module helper for notebook examples and docs.
+parametric_plot = toolkit_parametric_plot
 plot = toolkit_plot
 plot_style_options = toolkit_plot_style_options

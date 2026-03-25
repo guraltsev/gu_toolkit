@@ -289,6 +289,60 @@ def plot(
     )
 
 
+def parametric_plot(
+    funcs: Sequence[Any],
+    parameter_range: tuple[Any, Any, Any],
+    parameters: ParameterKeyOrKeys | None = None,
+    id: str | None = None,
+    label: str | None = None,
+    visible: bool = True,
+    sampling_points: int | str | object | None = None,
+    color: str | None = None,
+    thickness: int | float | None = None,
+    width: int | float | None = None,
+    dash: str | None = None,
+    opacity: int | float | None = None,
+    alpha: int | float | None = None,
+    line: Mapping[str, Any] | None = None,
+    trace: Mapping[str, Any] | None = None,
+    view: str | Sequence[str] | None = None,
+    vars: PlotVarsSpec | None = None,
+    samples: int | str | object | None = None,
+) -> Plot:
+    """Plot a parametric curve on the current figure.
+
+    The curve is defined by ``(x(t), y(t))`` sampled over
+    ``parameter_range == (t, min, max)``. When no current figure exists, this
+    helper creates and displays one, mirroring :func:`plot`.
+    """
+    fig = _current_figure()
+    if fig is None:
+        from .Figure import Figure
+
+        fig = Figure()
+        display(fig)
+    return fig.parametric_plot(
+        funcs,
+        parameter_range,
+        parameters=parameters,
+        id=id,
+        label=label,
+        visible=visible,
+        sampling_points=sampling_points,
+        color=color,
+        thickness=thickness,
+        width=width,
+        dash=dash,
+        opacity=opacity,
+        alpha=alpha,
+        line=line,
+        trace=trace,
+        view=view,
+        vars=vars,
+        samples=samples,
+    )
+
+
 __all__ = [
     "get_default_samples",
     "get_default_x_range",
@@ -301,6 +355,7 @@ __all__ = [
     "info",
     "parameter",
     "parameters",
+    "parametric_plot",
     "plot",
     "plots",
     "plot_style_options",

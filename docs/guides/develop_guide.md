@@ -210,7 +210,10 @@ Code generation should:
 
 ## 8. Plot system and style metadata
 
-`figure_plot.py` owns the per-curve render model.
+`figure_plot.py` owns the cartesian per-curve render model.
+
+`figure_parametric_plot.py` owns parametric `(x(t), y(t))` curve rendering and
+the helper used by `Figure.parametric_plot(...)`.
 
 The public style contract is centralized in `figure_plot_style.py` through
 structured `PlotStyleSpec` metadata. That metadata now drives:
@@ -226,6 +229,13 @@ When adding a new public style keyword, update:
 3. `figure_api.plot(...)`
 4. `Plot.update(...)` / `Plot.snapshot()` if needed
 5. code generation if it must round-trip
+
+When adding parametric-curve behavior, update the corresponding pieces in:
+
+1. `figure_parametric_plot.py`
+2. `Figure.parametric_plot(...)`
+3. `figure_api.parametric_plot(...)`
+4. `PlotSnapshot` / `codegen.py` if it must round-trip
 
 ---
 

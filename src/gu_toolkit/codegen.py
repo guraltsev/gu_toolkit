@@ -220,8 +220,17 @@ def _collect_symbols(snapshot: FigureSnapshot) -> list[Symbol]:
         for p in ps.parameters:
             if p.name not in seen:
                 seen[p.name] = p
+        if ps.x_func is not None:
+            for sym in sorted(ps.x_func.free_symbols, key=lambda s: s.sort_key()):
+                if sym.name not in seen:
+                    seen[sym.name] = sym
 
     return list(seen.values())
+
+
+def _snapshot_uses_parametric_plot(snapshot: FigureSnapshot) -> bool:
+    """Return whether any plot snapshot requires ``parametric_plot`` imports."""
+    return any(ps.is_parametric for ps in snapshot.plots.values())
 
 
 def _fmt_float(v: float) -> str:
@@ -276,22 +285,43 @@ def _plot_call(
     figure_snapshot: FigureSnapshot | None = None,
 ) -> str:
     """Emit one plot call."""
-    expr_code = sympy_to_code(ps.func)
-
-    args = [
-        f"{expr_code}",
-        f"{_symbol_ref(ps.var)}",
-        f"id={ps.id!r}",
-        f"label={ps.label!r}",
-    ]
+    if ps.is_parametric:
+        if ps.x_func is None or ps.parameter_domain is None:
+            raise ValueError(
+                "Parametric plot snapshots require x_func and parameter_domain metadata."
+            )
+        x_expr_code = sympy_to_code(ps.x_func)
+        y_expr_code = sympy_to_code(ps.func)
+        args = [
+            f"({x_expr_code}, {y_expr_code})",
+            (
+                f"({_symbol_ref(ps.var)}, "
+                f"{_fmt_float(ps.parameter_domain[0])}, "
+                f"{_fmt_float(ps.parameter_domain[1])})"
+            ),
+            f"id={ps.id!r}",
+            f"label={ps.label!r}",
+        ]
+        callee = (
+            "parametric_plot" if style == "context_manager" else "fig.parametric_plot"
+        )
+    else:
+        expr_code = sympy_to_code(ps.func)
+        args = [
+            f"{expr_code}",
+            f"{_symbol_ref(ps.var)}",
+            f"id={ps.id!r}",
+            f"label={ps.label!r}",
+        ]
+        if ps.x_domain is not None:
+            args.append(
+                f"x_domain=({_fmt_float(ps.x_domain[0])}, {_fmt_float(ps.x_domain[1])})"
+            )
+        callee = "plot" if style == "context_manager" else "fig.plot"
 
     # Only emit non-default optional kwargs
     if ps.visible is not True:
         args.append(f"visible={ps.visible!r}")
-    if ps.x_domain is not None:
-        args.append(
-            f"x_domain=({_fmt_float(ps.x_domain[0])}, {_fmt_float(ps.x_domain[1])})"
-        )
     if ps.sampling_points is not None:
         args.append(f"samples={ps.sampling_points}")
     elif (
@@ -316,7 +346,6 @@ def _plot_call(
 
     # Format: single line if short, multi-line otherwise
     joined = ", ".join(args)
-    callee = "plot" if style == "context_manager" else "fig.plot"
     call = f"{callee}({joined})"
     if len(call) <= 88:
         return call
@@ -402,7 +431,11 @@ def figure_to_code(
     if options.include_imports:
         lines.append("import sympy as sp")
         if options.interface_style == "context_manager":
-            lines.append("from gu_toolkit import Figure, parameter, plot, info")
+            import_items = ["Figure", "parameter", "plot"]
+            if _snapshot_uses_parametric_plot(snapshot):
+                import_items.append("parametric_plot")
+            import_items.append("info")
+            lines.append("from gu_toolkit import " + ", ".join(import_items))
         else:
             lines.append("from gu_toolkit import Figure")
         lines.append("from IPython.display import display")

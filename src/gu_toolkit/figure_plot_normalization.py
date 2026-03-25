@@ -209,3 +209,219 @@ def normalize_plot_inputs(
 
     parameters = tuple(sym for sym in bound_symbols if sym != plot_var)
     return plot_var, expr, numeric_fn, parameters
+
+
+def _wrap_numeric_function_with_ignored_parameter(
+    numeric_fn: NumericFunction,
+    *,
+    parameter_var: Symbol,
+    symbolic_expression: Expr,
+) -> NumericFunction:
+    """Return ``numeric_fn`` wrapped to ignore one leading plot parameter.
+
+    Parametric plotting allows constant or parameter-only coordinate components,
+    such as ``x = a`` with ``y = t``. Those components still need to be called
+    with the shared parameter sample array during rendering. This helper creates
+    a numeric wrapper that accepts the leading parameter input and forwards the
+    remaining arguments to the original numeric function unchanged.
+    """
+
+    def wrapped(*args: Any) -> Any:
+        return numeric_fn(*args[1:])
+
+    return NumericFunction(
+        wrapped,
+        vars=(parameter_var, *numeric_fn.free_vars),
+        symbolic=symbolic_expression,
+        source=numeric_fn.source,
+    )
+
+
+def _merge_unique_symbols(*sequences: Sequence[Symbol]) -> tuple[Symbol, ...]:
+    """Merge symbol sequences while preserving first-seen order.
+
+    Symbol identity, not just ``symbol.name``, is preserved here so later
+    parameter expansion can still distinguish same-name symbols with different
+    SymPy assumptions.
+    """
+
+    merged: list[Symbol] = []
+    for sequence in sequences:
+        for symbol in sequence:
+            if symbol not in merged:
+                merged.append(symbol)
+    return tuple(merged)
+
+
+def _normalize_parametric_component(
+    component: Any,
+    *,
+    parameter_var: Symbol,
+    vars: PlotVarsSpec | None = None,
+    id_hint: str | None = None,
+    component_name: str,
+) -> tuple[Expr, NumericFunction | None, tuple[Symbol, ...]]:
+    """Normalize one coordinate component for ``parametric_plot()``.
+
+    Unlike scalar ``plot()``, a parametric coordinate component may legitimately
+    be constant or may depend only on figure parameters. For that reason this
+    normalizer allows the shared parameter variable to be absent and, when
+    needed, wraps callable-backed numeric functions so they accept and ignore the
+    sampled parameter array.
+    """
+
+    vars_spec: Any = None
+    if vars is not None:
+        normalized = _normalize_vars(sp.Integer(0), vars)
+        vars_tuple = tuple(normalized["all"])
+        if not vars_tuple:
+            raise ValueError("parametric_plot() vars must not be empty when provided")
+        vars_spec = normalized["spec"]
+    else:
+        vars_tuple = None
+
+    numeric_fn: NumericFunction | None = None
+    source_callable: Callable[..., Any] | None = None
+    expr: Expr
+    call_symbols: tuple[Symbol, ...]
+
+    if isinstance(component, Expr):
+        expr = component
+        call_symbols = tuple(
+            sorted(expr.free_symbols, key=_expression_symbol_sort_key)
+        )
+    elif isinstance(component, NumericFunction):
+        numeric_fn = component
+        source_callable = component._fn
+        call_symbols = tuple(component.free_vars)
+        symbolic = component.symbolic
+        if isinstance(symbolic, Expr):
+            expr = symbolic
+        else:
+            expr = sp.Symbol(id_hint or component_name)
+    elif callable(component):
+        source_callable = component
+        sig = inspect.signature(component)
+        positional = [
+            p
+            for p in sig.parameters.values()
+            if p.kind
+            in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            )
+        ]
+        if any(
+            p.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            for p in sig.parameters.values()
+        ):
+            raise TypeError(
+                "parametric_plot() callable does not support *args/**kwargs signatures"
+            )
+        call_symbols = tuple(sp.Symbol(p.name) for p in positional)
+        numeric_fn = NumericFunction(
+            component,
+            vars=vars_spec if vars_spec is not None else call_symbols,
+        )
+        if vars_spec is not None:
+            call_symbols = tuple(numeric_fn.free_vars)
+        expr = sp.Symbol(id_hint or getattr(component, "__name__", component_name))
+    else:
+        raise TypeError(
+            "parametric_plot() expects each component to be a SymPy expression, NumericFunction, or callable."
+        )
+
+    if vars_tuple is not None:
+        bound_symbols = vars_tuple
+        if numeric_fn is not None:
+            numeric_fn = rebind_numeric_function_vars(
+                numeric_fn,
+                vars_spec=vars_spec if vars_spec is not None else bound_symbols,
+                source_callable=source_callable,
+            )
+    else:
+        bound_symbols = call_symbols
+
+    if parameter_var not in bound_symbols:
+        if numeric_fn is not None:
+            numeric_fn = _wrap_numeric_function_with_ignored_parameter(
+                numeric_fn,
+                parameter_var=parameter_var,
+                symbolic_expression=expr,
+            )
+        bound_symbols = (parameter_var, *bound_symbols)
+
+    parameters = tuple(sym for sym in bound_symbols if sym != parameter_var)
+    return expr, numeric_fn, parameters
+
+
+def normalize_parametric_plot_inputs(
+    components: Any,
+    parameter_range: Any,
+    *,
+    vars: PlotVarsSpec | None = None,
+    id_hint: str | None = None,
+) -> tuple[
+    Symbol,
+    Expr,
+    Expr,
+    NumericFunction | None,
+    NumericFunction | None,
+    tuple[Symbol, ...],
+]:
+    """Normalize ``parametric_plot()`` inputs.
+
+    Parameters
+    ----------
+    components : sequence
+        Two coordinate components representing ``(x(t), y(t))``. Each component
+        may be a SymPy expression, a :class:`NumericFunction`, or a plain
+        Python callable.
+    parameter_range : tuple
+        Three-item tuple ``(t, min, max)`` where ``t`` is the shared parameter
+        symbol.
+
+    Returns
+    -------
+    tuple
+        ``(parameter_var, x_expr, y_expr, x_numeric_fn, y_numeric_fn,
+        parameter_symbols)``.
+
+    Notes
+    -----
+    The returned ``parameter_symbols`` tuple contains the union of parameters
+    inferred from both coordinate components while preserving deterministic
+    first-seen order.
+    """
+
+    if not isinstance(components, Sequence) or len(components) != 2:
+        raise ValueError(
+            "parametric_plot() expects coordinate components with shape (xexpr, yexpr)."
+        )
+
+    if not isinstance(parameter_range, tuple) or len(parameter_range) != 3:
+        raise ValueError(
+            "parametric_plot() range tuple must have shape (t, min, max), e.g. (t, 0, 1)."
+        )
+
+    parameter_var = coerce_symbol(
+        parameter_range[0], role="parametric range tuple variable"
+    )
+
+    x_expr, x_numeric_fn, x_parameters = _normalize_parametric_component(
+        components[0],
+        parameter_var=parameter_var,
+        vars=vars,
+        id_hint=None if id_hint is None else f"{id_hint}_x",
+        component_name="x",
+    )
+    y_expr, y_numeric_fn, y_parameters = _normalize_parametric_component(
+        components[1],
+        parameter_var=parameter_var,
+        vars=vars,
+        id_hint=None if id_hint is None else f"{id_hint}_y",
+        component_name="y",
+    )
+
+    parameters = _merge_unique_symbols(x_parameters, y_parameters)
+    return parameter_var, x_expr, y_expr, x_numeric_fn, y_numeric_fn, parameters
