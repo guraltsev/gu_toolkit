@@ -85,6 +85,7 @@ class ScalarFieldPlot:
     ) -> None:
         self._smart_figure = smart_figure
         self.id = plot_id or label or "field"
+        self._label = str(label)
         self._handles: dict[str, FieldPlotHandle] = {}
         self._view_ids = set(view_ids or (self._smart_figure.views.current_id,))
         self._visible: VisibleSpec = visible
@@ -479,11 +480,11 @@ class ScalarFieldPlot:
 
     @property
     def label(self) -> str:
-        ref = self._reference_trace_handle()
-        return ref.name if ref is not None else ""
+        return self._label
 
     @label.setter
     def label(self, value: str) -> None:
+        self._label = str(value)
         for trace_handle in self._iter_trace_handles():
             trace_handle.name = value
 

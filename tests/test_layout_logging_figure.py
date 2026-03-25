@@ -53,9 +53,9 @@ def test_sidebar_visibility_logging_changed_vs_unchanged() -> None:
     with _enabled_layout_logging():
         fig = Figure()
 
-    changed = fig._layout.update_sidebar_visibility(False, False, False)
-    unchanged = fig._layout.update_sidebar_visibility(False, False, False)
-    changed_again = fig._layout.update_sidebar_visibility(True, False, False)
+    changed = fig._layout.update_sidebar_visibility(False, False, True)
+    unchanged = fig._layout.update_sidebar_visibility(False, False, True)
+    changed_again = fig._layout.update_sidebar_visibility(True, False, True)
 
     assert changed is False
     assert unchanged is False

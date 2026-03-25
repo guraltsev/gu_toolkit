@@ -115,6 +115,7 @@ from .figure_context import (
 from .figure_info import InfoPanelManager
 from .figure_layout import FigureLayout
 from .figure_legend import LegendPanelManager
+from .figure_plot_editor import PlotComposerDialog
 from .figure_parameters import ParameterManager
 from .figure_sound import FigureSoundManager
 from .figure_parametric_plot import ParametricPlot, create_or_update_parametric_plot
@@ -180,6 +181,7 @@ class Figure:
         "_parameter_manager",
         "_info",
         "_legend",
+        "_plot_editor",
         "_sound",
         "_view_manager",
         "_views",
@@ -384,7 +386,13 @@ class Figure:
             self._layout.legend_box,
             modal_host=self._layout.root_widget,
             root_widget=self._layout.root_widget,
+            enable_plot_editor=True,
         )
+        self._plot_editor = PlotComposerDialog(
+            self,
+            modal_host=self._layout.root_widget,
+        )
+        self._legend.bind_plot_editor_handler(self._open_plot_editor)
         self._sound = FigureSoundManager(
             self,
             self._legend,
@@ -815,9 +823,9 @@ class Figure:
         changed = self._layout.update_sidebar_visibility(
             self._parameter_manager.has_params,
             self._info.has_info,
-            self._legend.has_legend,
+            self._legend.panel_visible,
         )
-        self._emit_layout_event("sidebar_visibility_sync", source="Figure", phase="completed", changed=changed, params_visible=self._parameter_manager.has_params, info_visible=self._info.has_info, legend_visible=self._legend.has_legend)
+        self._emit_layout_event("sidebar_visibility_sync", source="Figure", phase="completed", changed=changed, params_visible=self._parameter_manager.has_params, info_visible=self._info.has_info, legend_visible=self._legend.panel_visible)
         return changed
 
     def _on_info_panel_structure_changed(self, reason: str) -> None:
@@ -830,6 +838,14 @@ class Figure:
         )
         if self._sync_sidebar_visibility():
             self._request_active_view_reflow("sidebar_visibility")
+
+    def _open_plot_editor(self, plot_id: str | None = None) -> None:
+        """Open the legend-driven plot composer for a new or existing plot."""
+
+        if plot_id is None:
+            self._plot_editor.open_for_new()
+            return
+        self._plot_editor.open_for_plot(str(plot_id))
 
 
     # --- Layout ---

@@ -1,10 +1,32 @@
+"""Legend sidebar runtime and interaction glue.
+
+Purpose
+-------
+This module owns the toolkit-managed legend sidebar: visible rows for plots in
+the active view, per-row visibility toggles, the line-style dialog, and the
+toolbar/edit triggers that now launch the plot-composer modal.
+
+Architecture
+------------
+The legend intentionally stays a *row manager* rather than becoming a full plot
+editor. It owns row widgets, active-view filtering, and browser-only context
+menu/dialog affordances, while delegating new-plot/edit-plot form logic to
+``figure_plot_editor.py`` through a tiny callback bridge.
+
+Discoverability
+---------------
+See :mod:`gu_toolkit.figure_plot_editor` for the modal form and
+:mod:`gu_toolkit.Figure` for the coordinator that wires both subsystems
+together.
+"""
+
 from __future__ import annotations
 
 import base64
 import html
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import traitlets
 
@@ -532,6 +554,7 @@ class LegendRowModel:
     sound_button: widgets.Button
     style_widget: widgets.HTML
     css_plot_id: str
+    edit_button: widgets.Button | None = None
     is_visible_for_active_view: bool = False
 
 
@@ -560,10 +583,13 @@ class LegendPanelManager:
         *,
         modal_host: widgets.Box | None = None,
         root_widget: widgets.Box | None = None,
+        enable_plot_editor: bool = False,
     ) -> None:
         """Initialize a legend manager bound to the provided layout box."""
         self._layout_box = layout_box
         self._modal_host = modal_host
+        self._enable_plot_editor = bool(enable_plot_editor)
+        self._plot_editor_handler: Callable[[str | None], None] | None = None
         self._rows: dict[str, LegendRowModel] = {}
         self._plots: dict[str, Any] = {}
         self._ordered_plot_ids: list[str] = []
@@ -747,10 +773,79 @@ class LegendPanelManager:
         if self._modal_host is not None and self._context_bridge not in self._modal_host.children:
             self._modal_host.children += (self._context_bridge,)
 
+        self._plot_add_button: widgets.Button | None = None
+        self._plot_toolbar: widgets.HBox | None = None
+        self._empty_state: widgets.HTML | None = None
+        if self._enable_plot_editor:
+            self._plot_add_button = widgets.Button(
+                description="+",
+                tooltip="Add plot from expression",
+                disabled=True,
+                layout=widgets.Layout(
+                    width="32px",
+                    min_width="32px",
+                    height="32px",
+                    margin="0",
+                    padding="0px",
+                ),
+            )
+            self._plot_add_button.add_class("gu-legend-add-plot-button")
+            self._plot_add_button.add_class("gu-legend-inline-button")
+            self._plot_add_button.on_click(lambda _button: self._request_plot_edit(None))
+            self._plot_toolbar = widgets.HBox(
+                [
+                    widgets.HTML(
+                        value=(
+                            "<div><b>Add plot</b><br>"
+                            "<span style='font-size: 12px; color: #475569;'>"
+                            "Function, parametric, contour, density, or temperature"
+                            "</span></div>"
+                        ),
+                        layout=widgets.Layout(margin="0", flex="1 1 auto", min_width="0"),
+                    ),
+                    self._plot_add_button,
+                ],
+                layout=widgets.Layout(
+                    width="100%",
+                    align_items="center",
+                    justify_content="space-between",
+                    gap="8px",
+                    margin="0 0 4px 0",
+                ),
+            )
+            self._plot_toolbar.add_class("gu-legend-plot-toolbar")
+            self._empty_state = widgets.HTML(
+                value=(
+                    "<div style='font-size: 13px; color: #475569; line-height: 1.4;'>"
+                    "No plots in this view yet. Use the <b>+</b> button to add one."
+                    "</div>"
+                ),
+                layout=widgets.Layout(margin="0", width="100%"),
+            )
+            self._empty_state.add_class("gu-legend-empty-state")
+
     @property
     def has_legend(self) -> bool:
         """Return ``True`` when at least one row is visible for the active view."""
         return any(row.is_visible_for_active_view for row in self._rows.values())
+
+    @property
+    def panel_visible(self) -> bool:
+        """Return whether the legend panel should occupy sidebar space."""
+
+        return self._enable_plot_editor or self.has_legend
+
+    def bind_plot_editor_handler(
+        self, callback: Callable[[str | None], None] | None
+    ) -> None:
+        """Bind the callback used by add/edit plot controls."""
+
+        self._plot_editor_handler = callback
+        if self._plot_add_button is not None:
+            self._plot_add_button.disabled = callback is None
+        for row in self._rows.values():
+            if row.edit_button is not None:
+                row.edit_button.disabled = callback is None
 
     def bind_sound_enabled_handler(self, callback: Any) -> None:
         """Bind the figure-level sound enable/disable handler."""
@@ -820,7 +915,15 @@ class LegendPanelManager:
             self._sync_row_widgets(row=row, plot=plot)
             if visible:
                 visible_rows.append(row.container)
-        desired_children = tuple(visible_rows)
+
+        desired_widgets: list[widgets.Widget] = []
+        if self._enable_plot_editor:
+            if self._plot_toolbar is not None:
+                desired_widgets.append(self._plot_toolbar)
+            if not visible_rows and self._empty_state is not None:
+                desired_widgets.append(self._empty_state)
+        desired_widgets.extend(visible_rows)
+        desired_children = tuple(desired_widgets)
         if self._layout_box.children != desired_children:
             self._layout_box.children = desired_children
         if not self._settings_open:
@@ -856,6 +959,24 @@ class LegendPanelManager:
             layout=widgets.Layout(margin="0", width="100%", flex="1 1 auto", min_width="0"),
         )
 
+        edit_button: widgets.Button | None = None
+        if self._enable_plot_editor:
+            edit_button = widgets.Button(
+                description="✎",
+                tooltip="Edit plot",
+                disabled=self._plot_editor_handler is None,
+                layout=widgets.Layout(
+                    width="28px",
+                    min_width="28px",
+                    height="28px",
+                    margin="0",
+                    padding="0px",
+                ),
+            )
+            edit_button.add_class("gu-legend-edit-button")
+            edit_button.add_class("gu-legend-inline-button")
+            edit_button.add_class(f"gu-legend-plot-id-{css_plot_id}")
+
         sound_button = widgets.Button(
             description="Play sound",
             tooltip="Play sound",
@@ -890,24 +1011,32 @@ class LegendPanelManager:
                 ".gu-legend-toggle::before,.gu-legend-sound-toggle::before {display: inline-flex !important;align-items: center !important;justify-content: center !important;width: 100% !important;height: 100% !important;line-height: 1 !important;}"
                 ".gu-legend-toggle::before {font-size: 15px !important;}"
                 ".gu-legend-sound-toggle::before {font-size: 14px !important;}"
+                ".gu-legend-inline-button button,.gu-legend-inline-button .widget-button,.gu-legend-inline-button .jupyter-button {padding: 0 !important;min-width: 0 !important;}"
                 ".gu-legend-toggle.mod-visible::before {content: '●';}"
                 ".gu-legend-toggle.mod-hidden::before {content: '⊘';}"
                 ".gu-legend-sound-toggle.mod-muted::before {content: '🔇';}"
                 ".gu-legend-sound-toggle.mod-playing::before {content: '🔊';}"
-                ".gu-legend-toggle:hover,.gu-legend-toggle:focus-visible,.gu-legend-sound-toggle:hover,.gu-legend-sound-toggle:focus-visible {background-color: rgba(15, 23, 42, 0.06) !important;}"
+                ".gu-legend-toggle:hover,.gu-legend-toggle:focus-visible,.gu-legend-sound-toggle:hover,.gu-legend-sound-toggle:focus-visible,.gu-legend-inline-button:hover,.gu-legend-inline-button:focus-visible {background-color: rgba(15, 23, 42, 0.06) !important;}"
                 "</style>"
             ),
             layout=widgets.Layout(display="none", width="0", height="0"),
         )
 
+        children: list[widgets.Widget] = [toggle, label_widget]
+        if edit_button is not None:
+            children.append(edit_button)
+        children.extend([sound_button, style_widget])
+
         container = widgets.HBox(
-            [toggle, label_widget, sound_button, style_widget],
+            children,
             layout=widgets.Layout(width="100%", align_items="center", margin="0", gap="6px"),
         )
         container.add_class("gu-legend-row")
         container.add_class("gu-figure-context-governed")
         container.add_class(f"gu-legend-plot-id-{css_plot_id}")
         toggle.observe(lambda change, pid=plot_id: self._on_toggle_changed(pid, change), names="value")
+        if edit_button is not None:
+            edit_button.on_click(lambda _button, pid=plot_id: self._request_plot_edit(pid))
         sound_button.on_click(lambda _button, pid=plot_id: self._on_sound_button_clicked(pid))
         return LegendRowModel(
             plot_id=plot_id,
@@ -917,6 +1046,7 @@ class LegendPanelManager:
             sound_button=sound_button,
             style_widget=style_widget,
             css_plot_id=css_plot_id,
+            edit_button=edit_button,
         )
 
     def _sync_row_widgets(self, *, row: LegendRowModel, plot: Any) -> None:
@@ -933,6 +1063,12 @@ class LegendPanelManager:
             plot_label=plot_label,
             is_visible=target_value,
         )
+        if row.edit_button is not None:
+            self._sync_edit_button_accessibility(
+                button=row.edit_button,
+                plot_label=plot_label,
+            )
+            row.edit_button.disabled = self._plot_editor_handler is None
         self._style_toggle_marker(toggle=row.toggle, is_visible=target_value, marker_color=marker_color)
         supports_sound = callable(getattr(plot, "sound", None))
         sound_enabled = self._sound_generation_enabled and supports_sound
@@ -1000,6 +1136,25 @@ class LegendPanelManager:
             description = f"{action} sound for plot {label}"
         button.description = description
         button.tooltip = description
+
+    @staticmethod
+    def _sync_edit_button_accessibility(
+        *,
+        button: widgets.Button,
+        plot_label: str,
+    ) -> None:
+        """Provide descriptive accessible copy for the edit button."""
+
+        label = plot_label.strip() or "plot"
+        description = f"Edit plot {label}"
+        button.description = "✎"
+        button.tooltip = description
+
+    def _request_plot_edit(self, plot_id: str | None) -> None:
+        """Forward add/edit plot requests to the bound figure callback."""
+
+        if callable(self._plot_editor_handler):
+            self._plot_editor_handler(plot_id)
 
     def _on_toggle_changed(self, plot_id: str, change: dict[str, Any]) -> None:
         """Propagate user checkbox toggles to bound plot visibility."""

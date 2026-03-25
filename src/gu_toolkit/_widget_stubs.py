@@ -333,6 +333,42 @@ class BoundedFloatText(FloatText):
         self.max = float(max)
 
 
+class IntText(Widget):
+    value = traitlets.Int(0)
+    description = traitlets.Unicode("")
+    disabled = traitlets.Bool(False)
+
+    def __init__(
+        self,
+        value: int = 0,
+        *,
+        description: str = "",
+        disabled: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.value = int(value)
+        self.description = str(description)
+        self.disabled = bool(disabled)
+
+
+class BoundedIntText(IntText):
+    min = traitlets.Int(0)
+    max = traitlets.Int(2147483647)
+
+    def __init__(
+        self,
+        value: int = 0,
+        *,
+        min: int = 0,
+        max: int = 2147483647,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(value=value, **kwargs)
+        self.min = int(min)
+        self.max = int(max)
+
+
 class Dropdown(Widget):
     value = traitlets.Any()
     options = traitlets.Any(())
@@ -353,6 +389,28 @@ class Dropdown(Widget):
         self.description = str(description)
         self.disabled = bool(disabled)
         self.value = value
+
+
+class SelectMultiple(Widget):
+    value = traitlets.Tuple()
+    options = traitlets.Any(())
+    description = traitlets.Unicode("")
+    disabled = traitlets.Bool(False)
+
+    def __init__(
+        self,
+        options: Any = (),
+        value: tuple[Any, ...] = (),
+        *,
+        description: str = "",
+        disabled: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.options = options
+        self.description = str(description)
+        self.disabled = bool(disabled)
+        self.value = tuple(value)
 
 
 class ColorPicker(Widget):
@@ -427,7 +485,10 @@ _widgets_module.ToggleButtons = ToggleButtons
 _widgets_module.Checkbox = Checkbox
 _widgets_module.FloatText = FloatText
 _widgets_module.BoundedFloatText = BoundedFloatText
+_widgets_module.IntText = IntText
+_widgets_module.BoundedIntText = BoundedIntText
 _widgets_module.Dropdown = Dropdown
+_widgets_module.SelectMultiple = SelectMultiple
 _widgets_module.ColorPicker = ColorPicker
 _widgets_module.Output = Output
 _widgets_module.link = traitlets.link

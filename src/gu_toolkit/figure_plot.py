@@ -173,6 +173,7 @@ class Plot:
         """
         self._smart_figure = smart_figure
         self.id = plot_id or label or "plot"
+        self._label = str(label)
         self._x_data: np.ndarray | None = None
         self._y_data: np.ndarray | None = None
         self._handles: dict[str, PlotHandle] = {}
@@ -539,8 +540,7 @@ class Plot:
         --------
         update : Update the label alongside other plot attributes.
         """
-        ref = self._reference_trace_handle()
-        return ref.name if ref is not None else ""
+        return self._label
 
     @label.setter
     def label(self, value: str) -> None:
@@ -566,6 +566,7 @@ class Plot:
         --------
         label : Read the current legend label.
         """
+        self._label = str(value)
         for trace_handle in self._iter_trace_handles():
             trace_handle.name = value
 

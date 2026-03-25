@@ -19,6 +19,7 @@ This folder uses a lightweight lifecycle model:
 ## Selected guides
 
 - `guides/develop_guide.md`: architecture ownership map and maintenance rules.
+- `guides/legend-plot-editor.md`: legend-driven plot creation and editing UI.
 - `guides/parametric-plotting.md`: public API and implementation notes for
   parametric curves.
 - `guides/render-batching-and-snapshots.md`: render queue + snapshot pipeline.

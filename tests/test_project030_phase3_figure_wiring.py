@@ -5,12 +5,25 @@ import sympy as sp
 from gu_toolkit import Figure
 
 
+def _legend_row_labels(fig: Figure) -> list[str]:
+    labels: list[str] = []
+    for child in fig._layout.legend_box.children:
+        if "gu-legend-row" not in getattr(child, "_dom_classes", ()):  # toolbar / empty state
+            continue
+        labels.append(child.children[1].value)
+    return labels
+
+
 def test_plot_lifecycle_updates_legend_and_sidebar_visibility() -> None:
     x = sp.symbols("x")
     fig = Figure()
 
     assert fig._legend.has_legend is False
-    assert fig._layout.sidebar_container.layout.display == "none"
+    assert fig._legend.panel_visible is True
+    assert fig._layout.legend_header.layout.display == "block"
+    assert fig._layout.legend_box.layout.display == "flex"
+    assert fig._layout.sidebar_container.layout.display == "flex"
+    assert getattr(fig._legend._plot_add_button, "disabled", True) is False
 
     fig.plot(sp.sin(x), x, id="sin", label="sin(x)")
 
@@ -18,9 +31,7 @@ def test_plot_lifecycle_updates_legend_and_sidebar_visibility() -> None:
     assert fig._layout.legend_header.layout.display == "block"
     assert fig._layout.legend_box.layout.display == "flex"
     assert fig._layout.sidebar_container.layout.display == "flex"
-    assert [row.children[1].value for row in fig._layout.legend_box.children] == [
-        "sin(x)"
-    ]
+    assert _legend_row_labels(fig) == ["sin(x)"]
 
     fig.plot(sp.sin(x), x, id="sin", label="sin-updated", visible=False)
 
@@ -38,17 +49,13 @@ def test_view_switch_and_remove_view_resyncs_legend_rows() -> None:
     fig.plot(sp.cos(x), x, id="alt_plot", label="Alt", view="alt")
 
     fig.set_active_view("main")
-    assert [row.children[1].value for row in fig._layout.legend_box.children] == [
-        "Main"
-    ]
+    assert _legend_row_labels(fig) == ["Main"]
 
     fig.set_active_view("alt")
-    assert [row.children[1].value for row in fig._layout.legend_box.children] == ["Alt"]
+    assert _legend_row_labels(fig) == ["Alt"]
 
     fig.set_active_view("main")
     fig.remove_view("alt")
 
     assert fig.plots["alt_plot"].views == ()
-    assert [row.children[1].value for row in fig._layout.legend_box.children] == [
-        "Main"
-    ]
+    assert _legend_row_labels(fig) == ["Main"]
