@@ -29,6 +29,7 @@ from sympy.core.numbers import (
 from sympy.printing.str import StrPrinter
 
 from .FigureSnapshot import FigureSnapshot, InfoCardSnapshot
+from .FieldPlotSnapshot import FieldPlotSnapshot
 from .PlotSnapshot import PlotSnapshot
 
 # ---------------------------------------------------------------------------
@@ -209,28 +210,48 @@ def _collect_symbols(snapshot: FigureSnapshot) -> list[Symbol]:
     """Return all unique symbols (params + plot vars) in a deterministic order."""
     seen: OrderedDict[str, Symbol] = OrderedDict()
 
-    # Parameters first (in snapshot iteration order)
     for sym in snapshot.parameters.symbols:
         seen[sym.name] = sym
 
-    # Plot variables and parameter lists
     for ps in snapshot.plots.values():
-        if ps.var.name not in seen:
-            seen[ps.var.name] = ps.var
-        for p in ps.parameters:
-            if p.name not in seen:
-                seen[p.name] = p
-        if ps.x_func is not None:
-            for sym in sorted(ps.x_func.free_symbols, key=lambda s: s.sort_key()):
+        if getattr(ps, "is_field", False):
+            for sym in (ps.x_var, ps.y_var, *ps.parameters):
                 if sym.name not in seen:
                     seen[sym.name] = sym
+        else:
+            if ps.var.name not in seen:
+                seen[ps.var.name] = ps.var
+            for p in ps.parameters:
+                if p.name not in seen:
+                    seen[p.name] = p
+            if ps.x_func is not None:
+                for sym in sorted(ps.x_func.free_symbols, key=lambda s: s.sort_key()):
+                    if sym.name not in seen:
+                        seen[sym.name] = sym
 
     return list(seen.values())
 
 
 def _snapshot_uses_parametric_plot(snapshot: FigureSnapshot) -> bool:
     """Return whether any plot snapshot requires ``parametric_plot`` imports."""
-    return any(ps.is_parametric for ps in snapshot.plots.values())
+    return any(getattr(ps, "is_parametric", False) for ps in snapshot.plots.values())
+
+
+def _snapshot_field_helpers(snapshot: FigureSnapshot) -> tuple[str, ...]:
+    """Return the distinct scalar-field helper imports required by ``snapshot``."""
+    helpers: list[str] = []
+    for ps in snapshot.plots.values():
+        if not getattr(ps, "is_field", False):
+            continue
+        if getattr(ps, "preset", None) == "temperature" and getattr(ps, "render_mode", None) == "heatmap":
+            name = "temperature"
+        elif getattr(ps, "render_mode", None) == "contour":
+            name = "contour"
+        else:
+            name = "density"
+        if name not in helpers:
+            helpers.append(name)
+    return tuple(helpers)
 
 
 def _fmt_float(v: float) -> str:
@@ -279,13 +300,69 @@ def _parameter_call(
 
 
 def _plot_call(
-    ps: PlotSnapshot,
+    ps: PlotSnapshot | FieldPlotSnapshot,
     *,
     style: Literal["figure_methods", "context_manager"],
     figure_snapshot: FigureSnapshot | None = None,
 ) -> str:
-    """Emit one plot call."""
-    if ps.is_parametric:
+    """Emit one plot or scalar-field call."""
+    if getattr(ps, "is_field", False):
+        expr_code = sympy_to_code(ps.func)
+        x_arg = (
+            f"({_symbol_ref(ps.x_var)}, {_fmt_float(ps.x_domain[0])}, {_fmt_float(ps.x_domain[1])})"
+            if ps.x_domain is not None
+            else _symbol_ref(ps.x_var)
+        )
+        y_arg = (
+            f"({_symbol_ref(ps.y_var)}, {_fmt_float(ps.y_domain[0])}, {_fmt_float(ps.y_domain[1])})"
+            if ps.y_domain is not None
+            else _symbol_ref(ps.y_var)
+        )
+        if ps.preset == "temperature" and ps.render_mode == "heatmap":
+            helper = "temperature"
+        elif ps.render_mode == "contour":
+            helper = "contour"
+        else:
+            helper = "density"
+        callee = helper if style == "context_manager" else f"fig.{helper}"
+        args = [expr_code, x_arg, y_arg, f"id={ps.id!r}", f"label={ps.label!r}"]
+        if ps.visible is not True:
+            args.append(f"visible={ps.visible!r}")
+        if ps.grid is not None:
+            args.append(f"grid={tuple(int(v) for v in ps.grid)!r}")
+        if ps.colorscale is not None:
+            args.append(f"colorscale={ps.colorscale!r}")
+        if ps.z_range is not None:
+            args.append(
+                f"z_range=({_fmt_float(ps.z_range[0])}, {_fmt_float(ps.z_range[1])})"
+            )
+        if ps.show_colorbar is not None:
+            args.append(f"show_colorbar={ps.show_colorbar!r}")
+        if ps.opacity is not None:
+            args.append(f"opacity={_fmt_float(ps.opacity)}")
+        if ps.reversescale:
+            args.append("reversescale=True")
+        if ps.colorbar is not None:
+            args.append(f"colorbar={ps.colorbar!r}")
+        if ps.trace is not None:
+            args.append(f"trace={ps.trace!r}")
+        if ps.render_mode == "contour":
+            if ps.levels is not None:
+                args.append(f"levels={int(ps.levels)}")
+            if ps.filled is not None:
+                args.append(f"filled={ps.filled!r}")
+            if ps.show_labels is not None:
+                args.append(f"show_labels={ps.show_labels!r}")
+            if ps.line_color is not None:
+                args.append(f"line_color={ps.line_color!r}")
+            if ps.line_width is not None:
+                args.append(f"line_width={_fmt_float(ps.line_width)}")
+        else:
+            if ps.smoothing is not None:
+                args.append(f"smoothing={ps.smoothing!r}")
+        if ps.connectgaps is not None:
+            args.append(f"connectgaps={ps.connectgaps!r}")
+    elif ps.is_parametric:
         if ps.x_func is None or ps.parameter_domain is None:
             raise ValueError(
                 "Parametric plot snapshots require x_func and parameter_domain metadata."
@@ -305,6 +382,24 @@ def _plot_call(
         callee = (
             "parametric_plot" if style == "context_manager" else "fig.parametric_plot"
         )
+        if ps.visible is not True:
+            args.append(f"visible={ps.visible!r}")
+        if ps.sampling_points is not None:
+            args.append(f"samples={ps.sampling_points}")
+        elif (
+            figure_snapshot is not None
+            and getattr(figure_snapshot, "default_samples", figure_snapshot.samples)
+            != figure_snapshot.samples
+        ):
+            args.append("samples='figure_default'")
+        if ps.color is not None:
+            args.append(f"color={ps.color!r}")
+        if ps.thickness is not None:
+            args.append(f"thickness={_fmt_float(ps.thickness)}")
+        if ps.dash is not None:
+            args.append(f"dash={ps.dash!r}")
+        if ps.opacity is not None:
+            args.append(f"opacity={_fmt_float(ps.opacity)}")
     else:
         expr_code = sympy_to_code(ps.func)
         args = [
@@ -318,33 +413,31 @@ def _plot_call(
                 f"x_domain=({_fmt_float(ps.x_domain[0])}, {_fmt_float(ps.x_domain[1])})"
             )
         callee = "plot" if style == "context_manager" else "fig.plot"
+        if ps.visible is not True:
+            args.append(f"visible={ps.visible!r}")
+        if ps.sampling_points is not None:
+            args.append(f"samples={ps.sampling_points}")
+        elif (
+            figure_snapshot is not None
+            and getattr(figure_snapshot, "default_samples", figure_snapshot.samples)
+            != figure_snapshot.samples
+        ):
+            args.append("samples='figure_default'")
+        if ps.color is not None:
+            args.append(f"color={ps.color!r}")
+        if ps.thickness is not None:
+            args.append(f"thickness={_fmt_float(ps.thickness)}")
+        if ps.dash is not None:
+            args.append(f"dash={ps.dash!r}")
+        if ps.opacity is not None:
+            args.append(f"opacity={_fmt_float(ps.opacity)}")
 
-    # Only emit non-default optional kwargs
-    if ps.visible is not True:
-        args.append(f"visible={ps.visible!r}")
-    if ps.sampling_points is not None:
-        args.append(f"samples={ps.sampling_points}")
-    elif (
-        figure_snapshot is not None
-        and getattr(figure_snapshot, "default_samples", figure_snapshot.samples)
-        != figure_snapshot.samples
-    ):
-        args.append("samples='figure_default'")
-    if ps.color is not None:
-        args.append(f"color={ps.color!r}")
-    if ps.thickness is not None:
-        args.append(f"thickness={_fmt_float(ps.thickness)}")
-    if ps.dash is not None:
-        args.append(f"dash={ps.dash!r}")
-    if ps.opacity is not None:
-        args.append(f"opacity={_fmt_float(ps.opacity)}")
     if getattr(ps, "views", ()):
         if len(ps.views) == 1:
             args.append(f"view={ps.views[0]!r}")
         else:
             args.append(f"view={tuple(ps.views)!r}")
 
-    # Format: single line if short, multi-line otherwise
     joined = ", ".join(args)
     call = f"{callee}({joined})"
     if len(call) <= 88:
@@ -434,6 +527,7 @@ def figure_to_code(
             import_items = ["Figure", "parameter", "plot"]
             if _snapshot_uses_parametric_plot(snapshot):
                 import_items.append("parametric_plot")
+            import_items.extend(_snapshot_field_helpers(snapshot))
             import_items.append("info")
             lines.append("from gu_toolkit import " + ", ".join(import_items))
         else:

@@ -934,16 +934,18 @@ class LegendPanelManager:
             is_visible=target_value,
         )
         self._style_toggle_marker(toggle=row.toggle, is_visible=target_value, marker_color=marker_color)
+        supports_sound = callable(getattr(plot, "sound", None))
+        sound_enabled = self._sound_generation_enabled and supports_sound
         self._sync_sound_button_accessibility(
             button=row.sound_button,
             plot_label=plot_label,
-            is_enabled=self._sound_generation_enabled,
-            is_playing=self._sound_playing_plot_id == row.plot_id,
+            is_enabled=sound_enabled,
+            is_playing=sound_enabled and self._sound_playing_plot_id == row.plot_id,
         )
         self._style_sound_button(
             button=row.sound_button,
-            is_enabled=self._sound_generation_enabled,
-            is_playing=self._sound_playing_plot_id == row.plot_id,
+            is_enabled=sound_enabled,
+            is_playing=sound_enabled and self._sound_playing_plot_id == row.plot_id,
         )
         if row.toggle.value != target_value:
             self._suspended_plot_ids.add(row.plot_id)
@@ -1219,13 +1221,13 @@ class LegendPanelManager:
             return
         plot_id = self._decode_css_plot_id(raw_plot_id)
         plot = self._plots.get(plot_id)
-        if plot is None:
+        if plot is None or not getattr(plot, "supports_style_dialog", True):
             return
         self._open_style_dialog(plot_id)
 
     def _open_style_dialog(self, plot_id: str) -> None:
         plot = self._plots.get(plot_id)
-        if plot is None:
+        if plot is None or not getattr(plot, "supports_style_dialog", True):
             return
         self._settings_plot_id = plot_id
         self._load_style_dialog_from_plot(plot, plot_id=plot_id)

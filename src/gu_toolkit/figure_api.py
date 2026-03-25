@@ -46,6 +46,7 @@ from .parameter_keys import ParameterKeyOrKeys
 
 if TYPE_CHECKING:
     from .Figure import Figure
+    from .figure_field import ScalarFieldPlot
     from .figure_plot import Plot
     from .figure_plot_normalization import PlotVarsSpec
 
@@ -228,6 +229,13 @@ def plot_style_options() -> dict[str, str]:
     return Figure.plot_style_options()
 
 
+def field_style_options() -> dict[str, str]:
+    """Return help text for supported scalar-field style keywords."""
+    from .Figure import Figure
+
+    return Figure.field_style_options()
+
+
 def parameter(
     symbols: ParameterKeyOrKeys,
     *,
@@ -343,6 +351,95 @@ def parametric_plot(
     )
 
 
+def scalar_field(
+    func: Any,
+    x: Any,
+    y: Any,
+    parameters: ParameterKeyOrKeys | None = None,
+    id: str | None = None,
+    label: str | None = None,
+    visible: bool = True,
+    x_domain: tuple[int | float | str, int | float | str] | None = None,
+    y_domain: tuple[int | float | str, int | float | str] | None = None,
+    grid: tuple[int | str, int | str] | None = None,
+    render_mode: str = "heatmap",
+    preset: str | None = None,
+    colorscale: Any | None = None,
+    z_range: tuple[int | float | str, int | float | str] | None = None,
+    show_colorbar: bool | None = None,
+    opacity: int | float | None = None,
+    alpha: int | float | None = None,
+    reversescale: bool | None = None,
+    colorbar: Mapping[str, Any] | None = None,
+    trace: Mapping[str, Any] | None = None,
+    levels: int | None = None,
+    filled: bool | None = None,
+    show_labels: bool | None = None,
+    line_color: str | None = None,
+    line_width: int | float | None = None,
+    smoothing: str | bool | None = None,
+    zsmooth: str | bool | None = None,
+    connectgaps: bool | None = None,
+    view: str | Sequence[str] | None = None,
+    vars: Any | None = None,
+) -> ScalarFieldPlot:
+    """Plot a scalar field on the current figure, auto-creating one when needed."""
+    fig = _current_figure()
+    if fig is None:
+        from .Figure import Figure
+
+        fig = Figure()
+        display(fig)
+    return fig.scalar_field(
+        func,
+        x,
+        y,
+        parameters=parameters,
+        id=id,
+        label=label,
+        visible=visible,
+        x_domain=x_domain,
+        y_domain=y_domain,
+        grid=grid,
+        render_mode=render_mode,
+        preset=preset,
+        colorscale=colorscale,
+        z_range=z_range,
+        show_colorbar=show_colorbar,
+        opacity=opacity,
+        alpha=alpha,
+        reversescale=reversescale,
+        colorbar=colorbar,
+        trace=trace,
+        levels=levels,
+        filled=filled,
+        show_labels=show_labels,
+        line_color=line_color,
+        line_width=line_width,
+        smoothing=smoothing,
+        zsmooth=zsmooth,
+        connectgaps=connectgaps,
+        view=view,
+        vars=vars,
+    )
+
+
+def contour(func: Any, x: Any, y: Any, **kwargs: Any) -> ScalarFieldPlot:
+    """Plot contour lines or filled contours on the current figure."""
+    return scalar_field(func, x, y, render_mode="contour", **kwargs)
+
+
+def density(func: Any, x: Any, y: Any, **kwargs: Any) -> ScalarFieldPlot:
+    """Plot a scalar field as a heatmap on the current figure."""
+    return scalar_field(func, x, y, render_mode="heatmap", **kwargs)
+
+
+def temperature(func: Any, x: Any, y: Any, **kwargs: Any) -> ScalarFieldPlot:
+    """Plot a scalar field with thermal heatmap defaults on the current figure."""
+    kwargs.setdefault("preset", "temperature")
+    return scalar_field(func, x, y, render_mode="heatmap", **kwargs)
+
+
 __all__ = [
     "get_default_samples",
     "get_default_x_range",
@@ -357,8 +454,13 @@ __all__ = [
     "parameters",
     "parametric_plot",
     "plot",
+    "scalar_field",
+    "contour",
+    "density",
+    "temperature",
     "plots",
     "plot_style_options",
+    "field_style_options",
     "sound_generation_enabled",
     "render",
     "set_default_samples",

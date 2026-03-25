@@ -1927,71 +1927,9 @@ class Figure:
 
 
 from . import figure_api as _figure_api
+from .figure_field import ScalarFieldPlot, contour_method as _contour_method, density_method as _density_method, field_style_option_docs as _field_style_option_docs, scalar_field_method as _scalar_field_method, temperature_method as _temperature_method
 
-get_default_samples = _figure_api.get_default_samples
-get_default_x_range = _figure_api.get_default_x_range
-get_default_y_range = _figure_api.get_default_y_range
-get_samples = _figure_api.get_samples
-get_sampling_points = _figure_api.get_sampling_points
-get_title = _figure_api.get_title
-get_x_range = _figure_api.get_x_range
-get_y_range = _figure_api.get_y_range
-info = _figure_api.info
-parameter = _figure_api.parameter
-parameters = _figure_api.parameters
-parametric_plot = _figure_api.parametric_plot
-plot = _figure_api.plot
-plots = _figure_api.plots
-plot_style_options = _figure_api.plot_style_options
-render = _figure_api.render
-sound_generation_enabled = _figure_api.sound_generation_enabled
-set_default_samples = _figure_api.set_default_samples
-set_default_x_range = _figure_api.set_default_x_range
-set_default_y_range = _figure_api.set_default_y_range
-set_samples = _figure_api.set_samples
-set_sampling_points = _figure_api.set_sampling_points
-set_title = _figure_api.set_title
-set_x_range = _figure_api.set_x_range
-set_y_range = _figure_api.set_y_range
+Figure.scalar_field = _scalar_field_method; Figure.contour = _contour_method; Figure.density = _density_method; Figure.temperature = _temperature_method; Figure.field_style_options = staticmethod(_field_style_option_docs)
+(get_default_samples, get_default_x_range, get_default_y_range, get_samples, get_sampling_points, get_title, get_x_range, get_y_range, info, parameter, parameters, parametric_plot, plot, scalar_field, contour, density, temperature, plots, plot_style_options, field_style_options, render, sound_generation_enabled, set_default_samples, set_default_x_range, set_default_y_range, set_samples, set_sampling_points, set_title, set_x_range, set_y_range) = (_figure_api.get_default_samples, _figure_api.get_default_x_range, _figure_api.get_default_y_range, _figure_api.get_samples, _figure_api.get_sampling_points, _figure_api.get_title, _figure_api.get_x_range, _figure_api.get_y_range, _figure_api.info, _figure_api.parameter, _figure_api.parameters, _figure_api.parametric_plot, _figure_api.plot, _figure_api.scalar_field, _figure_api.contour, _figure_api.density, _figure_api.temperature, _figure_api.plots, _figure_api.plot_style_options, _figure_api.field_style_options, _figure_api.render, _figure_api.sound_generation_enabled, _figure_api.set_default_samples, _figure_api.set_default_x_range, _figure_api.set_default_y_range, _figure_api.set_samples, _figure_api.set_sampling_points, _figure_api.set_title, _figure_api.set_x_range, _figure_api.set_y_range)
 
-
-__all__ = [
-    # Coordinator entry point
-    "Figure",
-    "FigureViews",
-    # Common collaborating types (re-exported for convenience)
-    "FigureLayout",
-    "ParametricPlot",
-    "Plot",
-    "View",
-    "FigureSnapshot",
-    "ViewSnapshot",
-    # Context
-    "current_figure",
-    # Module-level helpers (figure_api)
-    "parametric_plot",
-    "plot",
-    "plots",
-    "parameter",
-    "parameters",
-    "info",
-    "render",
-    "get_default_samples",
-    "get_default_x_range",
-    "get_default_y_range",
-    "get_samples",
-    "get_sampling_points",
-    "set_default_samples",
-    "set_default_x_range",
-    "set_default_y_range",
-    "set_samples",
-    "set_sampling_points",
-    "get_x_range",
-    "set_x_range",
-    "get_y_range",
-    "set_y_range",
-    "get_title",
-    "set_title",
-    "plot_style_options",
-    "sound_generation_enabled",
-]
+__all__ = ["Figure", "FigureViews", "FigureLayout", "ParametricPlot", "Plot", "ScalarFieldPlot", "View", "FigureSnapshot", "ViewSnapshot", "current_figure", "parametric_plot", "plot", "scalar_field", "contour", "density", "temperature", "plots", "parameter", "parameters", "info", "render", "get_default_samples", "get_default_x_range", "get_default_y_range", "get_samples", "get_sampling_points", "set_default_samples", "set_default_x_range", "set_default_y_range", "set_samples", "set_sampling_points", "get_x_range", "set_x_range", "get_y_range", "set_y_range", "get_title", "set_title", "plot_style_options", "field_style_options", "sound_generation_enabled"]

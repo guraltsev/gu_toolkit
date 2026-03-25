@@ -12,6 +12,7 @@ from collections.abc import Hashable
 from dataclasses import dataclass, field
 
 from .ParameterSnapshot import ParameterSnapshot
+from .FieldPlotSnapshot import FieldPlotSnapshot
 from .PlotSnapshot import PlotSnapshot
 
 
@@ -84,7 +85,7 @@ class FigureSnapshot:
         Figure title text.
     parameters : ParameterSnapshot
         Full parameter metadata snapshot.
-    plots : dict[str, PlotSnapshot]
+    plots : dict[str, PlotSnapshot | FieldPlotSnapshot]
         Mapping of plot id to its snapshot, in insertion order.
     info_cards : tuple[InfoCardSnapshot, ...]
         Static info card snapshots.
@@ -105,7 +106,7 @@ class FigureSnapshot:
     sampling_points: int
     title: str
     parameters: ParameterSnapshot
-    plots: dict[str, PlotSnapshot]
+    plots: dict[str, PlotSnapshot | FieldPlotSnapshot]
     info_cards: tuple[InfoCardSnapshot, ...]
     views: tuple[ViewSnapshot, ...] = field(default_factory=tuple)
     active_view_id: str = "main"

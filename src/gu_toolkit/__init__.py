@@ -19,8 +19,12 @@ from .Figure import (
     FigureLayout,
     ParametricPlot,
     Plot,
+    ScalarFieldPlot,
     View,
+    contour,
     current_figure,
+    density,
+    field_style_options,
     get_default_samples,
     get_default_x_range,
     get_default_y_range,
@@ -33,9 +37,12 @@ from .Figure import (
     parameter,
     parameters,
     parametric_plot,
+    plot,
     plots,
     render,
+    scalar_field,
     sound_generation_enabled,
+    temperature,
     set_default_samples,
     set_default_x_range,
     set_default_y_range,
@@ -49,12 +56,28 @@ from .Figure import (
     parametric_plot as toolkit_parametric_plot,
 )
 from .Figure import (
+    contour as toolkit_contour,
+)
+from .Figure import (
+    density as toolkit_density,
+)
+from .Figure import (
+    field_style_options as toolkit_field_style_options,
+)
+from .Figure import (
     plot as toolkit_plot,
 )
 from .Figure import (
     plot_style_options as toolkit_plot_style_options,
 )
+from .Figure import (
+    scalar_field as toolkit_scalar_field,
+)
+from .Figure import (
+    temperature as toolkit_temperature,
+)
 from .FigureSnapshot import FigureSnapshot, InfoCardSnapshot, ViewSnapshot
+from .FieldPlotSnapshot import FieldPlotSnapshot
 from .NamedFunction import NamedFunction as NamedFunction
 from .Notebook import *
 from .numeric_callable import (
@@ -80,8 +103,13 @@ from .Slider import FloatSlider
 
 # Keep toolkit helpers authoritative after notebook namespace wildcard imports.
 # ``Notebook`` intentionally exports SymPy's ``plot`` helper via
-# ``from sympy import *`` for convenience, but package-level ``plot`` should
-# resolve to gu_toolkit's module helper for notebook examples and docs.
+# ``from sympy import *`` for convenience, but package-level plotting helpers
+# should resolve to gu_toolkit's module helpers for notebook examples and docs.
+contour = toolkit_contour
+density = toolkit_density
+field_style_options = toolkit_field_style_options
 parametric_plot = toolkit_parametric_plot
 plot = toolkit_plot
 plot_style_options = toolkit_plot_style_options
+scalar_field = toolkit_scalar_field
+temperature = toolkit_temperature
