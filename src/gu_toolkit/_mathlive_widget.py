@@ -71,12 +71,16 @@ class MathLiveField(anywidget.AnyWidget):
       const readOnly = !!model.get("read_only");
       if (node instanceof HTMLElement) {
         node.setAttribute("aria-label", ariaLabel);
+        node.style.display = "block";
         node.style.width = "100%";
+        node.style.maxWidth = "100%";
         node.style.boxSizing = "border-box";
-        node.style.minHeight = "38px";
+        node.style.minHeight = "42px";
+        node.style.fontSize = "1.08rem";
+        node.style.lineHeight = "1.35";
         node.style.border = "1px solid rgba(15, 23, 42, 0.16)";
         node.style.borderRadius = "8px";
-        node.style.padding = "6px 10px";
+        node.style.padding = "8px 12px";
         node.style.background = readOnly ? "rgba(15, 23, 42, 0.04)" : "white";
       }
       if ("placeholder" in node) node.placeholder = placeholder;
@@ -122,6 +126,7 @@ class MathLiveField(anywidget.AnyWidget):
       field.setAttribute("virtual-keyboard-mode", "manual");
       field.smartFence = true;
       field.smartMode = true;
+      field.style.fontSize = "1.08rem";
       return field;
     }
 
@@ -138,6 +143,8 @@ class MathLiveField(anywidget.AnyWidget):
         el.innerHTML = "";
         el.style.width = "100%";
         el.style.minWidth = "0";
+        el.style.maxWidth = "100%";
+        el.style.overflow = "hidden";
 
         let input = null;
         try {

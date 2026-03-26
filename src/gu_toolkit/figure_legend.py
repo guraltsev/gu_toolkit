@@ -32,6 +32,16 @@ import traitlets
 
 from ._widget_stubs import anywidget, widgets
 from .figure_color import color_for_trace_index, color_to_picker_hex
+from .widget_chrome import (
+    add_widget_classes,
+    attach_host_children,
+    build_modal_overlay,
+    build_modal_panel,
+    configure_action_button,
+    configure_icon_button,
+    hosted_modal_dimensions,
+    shared_style_widget,
+)
 
 
 _DASH_STYLE_OPTIONS: tuple[tuple[str, str], ...] = (
@@ -623,10 +633,7 @@ class LegendPanelManager:
         )
         self._context_bridge.on_msg(self._handle_context_bridge_message)
 
-        self._dialog_style = widgets.HTML(
-            value=self._dialog_style_html(),
-            layout=widgets.Layout(width="0px", height="0px", margin="0px"),
-        )
+        self._dialog_style = shared_style_widget(self._dialog_style_css())
         self._dialog_color = widgets.ColorPicker(
             value="#636efa",
             description="Color:",
@@ -659,10 +666,8 @@ class LegendPanelManager:
         self._dialog_close_button = widgets.Button(
             description="Cancel legend style settings",
             tooltip="Cancel legend style settings",
-            layout=widgets.Layout(width="24px", height="24px", padding="0px"),
         )
-        self._dialog_close_button.add_class("smart-slider-icon-button")
-        self._dialog_close_button.add_class("smart-slider-close-button")
+        configure_icon_button(self._dialog_close_button, role="close", size_px=24)
         self._dialog_close_button.on_click(self._dismiss_style_dialog)
         self._dialog_title_text = widgets.HTML("<b>Legend style</b>")
         self._dialog_subject = widgets.HTMLMath(
@@ -682,20 +687,29 @@ class LegendPanelManager:
         self._dialog_title.add_class("smart-slider-settings-title")
         self._dialog_subject.add_class("smart-slider-settings-title-subject")
         self._dialog_title_text.add_class("smart-slider-settings-title-text")
+        self._dialog_title_text.add_class("gu-modal-title-text")
         self._dialog_title_text.add_class("gu-legend-style-dialog-title-text")
         self._dialog_cancel_button = widgets.Button(
             description="Cancel",
             tooltip="Discard legend style changes",
-            layout=widgets.Layout(width="auto", min_width="72px"),
         )
-        self._dialog_cancel_button.add_class("gu-legend-style-dialog-cancel-button")
+        configure_action_button(
+            self._dialog_cancel_button,
+            variant="secondary",
+            min_width_px=72,
+            extra_classes=("gu-legend-style-dialog-cancel-button",),
+        )
         self._dialog_cancel_button.on_click(self._dismiss_style_dialog)
         self._dialog_ok_button = widgets.Button(
             description="OK",
             tooltip="Apply legend style changes",
-            layout=widgets.Layout(width="auto", min_width="72px"),
         )
-        self._dialog_ok_button.add_class("gu-legend-style-dialog-ok-button")
+        configure_action_button(
+            self._dialog_ok_button,
+            variant="primary",
+            min_width_px=72,
+            extra_classes=("gu-legend-style-dialog-ok-button",),
+        )
         self._dialog_ok_button.on_click(self._apply_style_dialog)
         dialog_header = widgets.HBox(
             [self._dialog_title, self._dialog_close_button],
@@ -717,7 +731,11 @@ class LegendPanelManager:
                 min_width="0",
             ),
         )
-        self._dialog_panel = widgets.VBox(
+        dialog_width, dialog_min_width, dialog_max_width = hosted_modal_dimensions(
+            preferred_width_px=440,
+            minimum_width_px=320,
+        )
+        self._dialog_panel = build_modal_panel(
             [
                 dialog_header,
                 widgets.HBox([self._dialog_color], layout=widgets.Layout(width="100%", min_width="0")),
@@ -726,89 +744,44 @@ class LegendPanelManager:
                 widgets.HBox([self._dialog_dash], layout=widgets.Layout(width="100%", min_width="0")),
                 dialog_actions,
             ],
-            layout=widgets.Layout(
-                width="440px",
-                min_width="380px",
-                max_width="calc(100vw - 32px)",
-                display="none",
-                border="1px solid rgba(15, 23, 42, 0.12)",
-                padding="12px",
-                gap="8px",
-                background_color="white",
-                opacity="1",
-                box_shadow="0 10px 28px rgba(15, 23, 42, 0.28)",
-                align_items="stretch",
-                overflow_x="hidden",
-                overflow_y="auto",
-            ),
+            width=dialog_width,
+            min_width=dialog_min_width,
+            max_width=dialog_max_width,
+            display="none",
+            extra_classes=("gu-legend-style-dialog-panel",),
         )
-        self._dialog_panel.add_class("smart-slider-settings-panel")
-        self._dialog_panel.add_class("gu-legend-style-dialog-panel")
-        self._dialog_modal = widgets.Box(
-            [self._dialog_panel],
-            layout=widgets.Layout(
-                display="none",
-                position="fixed",
-                top="0",
-                left="0",
-                width="100vw",
-                height="100vh",
-                align_items="center",
-                justify_content="center",
-                background_color="rgba(15, 23, 42, 0.12)",
-                z_index="1000",
-                overflow_x="hidden",
-                overflow_y="hidden",
-            ),
+        self._dialog_modal = build_modal_overlay(
+            self._dialog_panel,
+            hosted=True,
+            z_index="1000",
+            background_color="rgba(15, 23, 42, 0.12)",
+            modal_class=self._dialog_modal_class,
         )
-        self._dialog_modal.add_class("smart-slider-settings-modal")
-        self._dialog_modal.add_class("smart-slider-settings-modal-hosted")
-        self._dialog_modal.add_class(self._dialog_modal_class)
 
-        if self._modal_host is not None:
-            if self._dialog_style not in self._modal_host.children:
-                self._modal_host.children += (self._dialog_style,)
-            if self._dialog_modal not in self._modal_host.children:
-                self._modal_host.children += (self._dialog_modal,)
-        if self._modal_host is not None and self._context_bridge not in self._modal_host.children:
-            self._modal_host.children += (self._context_bridge,)
+        attach_host_children(self._modal_host, self._dialog_style, self._dialog_modal, self._context_bridge)
 
         self._plot_add_button: widgets.Button | None = None
         self._plot_toolbar: widgets.HBox | None = None
         self._empty_state: widgets.HTML | None = None
         if self._enable_plot_editor:
             self._plot_add_button = widgets.Button(
-                description="+",
-                tooltip="Add plot from expression",
+                description="Create plot from expression",
+                tooltip="Create plot from expression",
                 disabled=True,
-                layout=widgets.Layout(
-                    width="32px",
-                    min_width="32px",
-                    height="32px",
-                    margin="0",
-                    padding="0px",
-                ),
             )
-            self._plot_add_button.add_class("gu-legend-add-plot-button")
-            self._plot_add_button.add_class("gu-legend-inline-button")
+            configure_icon_button(
+                self._plot_add_button,
+                role="plus",
+                size_px=32,
+                extra_classes=("gu-legend-add-plot-button", "gu-legend-inline-button"),
+            )
             self._plot_add_button.on_click(lambda _button: self._request_plot_edit(None))
             self._plot_toolbar = widgets.HBox(
-                [
-                    widgets.HTML(
-                        value=(
-                            "<div><b>Add plot</b><br>"
-                            "<span style='font-size: 12px; color: #475569;'>"
-                            "Function, parametric, contour, density, or temperature"
-                            "</span></div>"
-                        ),
-                        layout=widgets.Layout(margin="0", flex="1 1 auto", min_width="0"),
-                    ),
-                    self._plot_add_button,
-                ],
+                [self._plot_add_button],
                 layout=widgets.Layout(
                     width="100%",
                     align_items="center",
-                    justify_content="space-between",
+                    justify_content="flex-end",
                     gap="8px",
                     margin="0 0 4px 0",
                 ),
@@ -962,20 +935,16 @@ class LegendPanelManager:
         edit_button: widgets.Button | None = None
         if self._enable_plot_editor:
             edit_button = widgets.Button(
-                description="✎",
+                description="Edit plot",
                 tooltip="Edit plot",
                 disabled=self._plot_editor_handler is None,
-                layout=widgets.Layout(
-                    width="28px",
-                    min_width="28px",
-                    height="28px",
-                    margin="0",
-                    padding="0px",
-                ),
             )
-            edit_button.add_class("gu-legend-edit-button")
-            edit_button.add_class("gu-legend-inline-button")
-            edit_button.add_class(f"gu-legend-plot-id-{css_plot_id}")
+            configure_icon_button(
+                edit_button,
+                role="edit",
+                size_px=28,
+                extra_classes=("gu-legend-edit-button", "gu-legend-inline-button", f"gu-legend-plot-id-{css_plot_id}"),
+            )
 
         sound_button = widgets.Button(
             description="Play sound",
@@ -1147,7 +1116,7 @@ class LegendPanelManager:
 
         label = plot_label.strip() or "plot"
         description = f"Edit plot {label}"
-        button.description = "✎"
+        button.description = description
         button.tooltip = description
 
     def _request_plot_edit(self, plot_id: str | None) -> None:
@@ -1325,22 +1294,13 @@ class LegendPanelManager:
             return text
 
     @staticmethod
-    def _dialog_style_html() -> str:
+    def _dialog_style_css() -> str:
         return (
-            "<style>"
-            ".smart-slider-icon-button,.smart-slider-icon-button:hover,.smart-slider-icon-button:focus,.smart-slider-icon-button:active,"
-            ".smart-slider-icon-button button,.smart-slider-icon-button button:hover,.smart-slider-icon-button button:focus,.smart-slider-icon-button button:active,"
-            ".smart-slider-icon-button .widget-button,.smart-slider-icon-button .widget-button:hover,.smart-slider-icon-button .widget-button:focus,"
-            ".smart-slider-icon-button .jupyter-button,.smart-slider-icon-button .jupyter-button:hover,.smart-slider-icon-button .jupyter-button:focus,"
             ".gu-legend-context-menu-item,"
             ".gu-legend-context-menu-item:hover,"
             ".gu-legend-context-menu-item:focus,"
             ".gu-legend-context-menu-item:active {"
             "background: transparent !important;background-color: transparent !important;background-image: none !important;border: none !important;box-shadow: none !important;outline: none !important;}"
-            ".smart-slider-icon-button {position: relative !important;overflow: hidden !important;border-radius: 999px !important;font-size: 0 !important;line-height: 0 !important;}"
-            ".smart-slider-icon-button::before {display: inline-flex !important;align-items: center !important;justify-content: center !important;width: 100% !important;height: 100% !important;font-size: 13px !important;line-height: 1 !important;}"
-            ".smart-slider-icon-button:hover,.smart-slider-icon-button:focus-visible {background-color: rgba(15, 23, 42, 0.06) !important;}"
-            ".smart-slider-close-button::before {content: '✕';}"
             ".smart-slider-settings-title {flex: 1 1 auto !important;min-width: 0 !important;flex-wrap: wrap !important;}"
             ".smart-slider-settings-title-text,.smart-slider-settings-title-subject {min-width: 0 !important;}"
             ".smart-slider-settings-title-subject {overflow-wrap: anywhere !important;}"
@@ -1350,7 +1310,6 @@ class LegendPanelManager:
             ".gu-legend-context-menu-item {display: flex !important;align-items: center !important;gap: 8px !important;width: 100% !important;padding: 6px 8px !important;border-radius: 6px !important;color: #111827 !important;cursor: pointer !important;text-align: left !important;font: inherit !important;}"
             ".gu-legend-context-menu-checkbox input {margin: 0 !important;}"
             ".gu-legend-context-menu-item:hover,.gu-legend-context-menu-item:focus-visible {background: rgba(15, 23, 42, 0.06) !important;}"
-            "</style>"
         )
 
     def _handle_context_bridge_message(self, _widget: Any, content: Any, _buffers: Any) -> None:

@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import html
 import re
+import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -63,6 +64,22 @@ from .figure_parametric_plot import ParametricPlot
 from .figure_plot import Plot
 from .parameter_keys import parameter_name
 from .ParseLaTeX import LatexParseError, parse_latex
+from .widget_chrome import (
+    ModalDialogBridge,
+    attach_host_children,
+    build_modal_overlay,
+    build_modal_panel,
+    configure_action_button,
+    configure_icon_button,
+    full_width_layout,
+    hbox,
+    hosted_modal_dimensions,
+    labelled_field,
+    responsive_row,
+    set_tab_button_selected,
+    shared_style_widget,
+    vbox,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard
     from .Figure import Figure
@@ -103,6 +120,7 @@ class PlotEditorDraft:
     field_y_var_latex: str
     field_grid_x: int
     field_grid_y: int
+    visible: bool = True
 
 
 @dataclass(frozen=True)
@@ -315,6 +333,38 @@ def _to_latex(value: Any, *, default: str = "") -> str:
         return text if text else default
 
 
+def _title_symbol_latex(value: str, *, default: str) -> str:
+    """Return the compact LaTeX symbol string shown in responsive field titles."""
+
+    source = str(value or "").strip()
+    return source or default
+
+
+def _parametric_axis_title_latex(axis_name: str, parameter_latex: str) -> str:
+    """Return the compact label shown above ``x(t)``/``y(t)`` inputs."""
+
+    parameter = _title_symbol_latex(parameter_latex, default="t")
+    return rf"{axis_name}\left({parameter}\right)"
+
+
+def _parametric_bound_title_latex(parameter_latex: str, *, bound: Literal["min", "max"]) -> str:
+    """Return the compact label shown above parameter bound inputs."""
+
+    parameter = _title_symbol_latex(parameter_latex, default="t")
+    return rf"{parameter}_{{\mathrm{{{bound}}}}}"
+
+
+def _math_field_label(latex: str) -> widgets.HTMLMath:
+    """Return one MathJax-backed form label styled like the shared text labels."""
+
+    label = widgets.HTMLMath(
+        value=latex,
+        layout=widgets.Layout(margin="0px", min_width="0"),
+    )
+    label.add_class("gu-form-field-label")
+    return label
+
+
 def _sorted_unique_names(symbols: set[Symbol]) -> tuple[str, ...]:
     """Return canonical parameter names in a stable, user-friendly order."""
 
@@ -447,7 +497,7 @@ def apply_plot_editor_draft(
         "id": plot_id,
         "label": label_arg,
         "view": view_arg,
-        "visible": getattr(existing_plot, "visible", True),
+        "visible": bool(draft.visible),
     }
 
     if draft.kind == "cartesian":
@@ -516,9 +566,9 @@ def apply_plot_editor_draft(
 class PlotComposerDialog:
     """Modal editor for creating and editing figure plots from the legend.
 
-    The dialog is intentionally modest: it offers explicit mode selection,
-    MathLive-backed expression fields, a separate free-variable entry, and a
-    small set of high-value options (label, samples/grid, and target views).
+    The dialog now reuses the shared modal/button chrome used elsewhere in the
+    toolkit. Formula entry stays front-and-center while labels, identifiers,
+    visibility, views, and sampling live in a separate Advanced tab.
     """
 
     def __init__(self, figure: Figure, *, modal_host: widgets.Box) -> None:
@@ -526,15 +576,15 @@ class PlotComposerDialog:
         self._modal_host = modal_host
         self._editing_plot_id: str | None = None
         self._is_open = False
+        self._error_open = False
         self._suspend_observers = False
+        self._active_tab: Literal["formula", "advanced"] = "formula"
+        self._modal_class = f"gu-plot-editor-modal-{uuid.uuid4().hex[:8]}"
+        self._error_modal_class = f"{self._modal_class}-error"
 
-        self._style = widgets.HTML(
-            value=self._dialog_style_html(),
-            layout=widgets.Layout(width="0px", height="0px", margin="0px"),
-        )
+        self._style = shared_style_widget(self._dialog_style_css())
 
         self._kind = widgets.Dropdown(
-            description="Type:",
             options=(
                 ("Function y = f(x)", "cartesian"),
                 ("Parametric (x(t), y(t))", "parametric"),
@@ -543,23 +593,30 @@ class PlotComposerDialog:
                 ("Temperature heatmap", "temperature"),
             ),
             value="cartesian",
-            layout=widgets.Layout(width="100%"),
+            description="",
+            layout=full_width_layout(),
         )
         self._id_text = widgets.Text(
-            description="ID:",
+            description="",
             placeholder="Auto",
-            layout=widgets.Layout(width="100%"),
+            layout=full_width_layout(),
         )
         self._label_text = widgets.Text(
-            description="Label:",
+            description="",
             placeholder="Legend label",
-            layout=widgets.Layout(width="100%"),
+            layout=full_width_layout(),
         )
         self._views = widgets.SelectMultiple(
-            description="Views:",
+            description="",
             options=(),
             value=(),
-            layout=widgets.Layout(width="100%", min_height="88px"),
+            layout=widgets.Layout(width="100%", min_width="0", min_height="96px"),
+        )
+        self._visible_toggle = widgets.Checkbox(
+            value=True,
+            description="Visible",
+            indent=False,
+            layout=widgets.Layout(width="auto", min_width="0"),
         )
 
         self._cartesian_expression = MathLiveField(
@@ -572,11 +629,11 @@ class PlotComposerDialog:
             aria_label="Cartesian free variable",
         )
         self._cartesian_samples = widgets.BoundedIntText(
-            description="Samples:",
             min=2,
             max=100000,
             value=max(int(self._figure.samples or 500), 2),
-            layout=widgets.Layout(width="100%"),
+            description="",
+            layout=full_width_layout(),
         )
 
         self._parametric_x = MathLiveField(
@@ -603,11 +660,11 @@ class PlotComposerDialog:
             aria_label="Parametric parameter maximum",
         )
         self._parametric_samples = widgets.BoundedIntText(
-            description="Samples:",
             min=2,
             max=100000,
             value=max(int(self._figure.samples or 500), 2),
-            layout=widgets.Layout(width="100%"),
+            description="",
+            layout=full_width_layout(),
         )
 
         self._field_expression = MathLiveField(
@@ -625,179 +682,451 @@ class PlotComposerDialog:
             aria_label="Scalar-field y variable",
         )
         self._field_grid_x = widgets.BoundedIntText(
-            description="Grid x:",
             min=2,
             max=10000,
             value=120,
-            layout=widgets.Layout(width="100%"),
+            description="",
+            layout=full_width_layout(),
         )
         self._field_grid_y = widgets.BoundedIntText(
-            description="Grid y:",
             min=2,
             max=10000,
             value=120,
-            layout=widgets.Layout(width="100%"),
+            description="",
+            layout=full_width_layout(),
         )
 
-        self._parameter_preview = widgets.HTML(
-            value="",
-            layout=widgets.Layout(width="100%", margin="4px 0 0 0"),
+        self._title_eyebrow = widgets.HTML(
+            "Plot editor",
+            layout=widgets.Layout(margin="0px", min_width="0"),
         )
-        self._error_box = widgets.HTML(
-            value="",
-            layout=widgets.Layout(width="100%", display="none"),
+        self._title_eyebrow.add_class("gu-modal-title-eyebrow")
+        self._title = widgets.HTML(
+            "Create plot",
+            layout=widgets.Layout(margin="0px", min_width="0"),
+        )
+        self._title.add_class("gu-modal-title-text")
+        self._title_context = widgets.HTML(
+            "Choose a plot family, enter formulas, and assign the plot to one or more views.",
+            layout=widgets.Layout(margin="0px", min_width="0"),
+        )
+        self._title_context.add_class("gu-modal-subtitle")
+        self._title_block = vbox(
+            [self._title_eyebrow, self._title, self._title_context],
+            gap="2px",
+            extra_classes=("gu-modal-header-copy",),
         )
 
-        self._title = widgets.HTML("<b>Add plot</b>")
-        self._subtitle = widgets.HTML(
-            value="Choose a plot type, enter expressions, and the toolkit will create missing parameters automatically.",
-            layout=widgets.Layout(margin="0 0 4px 0"),
-        )
         self._close_button = widgets.Button(
-            description="✕",
+            description="Close plot editor",
             tooltip="Close plot editor",
-            layout=widgets.Layout(width="32px", height="32px", padding="0px"),
+        )
+        configure_icon_button(
+            self._close_button,
+            role="close",
+            size_px=28,
+            extra_classes=("gu-plot-editor-close-button",),
         )
         self._close_button.on_click(lambda _button: self.close())
+
+        self._formula_tab_button = widgets.Button(
+            description="Formula",
+            tooltip="Show formula settings",
+            layout=widgets.Layout(flex="1 1 120px", width="auto", min_width="0"),
+        )
+        configure_action_button(
+            self._formula_tab_button,
+            variant="tab",
+            min_width_px=0,
+            extra_classes=("gu-plot-editor-tab-button",),
+        )
+        self._formula_tab_button.on_click(lambda _button: self._set_tab("formula"))
+
+        self._advanced_tab_button = widgets.Button(
+            description="Advanced",
+            tooltip="Show advanced settings",
+            layout=widgets.Layout(flex="1 1 120px", width="auto", min_width="0"),
+        )
+        configure_action_button(
+            self._advanced_tab_button,
+            variant="tab",
+            min_width_px=0,
+            extra_classes=("gu-plot-editor-tab-button",),
+        )
+        self._advanced_tab_button.on_click(lambda _button: self._set_tab("advanced"))
+
         self._cancel_button = widgets.Button(
             description="Cancel",
             tooltip="Discard plot editor changes",
-            layout=widgets.Layout(width="auto", min_width="88px"),
         )
+        configure_action_button(self._cancel_button, variant="secondary", min_width_px=88)
         self._cancel_button.on_click(lambda _button: self.close())
+
         self._apply_button = widgets.Button(
-            description="Add plot",
-            tooltip="Apply plot editor changes",
-            layout=widgets.Layout(width="auto", min_width="96px"),
+            description="Create",
+            tooltip="Create the plot from the entered expressions",
         )
+        configure_action_button(self._apply_button, variant="primary", min_width_px=96)
         self._apply_button.on_click(self._on_apply_clicked)
 
-        common_section = widgets.VBox(
-            [
-                self._labelled_row("Plot type", self._kind),
-                self._labelled_row("Plot ID", self._id_text),
-                self._labelled_row("Label", self._label_text),
-                self._labelled_row("Views", self._views),
-            ],
-            layout=widgets.Layout(gap="8px", width="100%"),
+        self._status_bar = widgets.HTML("", layout=full_width_layout())
+        self._status_bar.add_class("gu-modal-status-bar")
+        self._status_bar.add_class("gu-plot-editor-status-bar")
+        self._parameter_preview = self._status_bar
+
+        visibility_row = widgets.HBox(
+            [self._visible_toggle],
+            layout=widgets.Layout(width="100%", min_width="0", align_items="center"),
         )
 
-        self._cartesian_box = widgets.VBox(
-            [
-                self._labelled_row("Expression", self._cartesian_expression),
-                self._labelled_row("Free variable", self._cartesian_variable),
-                self._cartesian_samples,
-            ],
-            layout=widgets.Layout(gap="8px", width="100%"),
+        self._parametric_x_label = _math_field_label(r"x\left(t\right)")
+        self._parametric_y_label = _math_field_label(r"y\left(t\right)")
+        self._parameter_min_label = _math_field_label(r"t_{\mathrm{min}}")
+        self._parameter_max_label = _math_field_label(r"t_{\mathrm{max}}")
+
+        self._plot_type_field = labelled_field(
+            "Plot type",
+            self._kind,
+            flex="0 1 260px",
         )
-        self._parametric_box = widgets.VBox(
-            [
-                self._labelled_row("x(t)", self._parametric_x),
-                self._labelled_row("y(t)", self._parametric_y),
-                self._labelled_row("Parameter", self._parameter_variable),
-                self._labelled_row("t min", self._parameter_min),
-                self._labelled_row("t max", self._parameter_max),
-                self._parametric_samples,
-            ],
-            layout=widgets.Layout(gap="8px", width="100%", display="none"),
-        )
-        self._field_box = widgets.VBox(
-            [
-                self._labelled_row("Expression", self._field_expression),
-                self._labelled_row("x variable", self._field_x_variable),
-                self._labelled_row("y variable", self._field_y_variable),
-                self._field_grid_x,
-                self._field_grid_y,
-            ],
-            layout=widgets.Layout(gap="8px", width="100%", display="none"),
+        self._plot_type_row = responsive_row(
+            [self._plot_type_field],
+            gap="10px",
+            extra_classes=("gu-plot-editor-wrap-row",),
         )
 
-        header = widgets.HBox(
-            [self._title, self._close_button],
-            layout=widgets.Layout(
-                justify_content="space-between",
-                align_items="center",
-                width="100%",
-                min_width="0",
-            ),
+        self._cartesian_expression_field = labelled_field("Expression", self._cartesian_expression)
+        self._cartesian_variable_field = labelled_field(
+            "Free variable",
+            self._cartesian_variable,
+            flex="0 1 190px",
         )
-        actions = widgets.HBox(
-            [self._cancel_button, self._apply_button],
-            layout=widgets.Layout(
-                justify_content="flex-end",
-                align_items="center",
-                gap="8px",
-                width="100%",
-            ),
+        self._cartesian_variable_row = responsive_row(
+            [self._cartesian_variable_field],
+            gap="10px",
+            extra_classes=("gu-plot-editor-wrap-row",),
+        )
+        self._cartesian_box = vbox(
+            [self._cartesian_expression_field, self._cartesian_variable_row],
+            gap="10px",
         )
 
-        self._panel = widgets.VBox(
+        self._parametric_x_field = labelled_field(self._parametric_x_label, self._parametric_x)
+        self._parametric_y_field = labelled_field(self._parametric_y_label, self._parametric_y)
+        self._parameter_variable_field = labelled_field(
+            "Parameter",
+            self._parameter_variable,
+            flex="0 1 190px",
+        )
+        self._parameter_min_field = labelled_field(
+            self._parameter_min_label,
+            self._parameter_min,
+            flex="1 1 190px",
+        )
+        self._parameter_max_field = labelled_field(
+            self._parameter_max_label,
+            self._parameter_max,
+            flex="1 1 190px",
+        )
+        self._parametric_parameter_row = responsive_row(
             [
-                header,
-                self._subtitle,
-                common_section,
+                self._parameter_variable_field,
+                self._parameter_min_field,
+                self._parameter_max_field,
+            ],
+            gap="10px",
+            extra_classes=("gu-plot-editor-wrap-row",),
+        )
+        self._parametric_box = vbox(
+            [
+                self._parametric_x_field,
+                self._parametric_y_field,
+                self._parametric_parameter_row,
+            ],
+            gap="10px",
+            display="none",
+        )
+
+        self._field_expression_field = labelled_field("Expression", self._field_expression)
+        self._field_x_variable_field = labelled_field(
+            "x variable",
+            self._field_x_variable,
+            flex="0 1 190px",
+        )
+        self._field_y_variable_field = labelled_field(
+            "y variable",
+            self._field_y_variable,
+            flex="0 1 190px",
+        )
+        self._field_variable_row = responsive_row(
+            [self._field_x_variable_field, self._field_y_variable_field],
+            gap="10px",
+            extra_classes=("gu-plot-editor-wrap-row",),
+        )
+        self._field_box = vbox(
+            [self._field_expression_field, self._field_variable_row],
+            gap="10px",
+            display="none",
+        )
+
+        self._views_field = labelled_field("Views", self._views)
+        self._label_field = labelled_field("Label", self._label_text, flex="1 1 280px")
+        self._id_field = labelled_field("Plot ID", self._id_text, flex="0 1 220px")
+        self._visibility_field = labelled_field(
+            "Visibility",
+            visibility_row,
+            flex="0 1 150px",
+        )
+        self._advanced_meta_row = responsive_row(
+            [self._label_field, self._id_field, self._visibility_field],
+            gap="10px",
+            extra_classes=("gu-plot-editor-wrap-row",),
+        )
+
+        self._cartesian_samples_field = labelled_field(
+            "Samples",
+            self._cartesian_samples,
+            flex="0 1 190px",
+        )
+        self._cartesian_samples_row = responsive_row(
+            [self._cartesian_samples_field],
+            gap="10px",
+            extra_classes=("gu-plot-editor-wrap-row",),
+        )
+        self._cartesian_advanced_box = vbox(
+            [self._cartesian_samples_row],
+            gap="8px",
+        )
+
+        self._parametric_samples_field = labelled_field(
+            "Samples",
+            self._parametric_samples,
+            flex="0 1 190px",
+        )
+        self._parametric_samples_row = responsive_row(
+            [self._parametric_samples_field],
+            gap="10px",
+            extra_classes=("gu-plot-editor-wrap-row",),
+        )
+        self._parametric_advanced_box = vbox(
+            [self._parametric_samples_row],
+            gap="8px",
+            display="none",
+        )
+
+        self._field_grid_x_field = labelled_field(
+            "Grid x",
+            self._field_grid_x,
+            flex="0 1 190px",
+        )
+        self._field_grid_y_field = labelled_field(
+            "Grid y",
+            self._field_grid_y,
+            flex="0 1 190px",
+        )
+        self._field_grid_row = responsive_row(
+            [self._field_grid_x_field, self._field_grid_y_field],
+            gap="10px",
+            extra_classes=("gu-plot-editor-wrap-row",),
+        )
+        self._field_advanced_box = vbox(
+            [self._field_grid_row],
+            gap="8px",
+            display="none",
+        )
+
+        self._formula_tab = vbox(
+            [
+                self._plot_type_row,
                 self._cartesian_box,
                 self._parametric_box,
                 self._field_box,
-                self._parameter_preview,
-                self._error_box,
-                actions,
             ],
-            layout=widgets.Layout(
-                width="min(720px, calc(100vw - 32px))",
-                max_height="calc(100vh - 32px)",
-                display="none",
-                padding="14px",
-                gap="10px",
-                border="1px solid rgba(15, 23, 42, 0.14)",
-                border_radius="12px",
-                background_color="white",
-                box_shadow="0 14px 40px rgba(15, 23, 42, 0.24)",
-                overflow_y="auto",
-                overflow_x="hidden",
-                align_items="stretch",
-            ),
+            gap="12px",
+            extra_classes=("gu-plot-editor-tab-panel",),
         )
-        self._panel.add_class("gu-plot-editor-panel")
+        self._advanced_tab = vbox(
+            [
+                self._advanced_meta_row,
+                self._views_field,
+                self._cartesian_advanced_box,
+                self._parametric_advanced_box,
+                self._field_advanced_box,
+            ],
+            gap="12px",
+            display="none",
+            extra_classes=("gu-plot-editor-tab-panel",),
+        )
 
-        self._modal = widgets.Box(
-            [self._panel],
-            layout=widgets.Layout(
-                display="none",
-                position="fixed",
-                top="0",
-                left="0",
-                width="100vw",
-                height="100vh",
-                align_items="center",
-                justify_content="center",
-                background_color="rgba(15, 23, 42, 0.16)",
-                z_index="1002",
-                overflow="hidden",
-            ),
+        header = hbox(
+            [self._title_block, self._close_button],
+            justify_content="space-between",
+            align_items="flex-start",
+            gap="12px",
+            extra_classes=("gu-modal-header",),
+        )
+        tabs = hbox(
+            [self._formula_tab_button, self._advanced_tab_button],
+            justify_content="flex-start",
+            align_items="stretch",
+            gap="4px",
+            flex_flow="row wrap",
+            extra_classes=("gu-plot-editor-tab-bar", "gu-tab-bar"),
+        )
+        actions = hbox(
+            [self._cancel_button, self._apply_button],
+            justify_content="flex-end",
+            align_items="center",
+            gap="8px",
+            flex_flow="row wrap",
+        )
+
+        panel_width, panel_min_width, panel_max_width = hosted_modal_dimensions(
+            preferred_width_px=720,
+            minimum_width_px=360,
+        )
+        self._panel = build_modal_panel(
+            [
+                header,
+                tabs,
+                self._formula_tab,
+                self._advanced_tab,
+                actions,
+                self._status_bar,
+            ],
+            width=panel_width,
+            min_width=panel_min_width,
+            max_width=panel_max_width,
+            padding="16px",
+            gap="12px",
+            display="none",
+            extra_classes=("gu-plot-editor-panel",),
+        )
+        self._modal = build_modal_overlay(
+            self._panel,
+            hosted=True,
+            z_index="1002",
+            background_color="rgba(15, 23, 42, 0.16)",
+            modal_class=self._modal_class,
         )
         self._modal.add_class("gu-plot-editor-modal")
 
-        if self._style not in self._modal_host.children:
-            self._modal_host.children += (self._style,)
-        if self._modal not in self._modal_host.children:
-            self._modal_host.children += (self._modal,)
+        self._error_eyebrow = widgets.HTML(
+            "Plot editor",
+            layout=widgets.Layout(margin="0px", min_width="0"),
+        )
+        self._error_eyebrow.add_class("gu-modal-title-eyebrow")
+        self._error_title = widgets.HTML(
+            "Could not apply plot",
+            layout=widgets.Layout(margin="0px", min_width="0"),
+        )
+        self._error_title.add_class("gu-modal-title-text")
+        self._error_title.add_class("gu-plot-editor-error-title-text")
+        self._error_context = widgets.HTML(
+            "Review the current tab, adjust the draft, and try again.",
+            layout=widgets.Layout(margin="0px", min_width="0"),
+        )
+        self._error_context.add_class("gu-modal-subtitle")
+        self._error_title_block = vbox(
+            [self._error_eyebrow, self._error_title, self._error_context],
+            gap="2px",
+            extra_classes=("gu-modal-header-copy",),
+        )
+        self._error_close_button = widgets.Button(
+            description="Close error dialog",
+            tooltip="Close error dialog",
+        )
+        configure_icon_button(
+            self._error_close_button,
+            role="close",
+            size_px=24,
+            extra_classes=("gu-plot-editor-error-close-button",),
+        )
+        self._error_close_button.on_click(lambda _button: self._hide_error_dialog())
+        self._error_message = widgets.HTML("", layout=full_width_layout())
+        self._error_message.add_class("gu-plot-editor-error-message")
+        self._error_ok_button = widgets.Button(
+            description="OK",
+            tooltip="Close error dialog",
+        )
+        configure_action_button(self._error_ok_button, variant="primary", min_width_px=72)
+        self._error_ok_button.on_click(lambda _button: self._hide_error_dialog())
+        self._error_box = self._error_message
+
+        error_header = hbox(
+            [self._error_title_block, self._error_close_button],
+            justify_content="space-between",
+            align_items="flex-start",
+            gap="12px",
+            extra_classes=("gu-modal-header",),
+        )
+        error_actions = hbox(
+            [self._error_ok_button],
+            justify_content="flex-end",
+            align_items="center",
+            gap="8px",
+        )
+        error_width, error_min_width, error_max_width = hosted_modal_dimensions(
+            preferred_width_px=420,
+            minimum_width_px=300,
+        )
+        self._error_panel = build_modal_panel(
+            [error_header, self._error_message, error_actions],
+            width=error_width,
+            min_width=error_min_width,
+            max_width=error_max_width,
+            padding="14px",
+            gap="12px",
+            display="none",
+            extra_classes=("gu-plot-editor-error-panel",),
+        )
+        self._error_modal = build_modal_overlay(
+            self._error_panel,
+            hosted=True,
+            z_index="1003",
+            background_color="rgba(15, 23, 42, 0.22)",
+            modal_class=self._error_modal_class,
+        )
+
+        zero_layout = widgets.Layout(width="0px", height="0px", margin="0px")
+        self._modal_bridge = ModalDialogBridge(
+            modal_class=self._modal_class,
+            panel_selector=".gu-plot-editor-panel",
+            close_selector=".gu-plot-editor-close-button",
+            title_selector=".gu-modal-title-text",
+            dialog_open=False,
+            dialog_label="Plot editor",
+            layout=zero_layout,
+        )
+        self._modal_bridge.on_msg(self._handle_main_dialog_message)
+        self._error_bridge = ModalDialogBridge(
+            modal_class=self._error_modal_class,
+            panel_selector=".gu-plot-editor-error-panel",
+            close_selector=".gu-plot-editor-error-close-button",
+            title_selector=".gu-plot-editor-error-title-text",
+            dialog_open=False,
+            dialog_label="Plot editor error",
+            layout=widgets.Layout(width="0px", height="0px", margin="0px"),
+        )
+        self._error_bridge.on_msg(self._handle_error_dialog_message)
+
+        attach_host_children(
+            self._modal_host,
+            self._style,
+            self._modal,
+            self._error_modal,
+            self._modal_bridge,
+            self._error_bridge,
+        )
 
         self._kind.observe(self._on_kind_changed, names="value")
-        for observed in (
-            self._cartesian_expression,
-            self._cartesian_variable,
-            self._parametric_x,
-            self._parametric_y,
-            self._parameter_variable,
-            self._parameter_min,
-            self._parameter_max,
-            self._field_expression,
-            self._field_x_variable,
-            self._field_y_variable,
-            self._views,
-        ):
-            observed.observe(self._on_form_value_changed, names="value")
+        self._parameter_variable.observe(self._on_parameter_variable_changed, names="value")
+
+        self._update_parametric_prompt_copy()
+        self._set_tab("formula")
+        self._sync_section_visibility()
+        self._refresh_status_bar()
+        self._sync_open_state()
 
     @property
     def panel_visible(self) -> bool:
@@ -811,10 +1140,13 @@ class PlotComposerDialog:
         self._refresh_view_options(selected=(self._figure.views.current_id,))
         self._editing_plot_id = None
         self._id_text.disabled = False
-        self._title.value = "<b>Add plot</b>"
-        self._apply_button.description = "Add plot"
+        self._title.value = "Create plot"
+        self._title_context.value = "Choose a plot family, enter formulas, and assign the plot to one or more views."
+        self._apply_button.description = "Create"
         self._apply_button.tooltip = "Create the plot from the entered expressions"
+        self._modal_bridge.dialog_label = "Create plot"
         self._clear_error()
+        self._set_tab("formula")
         self._load_defaults(default_kind=default_kind)
         self._set_open(True)
 
@@ -827,10 +1159,13 @@ class PlotComposerDialog:
 
         self._editing_plot_id = plot_id
         self._id_text.disabled = True
-        self._title.value = "<b>Edit plot</b>"
+        self._title.value = "Edit plot"
+        self._title_context.value = f"Update <code>{html.escape(plot_id)}</code> and keep its plot id stable."
         self._apply_button.description = "Apply"
         self._apply_button.tooltip = "Update the plot from the entered expressions"
+        self._modal_bridge.dialog_label = f"Edit plot {plot_id}"
         self._clear_error()
+        self._set_tab("formula")
         self._load_plot(plot)
         self._set_open(True)
 
@@ -840,10 +1175,83 @@ class PlotComposerDialog:
         self._clear_error()
         self._set_open(False)
 
+    def _handle_main_dialog_message(self, _widget: Any, content: Any, _buffers: Any) -> None:
+        if not isinstance(content, dict):
+            return
+        if content.get("type") != "dialog_request":
+            return
+        if content.get("action") == "close":
+            self.close()
+
+    def _handle_error_dialog_message(self, _widget: Any, content: Any, _buffers: Any) -> None:
+        if not isinstance(content, dict):
+            return
+        if content.get("type") != "dialog_request":
+            return
+        if content.get("action") == "close":
+            self._hide_error_dialog()
+
     def _set_open(self, value: bool) -> None:
         self._is_open = bool(value)
+        self._sync_open_state()
+
+    def _sync_open_state(self) -> None:
         self._panel.layout.display = "flex" if self._is_open else "none"
         self._modal.layout.display = "flex" if self._is_open else "none"
+        self._error_panel.layout.display = "flex" if self._error_open else "none"
+        self._error_modal.layout.display = "flex" if self._error_open else "none"
+        self._modal_bridge.dialog_open = self._is_open and not self._error_open
+        self._error_bridge.dialog_open = self._error_open
+
+    def _set_tab(self, tab_name: Literal["formula", "advanced"]) -> None:
+        self._active_tab = tab_name
+        self._formula_tab.layout.display = "flex" if tab_name == "formula" else "none"
+        self._advanced_tab.layout.display = "flex" if tab_name == "advanced" else "none"
+        set_tab_button_selected(self._formula_tab_button, tab_name == "formula")
+        set_tab_button_selected(self._advanced_tab_button, tab_name == "advanced")
+
+    def _on_parameter_variable_changed(self, _change: dict[str, Any]) -> None:
+        """Refresh compact parametric labels when the parameter symbol changes."""
+
+        if self._suspend_observers:
+            return
+        self._update_parametric_prompt_copy()
+
+    def _update_parametric_prompt_copy(self) -> None:
+        """Keep compact parametric field titles in sync with the chosen parameter."""
+
+        parameter_latex = _title_symbol_latex(self._parameter_variable.value, default="t")
+        self._parametric_x_label.value = _parametric_axis_title_latex("x", parameter_latex)
+        self._parametric_y_label.value = _parametric_axis_title_latex("y", parameter_latex)
+        self._parameter_min_label.value = _parametric_bound_title_latex(
+            parameter_latex,
+            bound="min",
+        )
+        self._parameter_max_label.value = _parametric_bound_title_latex(
+            parameter_latex,
+            bound="max",
+        )
+        parameter_name = str(self._parameter_variable.value or "").strip() or "t"
+        self._parametric_x.aria_label = f"Parametric x({parameter_name})"
+        self._parametric_y.aria_label = f"Parametric y({parameter_name})"
+        self._parameter_min.aria_label = f"Minimum value for {parameter_name}"
+        self._parameter_max.aria_label = f"Maximum value for {parameter_name}"
+
+    def _refresh_status_bar(self) -> None:
+        mode_label = {
+            "cartesian": "Function y = f(x)",
+            "parametric": "Parametric curve",
+            "contour": "Contour plot",
+            "density": "Density heatmap",
+            "temperature": "Temperature heatmap",
+        }.get(self._kind.value, "Plot")
+        action_word = self._apply_button.description or "Apply"
+        resolution_word = "sampling" if self._kind.value in {"cartesian", "parametric"} else "grid resolution"
+        message = (
+            f"{mode_label}. Expressions are validated when you click {action_word}. "
+            f"Advanced settings hold label, id, visibility, views, and {resolution_word}."
+        )
+        self._status_bar.value = f"<div>{html.escape(message)}</div>"
 
     def _load_defaults(self, *, default_kind: PlotEditorKind) -> None:
         """Populate a fresh new-plot form using figure defaults."""
@@ -853,6 +1261,7 @@ class PlotComposerDialog:
             self._kind.value = default_kind
             self._id_text.value = ""
             self._label_text.value = ""
+            self._visible_toggle.value = True
             self._cartesian_expression.value = ""
             self._cartesian_variable.value = "x"
             self._cartesian_samples.value = max(int(self._figure.samples or 500), 2)
@@ -867,10 +1276,9 @@ class PlotComposerDialog:
             self._field_y_variable.value = "y"
             self._field_grid_x.value = 120
             self._field_grid_y.value = 120
-            self._sync_section_visibility()
-            self._update_parameter_preview()
         finally:
             self._suspend_observers = False
+            self._update_parametric_prompt_copy()
             self._sync_section_visibility()
             self._update_parameter_preview()
 
@@ -888,7 +1296,7 @@ class PlotComposerDialog:
             self._kind.value = kind
             self._id_text.value = str(getattr(plot, "id", ""))
             self._label_text.value = str(getattr(plot, "label", ""))
-            self._sync_section_visibility()
+            self._visible_toggle.value = bool(getattr(plot, "visible", True))
 
             if kind == "cartesian":
                 assert isinstance(plot, Plot)
@@ -913,6 +1321,7 @@ class PlotComposerDialog:
                 self._field_grid_y.value = max(int(grid_y), 2)
         finally:
             self._suspend_observers = False
+            self._update_parametric_prompt_copy()
             self._sync_section_visibility()
             self._update_parameter_preview()
 
@@ -940,7 +1349,8 @@ class PlotComposerDialog:
         self._views.options = tuple(options)
         available = {value for _label, value in options}
         filtered = tuple(view_id for view_id in selected if view_id in available)
-        self._views.value = filtered or ((self._figure.views.current_id,) if self._figure.views.current_id in available else ())
+        fallback = (self._figure.views.current_id,) if self._figure.views.current_id in available else ()
+        self._views.value = filtered or fallback
 
     def _collect_draft(self) -> PlotEditorDraft:
         """Collect the current widget values into a detached draft."""
@@ -950,6 +1360,7 @@ class PlotComposerDialog:
             plot_id=(self._id_text.value.strip() or None),
             label=self._label_text.value,
             view_ids=tuple(str(view_id) for view_id in self._views.value),
+            visible=bool(self._visible_toggle.value),
             cartesian_expression_latex=self._cartesian_expression.value,
             cartesian_var_latex=self._cartesian_variable.value,
             cartesian_samples=int(self._cartesian_samples.value),
@@ -967,18 +1378,29 @@ class PlotComposerDialog:
         )
 
     def _set_error(self, message: str) -> None:
-        """Display a validation/apply error in the dialog."""
+        """Open the secondary error dialog for one apply failure."""
 
-        self._error_box.value = (
-            f"<div class='gu-plot-editor-error'><b>Could not apply plot.</b> {html.escape(message)}</div>"
-        )
-        self._error_box.layout.display = "block"
+        self._show_error_dialog(message)
 
     def _clear_error(self) -> None:
-        """Hide the validation/apply error area."""
+        """Hide the secondary error dialog and clear its contents."""
 
-        self._error_box.value = ""
-        self._error_box.layout.display = "none"
+        self._hide_error_dialog(clear_message=True)
+
+    def _show_error_dialog(self, message: str) -> None:
+        self._error_message.value = (
+            "<div class='gu-plot-editor-error-body'>"
+            + html.escape(message)
+            + "</div>"
+        )
+        self._error_open = True
+        self._sync_open_state()
+
+    def _hide_error_dialog(self, *, clear_message: bool = False) -> None:
+        self._error_open = False
+        if clear_message:
+            self._error_message.value = ""
+        self._sync_open_state()
 
     def _on_apply_clicked(self, _button: widgets.Button) -> None:
         """Validate the draft, apply it through Figure, and close on success."""
@@ -991,9 +1413,11 @@ class PlotComposerDialog:
         )
         try:
             if not draft.view_ids:
+                self._set_tab("advanced")
                 raise ValueError("Select at least one target view.")
             apply_plot_editor_draft(self._figure, draft, existing_plot=existing)
         except Exception as exc:
+            self._set_tab(self._error_tab_name(str(exc)))
             self._set_error(str(exc))
             return
         self.close()
@@ -1003,78 +1427,52 @@ class PlotComposerDialog:
 
         if self._suspend_observers:
             return
+        self._update_parametric_prompt_copy()
         self._sync_section_visibility()
-        self._update_parameter_preview()
-
-    def _on_form_value_changed(self, _change: dict[str, Any]) -> None:
-        """Refresh the parameter preview for user edits."""
-
-        if self._suspend_observers:
-            return
-        self._update_parameter_preview()
+        self._refresh_status_bar()
 
     def _sync_section_visibility(self) -> None:
-        """Show only the section relevant to the selected plot family."""
+        """Show only the sections relevant to the selected plot family."""
 
         kind = self._kind.value
         self._cartesian_box.layout.display = "flex" if kind == "cartesian" else "none"
         self._parametric_box.layout.display = "flex" if kind == "parametric" else "none"
-        self._field_box.layout.display = (
+        self._field_box.layout.display = "flex" if kind in {"contour", "density", "temperature"} else "none"
+        self._cartesian_advanced_box.layout.display = "flex" if kind == "cartesian" else "none"
+        self._parametric_advanced_box.layout.display = "flex" if kind == "parametric" else "none"
+        self._field_advanced_box.layout.display = (
             "flex" if kind in {"contour", "density", "temperature"} else "none"
         )
 
     def _update_parameter_preview(self) -> None:
-        """Compute and render the parameter-inference status line."""
+        """Refresh the subtle bottom status bar without live compilation feedback."""
 
-        preview = _draft_parameter_preview(self._figure, self._collect_draft())
-        if preview.error is not None:
-            self._parameter_preview.value = (
-                f"<div class='gu-plot-editor-note'><i>{html.escape(preview.error)}</i></div>"
-            )
-            return
-        if not preview.will_create and not preview.will_reuse:
-            self._parameter_preview.value = (
-                "<div class='gu-plot-editor-note'>No extra parameters inferred from the current expression.</div>"
-            )
-            return
-
-        parts: list[str] = []
-        if preview.will_create:
-            parts.append(
-                "Will create parameters: <code>"
-                + html.escape(", ".join(preview.will_create))
-                + "</code>"
-            )
-        if preview.will_reuse:
-            parts.append(
-                "Will reuse parameters: <code>"
-                + html.escape(", ".join(preview.will_reuse))
-                + "</code>"
-            )
-        self._parameter_preview.value = (
-            "<div class='gu-plot-editor-note'>" + "<br>".join(parts) + "</div>"
-        )
+        self._refresh_status_bar()
 
     @staticmethod
-    def _labelled_row(title: str, widget: widgets.Widget) -> widgets.VBox:
-        """Return one simple labelled editor row."""
+    def _error_tab_name(message: str) -> Literal["formula", "advanced"]:
+        """Heuristically map one apply error to the most relevant tab."""
 
-        return widgets.VBox(
-            [widgets.HTML(f"<b>{html.escape(title)}</b>"), widget],
-            layout=widgets.Layout(width="100%", gap="4px"),
-        )
+        lowered = str(message or "").lower()
+        if "view" in lowered:
+            return "advanced"
+        return "formula"
 
     @staticmethod
-    def _dialog_style_html() -> str:
-        """Return small CSS helpers for the plot-composer dialog."""
+    def _dialog_style_css() -> str:
+        """Return small plot-editor-specific CSS additions."""
 
         return (
-            "<style>"
-            ".gu-plot-editor-panel .widget-label {font-weight: 600 !important;}"
-            ".gu-plot-editor-note {color: #334155; font-size: 13px; line-height: 1.35;}"
-            ".gu-plot-editor-error {color: #991b1b; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.18); border-radius: 8px; padding: 8px 10px;}"
-            ".gu-plot-editor-panel code {background: rgba(15, 23, 42, 0.06); padding: 1px 4px; border-radius: 4px;}"
-            "</style>"
+            ".gu-plot-editor-panel,.gu-plot-editor-error-panel {overflow-x: hidden !important;}"
+            ".gu-plot-editor-panel > *,.gu-plot-editor-error-panel > * {min-width: 0 !important;max-width: 100% !important;}"
+            ".gu-plot-editor-tab-bar {width: 100% !important;}"
+            ".gu-plot-editor-tab-button {flex: 1 1 120px !important;min-width: 0 !important;max-width: 100% !important;}"
+            ".gu-plot-editor-tab-button button,.gu-plot-editor-tab-button .widget-button,.gu-plot-editor-tab-button .jupyter-button {width: 100% !important;}"
+            ".gu-plot-editor-tab-panel,.gu-plot-editor-wrap-row {overflow-x: hidden !important;}"
+            ".gu-plot-editor-panel :is(.gu-form-field,.gu-modal-row,.gu-modal-section,.widget-box,.jupyter-widgets,.widget-text,.widget-textarea,.widget-dropdown,.widget-select,.widget-select-multiple,.widget-html,.widget-htmlmath) {min-width: 0 !important;max-width: 100% !important;}"
+            ".gu-plot-editor-panel :is(select[multiple], .widget-select-multiple select) {overflow-x: hidden !important;}"
+            ".gu-plot-editor-panel .gu-modal-header-copy {gap: 2px !important;}"
+            ".gu-plot-editor-error-body {color: #991b1b; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.18); border-radius: 8px; padding: 10px 12px; line-height: 1.45;}"
         )
 
 

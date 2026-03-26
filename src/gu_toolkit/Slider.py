@@ -15,6 +15,13 @@ import traitlets
 
 from .InputConvert import InputConvert
 from .animation import DEFAULT_ANIMATION_TIME, AnimationController
+from .widget_chrome import (
+    attach_host_children,
+    build_modal_overlay,
+    build_modal_panel,
+    configure_icon_button,
+    shared_style_widget,
+)
 
 
 _ANIMATION_MODE_BUTTON_CLASSES = {
@@ -459,8 +466,8 @@ class FloatSlider(widgets.VBox):
         #    "</style>"
         # )
 
-        self._limit_style = widgets.HTML(r"""
-<style>
+        self._limit_style = shared_style_widget(
+            r"""
 /* Root sizing keeps parameter rows inside the sidebar without phantom x-scroll. */
 .smart-slider-root,
 .smart-slider-top-row,
@@ -533,185 +540,34 @@ class FloatSlider(widgets.VBox):
 
 /* The actual editable element(s): handle both input + textarea. */
 .smart-slider-limit :is(input, textarea) {
-  /* Make it small */
   font-size: 10px !important;
   line-height: 1.1 !important;
-
-  /* Force compact geometry despite JupyterLab theme defaults */
   height: 16px !important;
   min-height: 0 !important;
   padding: 0 2px !important;
   margin: 0 !important;
-
-  /* Make it look like static text */
   background: transparent !important;
   border: 1px solid transparent !important;
   box-shadow: none !important;
   border-radius: 3px !important;
-
   color: var(--jp-ui-font-color2, #666) !important;
   text-align: center !important;
   box-sizing: border-box !important;
 }
 
-/* Optional: subtle “this is clickable” affordance on hover */
 .smart-slider-limit :is(input, textarea):hover {
   border-bottom-color: rgba(0,0,0,0.20) !important;
 }
 
-/* On focus: show edit chrome so users realize they can type */
 .smart-slider-limit :is(input, textarea):focus {
   outline: none !important;
   border-color: rgba(0,0,0,0.28) !important;
   background: rgba(0,0,0,0.04) !important;
 }
 
-/* Icon-only action buttons keep text for assistive tech but show symbols via CSS. */
-.smart-slider-icon-button,
-.smart-slider-icon-button:hover,
-.smart-slider-icon-button:focus,
-.smart-slider-icon-button:active,
-.smart-slider-icon-button.mod-active,
-.smart-slider-icon-button.mod-active:hover,
-.smart-slider-icon-button.mod-active:focus,
-.smart-slider-icon-button button,
-.smart-slider-icon-button button:hover,
-.smart-slider-icon-button button:focus,
-.smart-slider-icon-button button:active,
-.smart-slider-icon-button .widget-button,
-.smart-slider-icon-button .widget-button:hover,
-.smart-slider-icon-button .widget-button:focus,
-.smart-slider-icon-button .jupyter-button,
-.smart-slider-icon-button .jupyter-button:hover,
-.smart-slider-icon-button .jupyter-button:focus {
-  background: transparent !important;
-  background-color: transparent !important;
-  background-image: none !important;
-  border: none !important;
-  box-shadow: none !important;
-  outline: none !important;
-}
-
-.smart-slider-icon-button {
-  position: relative !important;
-  overflow: hidden !important;
-  border-radius: 6px !important;
-  color: var(--jp-ui-font-color1, #334155) !important;
-  font-size: 0 !important;
-  line-height: 0 !important;
-}
-
-.smart-slider-icon-button::before {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  width: 100% !important;
-  height: 100% !important;
-  font-size: 13px !important;
-  line-height: 1 !important;
-}
-
-.smart-slider-icon-button:hover,
-.smart-slider-icon-button:focus-visible {
-  background-color: rgba(15, 23, 42, 0.06) !important;
-}
-
-.smart-slider-icon-button :is(button, .widget-button, .jupyter-button):focus-visible,
-.smart-slider-value-input :is(input, textarea):focus-visible,
-.smart-slider-limit :is(input, textarea):focus-visible,
-.smart-slider-settings-panel :is(input, textarea, select, button):focus-visible {
-  outline: 2px solid var(--jp-brand-color1, #0b76d1) !important;
-  outline-offset: 1px !important;
-}
-
-.smart-slider-animate-button::before {
-  content: ">>";
-}
-
-.smart-slider-animate-button.mod-mode-once::before {
-  content: ">";
-}
-
-.smart-slider-animate-button.mod-mode-loop::before {
-  content: ">>";
-}
-
-.smart-slider-animate-button.mod-mode-bounce::before {
-  content: "<>";
-}
-
-.smart-slider-animate-button.mod-running {
-  color: var(--jp-brand-color1, #0b76d1) !important;
-  background-color: rgba(11, 118, 209, 0.08) !important;
-}
-
-.smart-slider-animate-button.mod-running::before {
-  content: "⏸";
-}
-
-.smart-slider-reset-button::before {
-  content: "↺";
-}
-
-.smart-slider-settings-button::before {
-  content: "⚙";
-}
-
-.smart-slider-close-button::before {
-  content: "✕";
-}
-
-/* Modal overlay and panel styling */
-.smart-slider-settings-modal {
-  z-index: 99999 !important;
-  box-sizing: border-box !important;
-  align-items: center !important;
-  justify-content: center !important;
-  overflow-x: hidden !important;
-  overflow-y: hidden !important;
-  background: rgba(15, 23, 42, 0.12) !important;
-}
-
-.smart-slider-settings-modal > * {
-  min-width: 0 !important;
-  max-width: 100% !important;
-}
-
-.smart-slider-settings-modal-hosted {
-  position: absolute !important;
-  inset: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  padding: 12px !important;
-}
-
-.smart-slider-settings-modal-global {
-  position: fixed !important;
-  inset: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
-  padding: 12px !important;
-}
-
-.smart-slider-modal-host {
-  position: relative !important;
-}
-
 .smart-slider-settings-panel {
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.32) !important;
-  border-radius: 10px !important;
-  opacity: 1 !important;
-  background: #ffffff !important;
-  box-sizing: border-box !important;
   width: min(440px, calc(100vw - 32px)) !important;
   min-width: min(380px, calc(100vw - 32px)) !important;
-  max-width: min(calc(100% - 24px), calc(100vw - 32px)) !important;
-  overflow-x: hidden !important;
-  overflow-y: auto !important;
-}
-
-.smart-slider-settings-panel > * {
-  min-width: 0 !important;
 }
 
 .smart-slider-settings-title {
@@ -728,9 +584,8 @@ class FloatSlider(widgets.VBox):
 .smart-slider-settings-title-subject {
   overflow-wrap: anywhere !important;
 }
-</style>
-""")
-        self._limit_style.layout = widgets.Layout(width="0px", height="0px", margin="0px")
+"""
+        )
         # The *only* numeric field (editable; accepts expressions)
         self.number = widgets.Text(
             value=str(value),
@@ -742,24 +597,18 @@ class FloatSlider(widgets.VBox):
         self.btn_animate = widgets.Button(
             description="Start animation",
             tooltip="Start animation",
-            layout=widgets.Layout(width="24px", min_width="24px", height="24px", padding="0px"),
         )
-        self.btn_animate.add_class("smart-slider-icon-button")
-        self.btn_animate.add_class("smart-slider-animate-button")
+        configure_icon_button(self.btn_animate, role="animate", size_px=24)
         self.btn_reset = widgets.Button(
             description="Reset parameter",
             tooltip="Reset parameter",
-            layout=widgets.Layout(width="24px", min_width="24px", height="24px", padding="0px"),
         )
-        self.btn_reset.add_class("smart-slider-icon-button")
-        self.btn_reset.add_class("smart-slider-reset-button")
+        configure_icon_button(self.btn_reset, role="reset", size_px=24)
         self.btn_settings = widgets.Button(
             description="Open parameter settings",
             tooltip="Open parameter settings",
-            layout=widgets.Layout(width="24px", min_width="24px", height="24px", padding="0px"),
         )
-        self.btn_settings.add_class("smart-slider-icon-button")
-        self.btn_settings.add_class("smart-slider-settings-button")
+        configure_icon_button(self.btn_settings, role="settings", size_px=24)
 
         # --- Settings panel ---------------------------------------------------
         style_args = {
@@ -811,10 +660,8 @@ class FloatSlider(widgets.VBox):
         self.btn_close_settings = widgets.Button(
             description="Close parameter settings",
             tooltip="Close parameter settings",
-            layout=widgets.Layout(width="24px", height="24px", padding="0px"),
         )
-        self.btn_close_settings.add_class("smart-slider-icon-button")
-        self.btn_close_settings.add_class("smart-slider-close-button")
+        configure_icon_button(self.btn_close_settings, role="close", size_px=24)
         self.settings_title_text = widgets.HTML("<b>Parameter settings</b>")
         self.settings_title_text.add_class("smart-slider-settings-title-text")
         self.settings_subject = widgets.HTMLMath(
@@ -857,7 +704,7 @@ class FloatSlider(widgets.VBox):
         )
         self._settings_accessibility.on_msg(self._handle_settings_accessibility_message)
 
-        self.settings_panel = widgets.VBox(
+        self.settings_panel = build_modal_panel(
             [
                 settings_header,
                 widgets.HBox([self.set_step], layout=widgets.Layout(width="100%", min_width="0")),
@@ -865,42 +712,18 @@ class FloatSlider(widgets.VBox):
                 widgets.HBox([self.set_animation_time], layout=widgets.Layout(width="100%", min_width="0")),
                 widgets.HBox([self.set_animation_mode], layout=widgets.Layout(width="100%", min_width="0")),
             ],
-            layout=widgets.Layout(
-                width="440px",
-                min_width="380px",
-                max_width="calc(100vw - 32px)",
-                display="none",
-                border="1px solid rgba(15, 23, 42, 0.12)",
-                padding="12px",
-                gap="8px",
-                background_color="white",
-                opacity="1",
-                box_shadow="0 10px 28px rgba(15, 23, 42, 0.28)",
-                align_items="stretch",
-                overflow_x="hidden",
-                overflow_y="auto",
-            ),
+            width="440px",
+            min_width="380px",
+            max_width="calc(100vw - 32px)",
+            display="none",
+            extra_classes=(),
         )
-        self.settings_modal = widgets.Box(
-            [self.settings_panel],
-            layout=widgets.Layout(
-                display="none",
-                position="fixed",
-                top="0",
-                left="0",
-                width="100vw",
-                height="100vh",
-                align_items="center",
-                justify_content="center",
-                background_color="rgba(15, 23, 42, 0.12)",
-                z_index="1000",
-                overflow_x="hidden",
-                overflow_y="hidden",
-            ),
+        self.settings_modal = build_modal_overlay(
+            self.settings_panel,
+            hosted=False,
+            z_index="1000",
+            background_color="rgba(15, 23, 42, 0.12)",
         )
-        self.settings_panel.add_class("smart-slider-settings-panel")
-        self.settings_modal.add_class("smart-slider-settings-modal")
-        self.settings_modal.add_class("smart-slider-settings-modal-global")
         self.settings_modal.add_class(self._settings_modal_class)
         self._top_row: widgets.HBox | None = None
         self._modal_host: widgets.Box | None = None
@@ -1565,19 +1388,19 @@ class FloatSlider(widgets.VBox):
                 )
             if callable(modal_remove_class):
                 modal_remove_class("smart-slider-settings-modal-hosted")
+                modal_remove_class("gu-modal-overlay-hosted")
             if callable(modal_add_class):
                 modal_add_class("smart-slider-settings-modal-global")
+                modal_add_class("gu-modal-overlay-global")
         else:
             cast(Any, self).children = (top_row, self._settings_accessibility)
-            add_class = getattr(host, "add_class", None)
-            if callable(add_class):
-                add_class("smart-slider-modal-host")
-            if self.settings_modal not in host.children:
-                host.children += (self.settings_modal,)
+            attach_host_children(host, self.settings_modal)
             if callable(modal_remove_class):
                 modal_remove_class("smart-slider-settings-modal-global")
+                modal_remove_class("gu-modal-overlay-global")
             if callable(modal_add_class):
                 modal_add_class("smart-slider-settings-modal-hosted")
+                modal_add_class("gu-modal-overlay-hosted")
 
         self._modal_host = host
 

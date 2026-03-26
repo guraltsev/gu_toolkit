@@ -25,7 +25,7 @@ def test_update_sidebar_visibility_handles_legend_only() -> None:
     assert layout.params_box.layout.display == "none"
     assert layout.info_header.layout.display == "none"
     assert layout.info_box.layout.display == "none"
-    assert layout.legend_header.layout.display == "block"
+    assert layout.legend_header.layout.display == "none"
     assert layout.legend_box.layout.display == "flex"
     assert layout.sidebar_container.layout.display == "flex"
 

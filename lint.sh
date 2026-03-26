@@ -18,6 +18,14 @@ if ! ruff check .; then
 fi
 
 echo ""
+echo "=== Running widget layout guardrails ==="
+if ! PYTHONPATH=src python tools/check_widget_layout.py; then
+    echo ""
+    echo "ERROR: Widget layout guardrails failed."
+    exit 1
+fi
+
+echo ""
 echo "=== Running mypy (informational) ==="
 mypy . || {
     echo ""

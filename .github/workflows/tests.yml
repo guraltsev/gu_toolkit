@@ -18,6 +18,8 @@ jobs:
         run: ruff check .
       - name: Run ruff format check
         run: ruff format --check .
+      - name: Run widget layout guardrails
+        run: PYTHONPATH=src python tools/check_widget_layout.py
       - name: Run mypy (informational only)
         run: mypy . || true
         continue-on-error: true

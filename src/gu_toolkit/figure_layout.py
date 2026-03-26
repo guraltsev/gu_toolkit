@@ -207,7 +207,7 @@ class FigureLayout:
         self.info_box.add_class("gu-figure-panel-box")
 
         self.legend_header = widgets.HTML(
-            "<b>Legend</b>", layout=widgets.Layout(display="none", margin="0")
+            "", layout=widgets.Layout(display="none", margin="0")
         )
         self.legend_header.add_class("gu-figure-legend-area")
         self.legend_box = widgets.VBox(
@@ -419,7 +419,7 @@ class FigureLayout:
         self.info_header.layout.display = "block" if has_info else "none"
         self.info_box.layout.display = "flex" if has_info else "none"
 
-        self.legend_header.layout.display = "block" if has_legend else "none"
+        self.legend_header.layout.display = "none"
         self.legend_box.layout.display = "flex" if has_legend else "none"
 
         show_sidebar = has_params or has_info or has_legend
