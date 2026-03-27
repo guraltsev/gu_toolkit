@@ -117,10 +117,12 @@ def test_toggle_marker_reflects_plot_color_and_visibility_state() -> None:
     manager.on_plot_added(plot)
     row = manager._rows["p1"]
 
-    assert row.toggle.icon == "circle"
+    assert row.toggle.icon == ""
     assert row.toggle.style.text_color == "#123456"
     assert row.toggle.style.button_color == "transparent"
     assert "gu-legend-toggle" in row.toggle._dom_classes
+    assert "gu-legend-inline-button" not in row.toggle._dom_classes
+    assert "gu-icon-button" not in row.toggle._dom_classes
     assert "mod-visible" in row.toggle._dom_classes
     assert row.toggle.layout.width == "30px"
     assert row.toggle.layout.height == "30px"
@@ -130,7 +132,7 @@ def test_toggle_marker_reflects_plot_color_and_visibility_state() -> None:
 
     row.toggle.value = False
 
-    assert row.toggle.icon == "times-circle"
+    assert row.toggle.icon == ""
     assert row.toggle.style.text_color == "#123456"
     assert row.toggle.style.button_color == "transparent"
     assert row.toggle.layout.opacity == "0.6"

@@ -24,7 +24,7 @@ def test_raw_info_output_activates_sidebar_visibility() -> None:
     assert fig._layout.sidebar_container.layout.display == "flex"
     assert fig._layout.info_header.layout.display == "block"
     assert fig._layout.info_box.layout.display == "flex"
-    assert fig._layout.params_box.layout.display == "none"
+    assert fig._layout.params_panel.panel.layout.display == "none"
     assert out in fig._layout.info_box.children
     assert getattr(out, "id", None) == "summary"
     assert out.layout.height == "90px"

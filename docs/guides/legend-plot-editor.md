@@ -25,10 +25,11 @@ fig
 After displaying the figure:
 
 1. Use the legend `+` button to add a plot.
-2. Choose a plot type.
-3. Enter the expression(s) and the free variable(s).
-4. Pick one or more target views.
-5. Apply the draft.
+2. Use the `Expression` tab to choose a plot type and define the mathematical contract.
+3. Enter the expression(s) after the setup row.
+4. Use the `Style` tab for visibility and line style when editing cartesian or parametric curves.
+5. Use the `Advanced` tab for target views, label, plot id presentation, and resolution.
+6. Apply the draft.
 
 ## Supported plot families
 
@@ -43,6 +44,13 @@ The editor currently exposes five explicit modes:
 Mode selection is manual by design. This keeps the UI predictable and avoids
 fragile heuristics around whether an entered expression should become a curve,
 a contour, or a heatmap.
+
+## Tab structure and inline validation
+
+The dialog now uses three real tabs, `Expression`, `Style`, and `Advanced`,
+with shared tab chrome and keyboard semantics. Routine validation stays inside
+the dialog: the relevant tab becomes active, an inline alert appears at the top
+of that tab, and the affected field is marked invalid.
 
 ## Separate variable fields
 
@@ -74,6 +82,8 @@ Examples:
 The dialog intentionally exposes a short list of options that are broadly useful
 across notebooks:
 
+- visibility
+- line color, width, opacity, and dash style for cartesian and parametric curves
 - plot id
 - label
 - target views
@@ -81,8 +91,8 @@ across notebooks:
 - grid resolution for contour/density/temperature plots
 
 The editor is not meant to replace the full programmatic plotting API. It is a
-convenient authoring surface for common cases, while styling and advanced
-options still belong to the existing update/style APIs.
+convenient authoring surface for common cases while still keeping the existing
+public plotting methods as the single source of truth.
 
 ## Current limitation
 

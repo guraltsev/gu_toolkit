@@ -1,32 +1,33 @@
 from __future__ import annotations
 
 from gu_toolkit import Figure
+from gu_toolkit.Slider import FloatSlider
 
 
 RESPONSIVE_ROW_NAMES = (
-    "_plot_type_row",
-    "_cartesian_variable_row",
-    "_parametric_parameter_row",
-    "_field_variable_row",
-    "_advanced_meta_row",
-    "_cartesian_samples_row",
-    "_parametric_samples_row",
-    "_field_grid_row",
+    "_cartesian_setup_row",
+    "_parametric_setup_row",
+    "_field_setup_row",
+    "_visibility_row",
+    "_identity_row",
+    "_cartesian_resolution_row",
+    "_parametric_resolution_row",
+    "_field_resolution_row",
 )
 
 EXPECTED_FIELD_FLEX = {
     "_plot_type_field": "0 1 260px",
-    "_cartesian_variable_field": "0 1 190px",
-    "_parameter_variable_field": "0 1 190px",
-    "_parameter_min_field": "1 1 190px",
-    "_parameter_max_field": "1 1 190px",
-    "_field_x_variable_field": "0 1 190px",
-    "_field_y_variable_field": "0 1 190px",
+    "_cartesian_variable_field": "0 1 180px",
+    "_parameter_variable_field": "0 1 180px",
+    "_parameter_min_field": "1 1 160px",
+    "_parameter_max_field": "1 1 160px",
+    "_field_x_variable_field": "0 1 160px",
+    "_field_y_variable_field": "0 1 160px",
     "_label_field": "1 1 280px",
     "_id_field": "0 1 220px",
     "_visibility_field": "0 1 150px",
-    "_cartesian_samples_field": "0 1 190px",
-    "_parametric_samples_field": "0 1 190px",
+    "_cartesian_resolution_field": "0 1 190px",
+    "_parametric_resolution_field": "0 1 190px",
     "_field_grid_x_field": "0 1 190px",
     "_field_grid_y_field": "0 1 190px",
 }
@@ -39,12 +40,6 @@ HOSTED_PANEL_NAMES = (
 HOSTED_OVERLAY_NAMES = (
     ("plot editor overlay", "_modal"),
     ("plot editor error overlay", "_error_modal"),
-)
-
-SCROLL_GUARD_SNIPPETS = (
-    ".gu-plot-editor-tab-panel,.gu-plot-editor-wrap-row {overflow-x: hidden !important;}",
-    "select[multiple]",
-    "max-width: 100% !important;",
 )
 
 TAB_CLASS_NAMES = (
@@ -64,7 +59,7 @@ def _layout_value(widget: object, attr_name: str) -> str | None:
         return None
 
 
-def test_plot_editor_rows_and_fields_stay_compact_and_wrap_responsively() -> None:
+def test_plot_editor_rows_and_fields_follow_shared_responsive_contract() -> None:
     editor = Figure()._plot_editor
 
     for row_name in RESPONSIVE_ROW_NAMES:
@@ -72,6 +67,9 @@ def test_plot_editor_rows_and_fields_stay_compact_and_wrap_responsively() -> Non
         assert _layout_value(row, "flex_flow") == "row wrap"
         assert _layout_value(row, "width") == "100%"
         assert _layout_value(row, "min_width") == "0"
+        assert _layout_value(row, "max_width") == "100%"
+        assert _layout_value(row, "overflow_x") == "hidden"
+        assert _layout_value(row, "overflow_y") == "visible"
         assert "gu-wrap-row" in row._dom_classes
         assert "gu-plot-editor-wrap-row" in row._dom_classes
         for child in row.children:
@@ -84,17 +82,53 @@ def test_plot_editor_rows_and_fields_stay_compact_and_wrap_responsively() -> Non
         assert _layout_value(field, "width") == "100%"
         assert _layout_value(field, "min_width") == "0"
         assert _layout_value(field, "max_width") == "100%"
+        assert _layout_value(field, "overflow_x") == "hidden"
+        assert _layout_value(field, "overflow_y") == "visible"
 
-    assert editor._plot_type_field.children[1] is editor._kind
-    assert editor._parametric_parameter_row.children[0].children[1] is editor._parameter_variable
-    assert editor._parametric_parameter_row.children[1].children[1] is editor._parameter_min
-    assert editor._parametric_parameter_row.children[2].children[1] is editor._parameter_max
-    assert editor._field_variable_row.children[0].children[1] is editor._field_x_variable
-    assert editor._field_variable_row.children[1].children[1] is editor._field_y_variable
-    assert (
-        editor._advanced_meta_row.children[2].children[1].children[0]
-        is editor._visible_toggle
+    assert editor._cartesian_setup_row.children == (
+        editor._plot_type_field,
+        editor._cartesian_variable_field,
     )
+    assert editor._parametric_setup_row.children == (
+        editor._plot_type_field,
+        editor._parameter_variable_field,
+        editor._parameter_min_field,
+        editor._parameter_max_field,
+    )
+    assert editor._field_setup_row.children == (
+        editor._plot_type_field,
+        editor._field_x_variable_field,
+        editor._field_y_variable_field,
+    )
+    assert editor._visibility_row.children == (editor._visibility_field,)
+    assert editor._identity_row.children == (
+        editor._label_field,
+        editor._id_field,
+    )
+
+
+def test_shared_single_line_controls_hide_cross_axis_overflow() -> None:
+    figure = Figure()
+    editor = figure._plot_editor
+    legend = figure._legend
+
+    single_line_controls = (
+        editor._kind,
+        editor._id_text,
+        editor._label_text,
+        editor._curve_style_color,
+        editor._curve_style_thickness,
+        editor._curve_style_opacity,
+        editor._curve_style_dash,
+        legend._dialog_color,
+        legend._dialog_width,
+        legend._dialog_opacity,
+        legend._dialog_dash,
+    )
+
+    for control in single_line_controls:
+        assert _layout_value(control, "overflow_x") == "hidden"
+        assert _layout_value(control, "overflow_y") == "hidden"
 
 
 def test_parametric_labels_follow_the_selected_parameter_symbol() -> None:
@@ -103,19 +137,19 @@ def test_parametric_labels_follow_the_selected_parameter_symbol() -> None:
 
     editor._parameter_variable.value = "u"
 
-    assert editor._parametric_x_label.value == r"x\left(u\right)"
-    assert editor._parametric_y_label.value == r"y\left(u\right)"
-    assert editor._parameter_min_label.value == r"u_{\mathrm{min}}"
-    assert editor._parameter_max_label.value == r"u_{\mathrm{max}}"
+    assert editor._parametric_x_label.value == r"\(x\left(u\right)\)"
+    assert editor._parametric_y_label.value == r"\(y\left(u\right)\)"
+    assert editor._parameter_min_label.value == r"\(u_{\mathrm{min}}\)"
+    assert editor._parameter_max_label.value == r"\(u_{\mathrm{max}}\)"
     assert editor._parameter_min.aria_label == "Minimum value for u"
     assert editor._parameter_max.aria_label == "Maximum value for u"
 
     editor._parameter_variable.value = r"\theta"
 
-    assert editor._parametric_x_label.value == r"x\left(\theta\right)"
-    assert editor._parametric_y_label.value == r"y\left(\theta\right)"
-    assert editor._parameter_min_label.value == r"\theta_{\mathrm{min}}"
-    assert editor._parameter_max_label.value == r"\theta_{\mathrm{max}}"
+    assert editor._parametric_x_label.value == r"\(x\left(\theta\right)\)"
+    assert editor._parametric_y_label.value == r"\(y\left(\theta\right)\)"
+    assert editor._parameter_min_label.value == r"\(\theta_{\mathrm{min}}\)"
+    assert editor._parameter_max_label.value == r"\(\theta_{\mathrm{max}}\)"
 
 
 def test_hosted_plot_editor_and_legend_dialogs_use_container_relative_widths() -> None:
@@ -154,37 +188,152 @@ def test_hosted_plot_editor_and_legend_dialogs_use_container_relative_widths() -
     assert _layout_value(legend._dialog_modal, "height") == "100%"
 
 
-def test_plot_editor_tab_bar_titlebars_and_scroll_css_keep_accessible_modal_chrome() -> None:
+def test_plot_editor_header_tabs_and_shared_sections_follow_shared_shell() -> None:
     editor = Figure()._plot_editor
+    editor.open_for_new(default_kind="cartesian")
 
-    assert editor._title.value == "Create plot"
+    assert editor._title.value == "Plot editor"
     assert "<b>" not in editor._title.value.lower()
     assert "gu-modal-title-text" in editor._title._dom_classes
-    assert "gu-modal-title-eyebrow" in editor._title_eyebrow._dom_classes
-    assert "gu-modal-subtitle" in editor._title_context._dom_classes
-    assert "gu-modal-title-text" in editor._error_title._dom_classes
+    assert editor._title_chip.layout.display == "none"
+    assert editor._apply_button.description == "Create"
+    assert editor._id_text.layout.display == "flex"
+    assert editor._id_readonly.layout.display == "none"
 
     header = editor._panel.children[0]
     tab_bar = editor._panel.children[1]
     assert "gu-modal-header" in header._dom_classes
     assert "gu-tab-bar" in tab_bar._dom_classes
-    assert editor._formula_tab.layout.display == "flex"
-    assert editor._advanced_tab.layout.display == "none"
+    assert editor._expression_tab.layout.display == "flex"
+    assert editor._style_tab.layout.display == "none"
+    assert editor._settings_tab.layout.display == "none"
 
     for class_name in TAB_CLASS_NAMES:
-        assert class_name in editor._formula_tab_button._dom_classes
-        assert class_name in editor._advanced_tab_button._dom_classes
+        assert class_name in editor._expression_tab_button._dom_classes
+        assert class_name in editor._style_tab_button._dom_classes
+        assert class_name in editor._settings_tab_button._dom_classes
 
-    assert "mod-selected" in editor._formula_tab_button._dom_classes
-    assert "mod-selected" not in editor._advanced_tab_button._dom_classes
+    assert editor._expression_tab_button.description == "Expression"
+    assert editor._style_tab_button.description == "Style"
+    assert editor._settings_tab_button.description == "Advanced"
+    assert "mod-selected" in editor._expression_tab_button._dom_classes
+    assert "mod-selected" not in editor._style_tab_button._dom_classes
+    assert "mod-selected" not in editor._settings_tab_button._dom_classes
+
+    editor._set_tab("style")
+
+    assert "mod-selected" not in editor._expression_tab_button._dom_classes
+    assert "mod-selected" in editor._style_tab_button._dom_classes
+    assert "mod-selected" not in editor._settings_tab_button._dom_classes
+    assert editor._expression_tab.layout.display == "none"
+    assert editor._style_tab.layout.display == "flex"
+    assert editor._settings_tab.layout.display == "none"
+    assert editor._tab_bridge.selected_index == 1
+    assert editor._style_tab.children[1] is editor._visibility_section
+    assert editor._style_tab.children[2] is editor._curve_style_section
 
     editor._set_tab("advanced")
 
-    assert "mod-selected" not in editor._formula_tab_button._dom_classes
-    assert "mod-selected" in editor._advanced_tab_button._dom_classes
-    assert editor._formula_tab.layout.display == "none"
-    assert editor._advanced_tab.layout.display == "flex"
+    assert "mod-selected" not in editor._expression_tab_button._dom_classes
+    assert "mod-selected" not in editor._style_tab_button._dom_classes
+    assert "mod-selected" in editor._settings_tab_button._dom_classes
+    assert editor._expression_tab.layout.display == "none"
+    assert editor._style_tab.layout.display == "none"
+    assert editor._settings_tab.layout.display == "flex"
+    assert editor._tab_bridge.selected_index == 2
 
-    css = editor._style.value
-    for snippet in SCROLL_GUARD_SNIPPETS:
-        assert snippet in css
+    assert editor._views_field.layout.display == "flex"
+    assert editor._views_note.layout.display == "none"
+    assert editor._placement_body.children == (editor._views_field,)
+
+
+def test_plot_editor_switches_to_readonly_id_presentation_in_edit_mode_and_uses_inline_errors() -> None:
+    figure = Figure()
+    figure.add_view("alt")
+    editor = figure._plot_editor
+
+    editor.open_for_new(default_kind="cartesian")
+    assert editor._views_field.layout.display == "flex"
+    assert editor._views_note.layout.display == "none"
+
+    editor._cartesian_expression.value = "x"
+    editor._cartesian_variable.value = "x"
+    editor._views.value = ()
+    editor._apply_button.click()
+
+    assert editor.panel_visible is True
+    assert editor._error_open is False
+    assert editor._active_tab == "advanced"
+    assert editor._settings_alert.layout.display == "flex"
+    assert "Select at least one target view." in editor._settings_alert.value
+
+    editor.open_for_new(default_kind="parametric")
+    editor._parametric_x.value = r"\cos(t)"
+    editor._parametric_y.value = r"\sin(t)"
+    editor._parameter_variable.value = "t"
+    editor._parameter_min.value = "0"
+    editor._parameter_max.value = "a"
+    editor._apply_button.click()
+
+    assert editor.panel_visible is True
+    assert editor._error_open is False
+    assert editor._active_tab == "expression"
+    assert editor._expression_alert.layout.display == "flex"
+    assert "symbolic bounds are not supported" in editor._expression_alert.value
+
+    import sympy as sp
+
+    x = sp.symbols("x")
+    figure.plot(x, x, id="curve", label="Curve")
+    editor.open_for_plot("curve")
+
+    assert editor._title.value == "Plot editor"
+    assert editor._title_chip.layout.display == "block"
+    assert "Editing curve" in editor._title_chip.value
+    assert "gu-title-chip" not in editor._title_chip._dom_classes
+    assert editor._id_text.layout.display == "none"
+    assert editor._id_readonly.layout.display == "block"
+    assert editor._apply_button.description == "Apply"
+
+
+def test_slider_settings_dialog_uses_shared_shell_wording_and_done_action() -> None:
+    slider = FloatSlider(description=r"$a$:")
+
+    assert slider.settings_title_text.value == "Parameter settings"
+    assert "<b>" not in slider.settings_title_text.value.lower()
+    assert slider.settings_subject.value == r"$a$"
+    assert "gu-title-chip" not in slider.settings_subject._dom_classes
+    assert slider._settings_animation_section.children[0].value == "Animation"
+    assert slider.btn_done_settings.description == "Done"
+    assert slider.btn_settings.description == "Open parameter settings"
+    assert slider.btn_close_settings.description == "Close parameter settings"
+    assert slider.settings_panel.layout.width == "min(460px, calc(100vw - 32px))"
+    assert slider.settings_panel.layout.min_width == "min(320px, calc(100vw - 32px))"
+
+
+def test_plot_editor_single_view_keeps_target_views_table_available() -> None:
+    editor = Figure()._plot_editor
+    editor.open_for_new(default_kind="cartesian")
+
+    assert editor._views_field.layout.display == "flex"
+    assert editor._views_field.layout.height == "auto"
+    assert editor._views_field.layout.min_height == "0px"
+    assert editor._views.layout.display == "flex"
+    assert editor._views.layout.height == "auto"
+    assert editor._views.layout.min_height == "96px"
+    assert editor._views_note.layout.display == "none"
+    assert editor._placement_body.children == (editor._views_field,)
+
+
+def test_plot_editor_multi_view_keeps_target_views_field_mounted_and_moves_visibility_to_style_tab() -> None:
+    figure = Figure()
+    figure.add_view("alt")
+    editor = figure._plot_editor
+
+    editor.open_for_new(default_kind="cartesian")
+
+    assert editor._views_field.layout.display == "flex"
+    assert editor._views_note.layout.display == "none"
+    assert editor._placement_body.children == (editor._views_field,)
+    assert editor._visibility_row.children == (editor._visibility_field,)
+    assert editor._style_tab.children[1] is editor._visibility_section

@@ -8,7 +8,7 @@ from gu_toolkit import Figure
 def _legend_row_labels(fig: Figure) -> list[str]:
     labels: list[str] = []
     for child in fig._layout.legend_box.children:
-        if "gu-legend-row" not in getattr(child, "_dom_classes", ()):  # toolbar / empty state
+        if "gu-legend-row" not in getattr(child, "_dom_classes", ()):  # empty state or toolbar host
             continue
         labels.append(child.children[1].value)
     return labels
@@ -21,15 +21,16 @@ def test_plot_lifecycle_updates_legend_and_sidebar_visibility() -> None:
     assert fig._legend.has_legend is False
     assert fig._legend.panel_visible is True
     assert fig._layout.legend_header.layout.display == "none"
-    assert fig._layout.legend_box.layout.display == "flex"
+    assert fig._layout.legend_panel.panel.layout.display == "flex"
     assert fig._layout.sidebar_container.layout.display == "flex"
     assert getattr(fig._legend._plot_add_button, "disabled", True) is False
+    assert fig._layout.legend_header_toolbar.children == (fig._legend._plot_add_button,)
 
     fig.plot(sp.sin(x), x, id="sin", label="sin(x)")
 
     assert fig._legend.has_legend is True
     assert fig._layout.legend_header.layout.display == "none"
-    assert fig._layout.legend_box.layout.display == "flex"
+    assert fig._layout.legend_panel.panel.layout.display == "flex"
     assert fig._layout.sidebar_container.layout.display == "flex"
     assert _legend_row_labels(fig) == ["sin(x)"]
 

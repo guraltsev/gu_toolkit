@@ -35,6 +35,10 @@ pandas = [
 where = ["src"]
 include = ["gu_toolkit*"]
 
+
+[tool.setuptools.package-data]
+"gu_toolkit" = ["css/*.css"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

@@ -35,11 +35,18 @@ from .figure_color import color_for_trace_index, color_to_picker_hex
 from .widget_chrome import (
     add_widget_classes,
     attach_host_children,
+    build_action_bar,
+    build_dialog_header,
+    build_form_section,
     build_modal_overlay,
     build_modal_panel,
+    build_title_chip,
     configure_action_button,
+    configure_control,
     configure_icon_button,
     hosted_modal_dimensions,
+    labelled_field,
+    load_ui_css,
     shared_style_widget,
 )
 
@@ -53,6 +60,8 @@ _DASH_STYLE_OPTIONS: tuple[tuple[str, str], ...] = (
     ("Long dash-dot", "longdashdot"),
 )
 _DASH_STYLE_VALUES = frozenset(value for _, value in _DASH_STYLE_OPTIONS)
+
+_LEGEND_LOCAL_CSS = load_ui_css("legend.css")
 
 
 class _LegendInteractionBridge(anywidget.AnyWidget):
@@ -206,24 +215,11 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
           checkboxLabel.appendChild(checkbox);
           checkboxLabel.appendChild(checkboxText);
 
-          const styleButton = document.createElement("button");
-          styleButton.type = "button";
-          styleButton.className = "gu-legend-context-menu-item gu-legend-context-menu-style-button";
-          styleButton.textContent = "Line style settings…";
-          styleButton.setAttribute("role", "menuitem");
-
           menu.appendChild(checkboxLabel);
-          menu.appendChild(styleButton);
           document.body.appendChild(menu);
 
           checkbox.addEventListener("change", () => {
             sendRequest("set_sound_enabled", { enabled: !!checkbox.checked });
-          });
-          styleButton.addEventListener("click", () => {
-            if (menuPlotId) {
-              sendRequest("open_style_dialog", { plot_id: menuPlotId });
-            }
-            hideContextMenu();
           });
           menu.addEventListener("contextmenu", (event) => {
             event.preventDefault();
@@ -232,7 +228,6 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
 
           el.__guLegendContextMenu = menu;
           el.__guLegendContextMenuCheckbox = checkbox;
-          el.__guLegendContextMenuStyleButton = styleButton;
           return menu;
         }
 
@@ -244,10 +239,6 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
           return el.__guLegendContextMenuCheckbox || ensureContextMenu().querySelector("input");
         }
 
-        function menuStyleButtonEl() {
-          return el.__guLegendContextMenuStyleButton || q(contextMenuEl(), "button");
-        }
-
         function contextMenuVisible() {
           const menu = contextMenuEl();
           return menu instanceof HTMLElement && menu.style.display !== "none";
@@ -255,12 +246,8 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
 
         function syncContextMenu() {
           const checkbox = menuCheckboxEl();
-          const styleButton = menuStyleButtonEl();
           if (checkbox) {
             checkbox.checked = !!model.get("sound_enabled");
-          }
-          if (styleButton) {
-            styleButton.style.display = menuPlotId ? "flex" : "none";
           }
         }
 
@@ -593,11 +580,13 @@ class LegendPanelManager:
         *,
         modal_host: widgets.Box | None = None,
         root_widget: widgets.Box | None = None,
+        header_toolbar: widgets.Box | None = None,
         enable_plot_editor: bool = False,
     ) -> None:
         """Initialize a legend manager bound to the provided layout box."""
         self._layout_box = layout_box
         self._modal_host = modal_host
+        self._header_toolbar = header_toolbar
         self._enable_plot_editor = bool(enable_plot_editor)
         self._plot_editor_handler: Callable[[str | None], None] | None = None
         self._rows: dict[str, LegendRowModel] = {}
@@ -633,62 +622,72 @@ class LegendPanelManager:
         )
         self._context_bridge.on_msg(self._handle_context_bridge_message)
 
-        self._dialog_style = shared_style_widget(self._dialog_style_css())
+        self._style_widget = shared_style_widget(_LEGEND_LOCAL_CSS, include_base=False)
+        self._row_style_widget = self._style_widget
+        self._refresh_row_style_widget()
         self._dialog_color = widgets.ColorPicker(
             value="#636efa",
-            description="Color:",
+            description="",
             concise=True,
             layout=widgets.Layout(width="100%", min_width="0"),
         )
-        self._dialog_color.add_class("gu-legend-style-dialog-color")
+        configure_control(
+            self._dialog_color,
+            family="color",
+            extra_classes=("gu-legend-style-dialog-color",),
+        )
         self._dialog_width = widgets.BoundedFloatText(
             value=2.0,
             min=0.0,
-            description="Width:",
+            description="",
             layout=widgets.Layout(width="100%", min_width="0"),
         )
-        self._dialog_width.add_class("gu-legend-style-dialog-width")
+        configure_control(
+            self._dialog_width,
+            family="numeric",
+            extra_classes=("gu-legend-style-dialog-width",),
+        )
         self._dialog_opacity = widgets.BoundedFloatText(
             value=1.0,
             min=0.0,
             max=1.0,
-            description="Opacity:",
+            description="",
             layout=widgets.Layout(width="100%", min_width="0"),
         )
-        self._dialog_opacity.add_class("gu-legend-style-dialog-opacity")
+        configure_control(
+            self._dialog_opacity,
+            family="numeric",
+            extra_classes=("gu-legend-style-dialog-opacity",),
+        )
         self._dialog_dash = widgets.Dropdown(
             options=_DASH_STYLE_OPTIONS,
             value="solid",
-            description="Style:",
+            description="",
             layout=widgets.Layout(width="100%", min_width="0"),
         )
-        self._dialog_dash.add_class("gu-legend-style-dialog-dash")
+        configure_control(
+            self._dialog_dash,
+            family="dropdown",
+            extra_classes=("gu-legend-style-dialog-dash",),
+        )
         self._dialog_close_button = widgets.Button(
-            description="Cancel legend style settings",
-            tooltip="Cancel legend style settings",
+            description="Close legend style dialog",
+            tooltip="Close legend style dialog",
         )
-        configure_icon_button(self._dialog_close_button, role="close", size_px=24)
+        configure_icon_button(
+            self._dialog_close_button,
+            role="close",
+            size_px=24,
+            extra_classes=("gu-legend-style-dialog-close-button",),
+        )
         self._dialog_close_button.on_click(self._dismiss_style_dialog)
-        self._dialog_title_text = widgets.HTML("<b>Legend style</b>")
-        self._dialog_subject = widgets.HTMLMath(
-            value="",
-            layout=widgets.Layout(min_width="0", margin="0px"),
+        self._dialog_title_text = widgets.HTML(
+            "Legend style",
+            layout=widgets.Layout(margin="0px", min_width="0"),
         )
-        self._dialog_title = widgets.HBox(
-            [self._dialog_title_text, self._dialog_subject],
-            layout=widgets.Layout(
-                align_items="center",
-                gap="4px",
-                flex="1 1 auto",
-                min_width="0",
-                flex_flow="row wrap",
-            ),
-        )
-        self._dialog_title.add_class("smart-slider-settings-title")
-        self._dialog_subject.add_class("smart-slider-settings-title-subject")
-        self._dialog_title_text.add_class("smart-slider-settings-title-text")
         self._dialog_title_text.add_class("gu-modal-title-text")
         self._dialog_title_text.add_class("gu-legend-style-dialog-title-text")
+        self._dialog_subject = build_title_chip("")
         self._dialog_cancel_button = widgets.Button(
             description="Cancel",
             tooltip="Discard legend style changes",
@@ -701,7 +700,7 @@ class LegendPanelManager:
         )
         self._dialog_cancel_button.on_click(self._dismiss_style_dialog)
         self._dialog_ok_button = widgets.Button(
-            description="OK",
+            description="Apply",
             tooltip="Apply legend style changes",
         )
         configure_action_button(
@@ -711,25 +710,24 @@ class LegendPanelManager:
             extra_classes=("gu-legend-style-dialog-ok-button",),
         )
         self._dialog_ok_button.on_click(self._apply_style_dialog)
-        dialog_header = widgets.HBox(
-            [self._dialog_title, self._dialog_close_button],
-            layout=widgets.Layout(
-                justify_content="space-between",
-                align_items="flex-start",
-                gap="8px",
-                width="100%",
-                min_width="0",
-            ),
+        dialog_header = build_dialog_header(
+            self._dialog_title_text,
+            self._dialog_close_button,
+            chip_widget=self._dialog_subject,
         )
-        dialog_actions = widgets.HBox(
+        dialog_actions = build_action_bar(
             [self._dialog_cancel_button, self._dialog_ok_button],
-            layout=widgets.Layout(
-                justify_content="flex-end",
-                align_items="center",
-                gap="8px",
-                width="100%",
-                min_width="0",
-            ),
+            extra_classes=("gu-legend-style-dialog-actions",),
+        )
+        dialog_fields = build_form_section(
+            "Style",
+            [
+                labelled_field("Color", self._dialog_color),
+                labelled_field("Width", self._dialog_width),
+                labelled_field("Opacity", self._dialog_opacity),
+                labelled_field("Dash", self._dialog_dash),
+            ],
+            extra_classes=("gu-legend-style-dialog-section",),
         )
         dialog_width, dialog_min_width, dialog_max_width = hosted_modal_dimensions(
             preferred_width_px=440,
@@ -738,10 +736,7 @@ class LegendPanelManager:
         self._dialog_panel = build_modal_panel(
             [
                 dialog_header,
-                widgets.HBox([self._dialog_color], layout=widgets.Layout(width="100%", min_width="0")),
-                widgets.HBox([self._dialog_width], layout=widgets.Layout(width="100%", min_width="0")),
-                widgets.HBox([self._dialog_opacity], layout=widgets.Layout(width="100%", min_width="0")),
-                widgets.HBox([self._dialog_dash], layout=widgets.Layout(width="100%", min_width="0")),
+                dialog_fields,
                 dialog_actions,
             ],
             width=dialog_width,
@@ -758,7 +753,12 @@ class LegendPanelManager:
             modal_class=self._dialog_modal_class,
         )
 
-        attach_host_children(self._modal_host, self._dialog_style, self._dialog_modal, self._context_bridge)
+        attach_host_children(
+            self._modal_host,
+            self._style_widget,
+            self._dialog_modal,
+            self._context_bridge,
+        )
 
         self._plot_add_button: widgets.Button | None = None
         self._plot_toolbar: widgets.HBox | None = None
@@ -772,27 +772,26 @@ class LegendPanelManager:
             configure_icon_button(
                 self._plot_add_button,
                 role="plus",
-                size_px=32,
+                size_px=28,
                 extra_classes=("gu-legend-add-plot-button", "gu-legend-inline-button"),
             )
             self._plot_add_button.on_click(lambda _button: self._request_plot_edit(None))
-            self._plot_toolbar = widgets.HBox(
-                [self._plot_add_button],
-                layout=widgets.Layout(
-                    width="100%",
-                    align_items="center",
-                    justify_content="flex-end",
-                    gap="8px",
-                    margin="0 0 4px 0",
-                ),
-            )
-            self._plot_toolbar.add_class("gu-legend-plot-toolbar")
+            if self._header_toolbar is not None:
+                self._header_toolbar.children = (self._plot_add_button,)
+            else:
+                self._plot_toolbar = widgets.HBox(
+                    [self._plot_add_button],
+                    layout=widgets.Layout(
+                        width="100%",
+                        align_items="center",
+                        justify_content="flex-end",
+                        gap="8px",
+                        margin="0 0 4px 0",
+                    ),
+                )
+                self._plot_toolbar.add_class("gu-legend-plot-toolbar")
             self._empty_state = widgets.HTML(
-                value=(
-                    "<div style='font-size: 13px; color: #475569; line-height: 1.4;'>"
-                    "No plots in this view yet. Use the <b>+</b> button to add one."
-                    "</div>"
-                ),
+                value="No plots in this view yet. Use the + button to add one.",
                 layout=widgets.Layout(margin="0", width="100%"),
             )
             self._empty_state.add_class("gu-legend-empty-state")
@@ -924,8 +923,11 @@ class LegendPanelManager:
                 padding="0",
             )
         )
-        toggle.add_class("gu-legend-toggle")
-        toggle.add_class(f"gu-legend-plot-id-{css_plot_id}")
+        add_widget_classes(
+            toggle,
+            "gu-legend-toggle",
+            f"gu-legend-plot-id-{css_plot_id}",
+        )
 
         label_widget = widgets.HTMLMath(
             value="",
@@ -950,51 +952,23 @@ class LegendPanelManager:
             description="Play sound",
             tooltip="Play sound",
             layout=widgets.Layout(
-                width="24px",
-                min_width="24px",
-                height="24px",
+                width="28px",
+                min_width="28px",
+                height="28px",
                 margin="0",
                 padding="0",
                 display="none",
             ),
         )
-        sound_button.add_class("gu-legend-sound-toggle")
-        sound_button.add_class(f"gu-legend-plot-id-{css_plot_id}")
-
-        style_widget = widgets.HTML(
-            value=(
-                "<style>"
-                ".gu-legend-row {overflow: hidden !important;}"
-                ".gu-legend-toggle,.gu-legend-toggle:hover,.gu-legend-toggle:focus,.gu-legend-toggle:active,"
-                ".gu-legend-toggle.mod-active,.gu-legend-toggle.mod-active:hover,.gu-legend-toggle.mod-active:focus,"
-                ".gu-legend-toggle button,.gu-legend-toggle button:hover,.gu-legend-toggle button:focus,.gu-legend-toggle button:active,"
-                ".gu-legend-toggle .widget-button,.gu-legend-toggle .widget-button:hover,.gu-legend-toggle .widget-button:focus,"
-                ".gu-legend-toggle .jupyter-button,.gu-legend-toggle .jupyter-button:hover,.gu-legend-toggle .jupyter-button:focus,"
-                ".gu-legend-sound-toggle,.gu-legend-sound-toggle:hover,.gu-legend-sound-toggle:focus,.gu-legend-sound-toggle:active,"
-                ".gu-legend-sound-toggle button,.gu-legend-sound-toggle button:hover,.gu-legend-sound-toggle button:focus,.gu-legend-sound-toggle button:active,"
-                ".gu-legend-sound-toggle .widget-button,.gu-legend-sound-toggle .widget-button:hover,.gu-legend-sound-toggle .widget-button:focus,"
-                ".gu-legend-sound-toggle .jupyter-button,.gu-legend-sound-toggle .jupyter-button:hover,.gu-legend-sound-toggle .jupyter-button:focus {"
-                "background: transparent !important;background-color: transparent !important;background-image: none !important;"
-                "border: none !important;box-shadow: none !important;outline: none !important;}"
-                ".gu-legend-toggle,.gu-legend-sound-toggle {position: relative !important;overflow: hidden !important;border-radius: 999px !important;font-size: 0 !important;line-height: 0 !important;}"
-                ".gu-legend-toggle::before,.gu-legend-sound-toggle::before {display: inline-flex !important;align-items: center !important;justify-content: center !important;width: 100% !important;height: 100% !important;line-height: 1 !important;}"
-                ".gu-legend-toggle::before {font-size: 15px !important;}"
-                ".gu-legend-sound-toggle::before {font-size: 14px !important;}"
-                ".gu-legend-inline-button button,.gu-legend-inline-button .widget-button,.gu-legend-inline-button .jupyter-button {padding: 0 !important;min-width: 0 !important;}"
-                ".gu-legend-toggle.mod-visible::before {content: '●';}"
-                ".gu-legend-toggle.mod-hidden::before {content: '⊘';}"
-                ".gu-legend-sound-toggle.mod-muted::before {content: '🔇';}"
-                ".gu-legend-sound-toggle.mod-playing::before {content: '🔊';}"
-                ".gu-legend-toggle:hover,.gu-legend-toggle:focus-visible,.gu-legend-sound-toggle:hover,.gu-legend-sound-toggle:focus-visible,.gu-legend-inline-button:hover,.gu-legend-inline-button:focus-visible {background-color: rgba(15, 23, 42, 0.06) !important;}"
-                "</style>"
-            ),
-            layout=widgets.Layout(display="none", width="0", height="0"),
+        configure_icon_button(
+            sound_button,
+            size_px=28,
+            extra_classes=("gu-legend-sound-toggle", "gu-legend-inline-button", f"gu-legend-plot-id-{css_plot_id}"),
         )
-
         children: list[widgets.Widget] = [toggle, label_widget]
         if edit_button is not None:
             children.append(edit_button)
-        children.extend([sound_button, style_widget])
+        children.append(sound_button)
 
         container = widgets.HBox(
             children,
@@ -1007,16 +981,44 @@ class LegendPanelManager:
         if edit_button is not None:
             edit_button.on_click(lambda _button, pid=plot_id: self._request_plot_edit(pid))
         sound_button.on_click(lambda _button, pid=plot_id: self._on_sound_button_clicked(pid))
-        return LegendRowModel(
+        row_model = LegendRowModel(
             plot_id=plot_id,
             container=container,
             toggle=toggle,
             label_widget=label_widget,
             sound_button=sound_button,
-            style_widget=style_widget,
+            style_widget=self._row_style_widget,
             css_plot_id=css_plot_id,
             edit_button=edit_button,
         )
+        self._refresh_row_style_widget()
+        return row_model
+
+    def _refresh_row_style_widget(self) -> None:
+        """Append per-row marker colors so legend dots stay synchronized to plots."""
+
+        rules: list[str] = []
+        for plot_id in self._ordered_plot_ids:
+            row = self._rows.get(plot_id)
+            plot = self._plots.get(plot_id)
+            if row is None or plot is None:
+                continue
+            marker_color = self._resolve_plot_color(plot).strip() or "#6c757d"
+            css_plot_id = row.css_plot_id
+            rules.append(
+                "\n".join(
+                    (
+                        f".gu-legend-plot-id-{css_plot_id}.gu-legend-toggle,",
+                        f".gu-legend-plot-id-{css_plot_id}.gu-legend-toggle :is(button, .widget-button, .jupyter-button) {{",
+                        f"  --gu-legend-marker-color: {marker_color} !important;",
+                        "}",
+                    )
+                )
+            )
+        css = _LEGEND_LOCAL_CSS
+        if rules:
+            css = f"{css}\n\n/* Legend row marker colors */\n" + "\n".join(rules)
+        self._style_widget.value = f"<style>{css}</style>"
 
     def _sync_row_widgets(self, *, row: LegendRowModel, plot: Any) -> None:
         """Incrementally update label/toggle to mirror current plot state."""
@@ -1026,6 +1028,7 @@ class LegendPanelManager:
 
         target_value = self._coerce_visible_to_bool(getattr(plot, "visible", True))
         marker_color = self._resolve_plot_color(plot)
+        self._refresh_row_style_widget()
         plot_label = self._accessible_plot_label(plot, row.plot_id)
         self._sync_toggle_accessibility(
             toggle=row.toggle,
@@ -1138,10 +1141,12 @@ class LegendPanelManager:
         row = self._rows.get(plot_id)
         if row is None:
             return
+        marker_color = self._resolve_plot_color(plot)
+        self._refresh_row_style_widget()
         self._style_toggle_marker(
             toggle=row.toggle,
             is_visible=plot.visible is True,
-            marker_color=self._resolve_plot_color(plot),
+            marker_color=marker_color,
         )
         self._sync_toggle_accessibility(
             toggle=row.toggle,
@@ -1152,7 +1157,7 @@ class LegendPanelManager:
     @staticmethod
     def _style_toggle_marker(*, toggle: widgets.ToggleButton, is_visible: bool, marker_color: str) -> None:
         """Render the toggle marker as a color-coded circular legend control."""
-        toggle.icon = "circle" if is_visible else "times-circle"
+        toggle.icon = ""
         toggle.button_style = ""
         toggle.style.text_color = marker_color
         toggle.style.button_color = "transparent"
@@ -1293,25 +1298,6 @@ class LegendPanelManager:
         except Exception:
             return text
 
-    @staticmethod
-    def _dialog_style_css() -> str:
-        return (
-            ".gu-legend-context-menu-item,"
-            ".gu-legend-context-menu-item:hover,"
-            ".gu-legend-context-menu-item:focus,"
-            ".gu-legend-context-menu-item:active {"
-            "background: transparent !important;background-color: transparent !important;background-image: none !important;border: none !important;box-shadow: none !important;outline: none !important;}"
-            ".smart-slider-settings-title {flex: 1 1 auto !important;min-width: 0 !important;flex-wrap: wrap !important;}"
-            ".smart-slider-settings-title-text,.smart-slider-settings-title-subject {min-width: 0 !important;}"
-            ".smart-slider-settings-title-subject {overflow-wrap: anywhere !important;}"
-            ".smart-slider-settings-panel :is(input, textarea, select, button):focus-visible,"
-            ".gu-legend-context-menu :is(input, button):focus-visible {outline: 2px solid var(--jp-brand-color1, #0b76d1) !important;outline-offset: 1px !important;}"
-            ".gu-legend-context-menu {position: fixed !important;display: none;flex-direction: column;gap: 4px;min-width: 196px;padding: 6px;background: white;border: 1px solid rgba(15, 23, 42, 0.12);border-radius: 8px;box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22);z-index: 1001;}"
-            ".gu-legend-context-menu-item {display: flex !important;align-items: center !important;gap: 8px !important;width: 100% !important;padding: 6px 8px !important;border-radius: 6px !important;color: #111827 !important;cursor: pointer !important;text-align: left !important;font: inherit !important;}"
-            ".gu-legend-context-menu-checkbox input {margin: 0 !important;}"
-            ".gu-legend-context-menu-item:hover,.gu-legend-context-menu-item:focus-visible {background: rgba(15, 23, 42, 0.06) !important;}"
-        )
-
     def _handle_context_bridge_message(self, _widget: Any, content: Any, _buffers: Any) -> None:
         if not isinstance(content, dict):
             return
@@ -1398,6 +1384,7 @@ class LegendPanelManager:
         self._dialog_modal.layout.display = "flex" if self._settings_open else "none"
         self._context_bridge.dialog_open = self._settings_open
         if not self._settings_open:
+            self._dialog_subject.layout.display = "none"
             self._context_bridge.dialog_label = "Legend style settings"
             self._context_bridge.plot_label = "plot"
 
@@ -1419,13 +1406,14 @@ class LegendPanelManager:
         """Populate dialog controls from ``plot`` and capture their baseline."""
         state = self._style_dialog_state_for_plot(plot)
         self._dialog_loaded_style = state
-        self._dialog_subject.value = self._format_label_value(plot=plot, default_plot_id=plot_id)
+        plot_label = self._accessible_plot_label(plot, plot_id).strip() or plot_id
+        self._dialog_subject.value = html.escape(plot_label)
+        self._dialog_subject.layout.display = "flex"
         self._dialog_color.value = state.picker_color
         self._dialog_width.value = state.width
         self._dialog_opacity.value = state.opacity
         self._dialog_dash.value = state.dash
 
-        plot_label = self._accessible_plot_label(plot, plot_id).strip() or plot_id
         self._context_bridge.plot_label = plot_label
         self._context_bridge.dialog_label = f"Legend style settings for {plot_label}"
 

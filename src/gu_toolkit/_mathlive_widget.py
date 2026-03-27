@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import traitlets
 
-from ._widget_stubs import anywidget
+from ._widget_stubs import anywidget, widgets
 
 
 class MathLiveField(anywidget.AnyWidget):
@@ -54,6 +54,14 @@ class MathLiveField(anywidget.AnyWidget):
     aria_label = traitlets.Unicode("Mathematical input").tag(sync=True)
     read_only = traitlets.Bool(False).tag(sync=True)
 
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        self.layout = widgets.Layout(width="100%", min_width="0", max_width="100%")
+        add_class = getattr(self, "add_class", None)
+        if callable(add_class):
+            add_class("gu-control")
+            add_class("gu-control-math")
+
     _esm = r"""
     let mathliveReady = null;
 
@@ -75,13 +83,13 @@ class MathLiveField(anywidget.AnyWidget):
         node.style.width = "100%";
         node.style.maxWidth = "100%";
         node.style.boxSizing = "border-box";
-        node.style.minHeight = "42px";
-        node.style.fontSize = "1.08rem";
-        node.style.lineHeight = "1.35";
-        node.style.border = "1px solid rgba(15, 23, 42, 0.16)";
-        node.style.borderRadius = "8px";
-        node.style.padding = "8px 12px";
-        node.style.background = readOnly ? "rgba(15, 23, 42, 0.04)" : "white";
+        node.style.minWidth = "0";
+        node.style.overflow = "hidden";
+        if (node.tagName && node.tagName.toLowerCase() === "math-field") {
+          node.style.fontSize = "var(--gu-math-font-size, 18px)";
+          node.style.lineHeight = "1.05";
+        }
+        node.dataset.guReadOnly = readOnly ? "true" : "false";
       }
       if ("placeholder" in node) node.placeholder = placeholder;
       if ("readOnly" in node) node.readOnly = readOnly;
@@ -126,7 +134,6 @@ class MathLiveField(anywidget.AnyWidget):
       field.setAttribute("virtual-keyboard-mode", "manual");
       field.smartFence = true;
       field.smartMode = true;
-      field.style.fontSize = "1.08rem";
       return field;
     }
 

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ._widget_stubs import widgets
+from .ui_system import build_layout, build_section_panel, load_ui_css, shared_style_widget
 from IPython.display import display
 
 from .layout_logging import layout_value_snapshot
@@ -60,65 +61,7 @@ class _ViewPage:
 class FigureLayout:
     """Own the widget tree used by a figure instance."""
 
-    _STYLE_HTML = (
-        "<style>"
-        ".gu-figure-root,"
-        ".gu-figure-content,"
-        ".gu-figure-left-panel,"
-        ".gu-figure-view-stage,"
-        ".gu-figure-view-page,"
-        ".gu-figure-sidebar,"
-        ".gu-figure-panel-box,"
-        ".gu-figure-output-panel,"
-        ".gu-figure-info-output,"
-        ".gu-figure-output-widget {"
-        "box-sizing: border-box !important;"
-        "min-width: 0 !important;"
-        "}"
-        ".gu-figure-view-stage,"
-        ".gu-figure-view-page {"
-        "overflow: hidden !important;"
-        "}"
-        ".gu-figure-sidebar {"
-        "overflow-x: hidden !important;"
-        "overflow-y: auto !important;"
-        "}"
-        ".gu-figure-panel-box,"
-        ".gu-figure-panel-box > *,"
-        ".gu-figure-output-panel,"
-        ".gu-figure-output-panel > *,"
-        ".gu-figure-info-output,"
-        ".gu-figure-info-output > *,"
-        ".gu-figure-output-widget,"
-        ".gu-figure-output-widget > * {"
-        "box-sizing: border-box !important;"
-        "width: 100% !important;"
-        "max-width: 100% !important;"
-        "min-width: 0 !important;"
-        "}"
-        ".gu-figure-panel-box,"
-        ".gu-figure-output-panel,"
-        ".gu-figure-info-output,"
-        ".gu-figure-output-widget {"
-        "overflow-x: hidden !important;"
-        "}"
-        ".gu-figure-info-output :is(.jupyter-widgets-output-area, .output_scroll, .jp-OutputArea, .jp-OutputArea-output, .jp-OutputArea-child),"
-        ".gu-figure-output-panel :is(.jupyter-widgets-output-area, .output_scroll, .jp-OutputArea, .jp-OutputArea-output, .jp-OutputArea-child),"
-        ".gu-figure-output-widget :is(.jupyter-widgets-output-area, .output_scroll, .jp-OutputArea, .jp-OutputArea-output, .jp-OutputArea-child) {"
-        "box-sizing: border-box !important;"
-        "max-width: 100% !important;"
-        "margin: 0 !important;"
-        "overflow-x: hidden !important;"
-        "}"
-        ".gu-figure-panel-box pre,"
-        ".gu-figure-info-output pre,"
-        ".gu-figure-output-panel pre,"
-        ".gu-figure-output-widget pre {"
-        "white-space: pre-wrap !important;"
-        "overflow-wrap: anywhere !important;"
-        "}"
-        "</style>"
-    )
+    _STYLE_CSS = load_ui_css("figure_layout.css")
 
     def __init__(self, title: str = "") -> None:
         self._view_pages: dict[str, _ViewPage] = {}
@@ -132,33 +75,35 @@ class FigureLayout:
 
         # 1. Title bar
         self.title_html = widgets.HTMLMath(
-            value=title, layout=widgets.Layout(margin="0px")
+            value=title, layout=build_layout(margin="0px")
         )
+        self.title_html.add_class("gu-figure-title")
         self.full_width_checkbox = widgets.Checkbox(
             value=False,
             description="Full width plot",
             indent=False,
-            layout=widgets.Layout(width="160px", margin="0px"),
+            layout=build_layout(width="160px", margin="0px"),
         )
         self._titlebar = widgets.HBox(
             [self.title_html, self.full_width_checkbox],
-            layout=widgets.Layout(
+            layout=build_layout(
                 width="100%",
                 align_items="center",
                 justify_content="space-between",
                 margin="0 0 6px 0",
             ),
         )
+        self._titlebar.add_class("gu-figure-titlebar")
 
         # 2. Persistent view selector + stage
         self.view_selector = widgets.ToggleButtons(
             options=(),
             value=None,
-            layout=widgets.Layout(display="none", width="100%", margin="0 0 6px 0"),
+            layout=build_layout(display="none", width="100%", margin="0 0 6px 0"),
         )
         self.view_stage = widgets.Box(
             children=(),
-            layout=widgets.Layout(
+            layout=build_layout(
                 width="100%",
                 height="60vh",
                 min_width="0",
@@ -175,64 +120,44 @@ class FigureLayout:
         self.view_stage.add_class("gu-figure-context-governed")
 
         # 3. Controls sidebar
-        self.params_header = widgets.HTML(
-            "<b>Parameters</b>",
-            layout=widgets.Layout(display="none", margin="10px 0 0 0"),
+        self.legend_panel = build_section_panel(
+            "Legend",
+            variant="toolbar",
+            display="none",
+            extra_classes=("gu-figure-sidebar-panel", "gu-figure-panel-box"),
+            body_extra_classes=("gu-figure-panel-body", "gu-figure-legend-area"),
         )
-        self.params_box = widgets.VBox(
-            layout=widgets.Layout(
-                width="100%",
-                display="none",
-                padding="8px",
-                border="1px solid rgba(15,23,42,0.08)",
-                border_radius="10px",
-                overflow_x="hidden",
-            )
-        )
-        self.params_box.add_class("gu-figure-panel-box")
+        self.legend_header = self.legend_panel.title
+        self.legend_header_toolbar = self.legend_panel.toolbar
+        self.legend_box = self.legend_panel.body
 
-        self.info_header = widgets.HTML(
-            "<b>Info</b>", layout=widgets.Layout(display="none", margin="10px 0 0 0")
+        self.params_panel = build_section_panel(
+            "Parameters",
+            variant="minimal",
+            display="none",
+            extra_classes=("gu-figure-sidebar-panel", "gu-figure-panel-box"),
+            body_extra_classes=("gu-figure-panel-body",),
         )
-        self.info_box = widgets.VBox(
-            layout=widgets.Layout(
-                width="100%",
-                display="none",
-                padding="8px",
-                border="1px solid rgba(15,23,42,0.08)",
-                border_radius="10px",
-                overflow_x="hidden",
-            )
-        )
-        self.info_box.add_class("gu-figure-panel-box")
+        self.params_header = self.params_panel.title
+        self.params_box = self.params_panel.body
 
-        self.legend_header = widgets.HTML(
-            "", layout=widgets.Layout(display="none", margin="0")
+        self.info_panel = build_section_panel(
+            "Info",
+            variant="minimal",
+            display="none",
+            extra_classes=("gu-figure-sidebar-panel", "gu-figure-panel-box"),
+            body_extra_classes=("gu-figure-panel-body", "gu-figure-info-output"),
         )
-        self.legend_header.add_class("gu-figure-legend-area")
-        self.legend_box = widgets.VBox(
-            layout=widgets.Layout(
-                width="100%",
-                display="none",
-                padding="8px",
-                border="1px solid rgba(15,23,42,0.08)",
-                border_radius="10px",
-                overflow_x="hidden",
-            )
-        )
-        self.legend_box.add_class("gu-figure-panel-box")
-        self.legend_box.add_class("gu-figure-legend-area")
+        self.info_header = self.info_panel.title
+        self.info_box = self.info_panel.body
 
         self.sidebar_container = widgets.VBox(
             [
-                self.legend_header,
-                self.legend_box,
-                self.params_header,
-                self.params_box,
-                self.info_header,
-                self.info_box,
+                self.legend_panel.panel,
+                self.params_panel.panel,
+                self.info_panel.panel,
             ],
-            layout=widgets.Layout(
+            layout=build_layout(
                 margin="0px",
                 padding="0px 0px 0px 10px",
                 flex="0 1 380px",
@@ -250,7 +175,7 @@ class FigureLayout:
         # 4. Main content wrapper
         self.left_panel = widgets.VBox(
             [self.view_selector, self.view_stage],
-            layout=widgets.Layout(
+            layout=build_layout(
                 width="100%",
                 min_width="0",
                 flex="1 1 560px",
@@ -262,7 +187,7 @@ class FigureLayout:
 
         self.content_wrapper = widgets.Box(
             [self.left_panel, self.sidebar_container],
-            layout=widgets.Layout(
+            layout=build_layout(
                 display="flex",
                 flex_flow="row wrap",
                 align_items="stretch",
@@ -275,11 +200,8 @@ class FigureLayout:
         self.content_wrapper.add_class("gu-figure-content")
 
         # 5. Output area below the figure
-        self.print_header = widgets.HTML(
-            "<b>Output</b>", layout=widgets.Layout(margin="8px 0 4px 0")
-        )
         self.print_output = widgets.Output(
-            layout=widgets.Layout(
+            layout=build_layout(
                 width="100%",
                 min_width="0",
                 min_height="32px",
@@ -288,38 +210,31 @@ class FigureLayout:
             )
         )
         self.print_output.add_class("gu-figure-output-widget")
-        self.print_panel = widgets.VBox(
-            [self.print_output],
-            layout=widgets.Layout(
-                width="100%",
-                min_width="0",
-                min_height="48px",
-                padding="8px",
-                border="1px solid rgba(15,23,42,0.08)",
-                border_radius="10px",
-                overflow_x="hidden",
-                overflow_y="auto",
-                box_sizing="border-box",
-            ),
+        self.output_panel = build_section_panel(
+            "Output",
+            variant="minimal",
+            display="flex",
+            extra_classes=("gu-figure-output-panel", "gu-figure-panel-box"),
+            body_extra_classes=("gu-figure-output-body",),
         )
-        self.print_panel.add_class("gu-figure-panel-box")
-        self.print_panel.add_class("gu-figure-output-panel")
+        self.print_header = self.output_panel.title
+        self.print_panel = self.output_panel.panel
+        self.output_panel.body.children = (self.print_output,)
+        self.output_panel.body.layout.overflow_y = "auto"
         self.print_area = widgets.VBox(
-            [self.print_header, self.print_panel],
-            layout=widgets.Layout(width="100%", margin="6px 0 0 0"),
+            [self.print_panel],
+            layout=build_layout(width="100%", margin="6px 0 0 0"),
         )
         self.print_area.add_class("gu-figure-context-governed")
 
-        self._style_widget = widgets.HTML(
-            self._STYLE_HTML,
-            layout=widgets.Layout(width="0px", height="0px", margin="0px"),
-        )
+        self._style_widget = shared_style_widget(self._STYLE_CSS)
 
         self.root_widget = widgets.VBox(
             [self._style_widget, self._titlebar, self.content_wrapper, self.print_area],
-            layout=widgets.Layout(width="100%", min_width="0", position="relative"),
+            layout=build_layout(width="100%", min_width="0", position="relative"),
         )
         self.root_widget.add_class("gu-figure-root")
+        self.root_widget.add_class("gu-theme-root")
 
         self.full_width_checkbox.observe(self._on_full_width_change, names="value")
         self._apply_content_layout_mode(is_full=self.full_width_checkbox.value)
@@ -405,33 +320,30 @@ class FigureLayout:
         """Apply sidebar section visibility and report geometry changes."""
         old_state = (
             self.params_header.layout.display,
-            self.params_box.layout.display,
+            self.params_panel.panel.layout.display,
             self.info_header.layout.display,
-            self.info_box.layout.display,
-            self.legend_header.layout.display,
-            self.legend_box.layout.display,
+            self.info_panel.panel.layout.display,
+            self.legend_panel.panel.layout.display,
             self.sidebar_container.layout.display,
         )
 
         self.params_header.layout.display = "block" if has_params else "none"
-        self.params_box.layout.display = "flex" if has_params else "none"
+        self.params_panel.panel.layout.display = "flex" if has_params else "none"
 
         self.info_header.layout.display = "block" if has_info else "none"
-        self.info_box.layout.display = "flex" if has_info else "none"
+        self.info_panel.panel.layout.display = "flex" if has_info else "none"
 
-        self.legend_header.layout.display = "none"
-        self.legend_box.layout.display = "flex" if has_legend else "none"
+        self.legend_panel.panel.layout.display = "flex" if has_legend else "none"
 
         show_sidebar = has_params or has_info or has_legend
         self.sidebar_container.layout.display = "flex" if show_sidebar else "none"
 
         new_state = (
             self.params_header.layout.display,
-            self.params_box.layout.display,
+            self.params_panel.panel.layout.display,
             self.info_header.layout.display,
-            self.info_box.layout.display,
-            self.legend_header.layout.display,
-            self.legend_box.layout.display,
+            self.info_panel.panel.layout.display,
+            self.legend_panel.panel.layout.display,
             self.sidebar_container.layout.display,
         )
         changed = new_state != old_state
@@ -454,7 +366,7 @@ class FigureLayout:
         if page is None:
             host_box = widgets.Box(
                 children=(),
-                layout=widgets.Layout(
+                layout=build_layout(
                     width="100%",
                     height="100%",
                     min_width="0",

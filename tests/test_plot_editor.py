@@ -42,6 +42,7 @@ def test_toolbar_button_opens_new_dialog_and_row_edit_button_loads_existing_plot
     assert fig._plot_editor.panel_visible is False
     assert fig._legend._plot_add_button is not None
     assert fig._legend._plot_add_button.description == "Create plot from expression"
+    assert fig._layout.legend_header_toolbar.children == (fig._legend._plot_add_button,)
 
     fig._legend._plot_add_button.click()
 
@@ -49,21 +50,30 @@ def test_toolbar_button_opens_new_dialog_and_row_edit_button_loads_existing_plot
     assert editor.panel_visible is True
     assert editor._editing_plot_id is None
     assert editor._kind.value == "cartesian"
-    assert editor._formula_tab.layout.display == "flex"
-    assert editor._advanced_tab.layout.display == "none"
-    assert editor._formula_tab.children[0] is editor._plot_type_row
-    assert editor._plot_type_field.children[1] is editor._kind
-    assert editor._formula_tab.children[1] is editor._cartesian_box
+    assert editor._title.value == "Plot editor"
+    assert editor._title_chip.layout.display == "none"
+    assert editor._expression_tab.layout.display == "flex"
+    assert editor._style_tab.layout.display == "none"
+    assert editor._settings_tab.layout.display == "none"
+    assert editor._expression_tab.children[0] is editor._expression_alert
+    assert editor._expression_tab.children[1] is editor._cartesian_box
+    assert editor._style_tab.children[0] is editor._style_alert
+    assert editor._style_tab.children[1] is editor._visibility_section
+    assert editor._style_tab.children[2] is editor._curve_style_section
+    assert editor._settings_tab.children[0] is editor._settings_alert
+    assert editor._settings_tab.children[1] is editor._placement_section
+    assert editor._settings_tab.children[2] is editor._identity_section
+    assert editor._settings_tab.children[3] is editor._resolution_section
+    assert editor._cartesian_setup_row.children == (
+        editor._plot_type_field,
+        editor._cartesian_variable_field,
+    )
     assert editor._cartesian_expression_field.children[1] is editor._cartesian_expression
-    assert editor._cartesian_variable_field.children[1] is editor._cartesian_variable
-    assert editor._advanced_tab.children[0] is editor._advanced_meta_row
-    assert editor._advanced_tab.children[1] is editor._views_field
-    assert editor._views_field.children[1] is editor._views
-    assert editor._advanced_meta_row.children[0].children[1] is editor._label_text
-    assert editor._advanced_meta_row.children[1].children[1] is editor._id_text
-    assert editor._advanced_meta_row.children[2].children[1].children[0] is editor._visible_toggle
-    assert "validated when you click Create" in editor._status_bar.value
-    assert "Advanced settings hold label, id, visibility, views" in editor._status_bar.value
+    assert editor._views_note.layout.display == "none"
+    assert editor._views_field.layout.display == "flex"
+    assert editor._placement_body.children == (editor._views_field,)
+    assert editor._visibility_section.children[1] is editor._visibility_row
+    assert "Parameters:" not in editor._parameter_preview.value
 
     editor.close()
     fig.plot(sp.sin(x), x, id="sin", label="Sine")
@@ -78,6 +88,11 @@ def test_toolbar_button_opens_new_dialog_and_row_edit_button_loads_existing_plot
     assert editor._editing_plot_id == "sin"
     assert editor._label_text.value == "Sine"
     assert editor._apply_button.description == "Apply"
+    assert editor._title_chip.layout.display == "block"
+    assert "Editing sin" in editor._title_chip.value
+    assert "gu-title-chip" not in editor._title_chip._dom_classes
+    assert editor._id_text.layout.display == "none"
+    assert editor._id_readonly.layout.display == "block"
     assert "sin" in editor._cartesian_expression.value.lower()
 
 
@@ -136,7 +151,17 @@ def test_apply_plot_editor_draft_updates_existing_plot_label_views_samples_and_v
     x = sp.symbols("x")
     fig = Figure()
     fig.add_view("alt")
-    plot = fig.plot(x, x, id="curve", label="Original", samples=40)
+    plot = fig.plot(
+        x,
+        x,
+        id="curve",
+        label="Original",
+        samples=40,
+        color="#111111",
+        thickness=3.0,
+        dash="dash",
+        opacity=0.7,
+    )
 
     draft = _blank_draft(
         kind="cartesian",
@@ -156,45 +181,63 @@ def test_apply_plot_editor_draft_updates_existing_plot_label_views_samples_and_v
     assert plot.visible is False
     assert plot.samples == 123
     assert plot.views == ("alt",)
+    assert plot.color == "#111111"
+    assert plot.thickness == 3.0
+    assert plot.dash == "dash"
+    assert plot.opacity == 0.7
     assert "a" in set(fig.parameters.keys())
 
 
-def test_plot_editor_defers_parametric_validation_until_apply_and_uses_error_modal() -> None:
+def test_apply_plot_editor_draft_applies_curve_style_overrides_to_curves() -> None:
     fig = Figure()
 
-    draft = _blank_draft(
-        kind="parametric",
-        parametric_x_latex=r"\cos(t)",
-        parametric_y_latex=r"\sin(t)",
-        parameter_var_latex="t",
-        parameter_min_latex="0",
-        parameter_max_latex="a",
+    cartesian = apply_plot_editor_draft(
+        fig,
+        _blank_draft(
+            kind="cartesian",
+            plot_id="curve",
+            cartesian_expression_latex="x",
+            cartesian_var_latex="x",
+            curve_color="#123456",
+            curve_thickness=4.5,
+            curve_dash="dashdot",
+            curve_opacity=0.4,
+        ),
     )
 
-    editor = fig._plot_editor
-    editor.open_for_new(default_kind="parametric")
-    editor._parametric_x.value = draft.parametric_x_latex
-    editor._parametric_y.value = draft.parametric_y_latex
-    editor._parameter_variable.value = draft.parameter_var_latex
-    editor._parameter_min.value = draft.parameter_min_latex
-    editor._parameter_max.value = draft.parameter_max_latex
-    editor._update_parameter_preview()
+    assert isinstance(cartesian, Plot)
+    assert cartesian.color == "#123456"
+    assert cartesian.thickness == 4.5
+    assert cartesian.dash == "dashdot"
+    assert cartesian.opacity == 0.4
 
-    assert "symbolic bounds are not supported" not in editor._parameter_preview.value
-    assert "validated when you click Create" in editor._parameter_preview.value
-    assert editor._error_open is False
+    parametric = apply_plot_editor_draft(
+        fig,
+        _blank_draft(
+            kind="parametric",
+            plot_id="orbit",
+            parametric_x_latex=r"\cos(t)",
+            parametric_y_latex=r"\sin(t)",
+            parameter_var_latex="t",
+            parameter_min_latex="0",
+            parameter_max_latex=r"2\pi",
+            curve_color="#654321",
+            curve_thickness=2.5,
+            curve_dash="dot",
+            curve_opacity=0.6,
+        ),
+    )
 
-    editor._apply_button.click()
-
-    assert editor.panel_visible is True
-    assert editor._error_open is True
-    assert editor._error_modal.layout.display == "flex"
-    assert editor._active_tab == "formula"
-    assert "symbolic bounds are not supported" in editor._error_message.value
+    assert isinstance(parametric, ParametricPlot)
+    assert parametric.color == "#654321"
+    assert parametric.thickness == 2.5
+    assert parametric.dash == "dot"
+    assert parametric.opacity == 0.6
 
 
-def test_plot_editor_missing_views_routes_error_to_advanced_tab() -> None:
+def test_plot_editor_uses_inline_validation_and_advanced_tab_for_missing_views() -> None:
     fig = Figure()
+    fig.add_view("alt")
     editor = fig._plot_editor
 
     editor.open_for_new(default_kind="cartesian")
@@ -205,9 +248,51 @@ def test_plot_editor_missing_views_routes_error_to_advanced_tab() -> None:
     editor._apply_button.click()
 
     assert editor.panel_visible is True
-    assert editor._error_open is True
+    assert editor._error_open is False
     assert editor._active_tab == "advanced"
-    assert "Select at least one target view." in editor._error_message.value
+    assert editor._settings_alert.layout.display == "flex"
+    assert "Select at least one target view." in editor._settings_alert.value
+
+
+def test_plot_editor_shows_parse_errors_in_modal_without_inline_alert_artifacts() -> None:
+    fig = Figure()
+    editor = fig._plot_editor
+
+    editor.open_for_new(default_kind="cartesian")
+    editor._cartesian_expression.value = r"\sin("
+    editor._cartesian_variable.value = "x"
+
+    editor._apply_button.click()
+
+    assert editor.panel_visible is True
+    assert editor._error_open is True
+    assert editor._expression_alert.layout.display == "none"
+    assert "Could not parse Cartesian expression." in editor._error_message.value
+
+
+def test_plot_editor_defers_parametric_validation_until_apply_and_shows_inline_expression_error() -> None:
+    fig = Figure()
+    editor = fig._plot_editor
+
+    editor.open_for_new(default_kind="parametric")
+    editor._parametric_x.value = r"\cos(t)"
+    editor._parametric_y.value = r"\sin(t)"
+    editor._parameter_variable.value = "t"
+    editor._parameter_min.value = "0"
+    editor._parameter_max.value = "a"
+    editor._update_parameter_preview()
+
+    assert "symbolic bounds are not supported" not in editor._parameter_preview.value
+    assert editor._expression_alert.layout.display == "none"
+    assert editor._error_open is False
+
+    editor._apply_button.click()
+
+    assert editor.panel_visible is True
+    assert editor._error_open is False
+    assert editor._active_tab == "expression"
+    assert editor._expression_alert.layout.display == "flex"
+    assert "symbolic bounds are not supported" in editor._expression_alert.value
 
 
 def test_apply_plot_editor_draft_creates_contour_and_temperature_plots() -> None:

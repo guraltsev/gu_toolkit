@@ -386,6 +386,7 @@ class Figure:
             self._layout.legend_box,
             modal_host=self._layout.root_widget,
             root_widget=self._layout.root_widget,
+            header_toolbar=self._layout.legend_header_toolbar,
             enable_plot_editor=True,
         )
         self._plot_editor = PlotComposerDialog(
@@ -1245,6 +1246,7 @@ class Figure:
         else:
             explicit_plot_samples = self._coerce_samples_value(requested_samples)
 
+        opacity_supplied = opacity is not None or alpha is not None
         style_kwargs = validate_style_kwargs(
             {
                 "color": color,
@@ -1311,10 +1313,11 @@ class Figure:
                 "thickness": thickness,
                 "dash": dash,
                 "line": line,
-                "opacity": opacity,
                 "trace": trace,
                 "view": view,
             }
+            if opacity_supplied:
+                update_kwargs["opacity"] = opacity
             if normalized_numeric_fn is not None:
                 update_kwargs["numeric_function"] = normalized_numeric_fn
             if label is not None:

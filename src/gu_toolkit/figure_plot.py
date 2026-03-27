@@ -1023,11 +1023,14 @@ class Plot:
                     requested_views = (
                         {requested} if isinstance(requested, str) else set(requested)
                     )
+                    # Add new view memberships before removing old ones so a
+                    # fresh trace can clone the existing line style from a live
+                    # handle instead of falling back to Plotly defaults.
+                    for view_id in requested_views:
+                        self.add_to_view(view_id)
                     for view_id in tuple(self._view_ids):
                         if view_id not in requested_views:
                             self.remove_from_view(view_id)
-                    for view_id in requested_views:
-                        self.add_to_view(view_id)
 
             style_kwargs = validate_style_kwargs(
                 {

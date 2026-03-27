@@ -516,6 +516,7 @@ def create_or_update_parametric_plot(
     else:
         explicit_plot_samples = figure._coerce_samples_value(requested_samples)
 
+    opacity_supplied = opacity is not None or alpha is not None
     style_kwargs = validate_style_kwargs(
         {
             "color": color,
@@ -581,10 +582,11 @@ def create_or_update_parametric_plot(
             "thickness": thickness,
             "dash": dash,
             "line": line,
-            "opacity": opacity,
             "trace": trace,
             "view": view,
         }
+        if opacity_supplied:
+            update_kwargs["opacity"] = opacity
         if x_numeric_fn is not None:
             update_kwargs["x_numeric_function"] = x_numeric_fn
         if y_numeric_fn is not None:

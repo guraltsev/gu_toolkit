@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import ipywidgets as widgets
 
-from gu_toolkit.figure_legend import LegendPanelManager
+from gu_toolkit.figure_legend import LegendPanelManager, _LegendInteractionBridge
 
 
 @dataclass
@@ -121,12 +121,12 @@ def test_dialog_escape_request_closes_without_applying_pending_changes() -> None
     assert plot.thickness == 2.0
 
 
-def test_dialog_exposes_graphical_color_picker_and_ok_button() -> None:
+def test_dialog_exposes_graphical_color_picker_and_apply_button() -> None:
     manager = LegendPanelManager(widgets.VBox(), modal_host=widgets.VBox(), root_widget=widgets.VBox())
 
     assert type(manager._dialog_color).__name__ == "ColorPicker"
     assert manager._dialog_color.concise is True
-    assert manager._dialog_ok_button.description == "OK"
+    assert manager._dialog_ok_button.description == "Apply"
 
 
 def test_legend_row_and_root_are_marked_as_figure_context_governed() -> None:
@@ -140,3 +140,7 @@ def test_legend_row_and_root_are_marked_as_figure_context_governed() -> None:
     assert "gu-figure-context-governed" in row.container._dom_classes
     assert "gu-figure-context-governed" in root._dom_classes
     assert any(cls.startswith("gu-legend-plot-id-") for cls in row.toggle._dom_classes)
+
+
+def test_context_menu_bridge_no_longer_exposes_line_style_entry() -> None:
+    assert "open_style_dialog" not in _LegendInteractionBridge._esm

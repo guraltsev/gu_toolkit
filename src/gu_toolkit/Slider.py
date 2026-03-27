@@ -17,10 +17,20 @@ from .InputConvert import InputConvert
 from .animation import DEFAULT_ANIMATION_TIME, AnimationController
 from .widget_chrome import (
     attach_host_children,
+    build_action_bar,
+    build_boolean_field,
+    build_dialog_header,
+    build_form_section,
     build_modal_overlay,
     build_modal_panel,
+    configure_action_button,
+    configure_control,
     configure_icon_button,
+    labelled_field,
+    load_ui_css,
+    responsive_row,
     shared_style_widget,
+    style_widget_value,
 )
 
 
@@ -31,6 +41,8 @@ _ANIMATION_MODE_BUTTON_CLASSES = {
 }
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 _WHITESPACE_RE = re.compile(r"\s+")
+
+_SLIDER_LOCAL_CSS = load_ui_css("slider.css")
 
 
 def _derive_accessibility_label(description: str, *, fallback: str = "parameter") -> str:
@@ -48,6 +60,21 @@ def _derive_accessibility_label(description: str, *, fallback: str = "parameter"
     raw = raw.replace("{", " ").replace("}", " ")
     raw = _WHITESPACE_RE.sub(" ", raw).strip(" :")
     return raw or fallback
+
+
+def _normalize_title_subject(description: str) -> str:
+    """Return a compact visible subject for the settings-dialog title.
+
+    The inline slider description often ends with a trailing colon because it
+    sits beside the control row. The dialog title reads more naturally without
+    that punctuation while still preserving MathJax-compatible text supplied by
+    the caller.
+    """
+
+    text = str(description or "").strip()
+    if text.endswith(":"):
+        text = text[:-1].rstrip()
+    return text
 
 
 class _SliderModalAccessibilityBridge(anywidget.AnyWidget):
@@ -138,6 +165,18 @@ class _SliderModalAccessibilityBridge(anywidget.AnyWidget):
           return qInput(limits && limits.length > 1 ? limits[1] : null);
         }
 
+        function stepInputEl() {
+          return qInput(q(modalEl(), ".smart-slider-settings-step-input"));
+        }
+
+        function animationTimeInputEl() {
+          return qInput(q(modalEl(), ".smart-slider-settings-period-input"));
+        }
+
+        function animationModeInputEl() {
+          return qInput(q(modalEl(), ".smart-slider-settings-mode-input"));
+        }
+
         function titleEl() {
           return q(modalEl(), ".smart-slider-settings-title-text");
         }
@@ -159,6 +198,9 @@ class _SliderModalAccessibilityBridge(anywidget.AnyWidget):
           const valueInput = valueInputEl();
           const minInput = minInputEl();
           const maxInput = maxInputEl();
+          const stepInput = stepInputEl();
+          const animationTimeInput = animationTimeInputEl();
+          const animationModeInput = animationModeInputEl();
           const title = titleEl();
           const isOpen = !!model.get("dialog_open");
 
@@ -210,6 +252,23 @@ class _SliderModalAccessibilityBridge(anywidget.AnyWidget):
           if (maxInput) {
             maxInput.setAttribute("aria-label", `${controlLabel} maximum`);
             maxInput.setAttribute("inputmode", "decimal");
+          }
+
+          if (stepInput) {
+            stepInput.setAttribute("aria-label", `${controlLabel} step size`);
+            stepInput.setAttribute("inputmode", "decimal");
+          }
+
+          if (animationTimeInput) {
+            animationTimeInput.setAttribute(
+              "aria-label",
+              `${controlLabel} animation period in seconds`,
+            );
+            animationTimeInput.setAttribute("inputmode", "decimal");
+          }
+
+          if (animationModeInput) {
+            animationModeInput.setAttribute("aria-label", `${controlLabel} animation mode`);
           }
         }
 
@@ -451,141 +510,8 @@ class FloatSlider(widgets.VBox):
         )
         self.description_label.add_class("smart-slider-label")
 
-        # self._limit_style = widgets.HTML(
-        #    "<style>"
-        #    ".smart-slider-limit input{"
-        #    "font-size:10px;"
-        #    "color:#666;"
-        #    "height:18px;"
-        #    "border:none;"
-        #    "box-shadow:none;"
-        #    "background:transparent;"
-        #    "padding:0px;"
-        #   "text-align:center;"
-        #    "}"
-        #    "</style>"
-        # )
-
-        self._limit_style = shared_style_widget(
-            r"""
-/* Root sizing keeps parameter rows inside the sidebar without phantom x-scroll. */
-.smart-slider-root,
-.smart-slider-top-row,
-.smart-slider-track,
-.smart-slider-label,
-.smart-slider-value-input,
-.smart-slider-settings-panel,
-.smart-slider-settings-modal {
-  box-sizing: border-box !important;
-  min-width: 0 !important;
-}
-
-.smart-slider-root,
-.smart-slider-top-row {
-  width: 100% !important;
-}
-
-.smart-slider-top-row {
-  align-items: center !important;
-  column-gap: 2px !important;
-}
-
-.smart-slider-label {
-  flex: 0 0 auto !important;
-  width: auto !important;
-  margin-right: 0 !important;
-  white-space: nowrap !important;
-}
-
-.smart-slider-track {
-  flex: 1 1 auto !important;
-  width: auto !important;
-  min-width: 0 !important;
-  margin: 0 !important;
-}
-
-.smart-slider-value-input {
-  width: 64px !important;
-}
-
-.smart-slider-value-input,
-.smart-slider-value-input * {
-  min-width: 0 !important;
-  margin: 0 !important;
-}
-
-.smart-slider-value-input :is(input, textarea) {
-  min-width: 0 !important;
-}
-
-/* ============================================================
-   Min/Max look like small non-editable text until focus,
-   but remain fully editable on click.
-   Works without relying on a specific wrapper DOM.
-   ============================================================ */
-
-/* Shrink any wrapper(s) JupyterLab/ipywidgets might impose. */
-.smart-slider-limit,
-.smart-slider-limit * {
-  min-height: 0 !important;
-}
-
-.smart-slider-limit {
-  width: 38px !important;
-  flex: 0 0 38px !important;
-  box-sizing: border-box !important;
-  margin: 0 !important;
-  padding: 0 !important;
-}
-
-/* The actual editable element(s): handle both input + textarea. */
-.smart-slider-limit :is(input, textarea) {
-  font-size: 10px !important;
-  line-height: 1.1 !important;
-  height: 16px !important;
-  min-height: 0 !important;
-  padding: 0 2px !important;
-  margin: 0 !important;
-  background: transparent !important;
-  border: 1px solid transparent !important;
-  box-shadow: none !important;
-  border-radius: 3px !important;
-  color: var(--jp-ui-font-color2, #666) !important;
-  text-align: center !important;
-  box-sizing: border-box !important;
-}
-
-.smart-slider-limit :is(input, textarea):hover {
-  border-bottom-color: rgba(0,0,0,0.20) !important;
-}
-
-.smart-slider-limit :is(input, textarea):focus {
-  outline: none !important;
-  border-color: rgba(0,0,0,0.28) !important;
-  background: rgba(0,0,0,0.04) !important;
-}
-
-.smart-slider-settings-panel {
-  width: min(440px, calc(100vw - 32px)) !important;
-  min-width: min(380px, calc(100vw - 32px)) !important;
-}
-
-.smart-slider-settings-title {
-  flex: 1 1 auto !important;
-  min-width: 0 !important;
-  flex-wrap: wrap !important;
-}
-
-.smart-slider-settings-title-text,
-.smart-slider-settings-title-subject {
-  min-width: 0 !important;
-}
-
-.smart-slider-settings-title-subject {
-  overflow-wrap: anywhere !important;
-}
-"""
-        )
+        self._theme_style = shared_style_widget()
+        self._limit_style = shared_style_widget(_SLIDER_LOCAL_CSS, include_base=False)
         # The *only* numeric field (editable; accepts expressions)
         self.number = widgets.Text(
             value=str(value),
@@ -612,7 +538,6 @@ class FloatSlider(widgets.VBox):
 
         # --- Settings panel ---------------------------------------------------
         style_args = {
-            "style": {"description_width": "72px"},
             "layout": widgets.Layout(width="100%", min_width="0"),
         }
         self.set_min = widgets.Text(
@@ -634,64 +559,123 @@ class FloatSlider(widgets.VBox):
         ):
             if hasattr(field, "placeholder"):
                 setattr(field, "placeholder", placeholder)
-        self.set_step = widgets.FloatText(value=step, description="Step:", **style_args)
+        self.set_step = widgets.FloatText(value=step, description="", **style_args)
+        configure_control(self.set_step, family="numeric")
+        self.set_step.add_class("smart-slider-settings-step-input")
         self.set_live = widgets.Checkbox(
             value=True,
             description="Live Update",
             indent=False,
-            layout=widgets.Layout(width="100%", min_width="0"),
+            layout=widgets.Layout(width="auto", min_width="0"),
         )
+        configure_control(self.set_live, family="checkbox")
         self.set_animation_time = widgets.BoundedFloatText(
             value=DEFAULT_ANIMATION_TIME,
             min=0.001,
             step=0.1,
-            description="Anim:",
-            tooltip="Seconds to traverse the current range once.",
+            description="",
+            tooltip="Animation period in seconds for one pass across the current range.",
             **style_args,
         )
+        configure_control(self.set_animation_time, family="numeric")
+        self.set_animation_time.add_class("smart-slider-settings-period-input")
         self.set_animation_mode = widgets.Dropdown(
             options=(("Loop (>>)", ">>"), ("Once (>)", ">"), ("Bounce (<>)", "<>")),
             value=">>",
-            description="Mode:",
+            description="",
             tooltip="Animation mode for this parameter.",
             **style_args,
         )
+        configure_control(self.set_animation_mode, family="dropdown")
+        self.set_animation_mode.add_class("smart-slider-settings-mode-input")
 
         self.btn_close_settings = widgets.Button(
             description="Close parameter settings",
             tooltip="Close parameter settings",
         )
         configure_icon_button(self.btn_close_settings, role="close", size_px=24)
-        self.settings_title_text = widgets.HTML("<b>Parameter settings</b>")
+        self.settings_title_text = widgets.HTML(
+            "Parameter settings",
+            layout=widgets.Layout(margin="0px", min_width="0"),
+        )
+        self.settings_title_text.add_class("gu-modal-title-text")
         self.settings_title_text.add_class("smart-slider-settings-title-text")
+        settings_subject_value = _normalize_title_subject(description)
         self.settings_subject = widgets.HTMLMath(
-            value=description,
-            layout=widgets.Layout(min_width="0", margin="0px"),
-        )
-        self.settings_subject.add_class("smart-slider-settings-title-subject")
-        self.settings_title = widgets.HBox(
-            [
-                self.settings_title_text,
-                self.settings_subject,
-            ],
+            settings_subject_value,
             layout=widgets.Layout(
-                align_items="center",
-                gap="4px",
-                flex="1 1 auto",
+                display=("block" if settings_subject_value else "none"),
+                width="auto",
                 min_width="0",
-                flex_flow="row wrap",
+                margin="0px",
             ),
         )
-        self.settings_title.add_class("smart-slider-settings-title")
-        settings_header = widgets.HBox(
-            [self.settings_title, self.btn_close_settings],
-            layout=widgets.Layout(
-                justify_content="space-between",
-                align_items="flex-start",
-                gap="8px",
-                width="100%",
-                min_width="0",
+        self.settings_subject.add_class("smart-slider-settings-subject")
+        settings_header = build_dialog_header(
+            self.settings_title_text,
+            self.btn_close_settings,
+            chip_widget=self.settings_subject,
+        )
+
+        self.btn_done_settings = widgets.Button(
+            description="Done",
+            tooltip="Close parameter settings",
+        )
+        configure_action_button(self.btn_done_settings, variant="primary", min_width_px=84)
+        self.btn_done_settings.on_click(lambda _button: self.close_settings())
+
+        self._settings_step_field = labelled_field(
+            "Step",
+            self.set_step,
+            flex="1 1 180px",
+            max_width="220px",
+            extra_classes=("smart-slider-settings-field", "smart-slider-settings-step-field"),
+        )
+        self._settings_step_row = responsive_row(
+            [self._settings_step_field],
+            gap="12px",
+            extra_classes=("smart-slider-settings-row", "smart-slider-settings-step-row"),
+        )
+        self._settings_live_field = build_boolean_field(
+            self.set_live,
+            width="auto",
+            max_width="100%",
+            extra_classes=("smart-slider-settings-live-field",),
+        )
+        self._settings_live_row = responsive_row(
+            [self._settings_live_field],
+            gap="12px",
+            extra_classes=("smart-slider-settings-row", "smart-slider-settings-live-row"),
+        )
+        self._settings_animation_time_field = labelled_field(
+            "Period (s)",
+            self.set_animation_time,
+            flex="1 1 180px",
+            max_width="220px",
+            extra_classes=(
+                "smart-slider-settings-field",
+                "smart-slider-settings-period-field",
             ),
+        )
+        self._settings_animation_mode_field = labelled_field(
+            "Mode",
+            self.set_animation_mode,
+            flex="1 1 200px",
+            max_width="260px",
+            extra_classes=(
+                "smart-slider-settings-field",
+                "smart-slider-settings-mode-field",
+            ),
+        )
+        self._settings_animation_row = responsive_row(
+            [self._settings_animation_time_field, self._settings_animation_mode_field],
+            gap="12px",
+            extra_classes=("smart-slider-settings-row", "smart-slider-settings-animation-row"),
+        )
+        self._settings_animation_section = build_form_section(
+            "Animation",
+            [self._settings_animation_row],
+            extra_classes=("smart-slider-settings-animation-section",),
         )
 
         self._settings_accessibility = _SliderModalAccessibilityBridge(
@@ -704,16 +688,17 @@ class FloatSlider(widgets.VBox):
         )
         self._settings_accessibility.on_msg(self._handle_settings_accessibility_message)
 
+        settings_actions = build_action_bar([self.btn_done_settings])
         self.settings_panel = build_modal_panel(
             [
                 settings_header,
-                widgets.HBox([self.set_step], layout=widgets.Layout(width="100%", min_width="0")),
-                widgets.HBox([self.set_live], layout=widgets.Layout(width="100%", min_width="0")),
-                widgets.HBox([self.set_animation_time], layout=widgets.Layout(width="100%", min_width="0")),
-                widgets.HBox([self.set_animation_mode], layout=widgets.Layout(width="100%", min_width="0")),
+                self._settings_step_row,
+                self._settings_live_row,
+                self._settings_animation_section,
+                settings_actions,
             ],
-            width="440px",
-            min_width="380px",
+            width="min(460px, calc(100vw - 32px))",
+            min_width="min(320px, calc(100vw - 32px))",
             max_width="calc(100vw - 32px)",
             display="none",
             extra_classes=(),
@@ -731,6 +716,7 @@ class FloatSlider(widgets.VBox):
         # --- Layout -----------------------------------------------------------
         top_row = widgets.HBox(
             [
+                self._theme_style,
                 self._limit_style,
                 self.description_label,
                 self.set_min,
@@ -1402,7 +1388,17 @@ class FloatSlider(widgets.VBox):
                 modal_add_class("smart-slider-settings-modal-hosted")
                 modal_add_class("gu-modal-overlay-hosted")
 
+        self._sync_theme_style_widget(host)
         self._modal_host = host
+
+    @staticmethod
+    def _widget_has_class(widget: widgets.Widget | None, class_name: str) -> bool:
+        classes = getattr(widget, "_dom_classes", ()) or ()
+        return class_name in classes
+
+    def _sync_theme_style_widget(self, host: widgets.Box | None) -> None:
+        include_base = host is None or not self._widget_has_class(host, "gu-theme-root")
+        self._theme_style.value = style_widget_value(include_base=include_base)
 
     def _close_settings(self, _: Any) -> None:
         """Close the settings dialog from explicit UI actions."""

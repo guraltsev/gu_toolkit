@@ -20,6 +20,7 @@ This folder uses a lightweight lifecycle model:
 
 - `guides/develop_guide.md`: architecture ownership map and maintenance rules.
 - `guides/legend-plot-editor.md`: legend-driven plot creation and editing UI.
+- `guides/ui-layout-system.md`: shared tokens, primitives, invariants, and layout guardrails.
 - `guides/parametric-plotting.md`: public API and implementation notes for
   parametric curves.
 - `guides/render-batching-and-snapshots.md`: render queue + snapshot pipeline.
