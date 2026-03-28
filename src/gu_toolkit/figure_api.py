@@ -141,7 +141,12 @@ def render(
 
 
 def sound_generation_enabled(enabled: bool | None = None) -> bool:
-    """Query or set sound generation on the current figure."""
+    """Query or legacy-control sound playback on the current figure.
+
+    Sound-capable plots always show their speaker controls. Passing ``False``
+    stops active playback but does not hide those controls. The return value is
+    therefore always ``True``.
+    """
     return _require_current_figure().sound_generation_enabled(enabled)
 
 

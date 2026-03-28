@@ -1701,14 +1701,21 @@ class Figure:
         return self.to_code(options=options)
 
     def sound_generation_enabled(self, enabled: bool | None = None) -> bool:
-        """Query or set the figure-level sound generation toggle.
+        """Query or legacy-control figure sound playback availability.
 
         Parameters
         ----------
         enabled : bool | None, optional
-            ``True`` shows per-plot sound controls and allows playback.
-            ``False`` hides them and stops any active playback. When omitted,
-            the current state is returned without changing it.
+            Sound controls are always available. Passing ``False`` stops any
+            active playback but does not hide the legend speaker buttons.
+            Passing ``True`` leaves controls available and returns ``True``.
+            When omitted, the current availability state is reported.
+
+        Returns
+        -------
+        bool
+            Always ``True`` because sound-capable plots now always expose
+            speaker controls.
         """
         return self._sound.sound_generation_enabled(enabled)
 
