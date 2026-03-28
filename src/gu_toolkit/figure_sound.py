@@ -348,7 +348,7 @@ class FigureSoundManager:
         self._figure = figure
         self._legend = legend
         self._root_widget = root_widget
-        self._enabled = False
+        self._enabled = True
         self._active_plot_id: str | None = None
         self._generation_token = 0
         self._cursor_seconds = 0.0
@@ -371,7 +371,7 @@ class FigureSoundManager:
         bind_handler = getattr(self._legend, "bind_sound_enabled_handler", None)
         if callable(bind_handler):
             bind_handler(self.sound_generation_enabled)
-        self._legend.set_sound_generation_enabled(False)
+        self._legend.set_sound_generation_enabled(self._enabled)
         self._legend.set_sound_playing_plot(None)
 
     @property
@@ -583,9 +583,19 @@ class FigureSoundManager:
 
         peak = float(np.max(np.abs(y_values))) if y_values.size else 0.0
         if peak > 1.0 + self._value_tolerance:
-            raise ValueError(
-                "Sound expression must stay within [-1, 1]; auto-normalization is disabled."
-            )
+            autonormalization_handler = getattr(plot, "autonormalization", None)
+            autonormalization_enabled = False
+            if callable(autonormalization_handler):
+                try:
+                    autonormalization_enabled = bool(autonormalization_handler())
+                except Exception:
+                    autonormalization_enabled = False
+            if autonormalization_enabled and peak > self._value_tolerance:
+                y_values = y_values / peak
+            else:
+                raise ValueError(
+                    "Sound expression must stay within [-1, 1]; enable autonormalization to scale louder chunks automatically."
+                )
 
         pcm = (np.clip(y_values, -1.0, 1.0) * 32767.0).astype(np.int16)
         pcm_base64 = base64.b64encode(pcm.tobytes()).decode("ascii")

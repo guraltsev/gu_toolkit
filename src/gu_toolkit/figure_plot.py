@@ -113,6 +113,7 @@ class Plot:
         line: Mapping[str, Any] | None = None,
         opacity: int | float | None = None,
         trace: Mapping[str, Any] | None = None,
+        autonormalization: bool | None = None,
         plot_id: str = "",
         view_ids: Sequence[str] | None = None,
         *,
@@ -179,6 +180,7 @@ class Plot:
         self._handles: dict[str, PlotHandle] = {}
         self._view_ids = set(view_ids or (self._smart_figure.views.current_id,))
         self._visible: VisibleSpec = visible
+        self._sound_autonormalization = bool(autonormalization)
 
         for view_id in sorted(self._view_ids):
             self._create_trace_handle(view_id=view_id, label=label)
@@ -471,6 +473,7 @@ class Plot:
             thickness=self.thickness,
             dash=self.dash,
             opacity=self.opacity,
+            autonormalization=self.autonormalization(),
             views=self.views,
         )
 
@@ -810,6 +813,30 @@ class Plot:
             raise RuntimeError("Figure sound manager is unavailable.")
         sound_manager.sound(self.id, run=bool(run))
 
+    def autonormalization(self, enabled: bool | None = None) -> bool:
+        """Query or set per-plot sound auto-normalization.
+
+        When enabled, sound playback rescales chunks whose absolute peak
+        exceeds ``1.0`` back into ``[-1, 1]`` instead of raising an error.
+        """
+        if enabled is None:
+            return self._sound_autonormalization
+
+        next_enabled = bool(enabled)
+        if next_enabled == self._sound_autonormalization:
+            return self._sound_autonormalization
+
+        self._sound_autonormalization = next_enabled
+        sound_manager = getattr(self._smart_figure, "_sound", None)
+        if (
+            sound_manager is not None
+            and getattr(sound_manager, "active_plot_id", None) == self.id
+        ):
+            sound_manager.on_parameter_change(
+                {"reason": "plot_autonormalization_changed", "plot_id": self.id}
+            )
+        return self._sound_autonormalization
+
     def render(
         self,
         view_id: str | None = None,
@@ -945,7 +972,7 @@ class Plot:
         **kwargs : Any
             Supported keys include ``label``, ``x_domain``, ``sampling_points``,
             ``visible``, ``var``, ``func``, ``parameters``, ``color``, ``thickness``/``width``, ``dash``,
-            ``opacity``/``alpha``, ``line``, and ``trace``.
+            ``opacity``/``alpha``, ``line``, ``trace``, and ``autonormalization``.
 
         Returns
         -------
@@ -1042,6 +1069,7 @@ class Plot:
                     "opacity": kwargs.get("opacity"),
                     "alpha": kwargs.get("alpha"),
                     "trace": kwargs.get("trace"),
+                "autonormalization": kwargs.get("autonormalization"),
                 },
                 caller="Plot.update()",
             )
@@ -1058,6 +1086,8 @@ class Plot:
                 trace_update = dict(style_kwargs["trace"])
                 for trace_handle in self._iter_trace_handles():
                     trace_handle.update(**trace_update)
+            if "autonormalization" in kwargs and style_kwargs.get("autonormalization") is not None:
+                self.autonormalization(style_kwargs.get("autonormalization"))
 
             # Function update
             if any(k in kwargs for k in ("var", "func", "parameters", "numeric_function")):

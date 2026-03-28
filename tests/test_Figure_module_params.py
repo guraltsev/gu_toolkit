@@ -242,12 +242,25 @@ def test_plot_style_options_are_discoverable() -> None:
         "alpha",
         "line",
         "trace",
+        "autonormalization",
     ):
         assert key in options
 
     fig_options = Figure.plot_style_options()
     assert fig_options == options
 
+
+
+
+def test_plot_autonormalization_command_and_kwarg() -> None:
+    x = sp.symbols("x")
+    fig = Figure()
+    plot_ref = fig.plot(sp.sin(x), x, id="sin_auto", autonormalization=True)
+
+    assert plot_ref.autonormalization() is True
+
+    plot_ref.update(autonormalization=False)
+    assert plot_ref.autonormalization() is False
 
 def test_plot_accepts_label_kwarg_on_create() -> None:
     x = sp.symbols("x")

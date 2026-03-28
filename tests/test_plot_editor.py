@@ -30,6 +30,7 @@ def _blank_draft(**overrides: object) -> PlotEditorDraft:
         field_y_var_latex="y",
         field_grid_x=120,
         field_grid_y=120,
+        curve_autonormalization=None,
     )
     base.update(overrides)
     return PlotEditorDraft(**base)
@@ -60,6 +61,7 @@ def test_toolbar_button_opens_new_dialog_and_row_edit_button_loads_existing_plot
     assert editor._style_tab.children[0] is editor._style_alert
     assert editor._style_tab.children[1] is editor._visibility_section
     assert editor._style_tab.children[2] is editor._curve_style_section
+    assert editor._style_tab.children[3] is editor._curve_sound_section
     assert editor._settings_tab.children[0] is editor._settings_alert
     assert editor._settings_tab.children[1] is editor._placement_section
     assert editor._settings_tab.children[2] is editor._identity_section
@@ -202,6 +204,7 @@ def test_apply_plot_editor_draft_applies_curve_style_overrides_to_curves() -> No
             curve_thickness=4.5,
             curve_dash="dashdot",
             curve_opacity=0.4,
+            curve_autonormalization=True,
         ),
     )
 
@@ -210,6 +213,7 @@ def test_apply_plot_editor_draft_applies_curve_style_overrides_to_curves() -> No
     assert cartesian.thickness == 4.5
     assert cartesian.dash == "dashdot"
     assert cartesian.opacity == 0.4
+    assert cartesian.autonormalization() is True
 
     parametric = apply_plot_editor_draft(
         fig,
@@ -225,6 +229,7 @@ def test_apply_plot_editor_draft_applies_curve_style_overrides_to_curves() -> No
             curve_thickness=2.5,
             curve_dash="dot",
             curve_opacity=0.6,
+            curve_autonormalization=True,
         ),
     )
 
@@ -233,6 +238,7 @@ def test_apply_plot_editor_draft_applies_curve_style_overrides_to_curves() -> No
     assert parametric.thickness == 2.5
     assert parametric.dash == "dot"
     assert parametric.opacity == 0.6
+    assert parametric.autonormalization() is True
 
 
 def test_plot_editor_uses_inline_validation_and_advanced_tab_for_missing_views() -> None:

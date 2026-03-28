@@ -105,6 +105,7 @@ def test_parametric_plot_snapshot_and_codegen_round_trip() -> None:
         id="unit_circle",
         label="unit circle",
         color="green",
+        autonormalization=True,
     )
 
     snapshot = fig.snapshot()
@@ -115,10 +116,12 @@ def test_parametric_plot_snapshot_and_codegen_round_trip() -> None:
     assert plot_snapshot.x_func == sp.cos(t)
     assert plot_snapshot.func == sp.sin(t)
     assert plot_snapshot.parameter_domain == pytest.approx((0.0, float(2 * sp.pi)))
+    assert plot_snapshot.autonormalization is True
     assert "from gu_toolkit import Figure, parameter, plot, parametric_plot, info" in code
     assert "parametric_plot(" in code
     assert "(sp.cos(t), sp.sin(t))" in code
     assert "(t, 0.0, 6.283185307179586)" in code
+    assert "autonormalization=True" in code
 
     namespace: dict[str, object] = {}
     exec(code, namespace)
@@ -131,3 +134,4 @@ def test_parametric_plot_snapshot_and_codegen_round_trip() -> None:
     assert rebuilt_plot.func == plot_snapshot.func
     assert rebuilt_plot.parameter_domain == pytest.approx(plot_snapshot.parameter_domain)
     assert rebuilt_plot.color == plot_snapshot.color
+    assert rebuilt_plot.autonormalization == plot_snapshot.autonormalization

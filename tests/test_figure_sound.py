@@ -41,16 +41,30 @@ def _make_single_plot_figure(expr: Any, *, plot_id: str = "wave") -> tuple[Figur
     return fig, plot, row
 
 
-def test_sound_generation_is_disabled_by_default_and_row_button_is_hidden() -> None:
+def test_sound_generation_is_enabled_by_default_and_row_button_is_visible() -> None:
     fig, _plot, row = _make_single_plot_figure(sp.sin(sp.symbols("x")))
 
-    assert fig.sound_generation_enabled() is False
-    assert row.sound_button.layout.display == "none"
-    assert fig._legend._context_bridge.sound_enabled is False
+    assert fig.sound_generation_enabled() is True
+    assert row.sound_button.layout.display == "inline-flex"
+    assert fig._legend._context_bridge.sound_enabled is True
 
 
 def test_context_menu_sound_toggle_updates_figure_state_and_row_visibility() -> None:
     fig, _plot, row = _make_single_plot_figure(sp.sin(sp.symbols("x")))
+
+    assert fig.sound_generation_enabled() is True
+    assert row.sound_button.layout.display == "inline-flex"
+
+    fig._legend._context_bridge._emit_msg(
+        {
+            "type": "legend_context_request",
+            "action": "set_sound_enabled",
+            "enabled": False,
+        }
+    )
+
+    assert fig.sound_generation_enabled() is False
+    assert row.sound_button.layout.display == "none"
 
     fig._legend._context_bridge._emit_msg(
         {
@@ -64,23 +78,11 @@ def test_context_menu_sound_toggle_updates_figure_state_and_row_visibility() -> 
     assert row.sound_button.layout.display == "inline-flex"
     assert row.sound_button.tooltip == "Play sound for plot wave"
 
-    fig._legend._context_bridge._emit_msg(
-        {
-            "type": "legend_context_request",
-            "action": "set_sound_enabled",
-            "enabled": False,
-        }
-    )
-
-    assert fig.sound_generation_enabled() is False
-    assert row.sound_button.layout.display == "none"
-
 
 def test_plot_sound_start_restart_and_stop_update_manager_and_legend_state() -> None:
     fig, plot, row = _make_single_plot_figure(_constant_expr(0.25))
     messages = _capture_bridge_messages(fig._sound)
 
-    fig.sound_generation_enabled(True)
     plot.sound(run=True)
 
     assert fig._sound.active_plot_id == plot.id
@@ -110,7 +112,6 @@ def test_starting_a_second_plot_switches_the_active_sound_row() -> None:
     second = fig.plot(_constant_expr(0.2), x, id="second", label="second")
     messages = _capture_bridge_messages(fig._sound)
 
-    fig.sound_generation_enabled(True)
     first.sound(run=True)
     second.sound(run=True)
 
@@ -125,7 +126,6 @@ def test_chunk_request_uses_one_second_pcm_chunks_and_advances_cursor() -> None:
     fig, plot, _row = _make_single_plot_figure(_constant_expr(0.25))
     messages = _capture_bridge_messages(fig._sound)
 
-    fig.sound_generation_enabled(True)
     plot.sound(run=True)
     start_message = messages[-1]
     token = start_message["token"]
@@ -158,7 +158,6 @@ def test_parameter_change_requests_audio_refresh_and_new_chunks_use_latest_value
     plot = fig.plot(a + sp.Integer(0) * x, x, id="parametric", label="parametric", parameters=[a])
     messages = _capture_bridge_messages(fig._sound)
 
-    fig.sound_generation_enabled(True)
     plot.sound(run=True)
     start_token = messages[-1]["token"]
 
@@ -196,19 +195,45 @@ def test_parameter_change_requests_audio_refresh_and_new_chunks_use_latest_value
 def test_out_of_range_sound_expression_raises_without_auto_normalization() -> None:
     fig, plot, row = _make_single_plot_figure(_constant_expr(2.0), plot_id="too_loud")
     _capture_bridge_messages(fig._sound)
-    fig.sound_generation_enabled(True)
 
-    with pytest.raises(ValueError, match="within \[-1, 1\]"):
+    with pytest.raises(ValueError, match=r"within \[-1, 1\]"):
         plot.sound(run=True)
 
     assert fig._sound.active_plot_id is None
     assert "mod-muted" in row.sound_button._dom_classes
 
 
+def test_autonormalization_scales_loud_chunks_automatically() -> None:
+    fig, plot, _row = _make_single_plot_figure(_constant_expr(2.0), plot_id="too_loud")
+    messages = _capture_bridge_messages(fig._sound)
+
+    assert plot.autonormalization() is False
+    plot.autonormalization(True)
+    assert plot.autonormalization() is True
+
+    plot.sound(run=True)
+    token = messages[-1]["token"]
+
+    fig._sound._bridge._emit_msg(
+        {
+            "type": "sound_stream_request",
+            "action": "request_chunk",
+            "token": token,
+            "cursor_seconds": 0.0,
+        }
+    )
+
+    chunk_message = messages[-1]
+    pcm = _decode_pcm16_base64(chunk_message["pcm_base64"])
+
+    assert chunk_message["action"] == "chunk"
+    assert np.max(np.abs(pcm)) == pytest.approx(32767, abs=1)
+    assert fig._sound.active_plot_id == "too_loud"
+
+
 def test_row_sound_button_click_uses_plot_sound_semantics() -> None:
     fig, _plot, row = _make_single_plot_figure(_constant_expr(0.125))
     messages = _capture_bridge_messages(fig._sound)
-    fig.sound_generation_enabled(True)
 
     row.sound_button.click()
     assert messages[-1]["action"] == "start"

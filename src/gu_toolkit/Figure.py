@@ -1100,6 +1100,7 @@ class Figure:
         opacity: int | float | None = None,
         alpha: int | float | None = None,
         trace: Mapping[str, Any] | None = None,
+        autonormalization: bool | None = None,
         view: str | Sequence[str] | None = None,
         vars: PlotVarsSpec | None = None,
         samples: int | str | _FigureDefaultSentinel | None = None,
@@ -1153,6 +1154,11 @@ class Figure:
             Supported alias for ``opacity``.
         trace : mapping or None, optional
             Extra full-trace style fields as a mapping (advanced usage).
+        autonormalization : bool or None, optional
+            Per-plot sound setting. When ``True``, playback automatically
+            rescales chunks whose absolute peak exceeds ``1.0`` back into
+            ``[-1, 1]`` instead of raising an error. ``None`` preserves the
+            current setting during in-place updates.
         vars : Symbol or sequence or mapping, optional
             Optional callable-variable specification shared with
             :func:`numpify` normalization.
@@ -1201,7 +1207,7 @@ class Figure:
         --------
         parameter : Create sliders without plotting.
         plot_style_options : List supported style kwargs and meanings
-            (`color`, `thickness`/`width`, `dash`, `opacity`/`alpha`, `line`, `trace`).
+            (`color`, `thickness`/`width`, `dash`, `opacity`/`alpha`, `line`, `trace`, `autonormalization`).
         """
         id = resolve_plot_id(self.plots, id)
 
@@ -1247,6 +1253,7 @@ class Figure:
             explicit_plot_samples = self._coerce_samples_value(requested_samples)
 
         opacity_supplied = opacity is not None or alpha is not None
+        autonormalization_supplied = autonormalization is not None
         style_kwargs = validate_style_kwargs(
             {
                 "color": color,
@@ -1257,6 +1264,7 @@ class Figure:
                 "opacity": opacity,
                 "alpha": alpha,
                 "trace": trace,
+                "autonormalization": autonormalization,
             },
             caller="plot()",
         )
@@ -1266,6 +1274,7 @@ class Figure:
         line = style_kwargs.get("line")
         opacity = style_kwargs.get("opacity")
         trace = style_kwargs.get("trace")
+        autonormalization = style_kwargs.get("autonormalization")
 
         # Parameter normalization
         if parameters is None:
@@ -1318,6 +1327,8 @@ class Figure:
             }
             if opacity_supplied:
                 update_kwargs["opacity"] = opacity
+            if autonormalization_supplied:
+                update_kwargs["autonormalization"] = autonormalization
             if normalized_numeric_fn is not None:
                 update_kwargs["numeric_function"] = normalized_numeric_fn
             if label is not None:
@@ -1355,6 +1366,7 @@ class Figure:
                 line=line,
                 opacity=opacity,
                 trace=trace,
+                autonormalization=autonormalization,
                 plot_id=id,
                 view_ids=view_ids,
                 numeric_function=normalized_numeric_fn,
@@ -1383,6 +1395,7 @@ class Figure:
         opacity: int | float | None = None,
         alpha: int | float | None = None,
         trace: Mapping[str, Any] | None = None,
+        autonormalization: bool | None = None,
         view: str | Sequence[str] | None = None,
         vars: PlotVarsSpec | None = None,
         samples: int | str | _FigureDefaultSentinel | None = None,
@@ -1405,6 +1418,7 @@ class Figure:
             opacity=opacity,
             alpha=alpha,
             trace=trace,
+            autonormalization=autonormalization,
             view=view,
             vars=vars,
             samples=samples,

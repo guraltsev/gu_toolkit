@@ -48,6 +48,9 @@ class PlotSnapshot:
         Line dash pattern.
     opacity : float or None
         Trace opacity (0.0 – 1.0).
+    autonormalization : bool
+        Whether sound playback automatically rescales chunks whose absolute
+        peak exceeds 1.0 back into ``[-1, 1]``.
     views : tuple[str, ...]
         View memberships for this plot.
     kind : str, optional
@@ -73,6 +76,7 @@ class PlotSnapshot:
     thickness: float | None
     dash: str | None
     opacity: float | None
+    autonormalization: bool = False
     views: tuple[str, ...] = ()
     kind: str = "cartesian"
     x_func: Expr | None = None

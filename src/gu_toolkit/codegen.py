@@ -414,6 +414,8 @@ def _plot_call(
             args.append(f"dash={ps.dash!r}")
         if ps.opacity is not None:
             args.append(f"opacity={_fmt_float(ps.opacity)}")
+        if getattr(ps, "autonormalization", False):
+            args.append("autonormalization=True")
     else:
         expr_code = sympy_to_code(ps.func)
         args = [
@@ -445,6 +447,8 @@ def _plot_call(
             args.append(f"dash={ps.dash!r}")
         if ps.opacity is not None:
             args.append(f"opacity={_fmt_float(ps.opacity)}")
+        if getattr(ps, "autonormalization", False):
+            args.append("autonormalization=True")
 
     if getattr(ps, "views", ()):
         if len(ps.views) == 1:

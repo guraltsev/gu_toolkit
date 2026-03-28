@@ -129,6 +129,16 @@ PLOT_STYLE_OPTIONS: tuple[PlotStyleSpec, ...] = (
         default_doc="no extra trace overrides",
         description="Extra full-trace fields as a mapping for advanced Plotly styling",
     ),
+    PlotStyleSpec(
+        name="autonormalization",
+        type_doc="bool | None",
+        default_doc="False / disabled",
+        description=(
+            "Per-plot sound setting. When enabled, playback automatically"
+            " scales chunks whose absolute peak exceeds 1.0 back into"
+            " [-1, 1] instead of raising an error"
+        ),
+    ),
 )
 
 _PLOT_STYLE_SPEC_BY_NAME = {spec.name: spec for spec in PLOT_STYLE_OPTIONS}

@@ -17,6 +17,13 @@ class _FakePlot:
     thickness: float | None = 2.0
     opacity: float | None = 1.0
     dash: str | None = "solid"
+    _sound_autonormalization: bool = False
+
+    def autonormalization(self, enabled: bool | None = None) -> bool:
+        if enabled is None:
+            return self._sound_autonormalization
+        self._sound_autonormalization = bool(enabled)
+        return self._sound_autonormalization
 
 
 def test_context_bridge_opens_style_dialog_for_existing_plot() -> None:
@@ -82,6 +89,7 @@ def test_dialog_changes_apply_only_after_ok_and_refresh_row_color() -> None:
     manager._dialog_width.value = 4.5
     manager._dialog_opacity.value = 0.4
     manager._dialog_dash.value = "dashdot"
+    manager._dialog_autonormalization.value = True
 
     row = manager._rows["plot-1"]
     assert plot.color is None
@@ -95,6 +103,7 @@ def test_dialog_changes_apply_only_after_ok_and_refresh_row_color() -> None:
     assert plot.thickness == 4.5
     assert plot.opacity == 0.4
     assert plot.dash == "dashdot"
+    assert plot.autonormalization() is True
     assert row.toggle.style.text_color == "#123456"
 
 

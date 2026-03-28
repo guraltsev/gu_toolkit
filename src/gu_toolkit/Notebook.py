@@ -38,7 +38,10 @@ try:
 except ModuleNotFoundError:  # Optional dependency
     pd = None
 else:
-    __all__ += ["pd"]
+    __all__ += ["pd", "DataFrame"]
+    from pandas import DataFrame
+
+
 
 try:
     from .numeric_operations import NIntegrate, NReal_Fourier_Series, play
@@ -153,7 +156,6 @@ __all__ += [
 del _ch
 
 from pprint import pprint
+from IPython.display import HTML, Latex, display, Markdown
 
-from IPython.display import HTML, Latex, display
-
-__all__ += ["HTML", "Latex", "display", "pprint"]
+__all__ += ["HTML", "Latex","Markdown", "display", "pprint"]

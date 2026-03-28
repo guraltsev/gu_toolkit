@@ -155,6 +155,7 @@ class PlotEditorDraft:
     curve_thickness: float | None = None
     curve_opacity: float | None = None
     curve_dash: str | None = None
+    curve_autonormalization: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -179,6 +180,7 @@ class CurveStyleBaseline:
     thickness: float
     opacity: float
     dash: str
+    autonormalization: bool
 
 
 
@@ -484,6 +486,18 @@ def _next_auto_curve_color(figure: Figure) -> str:
     )
 
 
+def _plot_autonormalization_enabled(plot: Any) -> bool:
+    """Return the current per-plot sound auto-normalization flag."""
+
+    handler = getattr(plot, "autonormalization", None)
+    if callable(handler):
+        try:
+            return bool(handler())
+        except Exception:
+            return False
+    return bool(getattr(plot, "_sound_autonormalization", False))
+
+
 def _curve_style_baseline_for_plot(plot: Any, *, figure: Figure | None = None) -> CurveStyleBaseline:
     """Return the effective curve style values shown in the style tab."""
 
@@ -508,6 +522,7 @@ def _curve_style_baseline_for_plot(plot: Any, *, figure: Figure | None = None) -
         thickness=thickness,
         opacity=opacity,
         dash=dash,
+        autonormalization=_plot_autonormalization_enabled(plot),
     )
 
 
@@ -654,6 +669,8 @@ def apply_plot_editor_draft(
         curve_style_kwargs["opacity"] = float(draft.curve_opacity)
     if draft.curve_dash is not None:
         curve_style_kwargs["dash"] = draft.curve_dash
+    if draft.curve_autonormalization is not None:
+        curve_style_kwargs["autonormalization"] = bool(draft.curve_autonormalization)
 
     if draft.kind == "cartesian":
         expression = _latex_to_expression(
@@ -904,11 +921,24 @@ class PlotComposerDialog:
             layout=full_width_layout(),
         )
         configure_control(self._curve_style_dash, family="dropdown")
+        self._curve_style_autonormalization = widgets.Checkbox(
+            value=False,
+            description="Auto-normalize sound",
+            indent=False,
+            tooltip="Automatically scale louder sound chunks into [-1, 1]",
+            layout=widgets.Layout(width="auto", min_width="0"),
+        )
+        configure_control(
+            self._curve_style_autonormalization,
+            family="checkbox",
+            extra_classes=("gu-plot-editor-curve-autonormalization-control",),
+        )
         self._curve_style_baseline = CurveStyleBaseline(
             picker_color="#636efa",
             thickness=2.0,
             opacity=1.0,
             dash="solid",
+            autonormalization=False,
         )
 
         self._close_button = widgets.Button(
@@ -1234,6 +1264,11 @@ class PlotComposerDialog:
             [self._curve_style_row],
             extra_classes=("gu-plot-editor-curve-style-section",),
         )
+        self._curve_sound_section = build_form_section(
+            "Sound",
+            [build_boolean_field(self._curve_style_autonormalization)],
+            extra_classes=("gu-plot-editor-curve-sound-section",),
+        )
         self._identity_section = build_form_section(
             "Identity",
             [self._identity_row],
@@ -1265,6 +1300,7 @@ class PlotComposerDialog:
                 self._style_alert,
                 self._visibility_section,
                 self._curve_style_section,
+                self._curve_sound_section,
             ],
             gap="14px",
             display="none",
@@ -1613,8 +1649,11 @@ class PlotComposerDialog:
         self._curve_style_thickness.value = float(baseline.thickness)
         self._curve_style_opacity.value = float(baseline.opacity)
         self._curve_style_dash.value = baseline.dash
+        self._curve_style_autonormalization.value = bool(baseline.autonormalization)
 
-    def _curve_style_overrides(self) -> tuple[str | None, float | None, float | None, str | None]:
+    def _curve_style_overrides(
+        self,
+    ) -> tuple[str | None, float | None, float | None, str | None, bool | None]:
         """Return only the curve-style fields that differ from the loaded baseline."""
 
         baseline = self._curve_style_baseline
@@ -1630,7 +1669,18 @@ class PlotComposerDialog:
         dash_value = str(self._curve_style_dash.value or "solid")
         dash_override = None if dash_value == baseline.dash else dash_value
 
-        return color_override, thickness_override, opacity_override, dash_override
+        autonormalization_value = bool(self._curve_style_autonormalization.value)
+        autonormalization_override = (
+            None if autonormalization_value == bool(baseline.autonormalization) else autonormalization_value
+        )
+
+        return (
+            color_override,
+            thickness_override,
+            opacity_override,
+            dash_override,
+            autonormalization_override,
+        )
 
     def _load_defaults(self, *, default_kind: PlotEditorKind) -> None:
         """Populate a fresh new-plot form using figure defaults."""
@@ -1661,6 +1711,7 @@ class PlotComposerDialog:
                     thickness=2.0,
                     opacity=1.0,
                     dash="solid",
+                    autonormalization=False,
                 )
             )
         finally:
@@ -1772,7 +1823,13 @@ class PlotComposerDialog:
         """Collect the current widget values into a detached draft."""
 
         view_ids = tuple(str(view_id) for view_id in self._views.value)
-        curve_color, curve_thickness, curve_opacity, curve_dash = self._curve_style_overrides()
+        (
+            curve_color,
+            curve_thickness,
+            curve_opacity,
+            curve_dash,
+            curve_autonormalization,
+        ) = self._curve_style_overrides()
         return PlotEditorDraft(
             kind=self._kind.value,
             plot_id=(self._id_text.value.strip() or None),
@@ -1797,6 +1854,7 @@ class PlotComposerDialog:
             curve_thickness=curve_thickness,
             curve_opacity=curve_opacity,
             curve_dash=curve_dash,
+            curve_autonormalization=curve_autonormalization,
         )
 
     def _request_focus(self, selector: str) -> None:
@@ -2011,6 +2069,7 @@ class PlotComposerDialog:
         self._parametric_resolution_row.layout.display = "flex" if kind == "parametric" else "none"
         self._field_resolution_row.layout.display = "flex" if is_field else "none"
         self._curve_style_section.layout.display = "flex" if supports_curve_style else "none"
+        self._curve_sound_section.layout.display = "flex" if supports_curve_style else "none"
 
     def _update_parameter_preview(self) -> None:
         """Refresh compact parameter inference microcopy under the expression tab."""

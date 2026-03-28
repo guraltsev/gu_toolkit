@@ -99,6 +99,7 @@ class ParametricPlot(Plot):
         line: Mapping[str, Any] | None = None,
         opacity: int | float | None = None,
         trace: Mapping[str, Any] | None = None,
+        autonormalization: bool | None = None,
         plot_id: str = "",
         view_ids: Sequence[str] | None = None,
         *,
@@ -133,6 +134,7 @@ class ParametricPlot(Plot):
             line=line,
             opacity=opacity,
             trace=trace,
+            autonormalization=autonormalization,
             plot_id=plot_id,
             view_ids=view_ids,
             numeric_function=y_numeric_function,
@@ -271,6 +273,7 @@ class ParametricPlot(Plot):
             thickness=self.thickness,
             dash=self.dash,
             opacity=self.opacity,
+            autonormalization=self.autonormalization(),
             views=self.views,
             kind="parametric",
             x_func=self.x_expression,
@@ -397,6 +400,7 @@ class ParametricPlot(Plot):
                 "opacity",
                 "alpha",
                 "trace",
+                "autonormalization",
             }
             shared_kwargs = {key: kwargs[key] for key in common_keys if key in kwargs}
             if shared_kwargs:
@@ -469,6 +473,7 @@ def create_or_update_parametric_plot(
     opacity: int | float | None = None,
     alpha: int | float | None = None,
     trace: Mapping[str, Any] | None = None,
+    autonormalization: bool | None = None,
     view: str | Sequence[str] | None = None,
     vars: PlotVarsSpec | None = None,
     samples: int | str | _FigureDefaultSentinel | None = None,
@@ -517,6 +522,7 @@ def create_or_update_parametric_plot(
         explicit_plot_samples = figure._coerce_samples_value(requested_samples)
 
     opacity_supplied = opacity is not None or alpha is not None
+    autonormalization_supplied = autonormalization is not None
     style_kwargs = validate_style_kwargs(
         {
             "color": color,
@@ -527,6 +533,7 @@ def create_or_update_parametric_plot(
             "opacity": opacity,
             "alpha": alpha,
             "trace": trace,
+            "autonormalization": autonormalization,
         },
         caller="parametric_plot()",
     )
@@ -536,6 +543,7 @@ def create_or_update_parametric_plot(
     line = style_kwargs.get("line")
     opacity = style_kwargs.get("opacity")
     trace = style_kwargs.get("trace")
+    autonormalization = style_kwargs.get("autonormalization")
 
     if parameters is None:
         requested_parameter_keys: ParameterKeyOrKeys = tuple(inferred_parameters)
@@ -587,6 +595,8 @@ def create_or_update_parametric_plot(
         }
         if opacity_supplied:
             update_kwargs["opacity"] = opacity
+        if autonormalization_supplied:
+            update_kwargs["autonormalization"] = autonormalization
         if x_numeric_fn is not None:
             update_kwargs["x_numeric_function"] = x_numeric_fn
         if y_numeric_fn is not None:
@@ -625,6 +635,7 @@ def create_or_update_parametric_plot(
         line=line,
         opacity=opacity,
         trace=trace,
+        autonormalization=autonormalization,
         plot_id=id,
         view_ids=view_ids,
         x_numeric_function=x_numeric_fn,

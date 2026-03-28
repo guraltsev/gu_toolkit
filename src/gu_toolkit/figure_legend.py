@@ -36,6 +36,7 @@ from .widget_chrome import (
     add_widget_classes,
     attach_host_children,
     build_action_bar,
+    build_boolean_field,
     build_dialog_header,
     build_form_section,
     build_modal_overlay,
@@ -180,6 +181,10 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
           return qInput(q(panelEl(), ".gu-legend-style-dialog-dash"));
         }
 
+        function autonormalizationInputEl() {
+          return qInput(q(panelEl(), ".gu-legend-style-dialog-autonormalization"));
+        }
+
         function sendRequest(action, payload) {
           try {
             model.send({
@@ -297,6 +302,7 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
           const widthInput = widthInputEl();
           const opacityInput = opacityInputEl();
           const dashInput = dashInputEl();
+          const autonormalizationInput = autonormalizationInputEl();
 
           if (title) {
             title.id = titleId;
@@ -347,6 +353,13 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
 
           if (dashInput) {
             dashInput.setAttribute("aria-label", `${plotLabel} line style`);
+          }
+
+          if (autonormalizationInput) {
+            autonormalizationInput.setAttribute(
+              "aria-label",
+              `${plotLabel} sound auto-normalization`,
+            );
           }
         }
 
@@ -569,6 +582,7 @@ class LegendStyleDialogState:
     width: float
     opacity: float
     dash: str
+    autonormalization: bool
 
 
 class LegendPanelManager:
@@ -670,6 +684,18 @@ class LegendPanelManager:
             family="dropdown",
             extra_classes=("gu-legend-style-dialog-dash",),
         )
+        self._dialog_autonormalization = widgets.Checkbox(
+            value=False,
+            description="Auto-normalize sound",
+            indent=False,
+            tooltip="Automatically scale louder sound chunks into [-1, 1]",
+            layout=widgets.Layout(width="auto", min_width="0"),
+        )
+        configure_control(
+            self._dialog_autonormalization,
+            family="checkbox",
+            extra_classes=("gu-legend-style-dialog-autonormalization",),
+        )
         self._dialog_close_button = widgets.Button(
             description="Close legend style dialog",
             tooltip="Close legend style dialog",
@@ -729,6 +755,11 @@ class LegendPanelManager:
             ],
             extra_classes=("gu-legend-style-dialog-section",),
         )
+        dialog_sound = build_form_section(
+            "Sound",
+            [build_boolean_field(self._dialog_autonormalization)],
+            extra_classes=("gu-legend-style-dialog-section",),
+        )
         dialog_width, dialog_min_width, dialog_max_width = hosted_modal_dimensions(
             preferred_width_px=440,
             minimum_width_px=320,
@@ -737,6 +768,7 @@ class LegendPanelManager:
             [
                 dialog_header,
                 dialog_fields,
+                dialog_sound,
                 dialog_actions,
             ],
             width=dialog_width,
@@ -1374,6 +1406,11 @@ class LegendPanelManager:
             plot.dash = next_dash
             has_changes = True
 
+        next_autonormalization = bool(self._dialog_autonormalization.value)
+        if next_autonormalization != loaded.autonormalization:
+            self._set_plot_autonormalization(plot, next_autonormalization)
+            has_changes = True
+
         if has_changes:
             self.on_plot_updated(plot)
         self._dismiss_style_dialog(None)
@@ -1413,6 +1450,7 @@ class LegendPanelManager:
         self._dialog_width.value = state.width
         self._dialog_opacity.value = state.opacity
         self._dialog_dash.value = state.dash
+        self._dialog_autonormalization.value = state.autonormalization
 
         self._context_bridge.plot_label = plot_label
         self._context_bridge.dialog_label = f"Legend style settings for {plot_label}"
@@ -1428,7 +1466,26 @@ class LegendPanelManager:
             width=current_width,
             opacity=current_opacity,
             dash=current_dash if current_dash in _DASH_STYLE_VALUES else "solid",
+            autonormalization=self._plot_autonormalization_enabled(plot),
         )
+
+    @staticmethod
+    def _plot_autonormalization_enabled(plot: Any) -> bool:
+        handler = getattr(plot, "autonormalization", None)
+        if callable(handler):
+            try:
+                return bool(handler())
+            except Exception:
+                return False
+        return bool(getattr(plot, "_sound_autonormalization", False))
+
+    @classmethod
+    def _set_plot_autonormalization(cls, plot: Any, enabled: bool) -> None:
+        handler = getattr(plot, "autonormalization", None)
+        if callable(handler):
+            handler(enabled)
+            return
+        setattr(plot, "_sound_autonormalization", bool(enabled))
 
     @staticmethod
     def _safe_float(value: Any, *, default: float) -> float:

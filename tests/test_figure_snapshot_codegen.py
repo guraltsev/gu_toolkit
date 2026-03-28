@@ -24,6 +24,7 @@ def _build_exportable_figure(*, include_dynamic_info: bool) -> Figure:
         thickness=2.5,
         dash="dash",
         opacity=0.6,
+        autonormalization=True,
     )
     if include_dynamic_info:
         fig.info(
@@ -61,6 +62,7 @@ def test_snapshot_captures_parameters_plots_and_info_cards() -> None:
     assert plot.thickness == 2.5
     assert plot.dash == "dash"
     assert plot.opacity == 0.6
+    assert plot.autonormalization is True
 
     assert len(snap.info_cards) == 1
     assert snap.info_cards[0].id == "status"
@@ -81,6 +83,7 @@ def test_to_code_default_is_context_manager_with_dynamic_info_comment_block() ->
     assert "title='Snapshot demo'" in code
     assert "parameter(a, value=0.75, min=-2.0, max=2.0, step=0.05)" in code
     assert "plot(" in code
+    assert "autonormalization=True" in code
     assert "# info('<b>Static</b>', id='status')" in code
     assert "# print(inspect.getsource(my_dynamic_func))" in code
 
@@ -107,6 +110,7 @@ def test_to_code_supports_figure_methods_style_and_round_trip() -> None:
     assert rebuilt_plot.visible == original_plot.visible
     assert rebuilt_plot.x_domain == original_plot.x_domain
     assert rebuilt_plot.color == original_plot.color
+    assert rebuilt_plot.autonormalization == original_plot.autonormalization
 
     assert rebuilt_snapshot.info_cards[0].segments == ("<b>Static only</b>",)
 
