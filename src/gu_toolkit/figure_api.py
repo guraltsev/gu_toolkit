@@ -141,12 +141,7 @@ def render(
 
 
 def sound_generation_enabled(enabled: bool | None = None) -> bool:
-    """Query or legacy-control sound playback on the current figure.
-
-    Sound-capable plots always show their speaker controls. Passing ``False``
-    stops active playback but does not hide those controls. The return value is
-    therefore always ``True``.
-    """
+    """Query or set sound generation on the current figure."""
     return _require_current_figure().sound_generation_enabled(enabled)
 
 
@@ -239,6 +234,13 @@ def field_style_options() -> dict[str, str]:
     from .Figure import Figure
 
     return Figure.field_style_options()
+
+
+def field_palette_options() -> dict[str, str]:
+    """Return help text for curated scalar-field palette names."""
+    from .Figure import Figure
+
+    return Figure.field_palette_options()
 
 
 def parameter(
@@ -371,6 +373,9 @@ def scalar_field(
     preset: str | None = None,
     colorscale: Any | None = None,
     z_range: tuple[int | float | str, int | float | str] | None = None,
+    z_step: int | float | None = None,
+    under_color: str | None = None,
+    over_color: str | None = None,
     show_colorbar: bool | None = None,
     opacity: int | float | None = None,
     alpha: int | float | None = None,
@@ -378,10 +383,15 @@ def scalar_field(
     colorbar: Mapping[str, Any] | None = None,
     trace: Mapping[str, Any] | None = None,
     levels: int | None = None,
+    level_step: int | float | None = None,
+    level_start: int | float | None = None,
+    level_end: int | float | None = None,
     filled: bool | None = None,
     show_labels: bool | None = None,
     line_color: str | None = None,
     line_width: int | float | None = None,
+    line_dash: str | None = None,
+    dash: str | None = None,
     smoothing: str | bool | None = None,
     zsmooth: str | bool | None = None,
     connectgaps: bool | None = None,
@@ -410,6 +420,9 @@ def scalar_field(
         preset=preset,
         colorscale=colorscale,
         z_range=z_range,
+        z_step=z_step,
+        under_color=under_color,
+        over_color=over_color,
         show_colorbar=show_colorbar,
         opacity=opacity,
         alpha=alpha,
@@ -417,10 +430,15 @@ def scalar_field(
         colorbar=colorbar,
         trace=trace,
         levels=levels,
+        level_step=level_step,
+        level_start=level_start,
+        level_end=level_end,
         filled=filled,
         show_labels=show_labels,
         line_color=line_color,
         line_width=line_width,
+        line_dash=line_dash,
+        dash=dash,
         smoothing=smoothing,
         zsmooth=zsmooth,
         connectgaps=connectgaps,
@@ -466,6 +484,7 @@ __all__ = [
     "plots",
     "plot_style_options",
     "field_style_options",
+    "field_palette_options",
     "sound_generation_enabled",
     "render",
     "set_default_samples",

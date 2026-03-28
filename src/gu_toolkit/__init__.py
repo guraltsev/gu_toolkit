@@ -24,6 +24,7 @@ from .Figure import (
     contour,
     current_figure,
     density,
+    field_palette_options,
     field_style_options,
     get_default_samples,
     get_default_x_range,
@@ -60,6 +61,9 @@ from .Figure import (
 )
 from .Figure import (
     density as toolkit_density,
+)
+from .Figure import (
+    field_palette_options as toolkit_field_palette_options,
 )
 from .Figure import (
     field_style_options as toolkit_field_style_options,
@@ -107,6 +111,7 @@ from .Slider import FloatSlider
 # should resolve to gu_toolkit's module helpers for notebook examples and docs.
 contour = toolkit_contour
 density = toolkit_density
+field_palette_options = toolkit_field_palette_options
 field_style_options = toolkit_field_style_options
 parametric_plot = toolkit_parametric_plot
 plot = toolkit_plot

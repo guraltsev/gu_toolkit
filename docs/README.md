@@ -26,6 +26,7 @@ This folder uses a lightweight lifecycle model:
 - `guides/render-batching-and-snapshots.md`: render queue + snapshot pipeline.
 - `guides/parameter-animation.md`: animation behavior and public API.
 - `guides/parameter-key-semantics.md`: name-authoritative parameter identity rules.
+- `guides/scalar-field-styling.md`: contour and temperature styling, palettes, range control, and diffraction-oriented examples.
 
 ---
 

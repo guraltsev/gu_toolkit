@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import plotly.graph_objects as go
+from plotly.colors import get_colorscale, sample_colorscale
 import sympy as sp
 from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
@@ -22,7 +23,7 @@ from .FieldPlotSnapshot import FieldPlotSnapshot
 from .InputConvert import InputConvert
 from .figure_context import _is_figure_default
 from .figure_field_normalization import normalize_field_inputs
-from .figure_field_style import field_style_option_docs, validate_field_style_kwargs
+from .figure_field_style import field_palette_option_docs, field_style_option_docs, resolve_field_colorscale, validate_field_style_kwargs
 from .figure_plot_helpers import normalize_view_ids, remove_plot_from_figure, resolve_plot_id
 from .figure_types import RangeLike, VisibleSpec
 from .numpify import DYNAMIC_PARAMETER, NumericFunction, numpify_cached
@@ -66,16 +67,23 @@ class ScalarFieldPlot:
         preset: str | None = None,
         colorscale: Any | None = None,
         z_range: RangeLike | None = None,
+        z_step: int | float | None = None,
+        under_color: str | None = None,
+        over_color: str | None = None,
         show_colorbar: bool | None = None,
         opacity: int | float | None = None,
         reversescale: bool | None = None,
         colorbar: Mapping[str, Any] | None = None,
         trace: Mapping[str, Any] | None = None,
         levels: int | None = None,
+        level_step: int | float | None = None,
+        level_start: int | float | None = None,
+        level_end: int | float | None = None,
         filled: bool | None = None,
         show_labels: bool | None = None,
         line_color: str | None = None,
         line_width: int | float | None = None,
+        line_dash: str | None = None,
         smoothing: str | bool | None = None,
         connectgaps: bool | None = None,
         plot_id: str = "",
@@ -98,31 +106,45 @@ class ScalarFieldPlot:
         self._preset = self._coerce_preset(preset, render_mode=self._render_mode)
         self._colorscale: Any | None = None
         self._z_range: tuple[float, float] | None = None
+        self._z_step: float | None = None
+        self._under_color: str | None = None
+        self._over_color: str | None = None
         self._show_colorbar: bool = self._default_show_colorbar(self._render_mode)
         self._opacity: float | None = None
         self._reversescale: bool = False
         self._colorbar: dict[str, Any] | None = None
         self._trace_overrides: dict[str, Any] | None = None
         self._levels: int | None = None
+        self._level_step: float | None = None
+        self._level_start: float | None = None
+        self._level_end: float | None = None
         self._filled: bool = self._default_filled(self._render_mode)
         self._show_labels: bool = False
         self._line_color: str | None = None
         self._line_width: float | None = None
+        self._line_dash: str | None = None
         self._smoothing: str | bool | None = None
         self._connectgaps: bool | None = None
         self._apply_creation_defaults(
             colorscale=colorscale,
             z_range=z_range,
+            z_step=z_step,
+            under_color=under_color,
+            over_color=over_color,
             show_colorbar=show_colorbar,
             opacity=opacity,
             reversescale=reversescale,
             colorbar=colorbar,
             trace=trace,
             levels=levels,
+            level_step=level_step,
+            level_start=level_start,
+            level_end=level_end,
             filled=filled,
             show_labels=show_labels,
             line_color=line_color,
             line_width=line_width,
+            line_dash=line_dash,
             smoothing=smoothing,
             connectgaps=connectgaps,
         )
@@ -196,6 +218,12 @@ class ScalarFieldPlot:
         return (lower, upper)
 
     @staticmethod
+    def _coerce_optional_float(value: int | float | str | None) -> float | None:
+        if value is None:
+            return None
+        return float(InputConvert(value, float))
+
+    @staticmethod
     def _coerce_grid(value: tuple[int | str, int | str] | None) -> FieldGrid | None:
         if value is None:
             return None
@@ -212,16 +240,23 @@ class ScalarFieldPlot:
         *,
         colorscale: Any | None,
         z_range: RangeLike | None,
+        z_step: int | float | None,
+        under_color: str | None,
+        over_color: str | None,
         show_colorbar: bool | None,
         opacity: int | float | None,
         reversescale: bool | None,
         colorbar: Mapping[str, Any] | None,
         trace: Mapping[str, Any] | None,
         levels: int | None,
+        level_step: int | float | None,
+        level_start: int | float | None,
+        level_end: int | float | None,
         filled: bool | None,
         show_labels: bool | None,
         line_color: str | None,
         line_width: int | float | None,
+        line_dash: str | None,
         smoothing: str | bool | None,
         connectgaps: bool | None,
     ) -> None:
@@ -235,6 +270,11 @@ class ScalarFieldPlot:
         if colorscale is not None:
             self._colorscale = colorscale
         self._z_range = self._coerce_optional_range(z_range, axis_name="z")
+        self._z_step = self._coerce_optional_float(z_step)
+        if under_color is not None:
+            self._under_color = str(under_color)
+        if over_color is not None:
+            self._over_color = str(over_color)
         if show_colorbar is not None:
             self._show_colorbar = bool(show_colorbar)
         if opacity is not None:
@@ -245,6 +285,9 @@ class ScalarFieldPlot:
         self._trace_overrides = self._coerce_optional_mapping(trace)
         if levels is not None:
             self._levels = int(InputConvert(levels, int))
+        self._level_step = self._coerce_optional_float(level_step)
+        self._level_start = self._coerce_optional_float(level_start)
+        self._level_end = self._coerce_optional_float(level_end)
         if filled is not None:
             self._filled = bool(filled)
         if show_labels is not None:
@@ -253,6 +296,8 @@ class ScalarFieldPlot:
             self._line_color = str(line_color)
         if line_width is not None:
             self._line_width = float(InputConvert(line_width, float))
+        if line_dash is not None:
+            self._line_dash = str(line_dash)
         if smoothing is not None:
             self._smoothing = smoothing
         if connectgaps is not None:
@@ -266,6 +311,263 @@ class ScalarFieldPlot:
         if not 0.0 <= opacity <= 1.0:
             raise ValueError("opacity must be between 0.0 and 1.0")
         return opacity
+
+    @staticmethod
+    def _finite_z_bounds(values: np.ndarray | None) -> tuple[float, float] | None:
+        if values is None:
+            return None
+        array = np.asarray(values, dtype=float)
+        finite_mask = np.isfinite(array)
+        if not np.any(finite_mask):
+            return None
+        finite_values = array[finite_mask]
+        return float(np.min(finite_values)), float(np.max(finite_values))
+
+    def _resolved_base_colorscale(self, *, force_default: bool = False) -> Any | None:
+        resolved = resolve_field_colorscale(self._colorscale)
+        if resolved is not None:
+            return resolved
+        if not force_default:
+            return None
+        default_name = "hot" if self._preset == "temperature" else "Viridis"
+        return resolve_field_colorscale(default_name)
+
+    @staticmethod
+    def _coerce_colorscale_stops(colorscale: Any | None) -> list[tuple[float, str]] | None:
+        if colorscale is None:
+            return None
+        resolved = resolve_field_colorscale(colorscale)
+        if isinstance(resolved, str):
+            try:
+                return [(float(stop), str(color)) for stop, color in get_colorscale(resolved)]
+            except Exception:
+                return None
+        try:
+            result = [(float(item[0]), str(item[1])) for item in list(resolved)]
+        except Exception:
+            return None
+        return result or None
+
+    @classmethod
+    def _build_segmented_colorscale(
+        cls,
+        base_colorscale: Any,
+        *,
+        base_min: float,
+        base_max: float,
+        overall_min: float,
+        overall_max: float,
+        under_color: str | None,
+        over_color: str | None,
+    ) -> Any:
+        if overall_max <= overall_min:
+            return base_colorscale
+        base_stops = cls._coerce_colorscale_stops(base_colorscale)
+        if not base_stops:
+            return base_colorscale
+
+        span = overall_max - overall_min
+        inner_start = (base_min - overall_min) / span
+        inner_end = (base_max - overall_min) / span
+        scale: list[tuple[float, str]] = []
+
+        def add(stop: float, color: str) -> None:
+            scale.append((max(0.0, min(1.0, float(stop))), str(color)))
+
+        if under_color is not None:
+            add(0.0, under_color)
+            add(inner_start, under_color)
+
+        if inner_end <= inner_start:
+            midpoint_color = str(sample_colorscale(base_stops, [0.5])[0])
+            add(inner_start, midpoint_color)
+            add(inner_end, midpoint_color)
+        else:
+            for stop, color in base_stops:
+                mapped = inner_start + float(stop) * (inner_end - inner_start)
+                add(mapped, color)
+
+        if over_color is not None:
+            add(inner_end, over_color)
+            add(1.0, over_color)
+
+        return scale or base_colorscale
+
+    @staticmethod
+    def _build_discrete_colorscale(
+        base_colorscale: Any,
+        *,
+        boundaries: np.ndarray,
+        overall_min: float,
+        overall_max: float,
+        under_color: str | None,
+        over_color: str | None,
+    ) -> Any:
+        if overall_max <= overall_min:
+            return base_colorscale
+        boundaries_array = np.asarray(boundaries, dtype=float)
+        if boundaries_array.size < 2:
+            return base_colorscale
+
+        centers = (boundaries_array[:-1] + boundaries_array[1:]) / 2.0
+        if centers.size == 0:
+            return base_colorscale
+        if boundaries_array[-1] == boundaries_array[0]:
+            sample_points = [0.5] * int(centers.size)
+        else:
+            sample_points = [
+                float((center - boundaries_array[0]) / (boundaries_array[-1] - boundaries_array[0]))
+                for center in centers
+            ]
+        sampled_colors = [str(color) for color in sample_colorscale(base_colorscale, sample_points)]
+        span = overall_max - overall_min
+        scale: list[tuple[float, str]] = []
+
+        def add(stop: float, color: str) -> None:
+            scale.append((max(0.0, min(1.0, float(stop))), str(color)))
+
+        if under_color is not None:
+            transition = (boundaries_array[0] - overall_min) / span
+            add(0.0, under_color)
+            add(transition, under_color)
+
+        for low, high, color in zip(boundaries_array[:-1], boundaries_array[1:], sampled_colors):
+            start = (float(low) - overall_min) / span
+            end = (float(high) - overall_min) / span
+            add(start, color)
+            add(end, color)
+
+        if over_color is not None:
+            transition = (boundaries_array[-1] - overall_min) / span
+            add(transition, over_color)
+            add(1.0, over_color)
+
+        return scale or base_colorscale
+
+    def _build_heatmap_style_config(
+        self,
+        z_values: np.ndarray | None,
+    ) -> tuple[np.ndarray | None, Any | None, tuple[float, float] | None, dict[str, Any] | None]:
+        special_heatmap = self._render_mode == "heatmap" and (
+            self._z_step is not None or self._under_color is not None or self._over_color is not None
+        )
+        base_colorscale = self._resolved_base_colorscale(force_default=special_heatmap)
+        colorbar_payload = None if self._colorbar is None else dict(self._colorbar)
+        effective_range = self._z_range
+
+        if not special_heatmap:
+            return z_values, base_colorscale, effective_range, colorbar_payload
+
+        if effective_range is None:
+            effective_range = self._finite_z_bounds(z_values)
+        if effective_range is None:
+            return z_values, base_colorscale, None, colorbar_payload
+
+        base_min, base_max = effective_range
+        step = self._z_step
+        if step is not None:
+            step = float(step)
+            if base_max == base_min:
+                base_max = base_min + step
+
+        span = base_max - base_min
+        margin = step if step is not None else (span / 256.0 if span > 0 else 1.0)
+        under_margin = margin if self._under_color is not None else 0.0
+        over_margin = margin if self._over_color is not None else 0.0
+        effective_min = base_min - under_margin
+        effective_max = base_max + over_margin
+        display_values = None if z_values is None else np.asarray(z_values, dtype=float).copy()
+
+        if step is not None:
+            boundaries: list[float] = [base_min]
+            current = base_min
+            tolerance = abs(step) * 1e-12
+            while current + step < base_max - tolerance:
+                current = current + step
+                boundaries.append(current)
+            if boundaries[-1] < base_max:
+                boundaries.append(base_max)
+            boundary_values = np.asarray(boundaries, dtype=float)
+            if boundary_values.size < 2:
+                boundary_values = np.asarray([base_min, base_max], dtype=float)
+            centers = (boundary_values[:-1] + boundary_values[1:]) / 2.0
+
+            if display_values is not None:
+                raw = np.asarray(z_values, dtype=float)
+                finite_mask = np.isfinite(raw)
+                under_mask = finite_mask & (raw < base_min)
+                over_mask = finite_mask & (raw > base_max)
+                in_range_mask = finite_mask & ~under_mask & ~over_mask
+                clipped = np.clip(raw, base_min, base_max)
+                indices = np.floor((clipped - base_min) / step).astype(int)
+                indices = np.clip(indices, 0, centers.size - 1)
+                if np.any(in_range_mask):
+                    display_values[in_range_mask] = centers[indices[in_range_mask]]
+                if np.any(under_mask):
+                    display_values[under_mask] = (
+                        base_min - under_margin / 2.0
+                        if self._under_color is not None
+                        else centers[0]
+                    )
+                if np.any(over_mask):
+                    display_values[over_mask] = (
+                        base_max + over_margin / 2.0
+                        if self._over_color is not None
+                        else centers[-1]
+                    )
+
+            effective_colorscale = self._build_discrete_colorscale(
+                base_colorscale,
+                boundaries=boundary_values,
+                overall_min=effective_min,
+                overall_max=effective_max,
+                under_color=self._under_color,
+                over_color=self._over_color,
+            )
+            if colorbar_payload is None:
+                colorbar_payload = {}
+            colorbar_payload.setdefault("tickmode", "linear")
+            colorbar_payload.setdefault("tick0", base_min)
+            colorbar_payload.setdefault("dtick", step)
+            return (
+                display_values,
+                effective_colorscale,
+                (effective_min, effective_max),
+                colorbar_payload,
+            )
+
+        if display_values is not None:
+            raw = np.asarray(z_values, dtype=float)
+            finite_mask = np.isfinite(raw)
+            under_mask = finite_mask & (raw < base_min)
+            over_mask = finite_mask & (raw > base_max)
+            if np.any(under_mask):
+                display_values[under_mask] = (
+                    base_min - under_margin / 2.0 if self._under_color is not None else base_min
+                )
+            if np.any(over_mask):
+                display_values[over_mask] = (
+                    base_max + over_margin / 2.0 if self._over_color is not None else base_max
+                )
+
+        effective_colorscale = base_colorscale
+        if self._under_color is not None or self._over_color is not None:
+            effective_colorscale = self._build_segmented_colorscale(
+                base_colorscale,
+                base_min=base_min,
+                base_max=base_max,
+                overall_min=effective_min,
+                overall_max=effective_max,
+                under_color=self._under_color,
+                over_color=self._over_color,
+            )
+
+        return (
+            display_values,
+            effective_colorscale,
+            (effective_min, effective_max),
+            colorbar_payload,
+        )
 
     # ------------------------------------------------------------------
     # Trace/view ownership
@@ -286,20 +588,34 @@ class ScalarFieldPlot:
             return trace_handle
         return None
 
-    def _build_trace_style_payload(self) -> dict[str, Any]:
+    def _build_trace_style_payload(
+        self,
+        *,
+        z_values: np.ndarray | None = None,
+    ) -> tuple[dict[str, Any], np.ndarray | None]:
         payload: dict[str, Any] = {}
-        if self._colorscale is not None:
-            payload["colorscale"] = self._colorscale
-        if self._z_range is not None:
-            payload["zmin"] = self._z_range[0]
-            payload["zmax"] = self._z_range[1]
+        display_values = z_values
+        effective_colorscale = self._resolved_base_colorscale(force_default=False)
+        effective_z_range = self._z_range
+        colorbar_payload = None if self._colorbar is None else dict(self._colorbar)
+
+        if self._render_mode == "heatmap":
+            display_values, effective_colorscale, effective_z_range, colorbar_payload = (
+                self._build_heatmap_style_config(z_values)
+            )
+
+        if effective_colorscale is not None:
+            payload["colorscale"] = effective_colorscale
+        if effective_z_range is not None:
+            payload["zmin"] = effective_z_range[0]
+            payload["zmax"] = effective_z_range[1]
         payload["showscale"] = self._show_colorbar
         if self._opacity is not None:
             payload["opacity"] = self._opacity
         if self._reversescale:
             payload["reversescale"] = True
-        if self._colorbar:
-            payload["colorbar"] = dict(self._colorbar)
+        if colorbar_payload:
+            payload["colorbar"] = dict(colorbar_payload)
         if self._connectgaps is not None:
             payload["connectgaps"] = self._connectgaps
 
@@ -308,7 +624,19 @@ class ScalarFieldPlot:
                 "coloring": "fill" if self._filled else "lines",
                 "showlabels": self._show_labels,
             }
-            if self._levels is not None:
+            if self._level_step is not None:
+                contours_payload["size"] = self._level_step
+                start = self._level_start if self._level_start is not None else None
+                end = self._level_end if self._level_end is not None else None
+                if start is None and self._z_range is not None:
+                    start = self._z_range[0]
+                if end is None and self._z_range is not None:
+                    end = self._z_range[1]
+                if start is not None:
+                    contours_payload["start"] = start
+                if end is not None:
+                    contours_payload["end"] = end
+            elif self._levels is not None:
                 payload["ncontours"] = self._levels
             payload["contours"] = contours_payload
             line_payload: dict[str, Any] = {}
@@ -316,6 +644,8 @@ class ScalarFieldPlot:
                 line_payload["color"] = self._line_color
             if self._line_width is not None:
                 line_payload["width"] = self._line_width
+            if self._line_dash is not None:
+                line_payload["dash"] = self._line_dash
             if line_payload:
                 payload["line"] = line_payload
         else:
@@ -324,10 +654,11 @@ class ScalarFieldPlot:
 
         if self._trace_overrides:
             payload.update(dict(self._trace_overrides))
-        return payload
+        return payload, display_values
 
     def _create_trace_handle(self, *, view_id: str, label: str) -> FieldPlotHandle:
         figure_widget = self._smart_figure.views[view_id].figure_widget
+        style_payload, _ = self._build_trace_style_payload()
         trace: go.Contour | go.Heatmap
         if self._render_mode == "contour":
             trace = go.Contour(
@@ -336,7 +667,7 @@ class ScalarFieldPlot:
                 z=[],
                 name=label,
                 visible=self._visible,
-                **self._build_trace_style_payload(),
+                **style_payload,
             )
         else:
             trace = go.Heatmap(
@@ -345,7 +676,7 @@ class ScalarFieldPlot:
                 z=[],
                 name=label,
                 visible=self._visible,
-                **self._build_trace_style_payload(),
+                **style_payload,
             )
         figure_widget.add_trace(trace)
         trace_handle = figure_widget.data[-1]
@@ -354,7 +685,7 @@ class ScalarFieldPlot:
         return handle
 
     def _apply_style_to_all_trace_handles(self) -> None:
-        style_payload = self._build_trace_style_payload()
+        style_payload, _ = self._build_trace_style_payload(z_values=self._z_data)
         for trace_handle in self._iter_trace_handles():
             trace_handle.update(**style_payload)
             trace_handle.visible = self._visible
@@ -503,12 +834,19 @@ class ScalarFieldPlot:
 
     @staticmethod
     def _representative_colorscale_color(colorscale: Any) -> str | None:
-        if not colorscale or isinstance(colorscale, str):
+        if not colorscale:
             return None
-        try:
-            scale_items = list(colorscale)
-        except TypeError:
-            return None
+        resolved = resolve_field_colorscale(colorscale)
+        if isinstance(resolved, str):
+            try:
+                scale_items = list(get_colorscale(resolved))
+            except Exception:
+                return None
+        else:
+            try:
+                scale_items = list(resolved)
+            except TypeError:
+                return None
         if not scale_items:
             return None
         middle = scale_items[len(scale_items) // 2]
@@ -534,6 +872,18 @@ class ScalarFieldPlot:
         return self._z_range
 
     @property
+    def z_step(self) -> float | None:
+        return self._z_step
+
+    @property
+    def under_color(self) -> str | None:
+        return self._under_color
+
+    @property
+    def over_color(self) -> str | None:
+        return self._over_color
+
+    @property
     def show_colorbar(self) -> bool:
         return self._show_colorbar
 
@@ -550,6 +900,18 @@ class ScalarFieldPlot:
         return self._levels
 
     @property
+    def level_step(self) -> float | None:
+        return self._level_step
+
+    @property
+    def level_start(self) -> float | None:
+        return self._level_start
+
+    @property
+    def level_end(self) -> float | None:
+        return self._level_end
+
+    @property
     def filled(self) -> bool:
         return self._filled
 
@@ -564,6 +926,14 @@ class ScalarFieldPlot:
     @property
     def line_width(self) -> float | None:
         return self._line_width
+
+    @property
+    def line_dash(self) -> str | None:
+        return self._line_dash
+
+    @property
+    def dash(self) -> str | None:
+        return self._line_dash
 
     @property
     def smoothing(self) -> str | bool | None:
@@ -691,6 +1061,9 @@ class ScalarFieldPlot:
             grid=self.grid,
             colorscale=self.colorscale,
             z_range=self.z_range,
+            z_step=self.z_step,
+            under_color=self.under_color,
+            over_color=self.over_color,
             show_colorbar=self.show_colorbar,
             opacity=self.opacity,
             reversescale=self.reversescale,
@@ -698,10 +1071,14 @@ class ScalarFieldPlot:
             trace=(None if self._trace_overrides is None else dict(self._trace_overrides)),
             views=self.views,
             levels=self.levels,
+            level_step=self.level_step,
+            level_start=self.level_start,
+            level_end=self.level_end,
             filled=self.filled,
             show_labels=self.show_labels,
             line_color=self.line_color,
             line_width=self.line_width,
+            line_dash=self.line_dash,
             smoothing=self.smoothing,
             connectgaps=self.connectgaps,
         )
@@ -779,14 +1156,21 @@ class ScalarFieldPlot:
         self._y_axis_values = y_values.copy()
         self._z_data = z_values.copy()
 
+        style_payload, display_z_values = self._build_trace_style_payload(z_values=z_values)
+        if display_z_values is None:
+            display_z_values = z_values
+
         target_handle = self._handles[target_view].trace_handle
         if target_handle is None:
             return
 
         def _apply_trace_update() -> None:
+            target_handle.update(**style_payload)
+            target_handle.visible = self._visible
+            target_handle.name = self.label
             target_handle.x = x_values
             target_handle.y = y_values
-            target_handle.z = z_values
+            target_handle.z = display_z_values
 
         if use_batch_update:
             with fig.views[target_view].figure_widget.batch_update():
@@ -803,6 +1187,14 @@ class ScalarFieldPlot:
             self._colorscale = style_kwargs.get("colorscale")
         if "z_range" in style_kwargs:
             self._z_range = self._coerce_optional_range(style_kwargs.get("z_range"), axis_name="z")
+        if "z_step" in style_kwargs:
+            self._z_step = self._coerce_optional_float(style_kwargs.get("z_step"))
+        if "under_color" in style_kwargs:
+            under_color = style_kwargs.get("under_color")
+            self._under_color = None if under_color is None else str(under_color)
+        if "over_color" in style_kwargs:
+            over_color = style_kwargs.get("over_color")
+            self._over_color = None if over_color is None else str(over_color)
         if "show_colorbar" in style_kwargs:
             self._show_colorbar = bool(style_kwargs.get("show_colorbar"))
         if "opacity" in style_kwargs:
@@ -816,15 +1208,25 @@ class ScalarFieldPlot:
         if "levels" in style_kwargs:
             levels = style_kwargs.get("levels")
             self._levels = None if levels is None else int(InputConvert(levels, int))
+        if "level_step" in style_kwargs:
+            self._level_step = self._coerce_optional_float(style_kwargs.get("level_step"))
+        if "level_start" in style_kwargs:
+            self._level_start = self._coerce_optional_float(style_kwargs.get("level_start"))
+        if "level_end" in style_kwargs:
+            self._level_end = self._coerce_optional_float(style_kwargs.get("level_end"))
         if "filled" in style_kwargs:
             self._filled = bool(style_kwargs.get("filled"))
         if "show_labels" in style_kwargs:
             self._show_labels = bool(style_kwargs.get("show_labels"))
         if "line_color" in style_kwargs:
-            self._line_color = style_kwargs.get("line_color")
+            line_color = style_kwargs.get("line_color")
+            self._line_color = None if line_color is None else str(line_color)
         if "line_width" in style_kwargs:
             width = style_kwargs.get("line_width")
             self._line_width = None if width is None else float(InputConvert(width, float))
+        if "line_dash" in style_kwargs:
+            line_dash = style_kwargs.get("line_dash")
+            self._line_dash = None if line_dash is None else str(line_dash)
         if "smoothing" in style_kwargs:
             self._smoothing = style_kwargs.get("smoothing")
         if "connectgaps" in style_kwargs:
@@ -889,6 +1291,9 @@ class ScalarFieldPlot:
             for key in (
                 "colorscale",
                 "z_range",
+                "z_step",
+                "under_color",
+                "over_color",
                 "show_colorbar",
                 "showscale",
                 "opacity",
@@ -897,10 +1302,15 @@ class ScalarFieldPlot:
                 "colorbar",
                 "trace",
                 "levels",
+                "level_step",
+                "level_start",
+                "level_end",
                 "filled",
                 "show_labels",
                 "line_color",
                 "line_width",
+                "line_dash",
+                "dash",
                 "smoothing",
                 "zsmooth",
                 "connectgaps",
@@ -912,6 +1322,11 @@ class ScalarFieldPlot:
                     raw_style_kwargs,
                     caller="ScalarFieldPlot.update()",
                 )
+                if self._render_mode == "heatmap" and any(
+                    key in style_kwargs
+                    for key in ("z_range", "z_step", "under_color", "over_color")
+                ):
+                    render_requested = True
                 self._apply_style_updates(style_kwargs)
 
             if any(k in kwargs for k in ("x_var", "y_var", "func", "parameters", "numeric_function")):
@@ -981,6 +1396,9 @@ def create_or_update_scalar_field_plot(
     preset: str | None = None,
     colorscale: Any | None = None,
     z_range: RangeLike | None = None,
+    z_step: int | float | None = None,
+    under_color: str | None = None,
+    over_color: str | None = None,
     show_colorbar: bool | None = None,
     opacity: int | float | None = None,
     alpha: int | float | None = None,
@@ -988,10 +1406,15 @@ def create_or_update_scalar_field_plot(
     colorbar: Mapping[str, Any] | None = None,
     trace: Mapping[str, Any] | None = None,
     levels: int | None = None,
+    level_step: int | float | None = None,
+    level_start: int | float | None = None,
+    level_end: int | float | None = None,
     filled: bool | None = None,
     show_labels: bool | None = None,
     line_color: str | None = None,
     line_width: int | float | None = None,
+    line_dash: str | None = None,
+    dash: str | None = None,
     smoothing: str | bool | None = None,
     zsmooth: str | bool | None = None,
     connectgaps: bool | None = None,
@@ -1019,6 +1442,9 @@ def create_or_update_scalar_field_plot(
     for key, value in (
         ("colorscale", colorscale),
         ("z_range", z_range),
+        ("z_step", z_step),
+        ("under_color", under_color),
+        ("over_color", over_color),
         ("show_colorbar", show_colorbar),
         ("opacity", opacity),
         ("alpha", alpha),
@@ -1026,10 +1452,15 @@ def create_or_update_scalar_field_plot(
         ("colorbar", colorbar),
         ("trace", trace),
         ("levels", levels),
+        ("level_step", level_step),
+        ("level_start", level_start),
+        ("level_end", level_end),
         ("filled", filled),
         ("show_labels", show_labels),
         ("line_color", line_color),
         ("line_width", line_width),
+        ("line_dash", line_dash),
+        ("dash", dash),
         ("smoothing", smoothing),
         ("zsmooth", zsmooth),
         ("connectgaps", connectgaps),
@@ -1082,16 +1513,23 @@ def create_or_update_scalar_field_plot(
         for key in (
             "colorscale",
             "z_range",
+            "z_step",
+            "under_color",
+            "over_color",
             "show_colorbar",
             "opacity",
             "reversescale",
             "colorbar",
             "trace",
             "levels",
+            "level_step",
+            "level_start",
+            "level_end",
             "filled",
             "show_labels",
             "line_color",
             "line_width",
+            "line_dash",
             "smoothing",
             "connectgaps",
         ):
@@ -1124,16 +1562,23 @@ def create_or_update_scalar_field_plot(
         preset=preset,
         colorscale=style_kwargs.get("colorscale"),
         z_range=style_kwargs.get("z_range"),
+        z_step=style_kwargs.get("z_step"),
+        under_color=style_kwargs.get("under_color"),
+        over_color=style_kwargs.get("over_color"),
         show_colorbar=style_kwargs.get("show_colorbar"),
         opacity=style_kwargs.get("opacity"),
         reversescale=style_kwargs.get("reversescale"),
         colorbar=style_kwargs.get("colorbar"),
         trace=style_kwargs.get("trace"),
         levels=style_kwargs.get("levels"),
+        level_step=style_kwargs.get("level_step"),
+        level_start=style_kwargs.get("level_start"),
+        level_end=style_kwargs.get("level_end"),
         filled=style_kwargs.get("filled"),
         show_labels=style_kwargs.get("show_labels"),
         line_color=style_kwargs.get("line_color"),
         line_width=style_kwargs.get("line_width"),
+        line_dash=style_kwargs.get("line_dash"),
         smoothing=style_kwargs.get("smoothing"),
         connectgaps=style_kwargs.get("connectgaps"),
         plot_id=id,
@@ -1168,6 +1613,9 @@ def scalar_field_method(
     preset: str | None = None,
     colorscale: Any | None = None,
     z_range: RangeLike | None = None,
+    z_step: int | float | None = None,
+    under_color: str | None = None,
+    over_color: str | None = None,
     show_colorbar: bool | None = None,
     opacity: int | float | None = None,
     alpha: int | float | None = None,
@@ -1175,10 +1623,15 @@ def scalar_field_method(
     colorbar: Mapping[str, Any] | None = None,
     trace: Mapping[str, Any] | None = None,
     levels: int | None = None,
+    level_step: int | float | None = None,
+    level_start: int | float | None = None,
+    level_end: int | float | None = None,
     filled: bool | None = None,
     show_labels: bool | None = None,
     line_color: str | None = None,
     line_width: int | float | None = None,
+    line_dash: str | None = None,
+    dash: str | None = None,
     smoothing: str | bool | None = None,
     zsmooth: str | bool | None = None,
     connectgaps: bool | None = None,
@@ -1201,6 +1654,9 @@ def scalar_field_method(
         preset=preset,
         colorscale=colorscale,
         z_range=z_range,
+        z_step=z_step,
+        under_color=under_color,
+        over_color=over_color,
         show_colorbar=show_colorbar,
         opacity=opacity,
         alpha=alpha,
@@ -1208,10 +1664,15 @@ def scalar_field_method(
         colorbar=colorbar,
         trace=trace,
         levels=levels,
+        level_step=level_step,
+        level_start=level_start,
+        level_end=level_end,
         filled=filled,
         show_labels=show_labels,
         line_color=line_color,
         line_width=line_width,
+        line_dash=line_dash,
+        dash=dash,
         smoothing=smoothing,
         zsmooth=zsmooth,
         connectgaps=connectgaps,
@@ -1247,6 +1708,7 @@ __all__ = [
     "FieldRenderMode",
     "ScalarFieldPlot",
     "create_or_update_scalar_field_plot",
+    "field_palette_option_docs",
     "field_style_option_docs",
     "contour_method",
     "density_method",

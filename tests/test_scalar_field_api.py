@@ -9,6 +9,7 @@ from gu_toolkit import (
     FieldPlotSnapshot,
     contour,
     density,
+    field_palette_options,
     field_style_options,
     scalar_field,
     temperature,
@@ -55,7 +56,40 @@ def test_contour_plot_updates_from_parameters_after_flush() -> None:
 
     assert field.parameters == (a,)
     assert field.levels == 9
-    assert np.allclose(field.z_data, 3.0 * field.z_data * 0 + (3.0 * np.meshgrid(field.x_data, field.y_data)[0] + np.meshgrid(field.x_data, field.y_data)[1]))
+    expected_x, expected_y = np.meshgrid(field.x_data, field.y_data)
+    assert np.allclose(field.z_data, 3.0 * expected_x + expected_y)
+
+
+def test_contour_plot_supports_exact_level_spacing_and_line_dash_styles() -> None:
+    x, y = sp.symbols("x y")
+    fig = Figure(x_range=(-1, 1), y_range=(-1, 1))
+
+    field = fig.contour(
+        x**2 + y**2,
+        x,
+        y,
+        grid=(10, 10),
+        level_step=0.5,
+        level_start=0.0,
+        level_end=2.0,
+        line_dash="dashdot",
+        line_color="black",
+        line_width=2.0,
+    )
+
+    trace = fig.figure_widget.data[0]
+
+    assert isinstance(trace, go.Contour)
+    assert field.level_step == 0.5
+    assert field.level_start == 0.0
+    assert field.level_end == 2.0
+    assert field.line_dash == "dashdot"
+    assert trace.contours.size == 0.5
+    assert trace.contours.start == 0.0
+    assert trace.contours.end == 2.0
+    assert trace.line.dash == "dashdot"
+    assert trace.line.color == "black"
+    assert trace.line.width == 2.0
 
 
 def test_scalar_field_alias_helpers_route_to_current_figure() -> None:
@@ -90,6 +124,56 @@ def test_scalar_field_replaces_existing_cartesian_plot_with_same_id() -> None:
     assert isinstance(fig.figure_widget.data[0], go.Heatmap)
 
 
+def test_temperature_plot_supports_range_step_alpha_and_out_of_bounds_colors() -> None:
+    x, y = sp.symbols("x y")
+    fig = Figure(x_range=(-2, 2), y_range=(-1, 1))
+
+    field = fig.temperature(
+        3 * x + y,
+        x,
+        y,
+        id="temp-range",
+        grid=(5, 5),
+        colorscale="thermal",
+        z_range=(-1, 1),
+        z_step=0.5,
+        under_color="black",
+        over_color="white",
+        alpha=0.35,
+    )
+
+    trace = fig.figure_widget.data[0]
+    display_z = np.asarray(trace.z, dtype=float)
+
+    assert isinstance(trace, go.Heatmap)
+    assert field.z_step == 0.5
+    assert field.under_color == "black"
+    assert field.over_color == "white"
+    assert field.opacity == 0.35
+    assert trace.opacity == 0.35
+    assert trace.zmin == -1.5
+    assert trace.zmax == 1.5
+    assert trace.colorbar.tick0 == -1.0
+    assert trace.colorbar.dtick == 0.5
+    assert np.min(display_z) < -1.0
+    assert np.max(display_z) > 1.0
+    assert np.min(field.z_data) < -1.0
+    assert np.max(field.z_data) > 1.0
+
+
+def test_named_field_palette_aliases_resolve_for_heatmaps() -> None:
+    x, y = sp.symbols("x y")
+    fig = Figure()
+
+    field = fig.density(x + y, x, y, colorscale="phase", grid=(4, 4))
+    trace = fig.figure_widget.data[0]
+
+    assert field.colorscale == "phase"
+    assert isinstance(trace, go.Heatmap)
+    assert isinstance(trace.colorscale, tuple)
+    assert len(trace.colorscale) > 2
+
+
 def test_scalar_field_snapshot_and_codegen_round_trip() -> None:
     x, y = sp.symbols("x y")
     fig = Figure(x_range=(-4, 4), y_range=(-3, 3))
@@ -100,6 +184,11 @@ def test_scalar_field_snapshot_and_codegen_round_trip() -> None:
         id="temp",
         label="Temp",
         grid=(8, 6),
+        colorscale="thermal",
+        z_range=(-1, 2),
+        z_step=0.5,
+        under_color="black",
+        over_color="white",
         opacity=0.4,
         reversescale=True,
         connectgaps=False,
@@ -114,9 +203,17 @@ def test_scalar_field_snapshot_and_codegen_round_trip() -> None:
     assert field_snapshot.preset == "temperature"
     assert field_snapshot.render_mode == "heatmap"
     assert field_snapshot.grid == (8, 6)
+    assert field_snapshot.colorscale == "thermal"
+    assert field_snapshot.z_range == (-1.0, 2.0)
+    assert field_snapshot.z_step == 0.5
+    assert field_snapshot.under_color == "black"
+    assert field_snapshot.over_color == "white"
     assert "from gu_toolkit import Figure, parameter, plot, temperature, info" in code
     assert "temperature(" in code
     assert "grid=(8, 6)" in code
+    assert "z_step=0.5" in code
+    assert "under_color='black'" in code
+    assert "over_color='white'" in code
 
     namespace: dict[str, object] = {}
     exec(code, namespace)
@@ -130,6 +227,10 @@ def test_scalar_field_snapshot_and_codegen_round_trip() -> None:
     assert rebuilt_field.y_domain == field_snapshot.y_domain
     assert rebuilt_field.grid == field_snapshot.grid
     assert rebuilt_field.colorscale == field_snapshot.colorscale
+    assert rebuilt_field.z_range == field_snapshot.z_range
+    assert rebuilt_field.z_step == field_snapshot.z_step
+    assert rebuilt_field.under_color == field_snapshot.under_color
+    assert rebuilt_field.over_color == field_snapshot.over_color
     assert rebuilt_field.reversescale == field_snapshot.reversescale
 
 
@@ -139,15 +240,23 @@ def test_field_style_options_are_discoverable() -> None:
     for key in (
         "colorscale",
         "z_range",
+        "z_step",
+        "under_color",
+        "over_color",
         "show_colorbar",
         "showscale",
         "opacity",
         "alpha",
         "levels",
+        "level_step",
+        "level_start",
+        "level_end",
         "filled",
         "show_labels",
         "line_color",
         "line_width",
+        "line_dash",
+        "dash",
         "smoothing",
         "zsmooth",
         "connectgaps",
@@ -156,3 +265,20 @@ def test_field_style_options_are_discoverable() -> None:
         assert key in options
 
     assert Figure.field_style_options() == options
+
+
+def test_field_palette_options_are_discoverable() -> None:
+    options = field_palette_options()
+
+    for key in (
+        "thermal",
+        "temperature",
+        "phase",
+        "diffraction",
+        "potential",
+        "grayscale",
+        "viridis",
+    ):
+        assert key in options
+
+    assert Figure.field_palette_options() == options

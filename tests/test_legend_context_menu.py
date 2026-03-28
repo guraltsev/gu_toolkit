@@ -144,10 +144,3 @@ def test_legend_row_and_root_are_marked_as_figure_context_governed() -> None:
 
 def test_context_menu_bridge_no_longer_exposes_line_style_entry() -> None:
     assert "open_style_dialog" not in _LegendInteractionBridge._esm
-
-
-
-def test_context_menu_bridge_no_longer_exposes_sound_toggle_controls() -> None:
-    assert "set_sound_enabled" not in _LegendInteractionBridge._esm
-    assert "Sound generation" not in _LegendInteractionBridge._esm
-    assert "contextmenu" not in _LegendInteractionBridge._esm

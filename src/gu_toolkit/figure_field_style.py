@@ -11,6 +11,43 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from plotly.colors import named_colorscales
+
+
+@dataclass(frozen=True)
+class FieldPaletteSpec:
+    """Structured metadata for one curated scalar-field palette name."""
+
+    name: str
+    colorscale: str | tuple[tuple[float, str], ...]
+    aliases: tuple[str, ...] = ()
+    description: str = ""
+    best_for: str = ""
+
+    def format_help(self) -> str:
+        parts: list[str] = []
+        if self.description:
+            parts.append(self.description.rstrip(".") + ".")
+        if self.best_for:
+            parts.append(f"Best for: {self.best_for}.")
+        parts.append(f"Resolves to Plotly colorscale {self.colorscale!r}.")
+        if self.aliases:
+            alias_word = "Alias" if len(self.aliases) == 1 else "Aliases"
+            parts.append(f"{alias_word}: {', '.join(self.aliases)}.")
+        return " ".join(parts)
+
+    def format_alias_help(self, alias: str) -> str:
+        alias_name = str(alias)
+        if alias_name not in self.aliases:
+            raise KeyError(f"{alias_name!r} is not an alias of {self.name!r}")
+        parts = [f"Alias for {self.name}."]
+        if self.description:
+            parts.append(self.description.rstrip(".") + ".")
+        if self.best_for:
+            parts.append(f"Best for: {self.best_for}.")
+        parts.append(f"Resolves to Plotly colorscale {self.colorscale!r}.")
+        return " ".join(parts)
+
 
 @dataclass(frozen=True)
 class FieldStyleSpec:
@@ -58,18 +95,137 @@ class FieldStyleSpec:
         return " ".join(parts)
 
 
+FIELD_PALETTE_OPTIONS: tuple[FieldPaletteSpec, ...] = (
+    FieldPaletteSpec(
+        name="thermal",
+        colorscale="thermal",
+        aliases=("temperature",),
+        description="Perceptual thermal palette with strong dynamic range",
+        best_for="temperature-like scalar fields and thermal energy maps",
+    ),
+    FieldPaletteSpec(
+        name="hot",
+        colorscale="hot",
+        aliases=("heat",),
+        description="Classic black-red-yellow-white thermal ramp",
+        best_for="intensity and magnitude fields with bright peaks",
+    ),
+    FieldPaletteSpec(
+        name="viridis",
+        colorscale="viridis",
+        aliases=("amplitude",),
+        description="Perceptually uniform scientific palette",
+        best_for="general scalar amplitudes and smooth quantitative fields",
+    ),
+    FieldPaletteSpec(
+        name="plasma",
+        colorscale="plasma",
+        description="Bright, high-contrast scientific palette",
+        best_for="strong visual separation across the full range",
+    ),
+    FieldPaletteSpec(
+        name="magma",
+        colorscale="magma",
+        description="Dark-to-bright palette that preserves detail near low values",
+        best_for="fields with subtle low-amplitude structure",
+    ),
+    FieldPaletteSpec(
+        name="cividis",
+        colorscale="cividis",
+        description="Color-vision-friendly scientific palette",
+        best_for="publication-oriented quantitative heatmaps",
+    ),
+    FieldPaletteSpec(
+        name="ice",
+        colorscale="ice",
+        description="Cold blue-white palette",
+        best_for="negative or cold-valued fields",
+    ),
+    FieldPaletteSpec(
+        name="icefire",
+        colorscale="icefire",
+        aliases=("diffraction",),
+        description="High-contrast diverging palette with cold and hot extremes",
+        best_for="interference and diffraction intensity maps",
+    ),
+    FieldPaletteSpec(
+        name="phase",
+        colorscale="twilight",
+        aliases=("twilight",),
+        description="Cyclic palette for wrapped scalar values",
+        best_for="phase fields and angle-valued quantities",
+    ),
+    FieldPaletteSpec(
+        name="potential",
+        colorscale="balance",
+        aliases=("balance",),
+        description="Balanced diverging palette around a neutral midpoint",
+        best_for="signed potentials and positive/negative deviations",
+    ),
+    FieldPaletteSpec(
+        name="grayscale",
+        colorscale="greys",
+        aliases=("greyscale", "gray", "grey"),
+        description="Neutral grayscale palette",
+        best_for="print-friendly scalar fields and background maps",
+    ),
+    FieldPaletteSpec(
+        name="turbo",
+        colorscale="turbo",
+        description="Very vivid rainbow-like palette",
+        best_for="maximal contrast when perceptual uniformity is secondary",
+    ),
+)
+
+_FIELD_PALETTE_ALIAS_TO_SPEC = {
+    name: spec
+    for spec in FIELD_PALETTE_OPTIONS
+    for name in (spec.name, *spec.aliases)
+}
+_PLOTLY_NAMED_COLORCALES = {name.lower(): name for name in named_colorscales()}
+
+
 FIELD_STYLE_OPTIONS: tuple[FieldStyleSpec, ...] = (
     FieldStyleSpec(
         name="colorscale",
         type_doc="str | sequence[tuple[float, str]] | None",
         default_doc="Plotly/default field colorscale",
-        description="Scalar-field colorscale used for contour or heatmap coloring",
+        description=(
+            "Scalar-field colorscale used for contour or heatmap coloring."
+            " Accepts toolkit palette names from field_palette_options(), any"
+            " Plotly named colorscale, or an explicit stop list"
+        ),
     ),
     FieldStyleSpec(
         name="z_range",
         type_doc="tuple[int | float | str, int | float | str] | None",
-        default_doc="automatic from data",
+        default_doc="automatic from data when None",
         description="Explicit scalar range shown by the colorscale as (zmin, zmax)",
+    ),
+    FieldStyleSpec(
+        name="z_step",
+        type_doc="int | float | None",
+        default_doc="continuous heatmap coloring",
+        description=(
+            "Heatmap/temperature color step in scalar-value units. When set,"
+            " the heatmap is quantized into discrete color bands"
+        ),
+    ),
+    FieldStyleSpec(
+        name="under_color",
+        type_doc="str | None",
+        default_doc="lowest in-range color",
+        description=(
+            "Special heatmap color for values below the active z_range lower bound"
+        ),
+    ),
+    FieldStyleSpec(
+        name="over_color",
+        type_doc="str | None",
+        default_doc="highest in-range color",
+        description=(
+            "Special heatmap color for values above the active z_range upper bound"
+        ),
     ),
     FieldStyleSpec(
         name="show_colorbar",
@@ -107,7 +263,27 @@ FIELD_STYLE_OPTIONS: tuple[FieldStyleSpec, ...] = (
         name="levels",
         type_doc="int | None",
         default_doc="Plotly contour default",
-        description="Approximate number of contour levels",
+        description=(
+            "Approximate number of contour levels when exact level_step is not used"
+        ),
+    ),
+    FieldStyleSpec(
+        name="level_step",
+        type_doc="int | float | None",
+        default_doc="automatic from levels/Plotly",
+        description="Exact spacing between contour levels in scalar-value units",
+    ),
+    FieldStyleSpec(
+        name="level_start",
+        type_doc="int | float | None",
+        default_doc="automatic from Plotly or z_range[0]",
+        description="Starting contour value when level_step is used",
+    ),
+    FieldStyleSpec(
+        name="level_end",
+        type_doc="int | float | None",
+        default_doc="automatic from Plotly or z_range[1]",
+        description="Final contour value when level_step is used",
     ),
     FieldStyleSpec(
         name="filled",
@@ -134,6 +310,21 @@ FIELD_STYLE_OPTIONS: tuple[FieldStyleSpec, ...] = (
         description="Contour-line width in pixels",
     ),
     FieldStyleSpec(
+        name="line_dash",
+        aliases=("dash",),
+        type_doc="str | None",
+        default_doc="solid",
+        description="Contour-line dash pattern",
+        accepted_values=(
+            "solid",
+            "dot",
+            "dash",
+            "longdash",
+            "dashdot",
+            "longdashdot",
+        ),
+    ),
+    FieldStyleSpec(
         name="smoothing",
         aliases=("zsmooth",),
         type_doc="str | bool | None",
@@ -150,6 +341,34 @@ FIELD_STYLE_OPTIONS: tuple[FieldStyleSpec, ...] = (
 )
 
 _FIELD_STYLE_SPEC_BY_NAME = {spec.name: spec for spec in FIELD_STYLE_OPTIONS}
+
+
+def field_palette_option_docs(*, include_aliases: bool = True) -> dict[str, str]:
+    """Return discoverability text for curated scalar-field palette names."""
+    docs: dict[str, str] = {}
+    for spec in FIELD_PALETTE_OPTIONS:
+        docs[spec.name] = spec.format_help()
+        if include_aliases:
+            for alias in spec.aliases:
+                docs[alias] = spec.format_alias_help(alias)
+    return docs
+
+
+def resolve_field_colorscale(value: Any) -> Any:
+    """Resolve curated palette aliases to Plotly-compatible colorscale values."""
+    if value is None or not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return value
+    lower = text.lower()
+    curated = _FIELD_PALETTE_ALIAS_TO_SPEC.get(lower)
+    if curated is not None:
+        return curated.colorscale
+    plotly_name = _PLOTLY_NAMED_COLORCALES.get(lower)
+    if plotly_name is not None:
+        return plotly_name
+    return value
 
 
 def field_style_option_docs(*, include_aliases: bool = True) -> dict[str, str]:
@@ -218,17 +437,45 @@ def validate_field_style_kwargs(
     z_range = resolved.get("z_range")
     if z_range is not None:
         if not isinstance(z_range, tuple) or len(z_range) != 2:
-            raise ValueError(
-                f"{caller} requires z_range to have shape (zmin, zmax)."
-            )
+            raise ValueError(f"{caller} requires z_range to have shape (zmin, zmax).")
+
+    z_step = resolved.get("z_step")
+    if z_step is not None and float(z_step) <= 0.0:
+        raise ValueError(f"{caller} requires z_step to be a positive number.")
+
+    level_step = resolved.get("level_step")
+    if level_step is not None and float(level_step) <= 0.0:
+        raise ValueError(f"{caller} requires level_step to be a positive number.")
+
+    if levels is not None and level_step is not None:
+        raise ValueError(
+            f"{caller} cannot combine levels= with level_step=; choose approximate levels or exact spacing."
+        )
+
+    level_start = resolved.get("level_start")
+    level_end = resolved.get("level_end")
+    if (level_start is not None or level_end is not None) and level_step is None:
+        raise ValueError(
+            f"{caller} requires level_step= when level_start= or level_end= is provided."
+        )
+    if (
+        level_start is not None
+        and level_end is not None
+        and float(level_start) > float(level_end)
+    ):
+        raise ValueError(f"{caller} requires level_start to be <= level_end.")
 
     return resolved
 
 
 __all__ = [
+    "FIELD_PALETTE_OPTIONS",
     "FIELD_STYLE_OPTIONS",
+    "FieldPaletteSpec",
     "FieldStyleSpec",
+    "field_palette_option_docs",
     "field_style_option_docs",
+    "resolve_field_colorscale",
     "resolve_field_style_kwargs",
     "validate_field_style_kwargs",
 ]

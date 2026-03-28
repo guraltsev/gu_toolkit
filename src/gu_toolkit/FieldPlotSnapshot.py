@@ -27,6 +27,9 @@ class FieldPlotSnapshot:
     grid: tuple[int, int] | None
     colorscale: Any | None
     z_range: tuple[float, float] | None
+    z_step: float | None
+    under_color: str | None
+    over_color: str | None
     show_colorbar: bool | None
     opacity: float | None
     reversescale: bool | None
@@ -34,10 +37,14 @@ class FieldPlotSnapshot:
     trace: dict[str, Any] | None
     views: tuple[str, ...] = ()
     levels: int | None = None
+    level_step: float | None = None
+    level_start: float | None = None
+    level_end: float | None = None
     filled: bool | None = None
     show_labels: bool | None = None
     line_color: str | None = None
     line_width: float | None = None
+    line_dash: str | None = None
     smoothing: str | bool | None = None
     connectgaps: bool | None = None
     kind: str = "field"

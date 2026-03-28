@@ -1701,21 +1701,14 @@ class Figure:
         return self.to_code(options=options)
 
     def sound_generation_enabled(self, enabled: bool | None = None) -> bool:
-        """Query or legacy-control figure sound playback availability.
+        """Query or set the figure-level sound generation toggle.
 
         Parameters
         ----------
         enabled : bool | None, optional
-            Sound controls are always available. Passing ``False`` stops any
-            active playback but does not hide the legend speaker buttons.
-            Passing ``True`` leaves controls available and returns ``True``.
-            When omitted, the current availability state is reported.
-
-        Returns
-        -------
-        bool
-            Always ``True`` because sound-capable plots now always expose
-            speaker controls.
+            ``True`` shows per-plot sound controls and allows playback.
+            ``False`` hides them and stops any active playback. When omitted,
+            the current state is returned without changing it.
         """
         return self._sound.sound_generation_enabled(enabled)
 
@@ -1953,9 +1946,9 @@ class Figure:
 
 
 from . import figure_api as _figure_api
-from .figure_field import ScalarFieldPlot, contour_method as _contour_method, density_method as _density_method, field_style_option_docs as _field_style_option_docs, scalar_field_method as _scalar_field_method, temperature_method as _temperature_method
+from .figure_field import ScalarFieldPlot, contour_method as _contour_method, density_method as _density_method, field_palette_option_docs as _field_palette_option_docs, field_style_option_docs as _field_style_option_docs, scalar_field_method as _scalar_field_method, temperature_method as _temperature_method
 
-Figure.scalar_field = _scalar_field_method; Figure.contour = _contour_method; Figure.density = _density_method; Figure.temperature = _temperature_method; Figure.field_style_options = staticmethod(_field_style_option_docs)
-(get_default_samples, get_default_x_range, get_default_y_range, get_samples, get_sampling_points, get_title, get_x_range, get_y_range, info, parameter, parameters, parametric_plot, plot, scalar_field, contour, density, temperature, plots, plot_style_options, field_style_options, render, sound_generation_enabled, set_default_samples, set_default_x_range, set_default_y_range, set_samples, set_sampling_points, set_title, set_x_range, set_y_range) = (_figure_api.get_default_samples, _figure_api.get_default_x_range, _figure_api.get_default_y_range, _figure_api.get_samples, _figure_api.get_sampling_points, _figure_api.get_title, _figure_api.get_x_range, _figure_api.get_y_range, _figure_api.info, _figure_api.parameter, _figure_api.parameters, _figure_api.parametric_plot, _figure_api.plot, _figure_api.scalar_field, _figure_api.contour, _figure_api.density, _figure_api.temperature, _figure_api.plots, _figure_api.plot_style_options, _figure_api.field_style_options, _figure_api.render, _figure_api.sound_generation_enabled, _figure_api.set_default_samples, _figure_api.set_default_x_range, _figure_api.set_default_y_range, _figure_api.set_samples, _figure_api.set_sampling_points, _figure_api.set_title, _figure_api.set_x_range, _figure_api.set_y_range)
+Figure.scalar_field = _scalar_field_method; Figure.contour = _contour_method; Figure.density = _density_method; Figure.temperature = _temperature_method; Figure.field_style_options = staticmethod(_field_style_option_docs); Figure.field_palette_options = staticmethod(_field_palette_option_docs)
+(get_default_samples, get_default_x_range, get_default_y_range, get_samples, get_sampling_points, get_title, get_x_range, get_y_range, info, parameter, parameters, parametric_plot, plot, scalar_field, contour, density, temperature, plots, plot_style_options, field_style_options, field_palette_options, render, sound_generation_enabled, set_default_samples, set_default_x_range, set_default_y_range, set_samples, set_sampling_points, set_title, set_x_range, set_y_range) = (_figure_api.get_default_samples, _figure_api.get_default_x_range, _figure_api.get_default_y_range, _figure_api.get_samples, _figure_api.get_sampling_points, _figure_api.get_title, _figure_api.get_x_range, _figure_api.get_y_range, _figure_api.info, _figure_api.parameter, _figure_api.parameters, _figure_api.parametric_plot, _figure_api.plot, _figure_api.scalar_field, _figure_api.contour, _figure_api.density, _figure_api.temperature, _figure_api.plots, _figure_api.plot_style_options, _figure_api.field_style_options, _figure_api.field_palette_options, _figure_api.render, _figure_api.sound_generation_enabled, _figure_api.set_default_samples, _figure_api.set_default_x_range, _figure_api.set_default_y_range, _figure_api.set_samples, _figure_api.set_sampling_points, _figure_api.set_title, _figure_api.set_x_range, _figure_api.set_y_range)
 
-__all__ = ["Figure", "FigureViews", "FigureLayout", "ParametricPlot", "Plot", "ScalarFieldPlot", "View", "FigureSnapshot", "ViewSnapshot", "current_figure", "parametric_plot", "plot", "scalar_field", "contour", "density", "temperature", "plots", "parameter", "parameters", "info", "render", "get_default_samples", "get_default_x_range", "get_default_y_range", "get_samples", "get_sampling_points", "set_default_samples", "set_default_x_range", "set_default_y_range", "set_samples", "set_sampling_points", "get_x_range", "set_x_range", "get_y_range", "set_y_range", "get_title", "set_title", "plot_style_options", "field_style_options", "sound_generation_enabled"]
+__all__ = ["Figure", "FigureViews", "FigureLayout", "ParametricPlot", "Plot", "ScalarFieldPlot", "View", "FigureSnapshot", "ViewSnapshot", "current_figure", "parametric_plot", "plot", "scalar_field", "contour", "density", "temperature", "plots", "parameter", "parameters", "info", "render", "get_default_samples", "get_default_x_range", "get_default_y_range", "get_samples", "get_sampling_points", "set_default_samples", "set_default_x_range", "set_default_y_range", "set_samples", "set_sampling_points", "get_x_range", "set_x_range", "get_y_range", "set_y_range", "get_title", "set_title", "plot_style_options", "field_style_options", "field_palette_options", "sound_generation_enabled"]

@@ -336,6 +336,12 @@ def _plot_call(
             args.append(
                 f"z_range=({_fmt_float(ps.z_range[0])}, {_fmt_float(ps.z_range[1])})"
             )
+        if getattr(ps, "z_step", None) is not None:
+            args.append(f"z_step={_fmt_float(ps.z_step)}")
+        if getattr(ps, "under_color", None) is not None:
+            args.append(f"under_color={ps.under_color!r}")
+        if getattr(ps, "over_color", None) is not None:
+            args.append(f"over_color={ps.over_color!r}")
         if ps.show_colorbar is not None:
             args.append(f"show_colorbar={ps.show_colorbar!r}")
         if ps.opacity is not None:
@@ -349,6 +355,12 @@ def _plot_call(
         if ps.render_mode == "contour":
             if ps.levels is not None:
                 args.append(f"levels={int(ps.levels)}")
+            if getattr(ps, "level_step", None) is not None:
+                args.append(f"level_step={_fmt_float(ps.level_step)}")
+            if getattr(ps, "level_start", None) is not None:
+                args.append(f"level_start={_fmt_float(ps.level_start)}")
+            if getattr(ps, "level_end", None) is not None:
+                args.append(f"level_end={_fmt_float(ps.level_end)}")
             if ps.filled is not None:
                 args.append(f"filled={ps.filled!r}")
             if ps.show_labels is not None:
@@ -357,6 +369,8 @@ def _plot_call(
                 args.append(f"line_color={ps.line_color!r}")
             if ps.line_width is not None:
                 args.append(f"line_width={_fmt_float(ps.line_width)}")
+            if getattr(ps, "line_dash", None) is not None:
+                args.append(f"line_dash={ps.line_dash!r}")
         else:
             if ps.smoothing is not None:
                 args.append(f"smoothing={ps.smoothing!r}")
