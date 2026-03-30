@@ -84,25 +84,196 @@ class _ParameterSnapshotBase:
         return name in self._symbols_by_name
 
     def symbol_for_name(self, key: ParameterKey) -> Symbol:
-        """Return the canonical symbol recorded for ``key``."""
+        """Return the canonical symbol recorded for ``key``.
+        
+        Full API
+        --------
+        ``obj.symbol_for_name(key: ParameterKey) -> Symbol``
+        
+        Parameters
+        ----------
+        key : ParameterKey
+            Value for ``key`` in this API. Required.
+        
+        Returns
+        -------
+        Symbol
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``_ParameterSnapshotBase``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = _ParameterSnapshotBase(...)
+            result = obj.symbol_for_name(...)
+        
+        Discovery-oriented use::
+        
+            help(_ParameterSnapshotBase)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(_ParameterSnapshotBase)`` and ``dir(_ParameterSnapshotBase)`` to inspect adjacent members.
+        """
         return self._symbols_by_name[self._resolve_name(key)]
 
     @property
     def symbols(self) -> tuple[Symbol, ...]:
-        """Return canonical symbols in snapshot order."""
+        """Return canonical symbols in snapshot order.
+        
+        Full API
+        --------
+        ``obj.symbols -> tuple[Symbol, Ellipsis]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[Symbol, Ellipsis]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``_ParameterSnapshotBase``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = _ParameterSnapshotBase(...)
+            current = obj.symbols
+        
+        Discovery-oriented use::
+        
+            help(_ParameterSnapshotBase)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(_ParameterSnapshotBase)`` and ``dir(_ParameterSnapshotBase)`` to inspect adjacent members.
+        """
         return tuple(self._symbols_by_name[name] for name in self)  # type: ignore[misc]
 
     def symbol_items(self):
-        """Iterate ``(canonical_symbol, value)`` pairs in snapshot order."""
+        """Iterate ``(canonical_symbol, value)`` pairs in snapshot order.
+        
+        Full API
+        --------
+        ``obj.symbol_items()``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        Any
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``_ParameterSnapshotBase``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = _ParameterSnapshotBase(...)
+            result = obj.symbol_items(...)
+        
+        Discovery-oriented use::
+        
+            help(_ParameterSnapshotBase)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(_ParameterSnapshotBase)`` and ``dir(_ParameterSnapshotBase)`` to inspect adjacent members.
+        """
         for name in self:  # type: ignore[misc]
             yield self._symbols_by_name[name], self[name]  # type: ignore[index]
 
 
 class ParameterValueSnapshot(_ParameterSnapshotBase, Mapping[str, Any]):
     """Immutable name-keyed view of parameter values.
-
-    Iteration and mapping views expose canonical string names. Symbol keys remain
-    accepted as aliases and are resolved through ``symbol.name``.
+    
+    Full API
+    --------
+    ``ParameterValueSnapshot(entries: Mapping[ParameterKey, Mapping[str, Any]], symbols: Mapping[ParameterKey, Symbol] | None=None)``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
+    Parameters
+    ----------
+    entries : Mapping[ParameterKey, Mapping[str, Any]]
+        Value for ``entries`` in this API. Required.
+    
+    symbols : Mapping[ParameterKey, Symbol] | None, optional
+        Parameter symbols, names, or other accepted parameter keys. Defaults to ``None``.
+    
+    Returns
+    -------
+    ParameterValueSnapshot
+        New ``ParameterValueSnapshot`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``symbols=None``: Parameter symbols, names, or other accepted parameter keys.
+    
+    Architecture note
+    -----------------
+    ``ParameterValueSnapshot`` lives in ``gu_toolkit.ParameterSnapshot``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.ParameterSnapshot import ParameterValueSnapshot
+        obj = ParameterValueSnapshot(...)
+    
+    Discovery-oriented use::
+    
+        help(ParameterValueSnapshot)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/parameter-key-semantics.md``.
+    - Guide: ``docs/guides/parameter-animation.md``.
+    - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+    - In a notebook or REPL, run ``help(ParameterValueSnapshot)`` and ``dir(ParameterValueSnapshot)`` to inspect adjacent members.
     """
 
     def __init__(
@@ -135,15 +306,53 @@ class ParameterValueSnapshot(_ParameterSnapshotBase, Mapping[str, Any]):
 
 class ParameterSnapshot(_ParameterSnapshotBase, Mapping[str, Mapping[str, Any]]):
     """Immutable ordered snapshot of parameter values and optional metadata.
-
+    
+    Full API
+    --------
+    ``ParameterSnapshot(entries: Mapping[ParameterKey, Mapping[str, Any]], symbols: Mapping[ParameterKey, Symbol] | None=None)``
+    
+    Public members exposed from this class: ``value_map``
+    
     Parameters
     ----------
-    entries : Mapping[str | sympy.Symbol, Mapping[str, Any]]
-        Source mapping keyed by canonical parameter name or by a SymPy symbol.
-        Symbols are normalized to ``symbol.name``.
-    symbols : Mapping[str | sympy.Symbol, sympy.Symbol], optional
-        Optional canonical-symbol map used to preserve the representative symbol
-        chosen for each parameter name.
+    entries : Mapping[ParameterKey, Mapping[str, Any]]
+        Value for ``entries`` in this API. Required.
+    
+    symbols : Mapping[ParameterKey, Symbol] | None, optional
+        Parameter symbols, names, or other accepted parameter keys. Defaults to ``None``.
+    
+    Returns
+    -------
+    ParameterSnapshot
+        New ``ParameterSnapshot`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``symbols=None``: Parameter symbols, names, or other accepted parameter keys.
+    
+    Architecture note
+    -----------------
+    ``ParameterSnapshot`` lives in ``gu_toolkit.ParameterSnapshot``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.ParameterSnapshot import ParameterSnapshot
+        obj = ParameterSnapshot(...)
+    
+    Discovery-oriented use::
+    
+        help(ParameterSnapshot)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/parameter-key-semantics.md``.
+    - Guide: ``docs/guides/parameter-animation.md``.
+    - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+    - In a notebook or REPL, run ``help(ParameterSnapshot)`` and ``dir(ParameterSnapshot)`` to inspect adjacent members.
     """
 
     def __init__(
@@ -169,8 +378,47 @@ class ParameterSnapshot(_ParameterSnapshotBase, Mapping[str, Mapping[str, Any]])
 
     def value_map(self) -> ParameterValueSnapshot:
         """Return an immutable ``name -> value`` snapshot.
-
-        Symbol inputs remain accepted as aliases for name lookup.
+        
+        Full API
+        --------
+        ``obj.value_map() -> ParameterValueSnapshot``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        ParameterValueSnapshot
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ParameterSnapshot``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ParameterSnapshot(...)
+            result = obj.value_map(...)
+        
+        Discovery-oriented use::
+        
+            help(ParameterSnapshot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(ParameterSnapshot)`` and ``dir(ParameterSnapshot)`` to inspect adjacent members.
         """
         return ParameterValueSnapshot(self._entries, symbols=self._symbols_by_name)
 

@@ -19,7 +19,10 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
+
+from .performance_monitor import PerformanceMonitor
+from .runtime_support import schedule_later
 
 AnimationMode = Literal[">>", ">", "<>"]
 
@@ -30,42 +33,482 @@ _EPS = 1e-12
 
 
 class AnimationClockLike(Protocol):
-    """Minimal clock protocol used by :class:`AnimationController`."""
+    """Minimal clock protocol used by :class:`AnimationController`.
+    
+    Full API
+    --------
+    ``AnimationClockLike()``
+    
+    Public members exposed from this class: ``subscribe``, ``unsubscribe``
+    
+    Parameters
+    ----------
+    None. This API does not declare user-supplied parameters beyond implicit object context.
+    
+    Returns
+    -------
+    Any implementation of ``AnimationClockLike``
+        Objects matching this protocol/interface can be passed anywhere the toolkit expects ``AnimationClockLike``.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    ``AnimationClockLike`` lives in ``gu_toolkit.animation``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Implementation sketch::
+    
+        from gu_toolkit.animation import AnimationClockLike
+    
+        class MyAnimationClockLike(AnimationClockLike):
+            ...
+    
+    Discovery-oriented use::
+    
+        help(AnimationClockLike)
+        dir(MyAnimationClockLike)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/parameter-key-semantics.md``.
+    - Guide: ``docs/guides/parameter-animation.md``.
+    - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+    - In a notebook or REPL, run ``help(AnimationClockLike)`` and ``dir(AnimationClockLike)`` to inspect adjacent members.
+    """
 
     def subscribe(self, callback: Callable[[float], None]) -> None:
-        """Register a callback that receives the current monotonic time."""
+        """Register a callback that receives the current monotonic time.
+        
+        Full API
+        --------
+        ``obj.subscribe(callback: Callable[[float], None]) -> None``
+        
+        Parameters
+        ----------
+        callback : Callable[[float], None]
+            Callable that is invoked when the relevant event fires. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationClockLike``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationClockLike(...)
+            obj.subscribe(...)
+        
+        Discovery-oriented use::
+        
+            help(AnimationClockLike)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationClockLike)`` and ``dir(AnimationClockLike)`` to inspect adjacent members.
+        """
 
     def unsubscribe(self, callback: Callable[[float], None]) -> None:
-        """Unregister a previously registered callback."""
+        """Unregister a previously registered callback.
+        
+        Full API
+        --------
+        ``obj.unsubscribe(callback: Callable[[float], None]) -> None``
+        
+        Parameters
+        ----------
+        callback : Callable[[float], None]
+            Callable that is invoked when the relevant event fires. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationClockLike``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationClockLike(...)
+            obj.unsubscribe(...)
+        
+        Discovery-oriented use::
+        
+            help(AnimationClockLike)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationClockLike)`` and ``dir(AnimationClockLike)`` to inspect adjacent members.
+        """
 
 
 class AnimationTarget(Protocol):
-    """Control contract required by :class:`AnimationController`."""
+    """Control contract required by :class:`AnimationController`.
+    
+    Full API
+    --------
+    ``AnimationTarget()``
+    
+    Public members exposed from this class: ``value``, ``min``, ``max``, ``step``
+    
+    Parameters
+    ----------
+    None. This API does not declare user-supplied parameters beyond implicit object context.
+    
+    Returns
+    -------
+    Any implementation of ``AnimationTarget``
+        Objects matching this protocol/interface can be passed anywhere the toolkit expects ``AnimationTarget``.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    ``AnimationTarget`` lives in ``gu_toolkit.animation``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Implementation sketch::
+    
+        from gu_toolkit.animation import AnimationTarget
+    
+        class MyAnimationTarget(AnimationTarget):
+            ...
+    
+    Discovery-oriented use::
+    
+        help(AnimationTarget)
+        dir(MyAnimationTarget)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/parameter-key-semantics.md``.
+    - Guide: ``docs/guides/parameter-animation.md``.
+    - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+    - In a notebook or REPL, run ``help(AnimationTarget)`` and ``dir(AnimationTarget)`` to inspect adjacent members.
+    """
 
     @property
     def value(self) -> float:
-        """Current control value."""
+        """Current control value.
+        
+        Full API
+        --------
+        ``obj.value -> float``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        float
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationTarget``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationTarget(...)
+            current = obj.value
+        
+        Discovery-oriented use::
+        
+            help(AnimationTarget)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationTarget)`` and ``dir(AnimationTarget)`` to inspect adjacent members.
+        """
 
     @value.setter
     def value(self, value: float) -> None:
-        """Apply a new control value."""
+        """Apply a new control value.
+        
+        Full API
+        --------
+        ``obj.value = value``
+        
+        Parameters
+        ----------
+        value : float
+            New or current value for the relevant property, control, or calculation. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationTarget``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationTarget(...)
+            obj.value = value
+        
+        Discovery-oriented use::
+        
+            help(AnimationTarget)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationTarget)`` and ``dir(AnimationTarget)`` to inspect adjacent members.
+        """
 
     @property
     def min(self) -> float:
-        """Lower bound of the control."""
+        """Lower bound of the control.
+        
+        Full API
+        --------
+        ``obj.min -> float``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        float
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationTarget``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationTarget(...)
+            current = obj.min
+        
+        Discovery-oriented use::
+        
+            help(AnimationTarget)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationTarget)`` and ``dir(AnimationTarget)`` to inspect adjacent members.
+        """
 
     @property
     def max(self) -> float:
-        """Upper bound of the control."""
+        """Upper bound of the control.
+        
+        Full API
+        --------
+        ``obj.max -> float``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        float
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationTarget``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationTarget(...)
+            current = obj.max
+        
+        Discovery-oriented use::
+        
+            help(AnimationTarget)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationTarget)`` and ``dir(AnimationTarget)`` to inspect adjacent members.
+        """
 
     @property
     def step(self) -> float:
-        """Step size used by the control."""
+        """Step size used by the control.
+        
+        Full API
+        --------
+        ``obj.step -> float``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        float
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationTarget``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationTarget(...)
+            current = obj.step
+        
+        Discovery-oriented use::
+        
+            help(AnimationTarget)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationTarget)`` and ``dir(AnimationTarget)`` to inspect adjacent members.
+        """
 
 
 @dataclass(frozen=True)
 class AnimationDomain:
-    """Numeric domain used for animation quantization and wrapping."""
+    """Numeric domain used for animation quantization and wrapping.
+    
+    Full API
+    --------
+    ``AnimationDomain(min: float, max: float, step: float)``
+    
+    Public members exposed from this class: ``span``
+    
+    Parameters
+    ----------
+    min : float
+        Lower bound used by sliders, domains, or range validators. Required.
+    
+    max : float
+        Upper bound used by sliders, domains, or range validators. Required.
+    
+    step : float
+        Increment or resolution used for stepping through numeric values. Required.
+    
+    Returns
+    -------
+    AnimationDomain
+        New ``AnimationDomain`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    ``AnimationDomain`` lives in ``gu_toolkit.animation``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.animation import AnimationDomain
+        obj = AnimationDomain(...)
+    
+    Discovery-oriented use::
+    
+        help(AnimationDomain)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/parameter-key-semantics.md``.
+    - Guide: ``docs/guides/parameter-animation.md``.
+    - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+    - In a notebook or REPL, run ``help(AnimationDomain)`` and ``dir(AnimationDomain)`` to inspect adjacent members.
+    """
 
     min: float
     max: float
@@ -73,7 +516,49 @@ class AnimationDomain:
 
     @property
     def span(self) -> float:
-        """Return the non-negative numeric span of the domain."""
+        """Return the non-negative numeric span of the domain.
+        
+        Full API
+        --------
+        ``obj.span -> float``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        float
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationDomain``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationDomain(...)
+            current = obj.span
+        
+        Discovery-oriented use::
+        
+            help(AnimationDomain)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationDomain)`` and ``dir(AnimationDomain)`` to inspect adjacent members.
+        """
         return max(0.0, self.max - self.min)
 
 
@@ -145,10 +630,54 @@ def quantize_to_admissible(
     direction: float = 0.0,
 ) -> float:
     """Return the closest slider-compatible value for ``value``.
-
-    Ties are broken in the direction of motion so forward animations remain
-    monotone when the internal value lands exactly between two admissible
-    slider values.
+    
+    Full API
+    --------
+    ``quantize_to_admissible(value: float, domain: AnimationDomain, *, direction: float=0.0) -> float``
+    
+    Parameters
+    ----------
+    value : float
+        New or current value for the relevant property, control, or calculation. Required.
+    
+    domain : AnimationDomain
+        Numeric domain or span that bounds an animation or sweep. Required.
+    
+    direction : float, optional
+        Value for ``direction`` in this API. Defaults to ``0.0``.
+    
+    Returns
+    -------
+    float
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``direction=0.0``: Value for ``direction`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.animation``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.animation import quantize_to_admissible
+        result = quantize_to_admissible(...)
+    
+    Discovery-oriented use::
+    
+        help(quantize_to_admissible)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/parameter-key-semantics.md``.
+    - Guide: ``docs/guides/parameter-animation.md``.
+    - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+    - In a notebook or REPL, run ``help(quantize_to_admissible)`` and inspect sibling APIs in the same module.
     """
     candidates = _admissible_candidates(value, domain)
     if len(candidates) == 1:
@@ -170,7 +699,56 @@ def quantize_to_admissible(
 
 
 class AnimationClock:
-    """Shared cadence source for active parameter animations."""
+    """Shared cadence source for active parameter animations.
+    
+    Full API
+    --------
+    ``AnimationClock(frequency_hz: float=DEFAULT_ANIMATION_HZ, time_source: Callable[[], float]=time.monotonic)``
+    
+    Public members exposed from this class: ``frequency_hz``, ``subscribe``, ``unsubscribe``, ``performance_snapshot``
+    
+    Parameters
+    ----------
+    frequency_hz : float, optional
+        Tick frequency in hertz. Defaults to ``DEFAULT_ANIMATION_HZ``.
+    
+    time_source : Callable[[], float], optional
+        Value for ``time_source`` in this API. Defaults to ``time.monotonic``.
+    
+    Returns
+    -------
+    AnimationClock
+        New ``AnimationClock`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``frequency_hz=DEFAULT_ANIMATION_HZ``: Tick frequency in hertz.
+    - ``time_source=time.monotonic``: Value for ``time_source`` in this API.
+    
+    Architecture note
+    -----------------
+    ``AnimationClock`` lives in ``gu_toolkit.animation``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.animation import AnimationClock
+        obj = AnimationClock(...)
+    
+    Discovery-oriented use::
+    
+        help(AnimationClock)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/parameter-key-semantics.md``.
+    - Guide: ``docs/guides/parameter-animation.md``.
+    - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+    - In a notebook or REPL, run ``help(AnimationClock)`` and ``dir(AnimationClock)`` to inspect adjacent members.
+    """
 
     def __init__(
         self,
@@ -185,63 +763,399 @@ class AnimationClock:
         self._time_source = time_source
         self._lock = threading.Lock()
         self._timer: object | None = None
+        self._ticking = False
+        self._next_tick_deadline: float | None = None
         self._subscribers: set[Callable[[float], None]] = set()
+        self._last_timer_backend = "uninitialized"
+        self._last_tick_time: float | None = None
+        self._performance = PerformanceMonitor("AnimationClock")
+        self._performance.set_state(
+            frequency_hz=self._frequency_hz,
+            interval_ms=self._interval_s * 1000.0,
+            timer_backend=self._last_timer_backend,
+            ticking=False,
+        )
 
     @property
     def frequency_hz(self) -> float:
-        """Configured clock frequency."""
+        """Configured clock frequency.
+        
+        Full API
+        --------
+        ``obj.frequency_hz -> float``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        float
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationClock``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationClock(...)
+            current = obj.frequency_hz
+        
+        Discovery-oriented use::
+        
+            help(AnimationClock)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationClock)`` and ``dir(AnimationClock)`` to inspect adjacent members.
+        """
         return self._frequency_hz
 
     def subscribe(self, callback: Callable[[float], None]) -> None:
-        """Register a callback and start the cadence if needed."""
+        """Register a callback and start the cadence if needed.
+        
+        Full API
+        --------
+        ``obj.subscribe(callback: Callable[[float], None]) -> None``
+        
+        Parameters
+        ----------
+        callback : Callable[[float], None]
+            Callable that is invoked when the relevant event fires. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationClock``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationClock(...)
+            obj.subscribe(...)
+        
+        Discovery-oriented use::
+        
+            help(AnimationClock)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationClock)`` and ``dir(AnimationClock)`` to inspect adjacent members.
+        """
         with self._lock:
+            previous_count = len(self._subscribers)
             self._subscribers.add(callback)
-            if self._timer is None:
-                self._schedule_next_locked()
+            if len(self._subscribers) > previous_count:
+                self._performance.increment("subscriptions")
+            self._performance.set_state(subscriber_count=len(self._subscribers), ticking=self._ticking)
+            if self._timer is None and not self._ticking and self._subscribers:
+                now = float(self._time_source())
+                if self._next_tick_deadline is None:
+                    self._next_tick_deadline = now + self._interval_s
+                self._schedule_next_locked(now=now)
 
     def unsubscribe(self, callback: Callable[[float], None]) -> None:
-        """Remove a callback from the active cadence."""
+        """Remove a callback from the active cadence.
+        
+        Full API
+        --------
+        ``obj.unsubscribe(callback: Callable[[float], None]) -> None``
+        
+        Parameters
+        ----------
+        callback : Callable[[float], None]
+            Callable that is invoked when the relevant event fires. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationClock``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationClock(...)
+            obj.unsubscribe(...)
+        
+        Discovery-oriented use::
+        
+            help(AnimationClock)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationClock)`` and ``dir(AnimationClock)`` to inspect adjacent members.
+        """
         with self._lock:
+            previous_count = len(self._subscribers)
             self._subscribers.discard(callback)
+            if len(self._subscribers) < previous_count:
+                self._performance.increment("unsubscriptions")
+            if not self._subscribers:
+                handle = self._timer
+                self._timer = None
+                self._next_tick_deadline = None
+                if handle is not None:
+                    cancel = getattr(handle, "cancel", None)
+                    if callable(cancel):
+                        try:
+                            cancel()
+                        except Exception:
+                            logging.getLogger(__name__).debug(
+                                "Animation clock timer cancel failed",
+                                exc_info=True,
+                            )
+                        else:
+                            self._performance.increment("cancelled_timers")
+            self._performance.set_state(subscriber_count=len(self._subscribers), ticking=self._ticking)
 
-    def _schedule_next_locked(self) -> None:
-        delay_s = self._interval_s
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            timer = threading.Timer(delay_s, self._on_tick)
-            timer.daemon = True
-            self._timer = timer
-            timer.start()
+    def performance_snapshot(self, *, recent_event_limit: int = 25) -> dict[str, Any]:
+        """Work with performance snapshot on ``AnimationClock``.
+        
+        Full API
+        --------
+        ``obj.performance_snapshot(*, recent_event_limit: int=25) -> dict[str, Any]``
+        
+        Parameters
+        ----------
+        recent_event_limit : int, optional
+            Value for ``recent_event_limit`` in this API. Defaults to ``25``.
+        
+        Returns
+        -------
+        dict[str, Any]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``recent_event_limit=25``: Value for ``recent_event_limit`` in this API.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationClock``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationClock(...)
+            result = obj.performance_snapshot(...)
+        
+        Discovery-oriented use::
+        
+            help(AnimationClock)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationClock)`` and ``dir(AnimationClock)`` to inspect adjacent members.
+        """
+
+        return self._performance.snapshot(recent_limit=recent_event_limit)
+
+    def _schedule_next_locked(self, *, now: float | None = None) -> None:
+        if self._timer is not None or self._ticking or not self._subscribers:
             return
-
-        self._timer = loop.call_later(delay_s, self._on_tick)
+        current_now = float(self._time_source()) if now is None else float(now)
+        if self._next_tick_deadline is None:
+            self._next_tick_deadline = current_now + self._interval_s
+        delay_s = max(0.0, float(self._next_tick_deadline) - current_now)
+        if delay_s <= 1.0e-9:
+            self._performance.increment("zero_delay_schedules")
+        scheduled = schedule_later(
+            delay_s,
+            self._on_tick,
+            owner="AnimationClock",
+            thread_timer_factory=threading.Timer,
+        )
+        self._timer = scheduled.handle
+        self._last_timer_backend = scheduled.backend
+        self._performance.increment("scheduled_ticks")
+        self._performance.set_state(
+            timer_backend=self._last_timer_backend,
+            subscriber_count=len(self._subscribers),
+            next_delay_ms=delay_s * 1000.0,
+            ticking=self._ticking,
+        )
+        self._performance.record_duration(
+            "scheduled_delay_ms",
+            delay_s * 1000.0,
+            subscriber_count=len(self._subscribers),
+            timer_backend=self._last_timer_backend,
+        )
 
     def _on_tick(self) -> None:
         with self._lock:
             self._timer = None
             subscribers = tuple(self._subscribers)
-
-        if not subscribers:
-            return
+            expected_deadline = self._next_tick_deadline
+            if not subscribers:
+                self._next_tick_deadline = None
+                self._performance.increment("empty_ticks")
+                self._performance.set_state(subscriber_count=0, ticking=False)
+                return
+            self._ticking = True
+            self._performance.set_state(subscriber_count=len(subscribers), ticking=True)
 
         now = self._time_source()
+        if expected_deadline is not None:
+            lateness_ms = max(0.0, (float(now) - float(expected_deadline)) * 1000.0)
+            if lateness_ms > 0.0:
+                self._performance.increment("overdue_ticks")
+            self._performance.record_duration(
+                "tick_lateness_ms",
+                lateness_ms,
+                subscriber_count=len(subscribers),
+                timer_backend=self._last_timer_backend,
+            )
+        if self._last_tick_time is not None:
+            self._performance.record_duration(
+                "tick_spacing_ms",
+                (float(now) - float(self._last_tick_time)) * 1000.0,
+                subscriber_count=len(subscribers),
+            )
+        self._last_tick_time = float(now)
+
+        tick_started = time.perf_counter()
+        failures = 0
         for callback in subscribers:
+            callback_started = time.perf_counter()
             try:
                 callback(now)
             except Exception:  # pragma: no cover - defensive callback boundary
+                failures += 1
+                self._performance.increment("callback_failures")
                 logging.getLogger(__name__).exception("Animation clock callback failed")
+            finally:
+                self._performance.record_duration(
+                    "callback_duration_ms",
+                    (time.perf_counter() - callback_started) * 1000.0,
+                    subscriber_count=len(subscribers),
+                )
 
+        self._performance.increment("ticks")
+        self._performance.record_duration(
+            "tick_duration_ms",
+            (time.perf_counter() - tick_started) * 1000.0,
+            subscriber_count=len(subscribers),
+            failure_count=failures,
+        )
+
+        reschedule_now = float(self._time_source())
+        missed_intervals = 0
         with self._lock:
+            self._ticking = False
             if self._subscribers and self._timer is None:
-                self._schedule_next_locked()
+                if self._next_tick_deadline is None:
+                    self._next_tick_deadline = reschedule_now + self._interval_s
+                else:
+                    next_deadline = float(self._next_tick_deadline) + self._interval_s
+                    while next_deadline <= reschedule_now:
+                        next_deadline += self._interval_s
+                        missed_intervals += 1
+                    self._next_tick_deadline = next_deadline
+                self._schedule_next_locked(now=reschedule_now)
+            else:
+                self._next_tick_deadline = None
+            self._performance.set_state(
+                subscriber_count=len(self._subscribers),
+                ticking=False,
+            )
+
+        if missed_intervals:
+            self._performance.increment("missed_intervals", delta=missed_intervals)
 
 
 _DEFAULT_CLOCK: AnimationClock | None = None
 
 
 def get_default_animation_clock() -> AnimationClock:
-    """Return the process-wide default animation clock."""
+    """Return the process-wide default animation clock.
+    
+    Full API
+    --------
+    ``get_default_animation_clock() -> AnimationClock``
+    
+    Parameters
+    ----------
+    None. This API does not declare user-supplied parameters beyond implicit object context.
+    
+    Returns
+    -------
+    AnimationClock
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.animation``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.animation import get_default_animation_clock
+        result = get_default_animation_clock(...)
+    
+    Discovery-oriented use::
+    
+        help(get_default_animation_clock)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/parameter-key-semantics.md``.
+    - Guide: ``docs/guides/parameter-animation.md``.
+    - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+    - In a notebook or REPL, run ``help(get_default_animation_clock)`` and inspect sibling APIs in the same module.
+    """
     global _DEFAULT_CLOCK
     if _DEFAULT_CLOCK is None:
         _DEFAULT_CLOCK = AnimationClock()
@@ -250,22 +1164,70 @@ def get_default_animation_clock() -> AnimationClock:
 
 class AnimationController:
     """Widget-bound animation controller for a single parameter.
-
+    
+    Full API
+    --------
+    ``AnimationController(target: AnimationTarget, clock: AnimationClockLike | None=None, time_source: Callable[[], float]=time.monotonic, animation_time: float=DEFAULT_ANIMATION_TIME, animation_mode: AnimationMode='>>', state_change_callback: Callable[[bool], None] | None=None)``
+    
+    Public members exposed from this class: ``animation_time``, ``animation_mode``, ``running``, ``start``, ``stop``, ``toggle``,
+        ``handle_value_change``, ``handle_domain_change``
+    
     Parameters
     ----------
     target : AnimationTarget
-        Control to animate. The controller reads ``value``/``min``/``max``/
-        ``step`` and writes new values back through ``target.value``.
-    clock : AnimationClockLike, optional
-        Cadence source. Defaults to the shared 60 Hz clock.
-    time_source : callable, optional
-        Monotonic time provider. Defaults to :func:`time.monotonic`.
+        Value for ``target`` in this API. Required.
+    
+    clock : AnimationClockLike | None, optional
+        Animation clock used to schedule ticks. Defaults to ``None``.
+    
+    time_source : Callable[[], float], optional
+        Value for ``time_source`` in this API. Defaults to ``time.monotonic``.
+    
     animation_time : float, optional
-        Seconds needed to traverse the current full range once.
-    animation_mode : {">>", ">", "<>"}, optional
-        Forward loop, forward stop, or bounce.
-    state_change_callback : callable, optional
-        Invoked when running state changes.
+        Animation duration or time scale associated with a control. Defaults to ``DEFAULT_ANIMATION_TIME``.
+    
+    animation_mode : AnimationMode, optional
+        Animation strategy used when a control is animated. Defaults to ``'>>'``.
+    
+    state_change_callback : Callable[[bool], None] | None, optional
+        Value for ``state_change_callback`` in this API. Defaults to ``None``.
+    
+    Returns
+    -------
+    AnimationController
+        New ``AnimationController`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``clock=None``: Animation clock used to schedule ticks.
+    - ``time_source=time.monotonic``: Value for ``time_source`` in this API.
+    - ``animation_time=DEFAULT_ANIMATION_TIME``: Animation duration or time scale associated with a control.
+    - ``animation_mode='>>'``: Animation strategy used when a control is animated.
+    - ``state_change_callback=None``: Value for ``state_change_callback`` in this API.
+    
+    Architecture note
+    -----------------
+    ``AnimationController`` lives in ``gu_toolkit.animation``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.animation import AnimationController
+        obj = AnimationController(...)
+    
+    Discovery-oriented use::
+    
+        help(AnimationController)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/parameter-key-semantics.md``.
+    - Guide: ``docs/guides/parameter-animation.md``.
+    - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+    - In a notebook or REPL, run ``help(AnimationController)`` and ``dir(AnimationController)`` to inspect adjacent members.
     """
 
     def __init__(
@@ -296,11 +1258,98 @@ class AnimationController:
 
     @property
     def animation_time(self) -> float:
-        """Seconds needed to traverse the current numeric range once."""
+        """Seconds needed to traverse the current numeric range once.
+        
+        Full API
+        --------
+        ``obj.animation_time -> float``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        float
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationController``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationController(...)
+            current = obj.animation_time
+        
+        Discovery-oriented use::
+        
+            help(AnimationController)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationController)`` and ``dir(AnimationController)`` to inspect adjacent members.
+        """
         return self._animation_time
 
     @animation_time.setter
     def animation_time(self, seconds: float) -> None:
+        """Work with animation time on ``AnimationController``.
+        
+        Full API
+        --------
+        ``obj.animation_time = seconds``
+        
+        Parameters
+        ----------
+        seconds : float
+            Value for ``seconds`` in this API. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationController``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationController(...)
+            obj.animation_time = seconds
+        
+        Discovery-oriented use::
+        
+            help(AnimationController)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationController)`` and ``dir(AnimationController)`` to inspect adjacent members.
+        """
+
         seconds_value = float(seconds)
         if not math.isfinite(seconds_value) or seconds_value <= 0:
             raise ValueError("animation_time must be a finite number > 0")
@@ -308,11 +1357,98 @@ class AnimationController:
 
     @property
     def animation_mode(self) -> AnimationMode:
-        """Current animation mode token."""
+        """Current animation mode token.
+        
+        Full API
+        --------
+        ``obj.animation_mode -> AnimationMode``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        AnimationMode
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationController``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationController(...)
+            current = obj.animation_mode
+        
+        Discovery-oriented use::
+        
+            help(AnimationController)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationController)`` and ``dir(AnimationController)`` to inspect adjacent members.
+        """
         return self._animation_mode
 
     @animation_mode.setter
     def animation_mode(self, mode: str) -> None:
+        """Work with animation mode on ``AnimationController``.
+        
+        Full API
+        --------
+        ``obj.animation_mode = mode``
+        
+        Parameters
+        ----------
+        mode : str
+            Mode or strategy name controlling behavior. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationController``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationController(...)
+            obj.animation_mode = mode
+        
+        Discovery-oriented use::
+        
+            help(AnimationController)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationController)`` and ``dir(AnimationController)`` to inspect adjacent members.
+        """
+
         validated = _validate_mode(mode)
         self._animation_mode = validated
         if validated in (">", ">>"):
@@ -320,11 +1456,95 @@ class AnimationController:
 
     @property
     def running(self) -> bool:
-        """Whether the controller is currently subscribed to the clock."""
+        """Whether the controller is currently subscribed to the clock.
+        
+        Full API
+        --------
+        ``obj.running -> bool``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationController``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationController(...)
+            current = obj.running
+        
+        Discovery-oriented use::
+        
+            help(AnimationController)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationController)`` and ``dir(AnimationController)`` to inspect adjacent members.
+        """
         return self._running
 
     def start(self) -> None:
-        """Start animating from the current internal value."""
+        """Start animating from the current internal value.
+        
+        Full API
+        --------
+        ``obj.start() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationController``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationController(...)
+            obj.start(...)
+        
+        Discovery-oriented use::
+        
+            help(AnimationController)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationController)`` and ``dir(AnimationController)`` to inspect adjacent members.
+        """
         if self._running:
             return
         self._internal_value = float(self._target.value)
@@ -346,7 +1566,49 @@ class AnimationController:
         self._emit_state_change()
 
     def stop(self) -> None:
-        """Stop animating and unsubscribe from the clock."""
+        """Stop animating and unsubscribe from the clock.
+        
+        Full API
+        --------
+        ``obj.stop() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationController``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationController(...)
+            obj.stop(...)
+        
+        Discovery-oriented use::
+        
+            help(AnimationController)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationController)`` and ``dir(AnimationController)`` to inspect adjacent members.
+        """
         if not self._running:
             return
         self._clock.unsubscribe(self._on_clock_tick)
@@ -355,24 +1617,146 @@ class AnimationController:
         self._emit_state_change()
 
     def toggle(self) -> None:
-        """Toggle between running and paused states."""
+        """Toggle between running and paused states.
+        
+        Full API
+        --------
+        ``obj.toggle() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationController``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationController(...)
+            obj.toggle(...)
+        
+        Discovery-oriented use::
+        
+            help(AnimationController)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationController)`` and ``dir(AnimationController)`` to inspect adjacent members.
+        """
         if self._running:
             self.stop()
             return
         self.start()
 
     def handle_value_change(self, new_value: float) -> None:
-        """Sync the internal animation state from an external value edit."""
+        """Sync the internal animation state from an external value edit.
+        
+        Full API
+        --------
+        ``obj.handle_value_change(new_value: float) -> None``
+        
+        Parameters
+        ----------
+        new_value : float
+            Value for ``new_value`` in this API. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationController``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationController(...)
+            obj.handle_value_change(...)
+        
+        Discovery-oriented use::
+        
+            help(AnimationController)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationController)`` and ``dir(AnimationController)`` to inspect adjacent members.
+        """
         if self._applying_animation:
             return
         self._internal_value = float(new_value)
 
     def handle_domain_change(self) -> None:
         """Adapt the animation to a changed slider range or step.
-
-        The internal value is preserved while it stays inside the numeric range.
-        The displayed value is always re-quantized so the parameter remains
-        compatible with the current ``min``/``max``/``step`` configuration.
+        
+        Full API
+        --------
+        ``obj.handle_domain_change() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``AnimationController``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = AnimationController(...)
+            obj.handle_domain_change(...)
+        
+        Discovery-oriented use::
+        
+            help(AnimationController)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(AnimationController)`` and ``dir(AnimationController)`` to inspect adjacent members.
         """
         domain = _coerce_domain(self._target)
         if self._internal_value < domain.min or self._internal_value > domain.max:

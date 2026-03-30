@@ -48,22 +48,24 @@ Use Python's standard :mod:`logging` module rather than ``Figure(debug=...)``::
     logging.basicConfig(level=logging.INFO)
     logging.getLogger("gu_toolkit.layout").setLevel(logging.DEBUG)
 """
-
 from __future__ import annotations
-
 import logging
 import time
 import warnings
 from collections.abc import Callable, Hashable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from typing import Any
-
 from ._widget_stubs import widgets
 import plotly.graph_objects as go
 from IPython.display import display
 from sympy.core.symbol import Symbol
-
 from .codegen import CodegenOptions
+from .figure_diagnostics import (
+    figure_performance_report,
+    figure_performance_snapshot,
+    figure_runtime_diagnostics,
+    perform_render_request,
+)
 from .layout_logging import (
     LayoutEventBuffer,
     is_layout_logger_explicitly_enabled,
@@ -85,25 +87,21 @@ from .figure_plot_helpers import (
     resolve_plot_id,
 )
 from .FigureSnapshot import FigureSnapshot, ViewSnapshot
-
 from .InputConvert import InputConvert
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
 from .PlotlyPane import PlotlyPane, PlotlyPaneStyle
 from .parameter_keys import ParameterKeyOrKeys, expand_parameter_keys_to_symbols
 from .figure_types import RangeLike, VisibleSpec
-
+from .performance_monitor import PerformanceMonitor
+from .runtime_support import create_plotly_figure_widget, warn_once
 # Module logger
 # - Uses a NullHandler so importing this module never configures global logging.
 # - Callers can enable logs via standard logging configuration.
 logger = logging.getLogger(__name__)
 if not logger.handlers:
     logger.addHandler(logging.NullHandler())
-
-
-RENDER_TARGET_INTERVAL_MS = 16
-
-
+RENDER_TARGET_INTERVAL_MS = 10
 from .figure_context import (
     _FigureDefaultSentinel,
     _is_figure_default,
@@ -122,58 +120,111 @@ from .figure_parametric_plot import ParametricPlot, create_or_update_parametric_
 from .figure_plot import Plot
 from .figure_view import FigureViews, View
 from .figure_view_manager import ViewManager
-
 # SECTION: Figure (The Coordinator) [id: Figure]
 # =============================================================================
 class Figure:
     """Notebook-facing coordinator for interactive plotting.
-
-    ``Figure`` keeps high-level orchestration in one place while delegating
-    specialized state and lifecycle logic to dedicated collaborators.
-
-    Mental model
-    ------------
-    - ``fig.views["id"]`` returns the public :class:`View` object for one
-      plotting workspace.
-    - ``fig.views.current`` and ``fig.views.current_id`` are the canonical
-      active-view accessors.
-    - ``Figure.x_range`` and ``Figure.y_range`` are convenience shorthands for
-      the current view, not figure-global axes.
-    - :class:`FigureLayout` owns widget composition only; rendering decisions
-      and relayout policy stay here in ``Figure``.
-    - ``fig.info_manager`` is the advanced Info-section access point.
-      ``fig.info(...)`` is the convenience API for small rich-text cards.
-
+    
+    Full API
+    --------
+    ``Figure(title: str='', samples: int | str | _FigureDefaultSentinel | None=None, default_samples: int | str | _FigureDefaultSentinel | None=None, sampling_points: int | str | _FigureDefaultSentinel | None=None, default_x_range: RangeLike | None=None, default_y_range: RangeLike | None=None, x_label: str='', y_label: str='', show: bool=False, display: bool | None=None, x_range: RangeLike | None=None, y_range: RangeLike | None=None, **_deprecated_kwargs: Any)``
+    
+    Public members exposed from this class: ``title``, ``views``, ``active_view_id``, ``reflow_layout``, ``add_view``,
+        ``set_active_view``, ``view``, ``remove_view``, ``figure_widget``,
+        ``figure_widget_for``, ``pane``, ``pane_for``, ``runtime_diagnostics``,
+        ``performance_snapshot``, ``performance_report``, ``parameters``, ``info_manager``,
+        ``info_output``, ``x_range``, ``default_x_range``, ``y_range``, ``default_y_range``,
+        ``current_x_range``, ``current_y_range``, ``samples``, ``default_samples``,
+        ``sampling_points``, ``plot_style_options``, ``plot``, ``parametric_plot``,
+        ``parameter``, ``render``, ``flush_render_queue``, ``snapshot``, ``to_code``,
+        ``code``, ``get_code``, ``sound_generation_enabled``, ``info``,
+        ``add_param_change_hook``, ``show``
+    
     Parameters
     ----------
     title : str, optional
-        Figure title shown above the widget tree.
-    sampling_points : int, optional
-        Default sample count used when a plot does not set its own override.
-    default_x_range, default_y_range : RangeLike, optional
-        Initial default ranges seeded into the main view.
-    x_label, y_label : str, optional
-        Initial axis labels for the main view.
+        Human-readable title text shown in the UI or stored in snapshots. Defaults to ``''``.
+    
+    samples : int | str | _FigureDefaultSentinel | None, optional
+        Sampling density used when evaluating a curve or field. Defaults to ``None``.
+    
+    default_samples : int | str | _FigureDefaultSentinel | None, optional
+        Value for ``default_samples`` in this API. Defaults to ``None``.
+    
+    sampling_points : int | str | _FigureDefaultSentinel | None, optional
+        Sampling density used when evaluating a curve or field. Defaults to ``None``.
+    
+    default_x_range : RangeLike | None, optional
+        Default x-axis range used when a view is created or reset. Defaults to ``None``.
+    
+    default_y_range : RangeLike | None, optional
+        Default y-axis range used when a view is created or reset. Defaults to ``None``.
+    
+    x_label : str, optional
+        Horizontal-axis label text. Defaults to ``''``.
+    
+    y_label : str, optional
+        Vertical-axis label text. Defaults to ``''``.
+    
     show : bool, optional
-        If ``True``, display immediately in IPython/Jupyter.
-    display, x_range, y_range : optional
-        Deprecated compatibility aliases accepted for one transition cycle.
-
-    Attributes
-    ----------
-    plots : dict[str, Plot]
-        Registry of plot objects keyed by plot id.
-    views : FigureViews
-        Mapping-like view facade with ``current`` / ``current_id`` helpers.
-    parameters : ParameterManager
-        Parameter manager used by sliders and plot evaluation.
-    info_manager : InfoPanelManager
-        Advanced access point for raw info outputs and info-card management.
-
-    Notes
-    -----
-    ``Figure`` is intentionally a coordinator. Widget-building, parameter
-    storage, and per-curve rendering each live in their own owner modules.
+        Boolean flag that requests immediate display in a notebook. Defaults to ``False``.
+    
+    display : bool | None, optional
+        Compatibility display flag or display object, depending on the API. Defaults to ``None``.
+    
+    x_range : RangeLike | None, optional
+        Range specification for the x-axis. Defaults to ``None``.
+    
+    y_range : RangeLike | None, optional
+        Range specification for the y-axis. Defaults to ``None``.
+    
+    **_deprecated_kwargs : Any, optional
+        Additional keyword arguments forwarded by this API. Optional variadic input.
+    
+    Returns
+    -------
+    Figure
+        New ``Figure`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``title=''``: Human-readable title text shown in the UI or stored in snapshots.
+    - ``samples=None``: Sampling density used when evaluating a curve or field.
+    - ``default_samples=None``: Value for ``default_samples`` in this API.
+    - ``sampling_points=None``: Sampling density used when evaluating a curve or field.
+    - ``default_x_range=None``: Default x-axis range used when a view is created or reset.
+    - ``default_y_range=None``: Default y-axis range used when a view is created or reset.
+    - ``x_label=''``: Horizontal-axis label text.
+    - ``y_label=''``: Vertical-axis label text.
+    - ``show=False``: Boolean flag that requests immediate display in a notebook.
+    - ``display=None``: Compatibility display flag or display object, depending on the API.
+    - ``x_range=None``: Range specification for the x-axis.
+    - ``y_range=None``: Range specification for the y-axis.
+    - ``**_deprecated_kwargs``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+    
+    Architecture note
+    -----------------
+    ``Figure`` lives in ``gu_toolkit.Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.Figure import Figure
+        obj = Figure(...)
+    
+    Discovery-oriented use::
+    
+        help(Figure)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/develop_guide.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+    - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
     """
     __slots__ = [
         "plots",
@@ -202,15 +253,14 @@ class Figure:
         "_layout_event_emitter",
         "_layout_event_seq",
         "_has_been_displayed",
+        "_performance",
     ]
-
     @staticmethod
     def _coerce_range_tuple(value: RangeLike) -> tuple[float, float]:
         return (
             float(InputConvert(value[0], float)),
             float(InputConvert(value[1], float)),
         )
-
     @staticmethod
     def _coerce_samples_value(
         value: int | str | _FigureDefaultSentinel | None,
@@ -220,8 +270,6 @@ class Figure:
             if value is not None and not _is_figure_default(value)
             else None
         )
-
-
     def _auto_plot_color(self, *, plot_id: str | None = None) -> str:
         """Return a stable explicit color for a new or existing plot id."""
         if plot_id is None:
@@ -232,7 +280,6 @@ class Figure:
                 plot_order.index(str(plot_id)) if str(plot_id) in plot_order else len(plot_order)
             )
         return color_for_trace_index(self.figure_widget, trace_index)
-
     def __init__(
         self,
         *,
@@ -252,23 +299,19 @@ class Figure:
     ) -> None:
         # Handle backwards-compatible keyword arguments that were removed from
         # the public constructor.
-
         def _same_range(lhs: RangeLike, rhs: RangeLike) -> bool:
             return self._coerce_range_tuple(lhs) == self._coerce_range_tuple(rhs)
-
         def _same_samples(
             lhs: int | str | _FigureDefaultSentinel | None,
             rhs: int | str | _FigureDefaultSentinel | None,
         ) -> bool:
             return self._coerce_samples_value(lhs) == self._coerce_samples_value(rhs)
-
         debug = bool(_deprecated_kwargs.pop("debug", False))
         default_view_id = _deprecated_kwargs.pop("default_view_id", None)
         plotly_legend_mode = _deprecated_kwargs.pop("plotly_legend_mode", None)
         if _deprecated_kwargs:
             unexpected = ", ".join(sorted(_deprecated_kwargs))
             raise TypeError(f"Figure() got unexpected keyword argument(s): {unexpected}")
-
         if debug:
             warnings.warn(
                 "Figure(debug=...) is deprecated. Configure logging instead.",
@@ -276,7 +319,6 @@ class Figure:
                 stacklevel=2,
             )
             logging.getLogger("gu_toolkit.layout").setLevel(logging.DEBUG)
-
         if default_view_id is not None:
             warnings.warn(
                 "Figure(default_view_id=...) is deprecated and ignored; view ids are managed via fig.views.",
@@ -289,21 +331,18 @@ class Figure:
                 DeprecationWarning,
                 stacklevel=2,
             )
-
         if x_range is not None:
             if default_x_range is not None and not _same_range(x_range, default_x_range):
                 raise ValueError(
                     "Figure() received both x_range= and default_x_range= with different values; use only one initial x-range keyword."
                 )
             default_x_range = x_range
-
         if y_range is not None:
             if default_y_range is not None and not _same_range(y_range, default_y_range):
                 raise ValueError(
                     "Figure() received both y_range= and default_y_range= with different values; use only one initial y-range keyword."
                 )
             default_y_range = y_range
-
         if samples is not None:
             if default_samples is not None and not _same_samples(samples, default_samples):
                 raise ValueError(
@@ -321,7 +360,6 @@ class Figure:
                     "Figure() received both default_samples= and sampling_points= with different values; use only one initial samples keyword."
                 )
             sampling_points = default_samples
-
         if display is not None:
             warnings.warn(
                 "Figure(show=...) is deprecated; use Figure(show=...) instead.",
@@ -363,6 +401,16 @@ class Figure:
             buffer=self._layout_event_buffer,
             base_fields={"figure_id": self._layout_debug_figure_id},
             seq_factory=self._next_layout_seq,
+        )
+
+        self._performance = PerformanceMonitor(f"Figure[{self._layout_debug_figure_id}]")
+        self._performance.increment("figures_created")
+        self._performance.set_state(
+            title=title,
+            default_x_range=self._default_x_range,
+            default_y_range=self._default_y_range,
+            samples=self._sampling_points,
+            render_target_interval_ms=RENDER_TARGET_INTERVAL_MS,
         )
 
         # 1. Initialize Layout (View)
@@ -488,46 +536,95 @@ class Figure:
     @property
     def title(self) -> str:
         """Return the title text shown above the figure.
-
+        
+        Full API
+        --------
+        ``obj.title -> str``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
         Returns
         -------
         str
-            Current title (HTML/LaTeX is allowed).
-
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.title = "Demo"  # doctest: +SKIP
-        >>> fig.title  # doctest: +SKIP
-        'Demo'
-
-        See Also
-        --------
-        FigureLayout.set_title : Underlying layout helper.
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.title
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         return self._layout.get_title()
 
     @title.setter
     def title(self, value: str) -> None:
         """Set the title text shown above the figure.
-
+        
+        Full API
+        --------
+        ``obj.title = value``
+        
         Parameters
         ----------
         value : str
-            Title text (HTML/LaTeX supported).
-
+            New or current value for the relevant property, control, or calculation. Required.
+        
         Returns
         -------
         None
-
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.title = r"$y=\\sin(x)$"  # doctest: +SKIP
-
-        See Also
-        --------
-        title : Read the current title text.
+        Basic use::
+        
+            obj = Figure(...)
+            obj.title = value
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         self._layout.set_title(value)
 
@@ -538,20 +635,94 @@ class Figure:
     @property
     def views(self) -> FigureViews:
         """Mapping-like access to the figure's public :class:`View` objects.
-
-        ``fig.views[view_id]`` returns the public view object. Use
-        ``fig.views.current`` and ``fig.views.current_id`` for active-view
-        access, and prefer ``with fig.views[view_id]:`` when module-level
-        helpers should target a specific workspace temporarily.
+        
+        Full API
+        --------
+        ``obj.views -> FigureViews``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        FigureViews
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.views
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         return self._views
 
     @property
     def active_view_id(self) -> str:
         """Return the currently active view id.
-
-        .. deprecated:: 0.0
-            Use ``fig.views.current_id`` instead.
+        
+        Full API
+        --------
+        ``obj.active_view_id -> str``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.active_view_id
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         warnings.warn(
             "Figure.active_view_id is deprecated; use fig.views.current_id.",
@@ -571,13 +742,58 @@ class Figure:
         y_label: str | None = None,
     ) -> View:
         """Create one public :class:`View` object with its stable runtime."""
-        try:
-            figure_widget = go.FigureWidget()
-        except ImportError:
-            # Plotly >=6 delegates FigureWidget transport to anywidget. Fall
-            # back to a plain Figure in minimal/offline test environments where
-            # the Python-side API surface used by the toolkit remains available.
-            figure_widget = go.Figure()
+        figure_widget, widget_status = create_plotly_figure_widget()
+        self._performance.set_state(widget_support=widget_status.to_dict())
+        if not widget_status.figurewidget_supported:
+            warning_message = (
+                "gu_toolkit could not create a real Plotly FigureWidget. Falling back to a plain plotly Figure. "
+                "This commonly means anywidget is missing in the notebook kernel, and interactive animation/responsiveness will be degraded. Install anywidget to restore smooth FigureWidget updates."
+            )
+            warn_once(
+                "missing-anywidget-figurewidget",
+                warning_message,
+                category=RuntimeWarning,
+                stacklevel=3,
+            )
+            logging.getLogger(__name__).warning(
+                "%s Runtime detail: %s",
+                warning_message,
+                widget_status.reason,
+            )
+            self._performance.increment("degraded_plotly_widget_runtime")
+            self._emit_layout_event(
+                "plotly_widget_degraded",
+                source="Figure",
+                phase="warning",
+                level=logging.WARNING,
+                reason=widget_status.reason,
+                widget_mode=widget_status.figurewidget_mode,
+            )
+        elif widget_status.anywidget_is_fallback:
+            warning_message = (
+                "gu_toolkit detected that real anywidget is missing in the notebook kernel. "
+                "A local fallback stub allowed Plotly FigureWidget to construct, but interactivity or performance can still be degraded until anywidget is installed."
+            )
+            warn_once(
+                "missing-anywidget-fallback-figurewidget",
+                warning_message,
+                category=RuntimeWarning,
+                stacklevel=3,
+            )
+            logging.getLogger(__name__).warning(
+                "%s Runtime detail: %s",
+                warning_message,
+                widget_status.reason,
+            )
+            self._performance.increment("anywidget_fallback_runtime")
+            self._emit_layout_event(
+                "plotly_widget_anywidget_fallback",
+                source="Figure",
+                phase="warning",
+                level=logging.WARNING,
+                reason=widget_status.reason,
+                widget_mode=widget_status.figurewidget_mode,
+            )
         figure_widget.update_layout(**self._default_figure_layout())
         pane = PlotlyPane(
             figure_widget,
@@ -684,7 +900,54 @@ class Figure:
         self._request_view_reflow(self.views.current_id, reason)
 
     def reflow_layout(self, *, reason: str = "manual", view_id: str | None = None) -> str | None:
-        """Public helper to request a pane reflow for the active or named view."""
+        """Public helper to request a pane reflow for the active or named view.
+        
+        Full API
+        --------
+        ``obj.reflow_layout(*, reason: str='manual', view_id: str | None=None) -> str | None``
+        
+        Parameters
+        ----------
+        reason : str, optional
+            Short machine/human-readable reason recorded for scheduling or rendering. Defaults to ``'manual'``.
+        
+        view_id : str | None, optional
+            Identifier for the relevant view inside a figure. Defaults to ``None``.
+        
+        Returns
+        -------
+        str | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``reason='manual'``: Short machine/human-readable reason recorded for scheduling or rendering.
+        - ``view_id=None``: Identifier for the relevant view inside a figure.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.reflow_layout(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         target_view_id = str(view_id) if view_id is not None else (self.views.current_id if self._view_manager.views else "")
         if not target_view_id:
             self._request_view_reflow(target_view_id, reason)
@@ -703,25 +966,71 @@ class Figure:
         activate: bool = False,
     ) -> View:
         """Create and register a new plotting workspace.
-
+        
+        Full API
+        --------
+        ``obj.add_view(id: str, *, title: str | None=None, x_range: RangeLike | None=None, y_range: RangeLike | None=None, x_label: str | None=None, y_label: str | None=None, activate: bool=False) -> View``
+        
         Parameters
         ----------
-        id:
-            Stable view identifier.
-        title:
-            Optional human-readable selector label. Defaults to ``id``.
-        x_range, y_range:
-            Optional default axis ranges for the new view.
-        x_label, y_label:
-            Optional axis titles applied to the new view's Plotly widget.
-        activate:
-            If ``True``, make the new view current immediately. The default is
-            ``False``.
-
+        id : str
+            Stable identifier used to create, update, or look up the target object. Required.
+        
+        title : str | None, optional
+            Human-readable title text shown in the UI or stored in snapshots. Defaults to ``None``.
+        
+        x_range : RangeLike | None, optional
+            Range specification for the x-axis. Defaults to ``None``.
+        
+        y_range : RangeLike | None, optional
+            Range specification for the y-axis. Defaults to ``None``.
+        
+        x_label : str | None, optional
+            Horizontal-axis label text. Defaults to ``None``.
+        
+        y_label : str | None, optional
+            Vertical-axis label text. Defaults to ``None``.
+        
+        activate : bool, optional
+            Boolean flag that requests the newly created/updated object become active. Defaults to ``False``.
+        
         Returns
         -------
         View
-            The newly created public view object.
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``title=None``: Human-readable title text shown in the UI or stored in snapshots.
+        - ``x_range=None``: Range specification for the x-axis.
+        - ``y_range=None``: Range specification for the y-axis.
+        - ``x_label=None``: Horizontal-axis label text.
+        - ``y_label=None``: Vertical-axis label text.
+        - ``activate=False``: Boolean flag that requests the newly created/updated object become active.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.add_view(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         view_id = str(id)
         view = self._create_view(
@@ -751,7 +1060,50 @@ class Figure:
         return view
 
     def set_active_view(self, id: str) -> None:
-        """Set the active view id and synchronize widget ranges."""
+        """Set the active view id and synchronize widget ranges.
+        
+        Full API
+        --------
+        ``obj.set_active_view(id: str) -> None``
+        
+        Parameters
+        ----------
+        id : str
+            Stable identifier used to create, update, or look up the target object. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            obj.set_active_view(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         view_id = str(id)
         if not self._view_manager.views:
             raise KeyError(f"Unknown view: {view_id}")
@@ -792,7 +1144,50 @@ class Figure:
 
     @contextmanager
     def view(self, id: str) -> Iterator[Figure]:
-        """Deprecated alias for ``with fig.views[id]:``."""
+        """Deprecated alias for ``with fig.views[id]:``.
+        
+        Full API
+        --------
+        ``obj.view(id: str) -> Iterator[Figure]``
+        
+        Parameters
+        ----------
+        id : str
+            Stable identifier used to create, update, or look up the target object. Required.
+        
+        Returns
+        -------
+        Iterator[Figure]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.view(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         warnings.warn(
             "Figure.view(...) is deprecated; use `with fig.views[view_id]:` instead.",
             DeprecationWarning,
@@ -802,7 +1197,50 @@ class Figure:
             yield self
 
     def remove_view(self, id: str) -> None:
-        """Remove a view and drop plot memberships to it."""
+        """Remove a view and drop plot memberships to it.
+        
+        Full API
+        --------
+        ``obj.remove_view(id: str) -> None``
+        
+        Parameters
+        ----------
+        id : str
+            Stable identifier used to create, update, or look up the target object. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            obj.remove_view(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         view_id = str(id)
         if view_id not in self._view_manager.views:
             return
@@ -906,49 +1344,455 @@ class Figure:
     @property
     def figure_widget(self) -> go.FigureWidget:
         """Access the current view's Plotly ``FigureWidget``.
-
-        This is a convenience shorthand for ``fig.views.current.figure_widget``.
+        
+        Full API
+        --------
+        ``obj.figure_widget -> go.FigureWidget``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        go.FigureWidget
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.figure_widget
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         return self.views.current.figure_widget
 
     def figure_widget_for(self, view_id: str) -> go.FigureWidget:
         """Return the Plotly FigureWidget backing ``view_id``.
-
+        
+        Full API
+        --------
+        ``obj.figure_widget_for(view_id: str) -> go.FigureWidget``
+        
         Parameters
         ----------
         view_id : str
-            Target view identifier.
-
+            Identifier for the relevant view inside a figure. Required.
+        
         Returns
         -------
-        plotly.graph_objects.FigureWidget
-            The widget owned by that view.
+        go.FigureWidget
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.figure_widget_for(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         return self.views[str(view_id)].figure_widget
 
     @property
     def pane(self) -> PlotlyPane:
-        """Access the active view's :class:`PlotlyPane`."""
+        """Access the active view's :class:`PlotlyPane`.
+        
+        Full API
+        --------
+        ``obj.pane -> PlotlyPane``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        PlotlyPane
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.pane
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         return self.views.current.pane
 
     def pane_for(self, view_id: str) -> PlotlyPane:
-        """Return the :class:`PlotlyPane` backing ``view_id``."""
+        """Return the :class:`PlotlyPane` backing ``view_id``.
+        
+        Full API
+        --------
+        ``obj.pane_for(view_id: str) -> PlotlyPane``
+        
+        Parameters
+        ----------
+        view_id : str
+            Identifier for the relevant view inside a figure. Required.
+        
+        Returns
+        -------
+        PlotlyPane
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.pane_for(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         return self.views[str(view_id)].pane
+
+    def runtime_diagnostics(self) -> dict[str, Any]:
+        """Return runtime diagnostics for the current execution environment.
+        
+        Full API
+        --------
+        ``obj.runtime_diagnostics() -> dict[str, Any]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        dict[str, Any]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.runtime_diagnostics(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
+        return figure_runtime_diagnostics(
+            self,
+            render_target_interval_ms=RENDER_TARGET_INTERVAL_MS,
+        )
+
+    def performance_snapshot(
+        self,
+        *,
+        recent_event_limit: int = 25,
+        include_layout_events: bool = False,
+    ) -> dict[str, Any]:
+        """Return nested performance counters and timing snapshots.
+        
+        Full API
+        --------
+        ``obj.performance_snapshot(*, recent_event_limit: int=25, include_layout_events: bool=False) -> dict[str, Any]``
+        
+        Parameters
+        ----------
+        recent_event_limit : int, optional
+            Value for ``recent_event_limit`` in this API. Defaults to ``25``.
+        
+        include_layout_events : bool, optional
+            Value for ``include_layout_events`` in this API. Defaults to ``False``.
+        
+        Returns
+        -------
+        dict[str, Any]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``recent_event_limit=25``: Value for ``recent_event_limit`` in this API.
+        - ``include_layout_events=False``: Value for ``include_layout_events`` in this API.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.performance_snapshot(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
+        return figure_performance_snapshot(
+            self,
+            render_target_interval_ms=RENDER_TARGET_INTERVAL_MS,
+            recent_event_limit=recent_event_limit,
+            include_layout_events=include_layout_events,
+        )
+
+    def performance_report(
+        self,
+        *,
+        recent_event_limit: int = 10,
+        include_layout_events: bool = False,
+    ) -> str:
+        """Return a readable multi-section performance diagnostics report.
+        
+        Full API
+        --------
+        ``obj.performance_report(*, recent_event_limit: int=10, include_layout_events: bool=False) -> str``
+        
+        Parameters
+        ----------
+        recent_event_limit : int, optional
+            Value for ``recent_event_limit`` in this API. Defaults to ``10``.
+        
+        include_layout_events : bool, optional
+            Value for ``include_layout_events`` in this API. Defaults to ``False``.
+        
+        Returns
+        -------
+        str
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``recent_event_limit=10``: Value for ``recent_event_limit`` in this API.
+        - ``include_layout_events=False``: Value for ``include_layout_events`` in this API.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.performance_report(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
+        return figure_performance_report(
+            self,
+            render_target_interval_ms=RENDER_TARGET_INTERVAL_MS,
+            recent_event_limit=recent_event_limit,
+            include_layout_events=include_layout_events,
+        )
 
 
     # --- Parameters ---
     @property
     def parameters(self) -> ParameterManager:
-        """The figure parameter manager."""
+        """The figure parameter manager.
+        
+        Full API
+        --------
+        ``obj.parameters -> ParameterManager``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        ParameterManager
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.parameters
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         return self._parameter_manager
 
     @property
     def info_manager(self) -> InfoPanelManager:
         """Advanced access to the Info section manager.
-
-        Use :meth:`info` for simple rich-text cards. Reach for
-        ``fig.info_manager`` when you need raw :class:`ipywidgets.Output`
-        widgets, card snapshots, or other manager-level operations.
+        
+        Full API
+        --------
+        ``obj.info_manager -> InfoPanelManager``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        InfoPanelManager
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.info_manager
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         return self._info
 
@@ -956,49 +1800,430 @@ class Figure:
     @property
     def info_output(self) -> Mapping[Hashable, widgets.Output]:
         """Compatibility view of raw info outputs keyed by id.
-
-        Prefer :attr:`info_manager` for new advanced code. ``info_output`` is a
-        thin read-only alias kept for callers that only need the raw output
-        widgets created through :meth:`InfoPanelManager.get_output`.
+        
+        Full API
+        --------
+        ``obj.info_output -> Mapping[Hashable, widgets.Output]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        Mapping[Hashable, widgets.Output]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.info_output
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         return self._info.outputs
 
     @property
     def x_range(self) -> tuple[float, float]:
-        """Return the current view's default x-axis range."""
+        """Return the current view's default x-axis range.
+        
+        Full API
+        --------
+        ``obj.x_range -> tuple[float, float]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[float, float]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.x_range
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         return self.views.current.x_range
 
     @x_range.setter
     def x_range(self, value: RangeLike) -> None:
-        """Set the current view's default x-axis range."""
+        """Set the current view's default x-axis range.
+        
+        Full API
+        --------
+        ``obj.x_range = value``
+        
+        Parameters
+        ----------
+        value : RangeLike
+            New or current value for the relevant property, control, or calculation. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            obj.x_range = value
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         self.views.current.x_range = value
 
     @property
     def default_x_range(self) -> tuple[float, float]:
-        """Return the figure-level default x-range used for new views."""
+        """Return the figure-level default x-range used for new views.
+        
+        Full API
+        --------
+        ``obj.default_x_range -> tuple[float, float]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[float, float]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.default_x_range
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         return self._default_x_range
 
     @default_x_range.setter
     def default_x_range(self, value: RangeLike) -> None:
+        """Work with default x range on ``Figure``.
+        
+        Full API
+        --------
+        ``obj.default_x_range = value``
+        
+        Parameters
+        ----------
+        value : RangeLike
+            New or current value for the relevant property, control, or calculation. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            obj.default_x_range = value
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
+
         self._default_x_range = self._coerce_range_tuple(value)
 
     @property
     def y_range(self) -> tuple[float, float]:
-        """Return the current view's default y-axis range."""
+        """Return the current view's default y-axis range.
+        
+        Full API
+        --------
+        ``obj.y_range -> tuple[float, float]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[float, float]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.y_range
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         return self.views.current.y_range
 
     @y_range.setter
     def y_range(self, value: RangeLike) -> None:
-        """Set the current view's default y-axis range."""
+        """Set the current view's default y-axis range.
+        
+        Full API
+        --------
+        ``obj.y_range = value``
+        
+        Parameters
+        ----------
+        value : RangeLike
+            New or current value for the relevant property, control, or calculation. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            obj.y_range = value
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         self.views.current.y_range = value
 
     @property
     def default_y_range(self) -> tuple[float, float]:
-        """Return the figure-level default y-range used for new views."""
+        """Return the figure-level default y-range used for new views.
+        
+        Full API
+        --------
+        ``obj.default_y_range -> tuple[float, float]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[float, float]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.default_y_range
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         return self._default_y_range
 
     @default_y_range.setter
     def default_y_range(self, value: RangeLike) -> None:
+        """Work with default y range on ``Figure``.
+        
+        Full API
+        --------
+        ``obj.default_y_range = value``
+        
+        Parameters
+        ----------
+        value : RangeLike
+            New or current value for the relevant property, control, or calculation. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            obj.default_y_range = value
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
+
         self._default_y_range = self._coerce_range_tuple(value)
 
     @property
@@ -1029,33 +2254,289 @@ class Figure:
 
     @property
     def current_x_range(self) -> tuple[float, float] | None:
-        """Return the current viewport x-range."""
+        """Return the current viewport x-range.
+        
+        Full API
+        --------
+        ``obj.current_x_range -> tuple[float, float] | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[float, float] | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.current_x_range
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         return self._viewport_x_range
 
     @property
     def current_y_range(self) -> tuple[float, float] | None:
-        """Return the current viewport y-range (read-only)."""
+        """Return the current viewport y-range (read-only).
+        
+        Full API
+        --------
+        ``obj.current_y_range -> tuple[float, float] | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[float, float] | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.current_y_range
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         return self._viewport_y_range
 
     @property
     def samples(self) -> int | None:
-        """Return the figure's current sample count for inherited plots."""
+        """Return the figure's current sample count for inherited plots.
+        
+        Full API
+        --------
+        ``obj.samples -> int | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        int | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.samples
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         return self._sampling_points
 
     @samples.setter
     def samples(self, val: int | str | _FigureDefaultSentinel | None) -> None:
-        """Set the figure's current sample count for inherited plots."""
+        """Set the figure's current sample count for inherited plots.
+        
+        Full API
+        --------
+        ``obj.samples = val``
+        
+        Parameters
+        ----------
+        val : int | str | _FigureDefaultSentinel | None
+            Value for ``val`` in this API. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            obj.samples = val
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         self._sampling_points = self._coerce_samples_value(val)
 
     @property
     def default_samples(self) -> int | None:
-        """Return the default sample count used for newly created plots."""
+        """Return the default sample count used for newly created plots.
+        
+        Full API
+        --------
+        ``obj.default_samples -> int | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        int | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.default_samples
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         if self._default_samples is None:
             return self.samples
         return self._default_samples
 
     @default_samples.setter
     def default_samples(self, val: int | str | _FigureDefaultSentinel | None) -> None:
+        """Work with default samples on ``Figure``.
+        
+        Full API
+        --------
+        ``obj.default_samples = val``
+        
+        Parameters
+        ----------
+        val : int | str | _FigureDefaultSentinel | None
+            Value for ``val`` in this API. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            obj.default_samples = val
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
+
         if val is None or _is_figure_default(val):
             self._default_samples = None
             return
@@ -1063,11 +2544,98 @@ class Figure:
 
     @property
     def sampling_points(self) -> int | None:
-        """Compatibility alias for :attr:`samples`."""
+        """Compatibility alias for :attr:`samples`.
+        
+        Full API
+        --------
+        ``obj.sampling_points -> int | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        int | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.sampling_points
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         return self.samples
 
     @sampling_points.setter
     def sampling_points(self, val: int | str | _FigureDefaultSentinel | None) -> None:
+        """Work with sampling points on ``Figure``.
+        
+        Full API
+        --------
+        ``obj.sampling_points = val``
+        
+        Parameters
+        ----------
+        val : int | str | _FigureDefaultSentinel | None
+            Value for ``val`` in this API. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            obj.sampling_points = val
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
+
         self.samples = val
 
     # --- Public API ---
@@ -1075,10 +2643,46 @@ class Figure:
     @staticmethod
     def plot_style_options() -> dict[str, str]:
         """Return discoverable help text for supported plot-style keywords.
-
-        The returned mapping is generated from structured metadata in
-        :mod:`gu_toolkit.figure_plot_style`, so aliases, accepted values, and
-        default-behavior notes stay synchronized with the actual style contract.
+        
+        Full API
+        --------
+        ``Figure.plot_style_options() -> dict[str, str]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        dict[str, str]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            result = Figure.plot_style_options(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         return plot_style_option_docs()
 
@@ -1105,109 +2709,123 @@ class Figure:
         vars: PlotVarsSpec | None = None,
         samples: int | str | _FigureDefaultSentinel | None = None,
     ) -> Plot:
-        """
-        Plot an expression/callable on the figure (and keep it “live”).
-
+        """Plot an expression/callable on the figure (and keep it “live”).
+        
+        Full API
+        --------
+        ``obj.plot(func: Any, var: Any, parameters: ParameterKeyOrKeys | None=None, id: str | None=None, label: str | None=None, visible: VisibleSpec=True, x_domain: RangeLike | None=None, sampling_points: int | str | _FigureDefaultSentinel | None=None, color: str | None=None, thickness: int | float | None=None, width: int | float | None=None, dash: str | None=None, line: Mapping[str, Any] | None=None, opacity: int | float | None=None, alpha: int | float | None=None, trace: Mapping[str, Any] | None=None, autonormalization: bool | None=None, view: str | Sequence[str] | None=None, vars: PlotVarsSpec | None=None, samples: int | str | _FigureDefaultSentinel | None=None) -> Plot``
+        
         Parameters
         ----------
-        func : callable or NumericFunction or sympy.Expr
-            Function/expression to plot.
-        var : sympy.Symbol or tuple
-            Plot variable ``x`` or ``(x, min, max)`` range tuple.
-        parameters : str or sympy.Symbol or sequence, optional
-            Explicit parameter identifiers to ensure. Parameter names are
-            authoritative, so strings and symbols resolve by ``symbol.name``.
-            When a provided name matches multiple symbols in the expression or
-            numeric callable, that one logical parameter binds all of them.
-        x_domain : RangeLike or None, optional
-            Domain of the independent variable (e.g. ``(-10, 10)``).
-            If "figure_default", the figure's range is used when plotting.
-            If None, it is the same as "figure_default" for new plots while no change for existing plots.
-        id : str, optional
-            Unique identifier. If exists, the existing plot is updated in-place.
-        label : str, optional
-            Legend label for the trace. If omitted, new plots default to ``id``;
-            existing plots keep their current label.
-        visible : bool, optional
-            Visibility state for the trace. Hidden traces skip sampling until
-            shown.
-
-        sampling_points : int or str, optional
-            Number of sampling points for this plot. Use ``"figure_default"``
-            to inherit from the figure setting.
-        color : str or None, optional
-            Line color. Common formats include named colors (e.g., ``"red"``),
-            hex values (e.g., ``"#ff0000"``), and ``rgb(...)``/``rgba(...)``.
-        thickness : int or float, optional
-            Line width in pixels. ``1`` is thin; larger values produce thicker lines.
-        width : int or float, optional
-            Supported alias for ``thickness``.
-        dash : str or None, optional
-            Line pattern. Supported values: ``"solid"``, ``"dot"``, ``"dash"``,
-            ``"longdash"``, ``"dashdot"``, ``"longdashdot"``.
-        line : mapping or None, optional
-            Extra per-line style fields as a mapping (advanced usage).
-        opacity : int or float, optional
-            Overall curve opacity between ``0.0`` (fully transparent) and
-            ``1.0`` (fully opaque).
-        alpha : int or float, optional
-            Supported alias for ``opacity``.
-        trace : mapping or None, optional
-            Extra full-trace style fields as a mapping (advanced usage).
-        autonormalization : bool or None, optional
-            Per-plot sound setting. When ``True``, playback automatically
-            rescales chunks whose absolute peak exceeds ``1.0`` back into
-            ``[-1, 1]`` instead of raising an error. ``None`` preserves the
-            current setting during in-place updates.
-        vars : Symbol or sequence or mapping, optional
-            Optional callable-variable specification shared with
-            :func:`numpify` normalization.
-
-            Supported forms:
-            - ``x`` (single symbol),
-            - ``(x, a, b)`` (ordered positional symbols),
-            - ``{0: x, 1: a, "b": b}`` (mixed positional+keyed mapping),
-            - ``(x, a, {"b": b})`` (tuple positional prefix + keyed mapping).
-
-            Integer mapping keys must be contiguous starting at ``0``.
-
+        func : Any
+            Symbolic expression or callable to evaluate. Required.
+        
+        var : Any
+            Primary symbolic variable used for evaluation. Required.
+        
+        parameters : ParameterKeyOrKeys | None, optional
+            Parameter symbols/keys that should stay bound to this operation. Defaults to ``None``.
+        
+        id : str | None, optional
+            Stable identifier used to create, update, or look up the target object. Defaults to ``None``.
+        
+        label : str | None, optional
+            Human-readable label used in UI or plotting output. Defaults to ``None``.
+        
+        visible : VisibleSpec, optional
+            Visibility flag for a plot, field, panel, or UI element. Defaults to ``True``.
+        
+        x_domain : RangeLike | None, optional
+            Numeric x-domain used for evaluation or rendering. Defaults to ``None``.
+        
+        sampling_points : int | str | _FigureDefaultSentinel | None, optional
+            Sampling density used when evaluating a curve or field. Defaults to ``None``.
+        
+        color : str | None, optional
+            Explicit color value. Defaults to ``None``.
+        
+        thickness : int | float | None, optional
+            Value for ``thickness`` in this API. Defaults to ``None``.
+        
+        width : int | float | None, optional
+            Value for ``width`` in this API. Defaults to ``None``.
+        
+        dash : str | None, optional
+            Dash pattern used for contour or curve rendering. Defaults to ``None``.
+        
+        line : Mapping[str, Any] | None, optional
+            Value for ``line`` in this API. Defaults to ``None``.
+        
+        opacity : int | float | None, optional
+            Opacity value applied to the rendered output. Defaults to ``None``.
+        
+        alpha : int | float | None, optional
+            Value for ``alpha`` in this API. Defaults to ``None``.
+        
+        trace : Mapping[str, Any] | None, optional
+            Renderer-specific trace configuration mapping. Defaults to ``None``.
+        
+        autonormalization : bool | None, optional
+            Value for ``autonormalization`` in this API. Defaults to ``None``.
+        
+        view : str | Sequence[str] | None, optional
+            View identifier or view-scoped target. When omitted, the active view is used. Defaults to ``None``.
+        
+        vars : PlotVarsSpec | None, optional
+            Value for ``vars`` in this API. Defaults to ``None``.
+        
+        samples : int | str | _FigureDefaultSentinel | None, optional
+            Sampling density used when evaluating a curve or field. Defaults to ``None``.
+        
         Returns
         -------
         Plot
-            The created or updated plot instance.
-
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``parameters=None``: Parameter symbols/keys that should stay bound to this operation.
+        - ``id=None``: Stable identifier used to create, update, or look up the target object.
+        - ``label=None``: Human-readable label used in UI or plotting output.
+        - ``visible=True``: Visibility flag for a plot, field, panel, or UI element.
+        - ``x_domain=None``: Numeric x-domain used for evaluation or rendering.
+        - ``sampling_points=None``: Sampling density used when evaluating a curve or field.
+        - ``color=None``: Explicit color value.
+        - ``thickness=None``: Value for ``thickness`` in this API.
+        - ``width=None``: Value for ``width`` in this API.
+        - ``dash=None``: Dash pattern used for contour or curve rendering.
+        - ``line=None``: Value for ``line`` in this API.
+        - ``opacity=None``: Opacity value applied to the rendered output.
+        - ``alpha=None``: Value for ``alpha`` in this API.
+        - ``trace=None``: Renderer-specific trace configuration mapping.
+        - ``autonormalization=None``: Value for ``autonormalization`` in this API.
+        - ``view=None``: View identifier or view-scoped target. When omitted, the active view is used.
+        - ``vars=None``: Value for ``vars`` in this API.
+        - ``samples=None``: Sampling density used when evaluating a curve or field.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> import sympy as sp
-        >>> x, a = sp.symbols("x a")  # doctest: +SKIP
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> with fig:
-        >>>     plot(a * sp.sin(x), x, id="a_sin")  # doctest: +SKIP
-        >>>     plot(sp.sin(x), x, id="sin")  # doctest: +SKIP
-        >>> fig.show()
+        Basic use::
         
-        Notes
-        -----
-        Prefer explicit parameter setup with :meth:`parameter`/``parameters``
-        before plotting.
-
-        The ``vars=`` grammar is normalized by :func:`numpify._normalize_vars`
-        so callable plotting and numeric helpers share one variable-resolution
-        contract.
-
-        String-keyed aliases from ``vars=`` mappings are the same keys accepted
-        by :meth:`numpify.NumericFunction.freeze` and
-        :meth:`numpify.NumericFunction.unfreeze`.
-
-        All supported style options for this method are discoverable via
-        :meth:`Figure.plot_style_options`, which is generated from the
-        structured metadata in :mod:`gu_toolkit.figure_plot_style`.
-
-        See Also
-        --------
-        parameter : Create sliders without plotting.
-        plot_style_options : List supported style kwargs and meanings
-            (`color`, `thickness`/`width`, `dash`, `opacity`/`alpha`, `line`, `trace`, `autonormalization`).
+            obj = Figure(...)
+            result = obj.plot(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         id = resolve_plot_id(self.plots, id)
 
@@ -1400,7 +3018,120 @@ class Figure:
         vars: PlotVarsSpec | None = None,
         samples: int | str | _FigureDefaultSentinel | None = None,
     ) -> Plot:
-        """Plot a parametric curve ``(x(t), y(t))`` on the figure."""
+        """Plot a parametric curve ``(x(t), y(t))`` on the figure.
+        
+        Full API
+        --------
+        ``obj.parametric_plot(funcs: Sequence[Any], parameter_range: tuple[Any, Any, Any], parameters: ParameterKeyOrKeys | None=None, id: str | None=None, label: str | None=None, visible: VisibleSpec=True, sampling_points: int | str | _FigureDefaultSentinel | None=None, color: str | None=None, thickness: int | float | None=None, width: int | float | None=None, dash: str | None=None, line: Mapping[str, Any] | None=None, opacity: int | float | None=None, alpha: int | float | None=None, trace: Mapping[str, Any] | None=None, autonormalization: bool | None=None, view: str | Sequence[str] | None=None, vars: PlotVarsSpec | None=None, samples: int | str | _FigureDefaultSentinel | None=None) -> Plot``
+        
+        Parameters
+        ----------
+        funcs : Sequence[Any]
+            Value for ``funcs`` in this API. Required.
+        
+        parameter_range : tuple[Any, Any, Any]
+            Value for ``parameter_range`` in this API. Required.
+        
+        parameters : ParameterKeyOrKeys | None, optional
+            Parameter symbols/keys that should stay bound to this operation. Defaults to ``None``.
+        
+        id : str | None, optional
+            Stable identifier used to create, update, or look up the target object. Defaults to ``None``.
+        
+        label : str | None, optional
+            Human-readable label used in UI or plotting output. Defaults to ``None``.
+        
+        visible : VisibleSpec, optional
+            Visibility flag for a plot, field, panel, or UI element. Defaults to ``True``.
+        
+        sampling_points : int | str | _FigureDefaultSentinel | None, optional
+            Sampling density used when evaluating a curve or field. Defaults to ``None``.
+        
+        color : str | None, optional
+            Explicit color value. Defaults to ``None``.
+        
+        thickness : int | float | None, optional
+            Value for ``thickness`` in this API. Defaults to ``None``.
+        
+        width : int | float | None, optional
+            Value for ``width`` in this API. Defaults to ``None``.
+        
+        dash : str | None, optional
+            Dash pattern used for contour or curve rendering. Defaults to ``None``.
+        
+        line : Mapping[str, Any] | None, optional
+            Value for ``line`` in this API. Defaults to ``None``.
+        
+        opacity : int | float | None, optional
+            Opacity value applied to the rendered output. Defaults to ``None``.
+        
+        alpha : int | float | None, optional
+            Value for ``alpha`` in this API. Defaults to ``None``.
+        
+        trace : Mapping[str, Any] | None, optional
+            Renderer-specific trace configuration mapping. Defaults to ``None``.
+        
+        autonormalization : bool | None, optional
+            Value for ``autonormalization`` in this API. Defaults to ``None``.
+        
+        view : str | Sequence[str] | None, optional
+            View identifier or view-scoped target. When omitted, the active view is used. Defaults to ``None``.
+        
+        vars : PlotVarsSpec | None, optional
+            Value for ``vars`` in this API. Defaults to ``None``.
+        
+        samples : int | str | _FigureDefaultSentinel | None, optional
+            Sampling density used when evaluating a curve or field. Defaults to ``None``.
+        
+        Returns
+        -------
+        Plot
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``parameters=None``: Parameter symbols/keys that should stay bound to this operation.
+        - ``id=None``: Stable identifier used to create, update, or look up the target object.
+        - ``label=None``: Human-readable label used in UI or plotting output.
+        - ``visible=True``: Visibility flag for a plot, field, panel, or UI element.
+        - ``sampling_points=None``: Sampling density used when evaluating a curve or field.
+        - ``color=None``: Explicit color value.
+        - ``thickness=None``: Value for ``thickness`` in this API.
+        - ``width=None``: Value for ``width`` in this API.
+        - ``dash=None``: Dash pattern used for contour or curve rendering.
+        - ``line=None``: Value for ``line`` in this API.
+        - ``opacity=None``: Opacity value applied to the rendered output.
+        - ``alpha=None``: Value for ``alpha`` in this API.
+        - ``trace=None``: Renderer-specific trace configuration mapping.
+        - ``autonormalization=None``: Value for ``autonormalization`` in this API.
+        - ``view=None``: View identifier or view-scoped target. When omitted, the active view is used.
+        - ``vars=None``: Value for ``vars`` in this API.
+        - ``samples=None``: Sampling density used when evaluating a curve or field.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.parametric_plot(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
+        """
         return create_or_update_parametric_plot(
             self,
             funcs,
@@ -1431,31 +3162,56 @@ class Figure:
         control: Any | None = None,
         **control_kwargs: Any,
     ):
-        """
-        Create or ensure parameters and return refs.
-
+        """Create or ensure parameters and return refs.
+        
+        Full API
+        --------
+        ``obj.parameter(symbols: ParameterKeyOrKeys, *, control: Any | None=None, **control_kwargs: Any)``
+        
         Parameters
         ----------
-        symbols : str or sympy.Symbol or sequence
-            Parameter identifiers to ensure. The canonical lookup key is the
-            parameter name string (``symbol.name``).
-        control : Any, optional
-            Optional control instance to use for the parameter(s).
-        **control_kwargs : Any
-            Control configuration options (min, max, value, step).
-
+        symbols : ParameterKeyOrKeys
+            Parameter symbols, names, or other accepted parameter keys. Required.
+        
+        control : Any | None, optional
+            Control/widget style to construct when parameter widgets are created. Defaults to ``None``.
+        
+        **control_kwargs : Any, optional
+            Additional keyword arguments forwarded by this API. Optional variadic input.
+        
         Returns
         -------
-        ParamRef or dict[str, ParamRef]
-            ParamRef for a single parameter, or a name-keyed mapping for
-            multiple parameters.
-
+        Any
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``control=None``: Control/widget style to construct when parameter widgets are created.
+        - ``**control_kwargs``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> fig.parameter(a, min=-2, max=2)  # doctest: +SKIP
-
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.parameter(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         result = self._parameter_manager.parameter(
             symbols, control=control, **control_kwargs
@@ -1473,139 +3229,161 @@ class Figure:
         force: bool = False,
     ) -> None:
         """Queue or synchronously execute a figure render.
-
-        This is a *hot* method: slider drags, explicit refresh requests, and
-        relayout events all funnel through the same coalescing scheduler.
-
+        
+        Full API
+        --------
+        ``obj.render(reason: str='manual', trigger: Any=None, *, force: bool=False) -> None``
+        
         Parameters
         ----------
         reason : str, optional
-            Reason for rendering (for example ``"manual"``, ``"param_change"``,
-            ``"relayout"``, ``"view_switch"``).
+            Short machine/human-readable reason recorded for scheduling or rendering. Defaults to ``'manual'``.
+        
         trigger : Any, optional
-            Change payload from the event that triggered rendering.
-        force : bool, default=False
-            If ``False`` (default), queue a coalesced render targeting roughly
-            60 Hz. If ``True``, merge any pending request into this one and
-            render synchronously now.
-
+            Event object or trigger payload that caused the current action. Defaults to ``None``.
+        
+        force : bool, optional
+            Flag that requests eager execution or bypasses normal guards/debouncing. Defaults to ``False``.
+        
         Returns
         -------
         None
-
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        - ``reason='manual'``: Short machine/human-readable reason recorded for scheduling or rendering.
+        - ``trigger=None``: Event object or trigger payload that caused the current action.
+        - ``force=False``: Flag that requests eager execution or bypasses normal guards/debouncing.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.render()  # doctest: +SKIP
-        >>> fig.render(force=True)  # doctest: +SKIP
-
-        Notes
-        -----
-        Coalesced batches preserve the latest trigger payload while also
-        remembering whether any queued request represented a parameter change.
-        Parameter hooks therefore still run once after the actual render that
-        materializes the latest queued parameter state.
+        Basic use::
+        
+            obj = Figure(...)
+            obj.render(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
+        self._performance.increment("render_requests")
+        if force:
+            self._performance.increment("forced_render_requests")
+        self._performance.set_state(
+            last_requested_reason=str(reason),
+            last_requested_trigger_type=(type(trigger).__name__ if trigger is not None else None),
+            render_queue_has_pending=self._render_scheduler.has_pending,
+        )
         self._render_scheduler.request(reason=reason, trigger=trigger, force=force)
 
     def flush_render_queue(self) -> None:
         """Synchronously execute the newest pending queued render, if any.
-
-        This is primarily useful for deterministic tests and notebook code that
-        needs up-to-date sampled data immediately after a burst of queued state
-        changes.
+        
+        Full API
+        --------
+        ``obj.flush_render_queue() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            obj.flush_render_queue(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
+        self._performance.increment("render_queue_flushes")
         self._render_scheduler.flush()
 
     def _perform_render_request(self, request: RenderRequest) -> None:
         """Execute one coalesced render request immediately."""
-        reason = request.reason
-        trigger = request.trigger
-        param_trigger = (
-            request.latest_param_change_trigger
-            if request.includes_param_change
-            else None
-        )
-        self._emit_layout_event(
-            "render_started",
-            source="Figure",
-            phase="started",
-            level=logging.INFO,
-            reason=reason,
-            queued_count=request.queued_count,
-            includes_param_change=request.includes_param_change,
-            trigger_type=(type(trigger).__name__ if trigger is not None else None),
-        )
-        self._log_render(reason, trigger)
-
-        current_view_id = self.views.current_id
-        self._parameter_manager.refresh_render_parameter_context()
-        current_widget = self.views[current_view_id].figure_widget
-        with current_widget.batch_update():
-            for plot in self.plots.values():
-                plot.render(
-                    view_id=current_view_id,
-                    use_batch_update=False,
-                    refresh_parameter_snapshot=False,
-                )
-
-        # Mark inactive memberships stale when any queued request represented a
-        # parameter change, even if a later manual/view-switch request became the
-        # batch's visible reason.
-        if request.includes_param_change:
-            for plot in self.plots.values():
-                for view_id in plot.views:
-                    if view_id != current_view_id:
-                        self._view_manager.mark_stale(view_id=view_id)
-
-        if request.includes_param_change and param_trigger is not None:
-            sound_change_handler = getattr(self, "_sound", None)
-            if sound_change_handler is not None:
-                try:
-                    sound_change_handler.on_parameter_change(param_trigger)
-                except Exception as e:
-                    warnings.warn(f"Sound refresh failed: {e}", stacklevel=2)
-            hooks = self._parameter_manager.get_hooks()
-            for h_id, callback in list(hooks.items()):
-                try:
-                    callback(param_trigger)
-                except Exception as e:
-                    warnings.warn(f"Hook {h_id} failed: {e}", stacklevel=2)
-
-        self._info.schedule_info_update(reason=reason, trigger=trigger)
-        self._emit_layout_event(
-            "render_completed",
-            source="Figure",
-            phase="completed",
-            level=logging.INFO,
-            reason=reason,
-            queued_count=request.queued_count,
-            includes_param_change=request.includes_param_change,
-            view_id=current_view_id,
-        )
+        perform_render_request(self, request)
 
     def snapshot(self) -> FigureSnapshot:
         """Return an immutable snapshot of the entire figure state.
-
-        The snapshot captures figure-level settings, full parameter metadata,
-        plot symbolic expressions with styling, and static info card content.
-        Top-level ``x_range`` / ``y_range`` fields intentionally mirror the
-        main view defaults rather than the currently active view.
-
+        
+        Full API
+        --------
+        ``obj.snapshot() -> FigureSnapshot``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
         Returns
         -------
         FigureSnapshot
-
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> snap = fig.snapshot()  # doctest: +SKIP
-        >>> snap.x_range  # doctest: +SKIP
-        (-4.0, 4.0)
-
-        See Also
-        --------
-        to_code : Generate a Python script from the snapshot.
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.snapshot(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         active_view = self.views.current
         active_view.current_x_range
@@ -1644,25 +3422,48 @@ class Figure:
 
     def to_code(self, *, options: CodegenOptions | None = None) -> str:
         """Generate a self-contained Python script that recreates this figure.
-
+        
+        Full API
+        --------
+        ``obj.to_code(*, options: CodegenOptions | None=None) -> str``
+        
         Parameters
         ----------
         options : CodegenOptions | None, optional
-            Configuration for generated output structure.
-
+            Value for ``options`` in this API. Defaults to ``None``.
+        
         Returns
         -------
         str
-            Complete Python source code.
-
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``options=None``: Value for ``options`` in this API.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> print(fig.to_code())  # doctest: +SKIP
-
-        See Also
-        --------
-        snapshot : Capture the underlying state object.
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.to_code(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         from .codegen import figure_to_code
 
@@ -1671,58 +3472,141 @@ class Figure:
     @property
     def code(self) -> str:
         """Read-only shorthand for :meth:`to_code`.
-
+        
+        Full API
+        --------
+        ``obj.code -> str``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
         Returns
         -------
         str
-            Generated Python source that recreates the current figure state.
-
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> print(fig.code)  # doctest: +SKIP
-
-        See Also
-        --------
-        get_code : Configurable code generation helper.
-        to_code : Underlying serializer implementation.
+        Basic use::
+        
+            obj = Figure(...)
+            current = obj.code
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         return self.to_code()
 
     def get_code(self, options: CodegenOptions | None = None) -> str:
         """Return generated figure code with optional serialization settings.
-
+        
+        Full API
+        --------
+        ``obj.get_code(options: CodegenOptions | None=None) -> str``
+        
         Parameters
         ----------
         options : CodegenOptions | None, optional
-            Optional code-generation configuration.
-
+            Value for ``options`` in this API. Defaults to ``None``.
+        
         Returns
         -------
         str
-            Generated Python source code for the current figure state.
-
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``options=None``: Value for ``options`` in this API.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> print(fig.get_code())  # doctest: +SKIP
-
-        See Also
-        --------
-        code : Read-only default code serialization.
-        to_code : Keyword-only variant used internally.
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.get_code(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         return self.to_code(options=options)
 
     def sound_generation_enabled(self, enabled: bool | None = None) -> bool:
         """Query or set the figure-level sound generation toggle.
-
+        
+        Full API
+        --------
+        ``obj.sound_generation_enabled(enabled: bool | None=None) -> bool``
+        
         Parameters
         ----------
         enabled : bool | None, optional
-            ``True`` shows per-plot sound controls and allows playback.
-            ``False`` hides them and stops any active playback. When omitted,
-            the current state is returned without changing it.
+            Boolean flag that turns a feature on or off. Defaults to ``None``.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``enabled=None``: Boolean flag that turns a feature on or off.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.sound_generation_enabled(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         return self._sound.sound_generation_enabled(enabled)
 
@@ -1736,21 +3620,55 @@ class Figure:
         view: str | None = None,
     ) -> None:
         """Create or replace a simple info card in the Info sidebar.
-
-        An *info card* is a small rich-text block shown in the figure's
-        ``Info`` section. ``spec`` may be a static string, a callable, or a
-        mixed sequence of static and dynamic segments. Dynamic callables receive
-        ``(figure, context)`` and are re-evaluated after renders.
-
+        
+        Full API
+        --------
+        ``obj.info(spec: str | Callable[[Figure, Any], str] | Sequence[str | Callable[[Figure, Any], str]], id: Hashable | None=None, *, view: str | None=None) -> None``
+        
         Parameters
         ----------
-        spec:
-            Static text, one dynamic callable, or a mixed sequence of both.
-        id:
-            Optional stable card identifier used for replacement.
-        view:
-            Optional view id. When provided, the card is only visible while that
-            view is active.
+        spec : str | Callable[[Figure, Any], str] | Sequence[str | Callable[[Figure, Any], str]]
+            Flexible specification object or shorthand accepted by this API. Required.
+        
+        id : Hashable | None, optional
+            Stable identifier used to create, update, or look up the target object. Defaults to ``None``.
+        
+        view : str | None, optional
+            View identifier or view-scoped target. When omitted, the active view is used. Defaults to ``None``.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        - ``id=None``: Stable identifier used to create, update, or look up the target object.
+        - ``view=None``: View identifier or view-scoped target. When omitted, the active view is used.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            obj.info(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         self._info.set_simple_card(spec=spec, id=id, view=view)
         if self._sync_sidebar_visibility():
@@ -1763,32 +3681,56 @@ class Figure:
         *,
         run_now: bool = True,
     ) -> Hashable:
-        """
-        Register a callback to run when *any* parameter value changes.
-
+        """Register a callback to run when *any* parameter value changes.
+        
+        Full API
+        --------
+        ``obj.add_param_change_hook(callback: Callable[[ParamEvent | None], Any], hook_id: Hashable | None=None, *, run_now: bool=True) -> Hashable``
+        
         Parameters
         ----------
-        callback : callable
-            Function with signature ``(event)``. For ``run_now=True``, the
-            callback is invoked once with ``None`` after a manual render.
-        hook_id : hashable, optional
-            Unique identifier for the hook.
+        callback : Callable[[ParamEvent | None], Any]
+            Callable that is invoked when the relevant event fires. Required.
+        
+        hook_id : Hashable | None, optional
+            Value for ``hook_id`` in this API. Defaults to ``None``.
+        
         run_now : bool, optional
-            Whether to run once immediately with a ``None`` event.
-
+            Value for ``run_now`` in this API. Defaults to ``True``.
+        
         Returns
         -------
-        hashable
-            The hook identifier used for registration.
-
+        Hashable
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``hook_id=None``: Value for ``hook_id`` in this API.
+        - ``run_now=True``: Value for ``run_now`` in this API.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> fig = Figure()  # doctest: +SKIP
-        >>> fig.add_param_change_hook(lambda *_: None, run_now=False)  # doctest: +SKIP
-
-        Notes
-        -----
-        Hooks are executed after the figure re-renders in response to changes.
+        Basic use::
+        
+            obj = Figure(...)
+            result = obj.add_param_change_hook(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
 
         def _wrapped(event: ParamEvent | None) -> Any:
@@ -1900,8 +3842,47 @@ class Figure:
 
     def show(self) -> None:
         """Display the figure in IPython/Jupyter.
-
-        This is a small convenience wrapper around ``display(fig)``.
+        
+        Full API
+        --------
+        ``obj.show() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = Figure(...)
+            obj.show(...)
+        
+        Discovery-oriented use::
+        
+            help(Figure)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
         """
         self._has_been_displayed = True
         self._emit_layout_event(

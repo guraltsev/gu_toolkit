@@ -125,11 +125,97 @@ class _NamedFunctionSpec(Protocol):
     """
 
     def symbolic(self, *args: sp.Basic) -> _SymbolicReturn:
-        """Return the symbolic expansion/definition for the function call."""
+        """Return the symbolic expansion/definition for the function call.
+        
+        Full API
+        --------
+        ``obj.symbolic(*args: sp.Basic) -> _SymbolicReturn``
+        
+        Parameters
+        ----------
+        *args : sp.Basic, optional
+            Additional positional arguments forwarded by this API. Optional variadic input.
+        
+        Returns
+        -------
+        _SymbolicReturn
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``*args``: Additional positional arguments are passed through when this API supports variadic input.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``_NamedFunctionSpec``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = _NamedFunctionSpec(...)
+            result = obj.symbolic(...)
+        
+        Discovery-oriented use::
+        
+            help(_NamedFunctionSpec)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+        - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+        - In a notebook or REPL, run ``help(_NamedFunctionSpec)`` and ``dir(_NamedFunctionSpec)`` to inspect adjacent members.
+        """
         ...
 
     def numeric(self, *args: object) -> object:
-        """Return a numeric implementation used by ``numpify`` bindings."""
+        """Return a numeric implementation used by ``numpify`` bindings.
+        
+        Full API
+        --------
+        ``obj.numeric(*args: object) -> object``
+        
+        Parameters
+        ----------
+        *args : object, optional
+            Additional positional arguments forwarded by this API. Optional variadic input.
+        
+        Returns
+        -------
+        object
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``*args``: Additional positional arguments are passed through when this API supports variadic input.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``_NamedFunctionSpec``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = _NamedFunctionSpec(...)
+            result = obj.numeric(...)
+        
+        Discovery-oriented use::
+        
+            help(_NamedFunctionSpec)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+        - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+        - In a notebook or REPL, run ``help(_NamedFunctionSpec)`` and ``dir(_NamedFunctionSpec)`` to inspect adjacent members.
+        """
         ...
 
 
@@ -422,42 +508,48 @@ def NamedFunction(
     obj: _SymbolicCallable | type[_NamedFunctionSpec],
 ) -> type[sp.Function]:
     """Decorate a Python callable or spec class to produce a SymPy Function class.
-
-    Two modes are supported.
-
-    Mode 1: function decorator
-        The decorated function must accept ``n`` positional arguments and return:
-        - a SymPy expression (or any sympifiable value) for symbolic expansion, or
-        - ``None`` to indicate an opaque/undefined symbolic expansion.
-
-        You may also attach a NumPy implementation by setting ``func.f_numpy = callable``
-        *before* decorating.
-
-    Mode 2: class decorator
-        The decorated class must define exactly two methods:
-
-        - ``symbolic(self, *args)``: returns a SymPy expression (or sympifiable value) or ``None``.
-        - ``numeric(self, *args)``: returns a NumPy-compatible value.
-
-        The resulting SymPy Function class exposes ``f_numpy(*args)`` that calls the class's
-        ``numeric`` method (without instantiating the class).
-
+    
+    Full API
+    --------
+    ``NamedFunction(obj: _SymbolicCallable | type[_NamedFunctionSpec]) -> type[sp.Function]``
+    
     Parameters
     ----------
-    obj:
-        A function or a class meeting the requirements above.
-
+    obj : _SymbolicCallable | type[_NamedFunctionSpec]
+        Value for ``obj`` in this API. Required.
+    
     Returns
     -------
-    Type[sympy.Function]
-        A SymPy Function subclass with name equal to the original object name.
-
-    Raises
-    ------
-    TypeError
-        If ``obj`` is neither a function nor a class.
-    ValueError
-        If the decorated object does not meet the required signature constraints.
+    type[sp.Function]
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.NamedFunction``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.NamedFunction import NamedFunction
+        result = NamedFunction(...)
+    
+    Discovery-oriented use::
+    
+        help(NamedFunction)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+    - In a notebook or REPL, run ``help(NamedFunction)`` and inspect sibling APIs in the same module.
     """
     if inspect.isclass(obj):
         return _handle_class_decoration(cast(type[_NamedFunctionSpec], obj))

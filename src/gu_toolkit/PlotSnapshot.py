@@ -17,51 +17,102 @@ from sympy.core.symbol import Symbol
 @dataclass(frozen=True)
 class PlotSnapshot:
     """Immutable record of one plot's state.
-
+    
+    Full API
+    --------
+    ``PlotSnapshot(id: str, var: Symbol, func: Expr, parameters: tuple[Symbol, Ellipsis], label: str, visible: bool, x_domain: tuple[float, float] | None, sampling_points: int | None, color: str | None, thickness: float | None, dash: str | None, opacity: float | None, autonormalization: bool=False, views: tuple[str, Ellipsis]=(), kind: str='cartesian', x_func: Expr | None=None, parameter_domain: tuple[float, float] | None=None)``
+    
+    Public members exposed from this class: ``samples``, ``is_parametric``, ``y_func``
+    
     Parameters
     ----------
     id : str
-        Plot identifier (key in ``Figure.plots``).
-    var : sympy.Symbol
-        Independent variable for cartesian plots, or the shared parameter
-        variable for parametric plots.
-    func : sympy.Expr
-        Main symbolic expression. For cartesian plots this is ``y(x)``. For
-        parametric plots this stores the y-coordinate expression ``y(t)``.
-    parameters : tuple[Symbol, ...]
-        Parameter symbols used in the plot, in evaluation order.
+        Stable identifier used to create, update, or look up the target object. Required.
+    
+    var : Symbol
+        Primary symbolic variable used for evaluation. Required.
+    
+    func : Expr
+        Symbolic expression or callable to evaluate. Required.
+    
+    parameters : tuple[Symbol, Ellipsis]
+        Parameter symbols/keys that should stay bound to this operation. Required.
+    
     label : str
-        Legend label.
+        Human-readable label used in UI or plotting output. Required.
+    
     visible : bool
-        Plot visibility state.
-    x_domain : tuple[float, float] or None
-        Explicit cartesian-domain override, or ``None`` for figure default.
-        Parametric plots keep this field as ``None`` because their sampling
-        interval is stored in ``parameter_domain`` instead.
-    sampling_points : int or None
-        Per-plot sample count override, or ``None`` for figure default.
-    color : str or None
-        Line color.
-    thickness : float or None
-        Line width in pixels.
-    dash : str or None
-        Line dash pattern.
-    opacity : float or None
-        Trace opacity (0.0 – 1.0).
-    autonormalization : bool
-        Whether sound playback automatically rescales chunks whose absolute
-        peak exceeds 1.0 back into ``[-1, 1]``.
-    views : tuple[str, ...]
-        View memberships for this plot.
+        Visibility flag for a plot, field, panel, or UI element. Required.
+    
+    x_domain : tuple[float, float] | None
+        Numeric x-domain used for evaluation or rendering. Required.
+    
+    sampling_points : int | None
+        Sampling density used when evaluating a curve or field. Required.
+    
+    color : str | None
+        Explicit color value. Required.
+    
+    thickness : float | None
+        Value for ``thickness`` in this API. Required.
+    
+    dash : str | None
+        Dash pattern used for contour or curve rendering. Required.
+    
+    opacity : float | None
+        Opacity value applied to the rendered output. Required.
+    
+    autonormalization : bool, optional
+        Value for ``autonormalization`` in this API. Defaults to ``False``.
+    
+    views : tuple[str, Ellipsis], optional
+        Collection of view identifiers associated with this object or update. Defaults to ``()``.
+    
     kind : str, optional
-        Plot kind discriminator. Supported values are ``"cartesian"`` and
-        ``"parametric"``.
-    x_func : sympy.Expr or None, optional
-        Parametric x-coordinate expression ``x(t)``. ``None`` for cartesian
-        plots.
-    parameter_domain : tuple[float, float] or None, optional
-        Parametric sampling interval ``(t_min, t_max)``. ``None`` for cartesian
-        plots.
+        Value for ``kind`` in this API. Defaults to ``'cartesian'``.
+    
+    x_func : Expr | None, optional
+        Expression or callable that supplies x-values. Defaults to ``None``.
+    
+    parameter_domain : tuple[float, float] | None, optional
+        Numeric domain used for a parametric sweep variable. Defaults to ``None``.
+    
+    Returns
+    -------
+    PlotSnapshot
+        New ``PlotSnapshot`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``autonormalization=False``: Value for ``autonormalization`` in this API.
+    - ``views=()``: Collection of view identifiers associated with this object or update.
+    - ``kind='cartesian'``: Value for ``kind`` in this API.
+    - ``x_func=None``: Expression or callable that supplies x-values.
+    - ``parameter_domain=None``: Numeric domain used for a parametric sweep variable.
+    
+    Architecture note
+    -----------------
+    ``PlotSnapshot`` lives in ``gu_toolkit.PlotSnapshot``. Snapshots define the stable boundary between live notebook state and reproducible export/code-generation workflows. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.PlotSnapshot import PlotSnapshot
+        obj = PlotSnapshot(...)
+    
+    Discovery-oriented use::
+    
+        help(PlotSnapshot)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/render-batching-and-snapshots.md``.
+    - Regression/spec tests: ``tests/test_figure_snapshot_codegen.py``.
+    - Runtime discovery tip: create a snapshot in a notebook and inspect ``help(FigureSnapshot)`` or the generated code helpers side by side.
+    - In a notebook or REPL, run ``help(PlotSnapshot)`` and ``dir(PlotSnapshot)`` to inspect adjacent members.
     """
 
     id: str
@@ -84,20 +135,142 @@ class PlotSnapshot:
 
     @property
     def samples(self) -> int | None:
-        """Compatibility alias for :attr:`sampling_points`."""
+        """Compatibility alias for :attr:`sampling_points`.
+        
+        Full API
+        --------
+        ``obj.samples -> int | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        int | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``PlotSnapshot``. Snapshots define the stable boundary between live notebook state and reproducible export/code-generation workflows. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = PlotSnapshot(...)
+            current = obj.samples
+        
+        Discovery-oriented use::
+        
+            help(PlotSnapshot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/render-batching-and-snapshots.md``.
+        - Regression/spec tests: ``tests/test_figure_snapshot_codegen.py``.
+        - Runtime discovery tip: create a snapshot in a notebook and inspect ``help(FigureSnapshot)`` or the generated code helpers side by side.
+        - In a notebook or REPL, run ``help(PlotSnapshot)`` and ``dir(PlotSnapshot)`` to inspect adjacent members.
+        """
         return self.sampling_points
 
     @property
     def is_parametric(self) -> bool:
-        """Return whether this snapshot represents a parametric curve."""
+        """Return whether this snapshot represents a parametric curve.
+        
+        Full API
+        --------
+        ``obj.is_parametric -> bool``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``PlotSnapshot``. Snapshots define the stable boundary between live notebook state and reproducible export/code-generation workflows. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = PlotSnapshot(...)
+            current = obj.is_parametric
+        
+        Discovery-oriented use::
+        
+            help(PlotSnapshot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/render-batching-and-snapshots.md``.
+        - Regression/spec tests: ``tests/test_figure_snapshot_codegen.py``.
+        - Runtime discovery tip: create a snapshot in a notebook and inspect ``help(FigureSnapshot)`` or the generated code helpers side by side.
+        - In a notebook or REPL, run ``help(PlotSnapshot)`` and ``dir(PlotSnapshot)`` to inspect adjacent members.
+        """
         return self.kind == "parametric"
 
     @property
     def y_func(self) -> Expr:
         """Return the primary stored symbolic expression.
-
-        This property is a readability alias for ``func`` when consuming a
-        parametric snapshot.
+        
+        Full API
+        --------
+        ``obj.y_func -> Expr``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        Expr
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``PlotSnapshot``. Snapshots define the stable boundary between live notebook state and reproducible export/code-generation workflows. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = PlotSnapshot(...)
+            current = obj.y_func
+        
+        Discovery-oriented use::
+        
+            help(PlotSnapshot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/render-batching-and-snapshots.md``.
+        - Regression/spec tests: ``tests/test_figure_snapshot_codegen.py``.
+        - Runtime discovery tip: create a snapshot in a notebook and inspect ``help(FigureSnapshot)`` or the generated code helpers side by side.
+        - In a notebook or REPL, run ``help(PlotSnapshot)`` and ``dir(PlotSnapshot)`` to inspect adjacent members.
         """
         return self.func
 

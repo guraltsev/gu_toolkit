@@ -1,3 +1,21 @@
+"""Sound playback and sound-generation integration for interactive figures.
+
+Public entry points
+-------------------
+``FigureSoundManager``
+
+Architecture note
+-----------------
+Sound features are layered on top of the figure/plot model so audio generation reacts to the same selection and parameter state as visual rendering.
+
+Learn more / explore
+--------------------
+- Start with ``docs/guides/api-discovery.md`` for the package-level task map.
+- Example notebook: ``examples/Fourier-Sounds.ipynb``.
+- Regression/spec tests: ``tests/test_figure_sound.py``.
+- Runtime discovery tip: pair this API with ``Figure.sound(...)`` and the Fourier sound notebooks to see the full audio workflow.
+"""
+
 from __future__ import annotations
 
 """Figure-level streaming sound playback.
@@ -331,7 +349,59 @@ class _SoundStreamBridge(anywidget.AnyWidget):
 
 
 class FigureSoundManager:
-    """Own the figure's single-active streaming playback state."""
+    """Own the figure's single-active streaming playback state.
+    
+    Full API
+    --------
+    ``FigureSoundManager(figure: Figure, legend: LegendPanelManager, root_widget: widgets.Box | None=None)``
+    
+    Public members exposed from this class: ``enabled``, ``active_plot_id``, ``sound_generation_enabled``, ``sound``,
+        ``on_parameter_change``
+    
+    Parameters
+    ----------
+    figure : Figure
+        Figure instance that owns the relevant state. Required.
+    
+    legend : LegendPanelManager
+        Value for ``legend`` in this API. Required.
+    
+    root_widget : widgets.Box | None, optional
+        Value for ``root_widget`` in this API. Defaults to ``None``.
+    
+    Returns
+    -------
+    FigureSoundManager
+        New ``FigureSoundManager`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``root_widget=None``: Value for ``root_widget`` in this API.
+    
+    Architecture note
+    -----------------
+    ``FigureSoundManager`` lives in ``gu_toolkit.figure_sound``. Sound features are layered on top of the figure/plot model so audio generation reacts to the same selection and parameter state as visual rendering. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_sound import FigureSoundManager
+        obj = FigureSoundManager(...)
+    
+    Discovery-oriented use::
+    
+        help(FigureSoundManager)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Fourier-Sounds.ipynb``.
+    - Regression/spec tests: ``tests/test_figure_sound.py``.
+    - Runtime discovery tip: pair this API with ``Figure.sound(...)`` and the Fourier sound notebooks to see the full audio workflow.
+    - In a notebook or REPL, run ``help(FigureSoundManager)`` and ``dir(FigureSoundManager)`` to inspect adjacent members.
+    """
 
     sample_rate = 44100
     chunk_seconds = 1.0
@@ -376,16 +446,143 @@ class FigureSoundManager:
 
     @property
     def enabled(self) -> bool:
-        """Return whether sound controls are enabled for the figure."""
+        """Return whether sound controls are enabled for the figure.
+        
+        Full API
+        --------
+        ``obj.enabled -> bool``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureSoundManager``. Sound features are layered on top of the figure/plot model so audio generation reacts to the same selection and parameter state as visual rendering. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureSoundManager(...)
+            current = obj.enabled
+        
+        Discovery-oriented use::
+        
+            help(FigureSoundManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Fourier-Sounds.ipynb``.
+        - Regression/spec tests: ``tests/test_figure_sound.py``.
+        - Runtime discovery tip: pair this API with ``Figure.sound(...)`` and the Fourier sound notebooks to see the full audio workflow.
+        - In a notebook or REPL, run ``help(FigureSoundManager)`` and ``dir(FigureSoundManager)`` to inspect adjacent members.
+        """
         return self._enabled
 
     @property
     def active_plot_id(self) -> str | None:
-        """Return the currently playing plot id, if any."""
+        """Return the currently playing plot id, if any.
+        
+        Full API
+        --------
+        ``obj.active_plot_id -> str | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureSoundManager``. Sound features are layered on top of the figure/plot model so audio generation reacts to the same selection and parameter state as visual rendering. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureSoundManager(...)
+            current = obj.active_plot_id
+        
+        Discovery-oriented use::
+        
+            help(FigureSoundManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Fourier-Sounds.ipynb``.
+        - Regression/spec tests: ``tests/test_figure_sound.py``.
+        - Runtime discovery tip: pair this API with ``Figure.sound(...)`` and the Fourier sound notebooks to see the full audio workflow.
+        - In a notebook or REPL, run ``help(FigureSoundManager)`` and ``dir(FigureSoundManager)`` to inspect adjacent members.
+        """
         return self._active_plot_id
 
     def sound_generation_enabled(self, enabled: bool | None = None) -> bool:
-        """Query or set the figure-level sound-generation toggle."""
+        """Query or set the figure-level sound-generation toggle.
+        
+        Full API
+        --------
+        ``obj.sound_generation_enabled(enabled: bool | None=None) -> bool``
+        
+        Parameters
+        ----------
+        enabled : bool | None, optional
+            Boolean flag that turns a feature on or off. Defaults to ``None``.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``enabled=None``: Boolean flag that turns a feature on or off.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureSoundManager``. Sound features are layered on top of the figure/plot model so audio generation reacts to the same selection and parameter state as visual rendering. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureSoundManager(...)
+            result = obj.sound_generation_enabled(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureSoundManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Fourier-Sounds.ipynb``.
+        - Regression/spec tests: ``tests/test_figure_sound.py``.
+        - Runtime discovery tip: pair this API with ``Figure.sound(...)`` and the Fourier sound notebooks to see the full audio workflow.
+        - In a notebook or REPL, run ``help(FigureSoundManager)`` and ``dir(FigureSoundManager)`` to inspect adjacent members.
+        """
         if enabled is None:
             return self._enabled
 
@@ -401,7 +598,53 @@ class FigureSoundManager:
         return self._enabled
 
     def sound(self, plot_id: str, *, run: bool = True) -> None:
-        """Start, stop, or restart playback for ``plot_id``."""
+        """Start, stop, or restart playback for ``plot_id``.
+        
+        Full API
+        --------
+        ``obj.sound(plot_id: str, *, run: bool=True) -> None``
+        
+        Parameters
+        ----------
+        plot_id : str
+            Stable plot identifier used for lookup or update. Required.
+        
+        run : bool, optional
+            Value for ``run`` in this API. Defaults to ``True``.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        - ``run=True``: Value for ``run`` in this API.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureSoundManager``. Sound features are layered on top of the figure/plot model so audio generation reacts to the same selection and parameter state as visual rendering. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureSoundManager(...)
+            obj.sound(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureSoundManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Fourier-Sounds.ipynb``.
+        - Regression/spec tests: ``tests/test_figure_sound.py``.
+        - Runtime discovery tip: pair this API with ``Figure.sound(...)`` and the Fourier sound notebooks to see the full audio workflow.
+        - In a notebook or REPL, run ``help(FigureSoundManager)`` and ``dir(FigureSoundManager)`` to inspect adjacent members.
+        """
         normalized_plot_id = str(plot_id)
         if not run:
             if self._active_plot_id == normalized_plot_id:
@@ -453,7 +696,50 @@ class FigureSoundManager:
         )
 
     def on_parameter_change(self, _event: Any) -> None:
-        """Refresh queued audio so future chunks use the latest parameter values."""
+        """Refresh queued audio so future chunks use the latest parameter values.
+        
+        Full API
+        --------
+        ``obj.on_parameter_change(_event: Any) -> None``
+        
+        Parameters
+        ----------
+        _event : Any
+            Value for ``_event`` in this API. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureSoundManager``. Sound features are layered on top of the figure/plot model so audio generation reacts to the same selection and parameter state as visual rendering. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureSoundManager(...)
+            obj.on_parameter_change(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureSoundManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Fourier-Sounds.ipynb``.
+        - Regression/spec tests: ``tests/test_figure_sound.py``.
+        - Runtime discovery tip: pair this API with ``Figure.sound(...)`` and the Fourier sound notebooks to see the full audio workflow.
+        - In a notebook or REPL, run ``help(FigureSoundManager)`` and ``dir(FigureSoundManager)`` to inspect adjacent members.
+        """
         if not self._enabled or self._active_plot_id is None:
             return
         plot = self._figure.plots.get(self._active_plot_id)

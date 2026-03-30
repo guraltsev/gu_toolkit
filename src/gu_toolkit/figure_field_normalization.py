@@ -80,11 +80,61 @@ def normalize_field_inputs(
     id_hint: str | None = None,
 ) -> tuple[Symbol, Symbol, Expr, NumericFunction | None, tuple[Symbol, ...]]:
     """Normalize callable/expression inputs for ``scalar_field()``.
-
+    
+    Full API
+    --------
+    ``normalize_field_inputs(func: Any, x_spec: Any, y_spec: Any, *, vars: PlotVarsSpec | None=None, id_hint: str | None=None) -> tuple[Symbol, Symbol, Expr, NumericFunction | None, tuple[Symbol, ...]]``
+    
+    Parameters
+    ----------
+    func : Any
+        Symbolic expression or callable to evaluate. Required.
+    
+    x_spec : Any
+        Value for ``x_spec`` in this API. Required.
+    
+    y_spec : Any
+        Value for ``y_spec`` in this API. Required.
+    
+    vars : PlotVarsSpec | None, optional
+        Value for ``vars`` in this API. Defaults to ``None``.
+    
+    id_hint : str | None, optional
+        Value for ``id_hint`` in this API. Defaults to ``None``.
+    
     Returns
     -------
-    tuple
-        ``(x_var, y_var, symbolic_expr, numeric_fn_or_none, parameter_symbols)``.
+    tuple[Symbol, Symbol, Expr, NumericFunction | None, tuple[Symbol, Ellipsis]]
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``vars=None``: Value for ``vars`` in this API.
+    - ``id_hint=None``: Value for ``id_hint`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_field_normalization``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_field_normalization import normalize_field_inputs
+        result = normalize_field_inputs(...)
+    
+    Discovery-oriented use::
+    
+        help(normalize_field_inputs)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(normalize_field_inputs)`` and inspect sibling APIs in the same module.
     """
     x_var = _normalize_axis_var(x_spec, axis_name="x")
     y_var = _normalize_axis_var(y_spec, axis_name="y")

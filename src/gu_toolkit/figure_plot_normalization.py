@@ -48,7 +48,53 @@ PlotVarsSpec: TypeAlias = (
 
 
 def coerce_symbol(value: Any, *, role: str) -> Symbol:
-    """Return ``value`` as a SymPy symbol or raise a clear ``TypeError``."""
+    """Return ``value`` as a SymPy symbol or raise a clear ``TypeError``.
+    
+    Full API
+    --------
+    ``coerce_symbol(value: Any, *, role: str) -> Symbol``
+    
+    Parameters
+    ----------
+    value : Any
+        New or current value for the relevant property, control, or calculation. Required.
+    
+    role : str
+        Value for ``role`` in this API. Required.
+    
+    Returns
+    -------
+    Symbol
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_plot_normalization``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_plot_normalization import coerce_symbol
+        result = coerce_symbol(...)
+    
+    Discovery-oriented use::
+    
+        help(coerce_symbol)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(coerce_symbol)`` and inspect sibling APIs in the same module.
+    """
     if isinstance(value, Symbol):
         return value
     raise TypeError(
@@ -75,9 +121,54 @@ def rebind_numeric_function_vars(
     source_callable: Callable[..., Any] | None = None,
 ) -> NumericFunction:
     """Return ``numeric_fn`` rebound to ``vars_spec`` order.
-
-    Rebinding is used when callable-first plotting receives an explicit
-    ``vars=`` declaration or an inferred plot-variable replacement.
+    
+    Full API
+    --------
+    ``rebind_numeric_function_vars(numeric_fn: NumericFunction, *, vars_spec: Any, source_callable: Callable[..., Any] | None=None) -> NumericFunction``
+    
+    Parameters
+    ----------
+    numeric_fn : NumericFunction
+        Value for ``numeric_fn`` in this API. Required.
+    
+    vars_spec : Any
+        Value for ``vars_spec`` in this API. Required.
+    
+    source_callable : Callable[Ellipsis, Any] | None, optional
+        Value for ``source_callable`` in this API. Defaults to ``None``.
+    
+    Returns
+    -------
+    NumericFunction
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``source_callable=None``: Value for ``source_callable`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_plot_normalization``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_plot_normalization import rebind_numeric_function_vars
+        result = rebind_numeric_function_vars(...)
+    
+    Discovery-oriented use::
+    
+        help(rebind_numeric_function_vars)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(rebind_numeric_function_vars)`` and inspect sibling APIs in the same module.
     """
     fn = source_callable if source_callable is not None else numeric_fn._fn
     return NumericFunction(
@@ -96,11 +187,58 @@ def normalize_plot_inputs(
     id_hint: str | None = None,
 ) -> tuple[Symbol, Expr, NumericFunction | None, tuple[Symbol, ...]]:
     """Normalize callable-first ``plot()`` inputs.
-
+    
+    Full API
+    --------
+    ``normalize_plot_inputs(first: Any, second: Any, *, vars: PlotVarsSpec | None=None, id_hint: str | None=None) -> tuple[Symbol, Expr, NumericFunction | None, tuple[Symbol, ...]]``
+    
+    Parameters
+    ----------
+    first : Any
+        Value for ``first`` in this API. Required.
+    
+    second : Any
+        Value for ``second`` in this API. Required.
+    
+    vars : PlotVarsSpec | None, optional
+        Value for ``vars`` in this API. Defaults to ``None``.
+    
+    id_hint : str | None, optional
+        Value for ``id_hint`` in this API. Defaults to ``None``.
+    
     Returns
     -------
-    tuple
-        ``(plot_var, symbolic_expr, numeric_fn_or_none, parameter_symbols)``.
+    tuple[Symbol, Expr, NumericFunction | None, tuple[Symbol, Ellipsis]]
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``vars=None``: Value for ``vars`` in this API.
+    - ``id_hint=None``: Value for ``id_hint`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_plot_normalization``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_plot_normalization import normalize_plot_inputs
+        result = normalize_plot_inputs(...)
+    
+    Discovery-oriented use::
+    
+        help(normalize_plot_inputs)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(normalize_plot_inputs)`` and inspect sibling APIs in the same module.
     """
     vars_spec: Any = None
     if vars is not None:
@@ -370,28 +508,58 @@ def normalize_parametric_plot_inputs(
     tuple[Symbol, ...],
 ]:
     """Normalize ``parametric_plot()`` inputs.
-
+    
+    Full API
+    --------
+    ``normalize_parametric_plot_inputs(components: Any, parameter_range: Any, *, vars: PlotVarsSpec | None=None, id_hint: str | None=None) -> tuple[Symbol, Expr, Expr, NumericFunction | None, NumericFunction | None, tuple[Symbol, ...]]``
+    
     Parameters
     ----------
-    components : sequence
-        Two coordinate components representing ``(x(t), y(t))``. Each component
-        may be a SymPy expression, a :class:`NumericFunction`, or a plain
-        Python callable.
-    parameter_range : tuple
-        Three-item tuple ``(t, min, max)`` where ``t`` is the shared parameter
-        symbol.
-
+    components : Any
+        Value for ``components`` in this API. Required.
+    
+    parameter_range : Any
+        Value for ``parameter_range`` in this API. Required.
+    
+    vars : PlotVarsSpec | None, optional
+        Value for ``vars`` in this API. Defaults to ``None``.
+    
+    id_hint : str | None, optional
+        Value for ``id_hint`` in this API. Defaults to ``None``.
+    
     Returns
     -------
-    tuple
-        ``(parameter_var, x_expr, y_expr, x_numeric_fn, y_numeric_fn,
-        parameter_symbols)``.
-
-    Notes
-    -----
-    The returned ``parameter_symbols`` tuple contains the union of parameters
-    inferred from both coordinate components while preserving deterministic
-    first-seen order.
+    tuple[Symbol, Expr, Expr, NumericFunction | None, NumericFunction | None, tuple[Symbol, Ellipsis]]
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``vars=None``: Value for ``vars`` in this API.
+    - ``id_hint=None``: Value for ``id_hint`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_plot_normalization``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_plot_normalization import normalize_parametric_plot_inputs
+        result = normalize_parametric_plot_inputs(...)
+    
+    Discovery-oriented use::
+    
+        help(normalize_parametric_plot_inputs)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(normalize_parametric_plot_inputs)`` and inspect sibling APIs in the same module.
     """
 
     if not isinstance(components, Sequence) or len(components) != 2:

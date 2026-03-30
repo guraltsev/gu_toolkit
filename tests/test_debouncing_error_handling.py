@@ -92,3 +92,27 @@ def test_debouncer_logs_and_keeps_processing_after_callback_error_asyncio(
 
     assert state["n"] == 2
     assert "QueuedDebouncer callback failed" in caplog.text
+
+
+def test_debouncer_does_not_schedule_while_callback_is_executing() -> None:
+    observed: list[tuple[str, int]] = []
+    debouncer: QueuedDebouncer | None = None
+
+    def _callback(payload: str) -> None:
+        nonlocal debouncer
+        assert debouncer is not None
+        if payload == "first":
+            debouncer("second")
+            observed.append(("during_callback_timer_count", len(_FakeThreadTimer.created)))
+
+    _FakeThreadTimer.created.clear()
+
+    with patch("gu_toolkit.debouncing.threading.Timer", _FakeThreadTimer):
+        debouncer = QueuedDebouncer(_callback, execute_every_ms=1, drop_overflow=False)
+        debouncer("first")
+        assert len(_FakeThreadTimer.created) == 1
+
+        _FakeThreadTimer.created[0].callback()
+
+    assert observed == [("during_callback_timer_count", 1)]
+    assert len(_FakeThreadTimer.created) == 2

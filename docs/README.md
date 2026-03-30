@@ -27,6 +27,8 @@ This folder uses a lightweight lifecycle model:
 - `guides/parameter-animation.md`: animation behavior and public API.
 - `guides/parameter-key-semantics.md`: name-authoritative parameter identity rules.
 - `guides/scalar-field-styling.md`: contour and temperature styling, palettes, range control, and diffraction-oriented examples.
+- `guides/api-discovery.md`: task-oriented map from user goals to the right public APIs, guides, examples, and tests.
+- `guides/public-api-documentation-structure.md`: required structure and discoverability rules for public docstrings.
 
 ---
 

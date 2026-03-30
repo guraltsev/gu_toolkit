@@ -16,7 +16,66 @@ from plotly.colors import named_colorscales
 
 @dataclass(frozen=True)
 class FieldPaletteSpec:
-    """Structured metadata for one curated scalar-field palette name."""
+    """Structured metadata for one curated scalar-field palette name.
+    
+    Full API
+    --------
+    ``FieldPaletteSpec(name: str, colorscale: str | tuple[tuple[float, str], Ellipsis], aliases: tuple[str, Ellipsis]=(), description: str='', best_for: str='')``
+    
+    Public members exposed from this class: ``format_help``, ``format_alias_help``
+    
+    Parameters
+    ----------
+    name : str
+        Human-readable or canonical name for the target object. Required.
+    
+    colorscale : str | tuple[tuple[float, str], Ellipsis]
+        Colorscale specification passed to the renderer. Required.
+    
+    aliases : tuple[str, Ellipsis], optional
+        Value for ``aliases`` in this API. Defaults to ``()``.
+    
+    description : str, optional
+        Value for ``description`` in this API. Defaults to ``''``.
+    
+    best_for : str, optional
+        Value for ``best_for`` in this API. Defaults to ``''``.
+    
+    Returns
+    -------
+    FieldPaletteSpec
+        New ``FieldPaletteSpec`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``aliases=()``: Value for ``aliases`` in this API.
+    - ``description=''``: Value for ``description`` in this API.
+    - ``best_for=''``: Value for ``best_for`` in this API.
+    
+    Architecture note
+    -----------------
+    ``FieldPaletteSpec`` lives in ``gu_toolkit.figure_field_style``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_field_style import FieldPaletteSpec
+        obj = FieldPaletteSpec(...)
+    
+    Discovery-oriented use::
+    
+        help(FieldPaletteSpec)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(FieldPaletteSpec)`` and ``dir(FieldPaletteSpec)`` to inspect adjacent members.
+    """
 
     name: str
     colorscale: str | tuple[tuple[float, str], ...]
@@ -25,6 +84,50 @@ class FieldPaletteSpec:
     best_for: str = ""
 
     def format_help(self) -> str:
+        """Format help.
+        
+        Full API
+        --------
+        ``obj.format_help() -> str``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FieldPaletteSpec``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FieldPaletteSpec(...)
+            result = obj.format_help(...)
+        
+        Discovery-oriented use::
+        
+            help(FieldPaletteSpec)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(FieldPaletteSpec)`` and ``dir(FieldPaletteSpec)`` to inspect adjacent members.
+        """
+
         parts: list[str] = []
         if self.description:
             parts.append(self.description.rstrip(".") + ".")
@@ -37,6 +140,51 @@ class FieldPaletteSpec:
         return " ".join(parts)
 
     def format_alias_help(self, alias: str) -> str:
+        """Format alias help.
+        
+        Full API
+        --------
+        ``obj.format_alias_help(alias: str) -> str``
+        
+        Parameters
+        ----------
+        alias : str
+            Value for ``alias`` in this API. Required.
+        
+        Returns
+        -------
+        str
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FieldPaletteSpec``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FieldPaletteSpec(...)
+            result = obj.format_alias_help(...)
+        
+        Discovery-oriented use::
+        
+            help(FieldPaletteSpec)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(FieldPaletteSpec)`` and ``dir(FieldPaletteSpec)`` to inspect adjacent members.
+        """
+
         alias_name = str(alias)
         if alias_name not in self.aliases:
             raise KeyError(f"{alias_name!r} is not an alias of {self.name!r}")
@@ -51,7 +199,71 @@ class FieldPaletteSpec:
 
 @dataclass(frozen=True)
 class FieldStyleSpec:
-    """Structured metadata for one public scalar-field style keyword."""
+    """Structured metadata for one public scalar-field style keyword.
+    
+    Full API
+    --------
+    ``FieldStyleSpec(name: str, aliases: tuple[str, Ellipsis]=(), type_doc: str='', default_doc: str='', description: str='', accepted_values: tuple[Any, Ellipsis]=())``
+    
+    Public members exposed from this class: ``format_help``, ``format_alias_help``
+    
+    Parameters
+    ----------
+    name : str
+        Human-readable or canonical name for the target object. Required.
+    
+    aliases : tuple[str, Ellipsis], optional
+        Value for ``aliases`` in this API. Defaults to ``()``.
+    
+    type_doc : str, optional
+        Value for ``type_doc`` in this API. Defaults to ``''``.
+    
+    default_doc : str, optional
+        Value for ``default_doc`` in this API. Defaults to ``''``.
+    
+    description : str, optional
+        Value for ``description`` in this API. Defaults to ``''``.
+    
+    accepted_values : tuple[Any, Ellipsis], optional
+        Value for ``accepted_values`` in this API. Defaults to ``()``.
+    
+    Returns
+    -------
+    FieldStyleSpec
+        New ``FieldStyleSpec`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``aliases=()``: Value for ``aliases`` in this API.
+    - ``type_doc=''``: Value for ``type_doc`` in this API.
+    - ``default_doc=''``: Value for ``default_doc`` in this API.
+    - ``description=''``: Value for ``description`` in this API.
+    - ``accepted_values=()``: Value for ``accepted_values`` in this API.
+    
+    Architecture note
+    -----------------
+    ``FieldStyleSpec`` lives in ``gu_toolkit.figure_field_style``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_field_style import FieldStyleSpec
+        obj = FieldStyleSpec(...)
+    
+    Discovery-oriented use::
+    
+        help(FieldStyleSpec)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(FieldStyleSpec)`` and ``dir(FieldStyleSpec)`` to inspect adjacent members.
+    """
 
     name: str
     aliases: tuple[str, ...] = ()
@@ -61,6 +273,50 @@ class FieldStyleSpec:
     accepted_values: tuple[Any, ...] = ()
 
     def format_help(self) -> str:
+        """Format help.
+        
+        Full API
+        --------
+        ``obj.format_help() -> str``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FieldStyleSpec``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FieldStyleSpec(...)
+            result = obj.format_help(...)
+        
+        Discovery-oriented use::
+        
+            help(FieldStyleSpec)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(FieldStyleSpec)`` and ``dir(FieldStyleSpec)`` to inspect adjacent members.
+        """
+
         parts = []
         if self.description:
             parts.append(self.description.rstrip(".") + ".")
@@ -78,6 +334,51 @@ class FieldStyleSpec:
         return " ".join(parts)
 
     def format_alias_help(self, alias: str) -> str:
+        """Format alias help.
+        
+        Full API
+        --------
+        ``obj.format_alias_help(alias: str) -> str``
+        
+        Parameters
+        ----------
+        alias : str
+            Value for ``alias`` in this API. Required.
+        
+        Returns
+        -------
+        str
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FieldStyleSpec``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FieldStyleSpec(...)
+            result = obj.format_alias_help(...)
+        
+        Discovery-oriented use::
+        
+            help(FieldStyleSpec)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(FieldStyleSpec)`` and ``dir(FieldStyleSpec)`` to inspect adjacent members.
+        """
+
         alias_name = str(alias)
         if alias_name not in self.aliases:
             raise KeyError(f"{alias_name!r} is not an alias of {self.name!r}")
@@ -344,7 +645,50 @@ _FIELD_STYLE_SPEC_BY_NAME = {spec.name: spec for spec in FIELD_STYLE_OPTIONS}
 
 
 def field_palette_option_docs(*, include_aliases: bool = True) -> dict[str, str]:
-    """Return discoverability text for curated scalar-field palette names."""
+    """Return discoverability text for curated scalar-field palette names.
+    
+    Full API
+    --------
+    ``field_palette_option_docs(*, include_aliases: bool=True) -> dict[str, str]``
+    
+    Parameters
+    ----------
+    include_aliases : bool, optional
+        Value for ``include_aliases`` in this API. Defaults to ``True``.
+    
+    Returns
+    -------
+    dict[str, str]
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``include_aliases=True``: Value for ``include_aliases`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_field_style``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_field_style import field_palette_option_docs
+        result = field_palette_option_docs(...)
+    
+    Discovery-oriented use::
+    
+        help(field_palette_option_docs)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(field_palette_option_docs)`` and inspect sibling APIs in the same module.
+    """
     docs: dict[str, str] = {}
     for spec in FIELD_PALETTE_OPTIONS:
         docs[spec.name] = spec.format_help()
@@ -355,7 +699,50 @@ def field_palette_option_docs(*, include_aliases: bool = True) -> dict[str, str]
 
 
 def resolve_field_colorscale(value: Any) -> Any:
-    """Resolve curated palette aliases to Plotly-compatible colorscale values."""
+    """Resolve curated palette aliases to Plotly-compatible colorscale values.
+    
+    Full API
+    --------
+    ``resolve_field_colorscale(value: Any) -> Any``
+    
+    Parameters
+    ----------
+    value : Any
+        New or current value for the relevant property, control, or calculation. Required.
+    
+    Returns
+    -------
+    Any
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_field_style``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_field_style import resolve_field_colorscale
+        result = resolve_field_colorscale(...)
+    
+    Discovery-oriented use::
+    
+        help(resolve_field_colorscale)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(resolve_field_colorscale)`` and inspect sibling APIs in the same module.
+    """
     if value is None or not isinstance(value, str):
         return value
     text = value.strip()
@@ -372,7 +759,50 @@ def resolve_field_colorscale(value: Any) -> Any:
 
 
 def field_style_option_docs(*, include_aliases: bool = True) -> dict[str, str]:
-    """Return discoverability text for scalar-field style keywords."""
+    """Return discoverability text for scalar-field style keywords.
+    
+    Full API
+    --------
+    ``field_style_option_docs(*, include_aliases: bool=True) -> dict[str, str]``
+    
+    Parameters
+    ----------
+    include_aliases : bool, optional
+        Value for ``include_aliases`` in this API. Defaults to ``True``.
+    
+    Returns
+    -------
+    dict[str, str]
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``include_aliases=True``: Value for ``include_aliases`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_field_style``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_field_style import field_style_option_docs
+        result = field_style_option_docs(...)
+    
+    Discovery-oriented use::
+    
+        help(field_style_option_docs)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(field_style_option_docs)`` and inspect sibling APIs in the same module.
+    """
     docs: dict[str, str] = {}
     for spec in FIELD_STYLE_OPTIONS:
         docs[spec.name] = spec.format_help()
@@ -385,7 +815,53 @@ def field_style_option_docs(*, include_aliases: bool = True) -> dict[str, str]:
 def resolve_field_style_kwargs(
     style_kwargs: dict[str, Any], *, caller: str = "scalar_field()"
 ) -> dict[str, Any]:
-    """Resolve alias keywords in ``style_kwargs`` into canonical names."""
+    """Resolve alias keywords in ``style_kwargs`` into canonical names.
+    
+    Full API
+    --------
+    ``resolve_field_style_kwargs(style_kwargs: dict[str, Any], *, caller: str='scalar_field()') -> dict[str, Any]``
+    
+    Parameters
+    ----------
+    style_kwargs : dict[str, Any]
+        Value for ``style_kwargs`` in this API. Required.
+    
+    caller : str, optional
+        Value for ``caller`` in this API. Defaults to ``'scalar_field()'``.
+    
+    Returns
+    -------
+    dict[str, Any]
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``caller='scalar_field()'``: Value for ``caller`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_field_style``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_field_style import resolve_field_style_kwargs
+        result = resolve_field_style_kwargs(...)
+    
+    Discovery-oriented use::
+    
+        help(resolve_field_style_kwargs)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(resolve_field_style_kwargs)`` and inspect sibling APIs in the same module.
+    """
     resolved = dict(style_kwargs)
 
     for spec in FIELD_STYLE_OPTIONS:
@@ -412,7 +888,53 @@ def resolve_field_style_kwargs(
 def validate_field_style_kwargs(
     style_kwargs: dict[str, Any], *, caller: str = "scalar_field()"
 ) -> dict[str, Any]:
-    """Resolve aliases and validate metadata-driven scalar-field style constraints."""
+    """Resolve aliases and validate metadata-driven scalar-field style constraints.
+    
+    Full API
+    --------
+    ``validate_field_style_kwargs(style_kwargs: dict[str, Any], *, caller: str='scalar_field()') -> dict[str, Any]``
+    
+    Parameters
+    ----------
+    style_kwargs : dict[str, Any]
+        Value for ``style_kwargs`` in this API. Required.
+    
+    caller : str, optional
+        Value for ``caller`` in this API. Defaults to ``'scalar_field()'``.
+    
+    Returns
+    -------
+    dict[str, Any]
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``caller='scalar_field()'``: Value for ``caller`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_field_style``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_field_style import validate_field_style_kwargs
+        result = validate_field_style_kwargs(...)
+    
+    Discovery-oriented use::
+    
+        help(validate_field_style_kwargs)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(validate_field_style_kwargs)`` and inspect sibling APIs in the same module.
+    """
     resolved = resolve_field_style_kwargs(style_kwargs, caller=caller)
     for name, value in tuple(resolved.items()):
         spec = _FIELD_STYLE_SPEC_BY_NAME.get(name)

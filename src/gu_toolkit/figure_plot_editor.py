@@ -127,9 +127,124 @@ _CURVE_DASH_STYLE_OPTIONS: tuple[tuple[str, str], ...] = (
 @dataclass(frozen=True)
 class PlotEditorDraft:
     """Detached snapshot of the plot-composer form state.
-
-    The draft keeps widget concerns out of parsing/apply helpers, which makes
-    the behavior easy to test without constructing the modal UI.
+    
+    Full API
+    --------
+    ``PlotEditorDraft(kind: PlotEditorKind, plot_id: str | None, label: str, view_ids: tuple[str, Ellipsis], cartesian_expression_latex: str, cartesian_var_latex: str, cartesian_samples: int, parametric_x_latex: str, parametric_y_latex: str, parameter_var_latex: str, parameter_min_latex: str, parameter_max_latex: str, parametric_samples: int, field_expression_latex: str, field_x_var_latex: str, field_y_var_latex: str, field_grid_x: int, field_grid_y: int, visible: bool=True, curve_color: str | None=None, curve_thickness: float | None=None, curve_opacity: float | None=None, curve_dash: str | None=None, curve_autonormalization: bool | None=None)``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
+    Parameters
+    ----------
+    kind : PlotEditorKind
+        Value for ``kind`` in this API. Required.
+    
+    plot_id : str | None
+        Stable plot identifier used for lookup or update. Required.
+    
+    label : str
+        Human-readable label used in UI or plotting output. Required.
+    
+    view_ids : tuple[str, Ellipsis]
+        Collection of view identifiers associated with this object or update. Required.
+    
+    cartesian_expression_latex : str
+        Value for ``cartesian_expression_latex`` in this API. Required.
+    
+    cartesian_var_latex : str
+        Value for ``cartesian_var_latex`` in this API. Required.
+    
+    cartesian_samples : int
+        Value for ``cartesian_samples`` in this API. Required.
+    
+    parametric_x_latex : str
+        Value for ``parametric_x_latex`` in this API. Required.
+    
+    parametric_y_latex : str
+        Value for ``parametric_y_latex`` in this API. Required.
+    
+    parameter_var_latex : str
+        Value for ``parameter_var_latex`` in this API. Required.
+    
+    parameter_min_latex : str
+        Value for ``parameter_min_latex`` in this API. Required.
+    
+    parameter_max_latex : str
+        Value for ``parameter_max_latex`` in this API. Required.
+    
+    parametric_samples : int
+        Value for ``parametric_samples`` in this API. Required.
+    
+    field_expression_latex : str
+        Value for ``field_expression_latex`` in this API. Required.
+    
+    field_x_var_latex : str
+        Value for ``field_x_var_latex`` in this API. Required.
+    
+    field_y_var_latex : str
+        Value for ``field_y_var_latex`` in this API. Required.
+    
+    field_grid_x : int
+        Value for ``field_grid_x`` in this API. Required.
+    
+    field_grid_y : int
+        Value for ``field_grid_y`` in this API. Required.
+    
+    visible : bool, optional
+        Visibility flag for a plot, field, panel, or UI element. Defaults to ``True``.
+    
+    curve_color : str | None, optional
+        Value for ``curve_color`` in this API. Defaults to ``None``.
+    
+    curve_thickness : float | None, optional
+        Value for ``curve_thickness`` in this API. Defaults to ``None``.
+    
+    curve_opacity : float | None, optional
+        Value for ``curve_opacity`` in this API. Defaults to ``None``.
+    
+    curve_dash : str | None, optional
+        Value for ``curve_dash`` in this API. Defaults to ``None``.
+    
+    curve_autonormalization : bool | None, optional
+        Value for ``curve_autonormalization`` in this API. Defaults to ``None``.
+    
+    Returns
+    -------
+    PlotEditorDraft
+        New ``PlotEditorDraft`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``visible=True``: Visibility flag for a plot, field, panel, or UI element.
+    - ``curve_color=None``: Value for ``curve_color`` in this API.
+    - ``curve_thickness=None``: Value for ``curve_thickness`` in this API.
+    - ``curve_opacity=None``: Value for ``curve_opacity`` in this API.
+    - ``curve_dash=None``: Value for ``curve_dash`` in this API.
+    - ``curve_autonormalization=None``: Value for ``curve_autonormalization`` in this API.
+    
+    Architecture note
+    -----------------
+    ``PlotEditorDraft`` lives in ``gu_toolkit.figure_plot_editor``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_plot_editor import PlotEditorDraft
+        obj = PlotEditorDraft(...)
+    
+    Discovery-oriented use::
+    
+        help(PlotEditorDraft)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(PlotEditorDraft)`` and ``dir(PlotEditorDraft)`` to inspect adjacent members.
     """
 
     kind: PlotEditorKind
@@ -160,7 +275,58 @@ class PlotEditorDraft:
 
 @dataclass(frozen=True)
 class ParameterPreview:
-    """Parameter-inference summary shown in the composer dialog."""
+    """Parameter-inference summary shown in the composer dialog.
+    
+    Full API
+    --------
+    ``ParameterPreview(will_create: tuple[str, Ellipsis], will_reuse: tuple[str, Ellipsis], error: str | None=None)``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
+    Parameters
+    ----------
+    will_create : tuple[str, Ellipsis]
+        Value for ``will_create`` in this API. Required.
+    
+    will_reuse : tuple[str, Ellipsis]
+        Value for ``will_reuse`` in this API. Required.
+    
+    error : str | None, optional
+        Value for ``error`` in this API. Defaults to ``None``.
+    
+    Returns
+    -------
+    ParameterPreview
+        New ``ParameterPreview`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``error=None``: Value for ``error`` in this API.
+    
+    Architecture note
+    -----------------
+    ``ParameterPreview`` lives in ``gu_toolkit.figure_plot_editor``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_plot_editor import ParameterPreview
+        obj = ParameterPreview(...)
+    
+    Discovery-oriented use::
+    
+        help(ParameterPreview)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(ParameterPreview)`` and ``dir(ParameterPreview)`` to inspect adjacent members.
+    """
 
     will_create: tuple[str, ...]
     will_reuse: tuple[str, ...]
@@ -170,10 +336,62 @@ class ParameterPreview:
 @dataclass(frozen=True)
 class CurveStyleBaseline:
     """Effective style values shown by the plot-editor style tab.
-
-    The baseline lets the editor keep the widgets populated while still
-    emitting ``None`` for unchanged style fields so new plots keep automatic
-    defaults whenever the user does not touch the style tab.
+    
+    Full API
+    --------
+    ``CurveStyleBaseline(picker_color: str, thickness: float, opacity: float, dash: str, autonormalization: bool)``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
+    Parameters
+    ----------
+    picker_color : str
+        Value for ``picker_color`` in this API. Required.
+    
+    thickness : float
+        Value for ``thickness`` in this API. Required.
+    
+    opacity : float
+        Opacity value applied to the rendered output. Required.
+    
+    dash : str
+        Dash pattern used for contour or curve rendering. Required.
+    
+    autonormalization : bool
+        Value for ``autonormalization`` in this API. Required.
+    
+    Returns
+    -------
+    CurveStyleBaseline
+        New ``CurveStyleBaseline`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    ``CurveStyleBaseline`` lives in ``gu_toolkit.figure_plot_editor``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_plot_editor import CurveStyleBaseline
+        obj = CurveStyleBaseline(...)
+    
+    Discovery-oriented use::
+    
+        help(CurveStyleBaseline)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(CurveStyleBaseline)`` and ``dir(CurveStyleBaseline)`` to inspect adjacent members.
     """
 
     picker_color: str
@@ -632,16 +850,54 @@ def apply_plot_editor_draft(
     existing_plot: Any | None = None,
 ) -> Any:
     """Apply one validated editor draft through the public figure API.
-
+    
+    Full API
+    --------
+    ``apply_plot_editor_draft(figure: Figure, draft: PlotEditorDraft, *, existing_plot: Any | None=None) -> Any``
+    
     Parameters
     ----------
-    figure:
-        Target figure that will own the created/updated plot.
-    draft:
-        Detached form snapshot.
-    existing_plot:
-        Existing runtime plot being edited, when any. The helper uses this to
-        preserve the current plot id and visibility semantics.
+    figure : Figure
+        Figure instance that owns the relevant state. Required.
+    
+    draft : PlotEditorDraft
+        Value for ``draft`` in this API. Required.
+    
+    existing_plot : Any | None, optional
+        Value for ``existing_plot`` in this API. Defaults to ``None``.
+    
+    Returns
+    -------
+    Any
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``existing_plot=None``: Value for ``existing_plot`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_plot_editor``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_plot_editor import apply_plot_editor_draft
+        result = apply_plot_editor_draft(...)
+    
+    Discovery-oriented use::
+    
+        help(apply_plot_editor_draft)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(apply_plot_editor_draft)`` and inspect sibling APIs in the same module.
     """
 
     plot_id = draft.plot_id or getattr(existing_plot, "id", None)
@@ -739,10 +995,53 @@ def apply_plot_editor_draft(
 
 class PlotComposerDialog:
     """Modal editor for creating and editing figure plots from the legend.
-
-    The dialog now reuses the shared modal/button chrome used elsewhere in the
-    toolkit. Formula entry stays front-and-center while labels, identifiers,
-    visibility, views, and sampling live in a separate Advanced tab.
+    
+    Full API
+    --------
+    ``PlotComposerDialog(figure: Figure, modal_host: widgets.Box)``
+    
+    Public members exposed from this class: ``panel_visible``, ``open_for_new``, ``open_for_plot``, ``close``
+    
+    Parameters
+    ----------
+    figure : Figure
+        Figure instance that owns the relevant state. Required.
+    
+    modal_host : widgets.Box
+        Value for ``modal_host`` in this API. Required.
+    
+    Returns
+    -------
+    PlotComposerDialog
+        New ``PlotComposerDialog`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    ``PlotComposerDialog`` lives in ``gu_toolkit.figure_plot_editor``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_plot_editor import PlotComposerDialog
+        obj = PlotComposerDialog(...)
+    
+    Discovery-oriented use::
+    
+        help(PlotComposerDialog)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(PlotComposerDialog)`` and ``dir(PlotComposerDialog)`` to inspect adjacent members.
     """
 
     def __init__(self, figure: Figure, *, modal_host: widgets.Box) -> None:
@@ -1476,12 +1775,97 @@ class PlotComposerDialog:
 
     @property
     def panel_visible(self) -> bool:
-        """Return whether the modal is currently open."""
+        """Return whether the modal is currently open.
+        
+        Full API
+        --------
+        ``obj.panel_visible -> bool``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``PlotComposerDialog``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = PlotComposerDialog(...)
+            current = obj.panel_visible
+        
+        Discovery-oriented use::
+        
+            help(PlotComposerDialog)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/legend-plot-editor.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+        - In a notebook or REPL, run ``help(PlotComposerDialog)`` and ``dir(PlotComposerDialog)`` to inspect adjacent members.
+        """
 
         return self._is_open
 
     def open_for_new(self, *, default_kind: PlotEditorKind = "cartesian") -> None:
-        """Open the dialog preloaded for creating a new plot."""
+        """Open the dialog preloaded for creating a new plot.
+        
+        Full API
+        --------
+        ``obj.open_for_new(*, default_kind: PlotEditorKind='cartesian') -> None``
+        
+        Parameters
+        ----------
+        default_kind : PlotEditorKind, optional
+            Value for ``default_kind`` in this API. Defaults to ``'cartesian'``.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        - ``default_kind='cartesian'``: Value for ``default_kind`` in this API.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``PlotComposerDialog``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = PlotComposerDialog(...)
+            obj.open_for_new(...)
+        
+        Discovery-oriented use::
+        
+            help(PlotComposerDialog)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/legend-plot-editor.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+        - In a notebook or REPL, run ``help(PlotComposerDialog)`` and ``dir(PlotComposerDialog)`` to inspect adjacent members.
+        """
 
         self._refresh_view_options(selected=(self._figure.views.current_id,))
         self._editing_plot_id = None
@@ -1502,7 +1886,50 @@ class PlotComposerDialog:
         self._set_open(True)
 
     def open_for_plot(self, plot_id: str) -> None:
-        """Open the dialog with fields loaded from an existing runtime plot."""
+        """Open the dialog with fields loaded from an existing runtime plot.
+        
+        Full API
+        --------
+        ``obj.open_for_plot(plot_id: str) -> None``
+        
+        Parameters
+        ----------
+        plot_id : str
+            Stable plot identifier used for lookup or update. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``PlotComposerDialog``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = PlotComposerDialog(...)
+            obj.open_for_plot(...)
+        
+        Discovery-oriented use::
+        
+            help(PlotComposerDialog)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/legend-plot-editor.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+        - In a notebook or REPL, run ``help(PlotComposerDialog)`` and ``dir(PlotComposerDialog)`` to inspect adjacent members.
+        """
 
         plot = self._figure.plots.get(plot_id)
         if plot is None:
@@ -1525,7 +1952,49 @@ class PlotComposerDialog:
         self._set_open(True)
 
     def close(self) -> None:
-        """Hide the dialog and clear transient error state."""
+        """Hide the dialog and clear transient error state.
+        
+        Full API
+        --------
+        ``obj.close() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``PlotComposerDialog``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = PlotComposerDialog(...)
+            obj.close(...)
+        
+        Discovery-oriented use::
+        
+            help(PlotComposerDialog)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/legend-plot-editor.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+        - In a notebook or REPL, run ``help(PlotComposerDialog)`` and ``dir(PlotComposerDialog)`` to inspect adjacent members.
+        """
 
         self._clear_error()
         self._set_open(False)

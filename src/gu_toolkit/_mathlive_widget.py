@@ -33,20 +33,54 @@ from ._widget_stubs import anywidget, widgets
 
 class MathLiveField(anywidget.AnyWidget):
     """Editable LaTeX-backed math input widget.
-
-    The widget exposes a single synchronized ``value`` trait containing the
-    current LaTeX content. In browsers where MathLive cannot be loaded, it
-    degrades to a simple textarea so the surrounding editor remains functional.
-
+    
+    Full API
+    --------
+    ``MathLiveField(*args: object, **kwargs: object)``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
+    Parameters
+    ----------
+    *args : object, optional
+        Additional positional arguments forwarded by this API. Optional variadic input.
+    
+    **kwargs : object, optional
+        Additional keyword arguments forwarded by this API. Optional variadic input.
+    
+    Returns
+    -------
+    MathLiveField
+        New ``MathLiveField`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``*args``: Additional positional arguments are passed through when this API supports variadic input.
+    - ``**kwargs``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+    
+    Architecture note
+    -----------------
+    ``MathLiveField`` lives in ``gu_toolkit._mathlive_widget``. Runtime, scheduling, and widget-chrome modules isolate notebook-specific concerns from the core plotting model so the main figure code remains testable. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
     Examples
     --------
-    The widget is typically embedded inside higher-level dialogs instead of
-    being used directly:
-
-    >>> from gu_toolkit._mathlive_widget import MathLiveField  # doctest: +SKIP
-    >>> field = MathLiveField(value=r"x^2", placeholder="Expression")  # doctest: +SKIP
-    >>> field.value  # doctest: +SKIP
-    'x^2'
+    Construction::
+    
+        from gu_toolkit._mathlive_widget import MathLiveField
+        obj = MathLiveField(...)
+    
+    Discovery-oriented use::
+    
+        help(MathLiveField)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/ui-layout-system.md``.
+    - Example notebook: ``examples/layout_debug.ipynb``.
+    - Runtime discovery tip: pair ``help(...)`` with ``examples/layout_debug.ipynb`` when debugging widget, CSS, or geometry behavior.
+    - In a notebook or REPL, run ``help(MathLiveField)`` and ``dir(MathLiveField)`` to inspect adjacent members.
     """
 
     value = traitlets.Unicode("").tag(sync=True)

@@ -19,15 +19,56 @@ from .PlotSnapshot import PlotSnapshot
 @dataclass(frozen=True)
 class InfoCardSnapshot:
     """Immutable record of a simple info card.
-
+    
+    Full API
+    --------
+    ``InfoCardSnapshot(id: Hashable, segments: tuple[str, Ellipsis], view_id: str | None=None)``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
     Parameters
     ----------
     id : Hashable
-        Card identifier (key in the info panel).
-    segments : tuple[str, ...]
-        Ordered text segments.  Static segments contain their original text;
-        dynamic (callable) segments are stored as the placeholder
-        ``"<dynamic>"``.
+        Stable identifier used to create, update, or look up the target object. Required.
+    
+    segments : tuple[str, Ellipsis]
+        Value for ``segments`` in this API. Required.
+    
+    view_id : str | None, optional
+        Identifier for the relevant view inside a figure. Defaults to ``None``.
+    
+    Returns
+    -------
+    InfoCardSnapshot
+        New ``InfoCardSnapshot`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``view_id=None``: Identifier for the relevant view inside a figure.
+    
+    Architecture note
+    -----------------
+    ``InfoCardSnapshot`` lives in ``gu_toolkit.FigureSnapshot``. Snapshots define the stable boundary between live notebook state and reproducible export/code-generation workflows. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.FigureSnapshot import InfoCardSnapshot
+        obj = InfoCardSnapshot(...)
+    
+    Discovery-oriented use::
+    
+        help(InfoCardSnapshot)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/render-batching-and-snapshots.md``.
+    - Regression/spec tests: ``tests/test_figure_snapshot_codegen.py``.
+    - Runtime discovery tip: create a snapshot in a notebook and inspect ``help(FigureSnapshot)`` or the generated code helpers side by side.
+    - In a notebook or REPL, run ``help(InfoCardSnapshot)`` and ``dir(InfoCardSnapshot)`` to inspect adjacent members.
     """
 
     id: Hashable
@@ -38,25 +79,72 @@ class InfoCardSnapshot:
 @dataclass(frozen=True)
 class ViewSnapshot:
     """Immutable record of one workspace view.
-
+    
+    Full API
+    --------
+    ``ViewSnapshot(id: str, title: str, x_label: str, y_label: str, x_range: tuple[float, float], y_range: tuple[float, float], viewport_x_range: tuple[float, float] | None=None, viewport_y_range: tuple[float, float] | None=None)``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
     Parameters
     ----------
     id : str
-        Stable view identifier.
+        Stable identifier used to create, update, or look up the target object. Required.
+    
     title : str
-        Human-readable label for the view selector.
+        Human-readable title text shown in the UI or stored in snapshots. Required.
+    
     x_label : str
-        Optional x-axis label metadata.
+        Horizontal-axis label text. Required.
+    
     y_label : str
-        Optional y-axis label metadata.
+        Vertical-axis label text. Required.
+    
     x_range : tuple[float, float]
-        Default x-range for the view.
+        Range specification for the x-axis. Required.
+    
     y_range : tuple[float, float]
-        Default y-range for the view.
-    viewport_x_range : tuple[float, float] or None
-        Last known viewport x-range.
-    viewport_y_range : tuple[float, float] or None
-        Last known viewport y-range.
+        Range specification for the y-axis. Required.
+    
+    viewport_x_range : tuple[float, float] | None, optional
+        Remembered x-axis viewport range for a view. Defaults to ``None``.
+    
+    viewport_y_range : tuple[float, float] | None, optional
+        Remembered y-axis viewport range for a view. Defaults to ``None``.
+    
+    Returns
+    -------
+    ViewSnapshot
+        New ``ViewSnapshot`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``viewport_x_range=None``: Remembered x-axis viewport range for a view.
+    - ``viewport_y_range=None``: Remembered y-axis viewport range for a view.
+    
+    Architecture note
+    -----------------
+    ``ViewSnapshot`` lives in ``gu_toolkit.FigureSnapshot``. Snapshots define the stable boundary between live notebook state and reproducible export/code-generation workflows. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.FigureSnapshot import ViewSnapshot
+        obj = ViewSnapshot(...)
+    
+    Discovery-oriented use::
+    
+        help(ViewSnapshot)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/render-batching-and-snapshots.md``.
+    - Regression/spec tests: ``tests/test_figure_snapshot_codegen.py``.
+    - Runtime discovery tip: create a snapshot in a notebook and inspect ``help(FigureSnapshot)`` or the generated code helpers side by side.
+    - In a notebook or REPL, run ``help(ViewSnapshot)`` and ``dir(ViewSnapshot)`` to inspect adjacent members.
     """
 
     id: str
@@ -72,33 +160,87 @@ class ViewSnapshot:
 @dataclass(frozen=True)
 class FigureSnapshot:
     """Immutable record of a full figure's state.
-
+    
+    Full API
+    --------
+    ``FigureSnapshot(x_range: tuple[float, float], y_range: tuple[float, float], sampling_points: int, title: str, parameters: ParameterSnapshot, plots: dict[str, PlotSnapshot | FieldPlotSnapshot], info_cards: tuple[InfoCardSnapshot, Ellipsis], views: tuple[ViewSnapshot, Ellipsis]=field(default_factory=tuple), active_view_id: str='main', default_x_range: tuple[float, float] | None=None, default_y_range: tuple[float, float] | None=None, default_samples: int | None=None)``
+    
+    Public members exposed from this class: ``samples``
+    
     Parameters
     ----------
     x_range : tuple[float, float]
-        Default x-axis range for the main view.
+        Range specification for the x-axis. Required.
+    
     y_range : tuple[float, float]
-        Default y-axis range for the main view.
+        Range specification for the y-axis. Required.
+    
     sampling_points : int
-        Current figure sample count used by inherited plots.
+        Sampling density used when evaluating a curve or field. Required.
+    
     title : str
-        Figure title text.
+        Human-readable title text shown in the UI or stored in snapshots. Required.
+    
     parameters : ParameterSnapshot
-        Full parameter metadata snapshot.
+        Parameter symbols/keys that should stay bound to this operation. Required.
+    
     plots : dict[str, PlotSnapshot | FieldPlotSnapshot]
-        Mapping of plot id to its snapshot, in insertion order.
-    info_cards : tuple[InfoCardSnapshot, ...]
-        Static info card snapshots.
-    views : tuple[ViewSnapshot, ...]
-        Workspace view definitions.
-    active_view_id : str
-        Currently selected view id.
-    default_x_range : tuple[float, float] or None
-        Figure-level default x-range used for new views.
-    default_y_range : tuple[float, float] or None
-        Figure-level default y-range used for new views.
-    default_samples : int or None
-        Figure-level default samples used for newly created plots.
+        Value for ``plots`` in this API. Required.
+    
+    info_cards : tuple[InfoCardSnapshot, Ellipsis]
+        Value for ``info_cards`` in this API. Required.
+    
+    views : tuple[ViewSnapshot, Ellipsis], optional
+        Collection of view identifiers associated with this object or update. Defaults to ``field(default_factory=tuple)``.
+    
+    active_view_id : str, optional
+        Identifier for the currently selected view. Defaults to ``'main'``.
+    
+    default_x_range : tuple[float, float] | None, optional
+        Default x-axis range used when a view is created or reset. Defaults to ``None``.
+    
+    default_y_range : tuple[float, float] | None, optional
+        Default y-axis range used when a view is created or reset. Defaults to ``None``.
+    
+    default_samples : int | None, optional
+        Value for ``default_samples`` in this API. Defaults to ``None``.
+    
+    Returns
+    -------
+    FigureSnapshot
+        New ``FigureSnapshot`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``views=field(default_factory=tuple)``: Collection of view identifiers associated with this object or update.
+    - ``active_view_id='main'``: Identifier for the currently selected view.
+    - ``default_x_range=None``: Default x-axis range used when a view is created or reset.
+    - ``default_y_range=None``: Default y-axis range used when a view is created or reset.
+    - ``default_samples=None``: Value for ``default_samples`` in this API.
+    
+    Architecture note
+    -----------------
+    ``FigureSnapshot`` lives in ``gu_toolkit.FigureSnapshot``. Snapshots define the stable boundary between live notebook state and reproducible export/code-generation workflows. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.FigureSnapshot import FigureSnapshot
+        obj = FigureSnapshot(...)
+    
+    Discovery-oriented use::
+    
+        help(FigureSnapshot)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/render-batching-and-snapshots.md``.
+    - Regression/spec tests: ``tests/test_figure_snapshot_codegen.py``.
+    - Runtime discovery tip: create a snapshot in a notebook and inspect ``help(FigureSnapshot)`` or the generated code helpers side by side.
+    - In a notebook or REPL, run ``help(FigureSnapshot)`` and ``dir(FigureSnapshot)`` to inspect adjacent members.
     """
 
     x_range: tuple[float, float]
@@ -124,7 +266,49 @@ class FigureSnapshot:
 
     @property
     def samples(self) -> int:
-        """Compatibility alias for :attr:`sampling_points`."""
+        """Compatibility alias for :attr:`sampling_points`.
+        
+        Full API
+        --------
+        ``obj.samples -> int``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        int
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureSnapshot``. Snapshots define the stable boundary between live notebook state and reproducible export/code-generation workflows. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureSnapshot(...)
+            current = obj.samples
+        
+        Discovery-oriented use::
+        
+            help(FigureSnapshot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/render-batching-and-snapshots.md``.
+        - Regression/spec tests: ``tests/test_figure_snapshot_codegen.py``.
+        - Runtime discovery tip: create a snapshot in a notebook and inspect ``help(FigureSnapshot)`` or the generated code helpers side by side.
+        - In a notebook or REPL, run ``help(FigureSnapshot)`` and ``dir(FigureSnapshot)`` to inspect adjacent members.
+        """
         return self.sampling_points
 
     def __repr__(self) -> str:

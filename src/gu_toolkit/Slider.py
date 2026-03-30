@@ -399,30 +399,74 @@ class _SliderModalAccessibilityBridge(anywidget.AnyWidget):
 
 
 class FloatSlider(widgets.VBox):
-    """
-    A FloatSlider with:
-      - a *single editable numeric field* (Text) that accepts expressions via InputConvert,
-      - play/pause, reset, and settings buttons,
-      - a small settings panel (min/max/step + live update toggle + animation options).
-
-    Design notes
-    ------------
-    - The slider's built-in readout is disabled, so there is only one number field.
-    - The Text field commits on Enter (continuous_update=False). This avoids fighting the
-      user while they type partial expressions like "pi/2".
-    - If parsing fails, the Text field reverts to the previous committed value.
-
-    Notes
-    -----
-    The slider exposes ``default_value``, ``min``, ``max``, and ``step`` so it
-    can be wrapped by :class:`ParamRef` implementations and used with
-    :class:`Figure` parameter management.
-
+    """A FloatSlider with:
+    
+    Full API
+    --------
+    ``FloatSlider(value: float=0.0, min: float=0.0, max: float=1.0, step: float=0.1, description: str='Value:', **kwargs: Any)``
+    
+    Public members exposed from this class: ``open_settings``, ``close_settings``, ``default_value``, ``min``, ``max``, ``step``,
+        ``reset``, ``animation_time``, ``animation_mode``, ``animation_running``,
+        ``start_animation``, ``stop_animation``, ``toggle_animation``, ``make_refs``,
+        ``set_modal_host``
+    
+    Parameters
+    ----------
+    value : float, optional
+        New or current value for the relevant property, control, or calculation. Defaults to ``0.0``.
+    
+    min : float, optional
+        Lower bound used by sliders, domains, or range validators. Defaults to ``0.0``.
+    
+    max : float, optional
+        Upper bound used by sliders, domains, or range validators. Defaults to ``1.0``.
+    
+    step : float, optional
+        Increment or resolution used for stepping through numeric values. Defaults to ``0.1``.
+    
+    description : str, optional
+        Value for ``description`` in this API. Defaults to ``'Value:'``.
+    
+    **kwargs : Any, optional
+        Additional keyword arguments forwarded by this API. Optional variadic input.
+    
+    Returns
+    -------
+    FloatSlider
+        New ``FloatSlider`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``value=0.0``: New or current value for the relevant property, control, or calculation.
+    - ``min=0.0``: Lower bound used by sliders, domains, or range validators.
+    - ``max=1.0``: Upper bound used by sliders, domains, or range validators.
+    - ``step=0.1``: Increment or resolution used for stepping through numeric values.
+    - ``description='Value:'``: Value for ``description`` in this API.
+    - ``**kwargs``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+    
+    Architecture note
+    -----------------
+    ``FloatSlider`` lives in ``gu_toolkit.Slider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
     Examples
     --------
-    >>> slider = FloatSlider(value=1.0, min=-2.0, max=2.0, step=0.1)  # doctest: +SKIP
-    >>> slider.value  # doctest: +SKIP
-    1.0
+    Construction::
+    
+        from gu_toolkit.Slider import FloatSlider
+        obj = FloatSlider(...)
+    
+    Discovery-oriented use::
+    
+        help(FloatSlider)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/parameter-key-semantics.md``.
+    - Guide: ``docs/guides/parameter-animation.md``.
+    - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+    - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
     """
 
     value = traitlets.Float(0.0)
@@ -824,12 +868,96 @@ class FloatSlider(widgets.VBox):
         self.btn_settings.tooltip = next_description
 
     def open_settings(self) -> None:
-        """Open the parameter settings dialog."""
+        """Open the parameter settings dialog.
+        
+        Full API
+        --------
+        ``obj.open_settings() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FloatSlider(...)
+            obj.open_settings(...)
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
+        """
 
         self._set_settings_open(True)
 
     def close_settings(self) -> None:
-        """Close the parameter settings dialog."""
+        """Close the parameter settings dialog.
+        
+        Full API
+        --------
+        ``obj.close_settings() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FloatSlider(...)
+            obj.close_settings(...)
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
+        """
 
         self._set_settings_open(False)
 
@@ -1074,75 +1202,190 @@ class FloatSlider(widgets.VBox):
     @property
     def default_value(self) -> float:
         """Return the stored default value used by reset.
-
+        
+        Full API
+        --------
+        ``obj.default_value -> float``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
         Returns
         -------
         float
-            Default value for the slider reset.
-
-        Notes
-        -----
-        Setting ``default_value`` does not change the current slider value.
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FloatSlider(...)
+            current = obj.default_value
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
         """
         return float(self._defaults["value"])
 
     @default_value.setter
     def default_value(self, value: float) -> None:
         """Set the stored default value used by reset.
-
+        
+        Full API
+        --------
+        ``obj.default_value = value``
+        
         Parameters
         ----------
         value : float
-            New default value (does not change the current value).
-
+            New or current value for the relevant property, control, or calculation. Required.
+        
         Returns
         -------
         None
-
-        See Also
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
         --------
-        reset : Apply the stored default value to the slider.
+        Basic use::
+        
+            obj = FloatSlider(...)
+            obj.default_value = value
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
         """
         self._defaults["value"] = float(value)
 
     @property
     def min(self) -> float:
         """Return the current minimum slider limit.
-
+        
+        Full API
+        --------
+        ``obj.min -> float``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
         Returns
         -------
         float
-            Minimum slider value.
-
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> slider = FloatSlider(min=-1.0, max=1.0)  # doctest: +SKIP
-        >>> slider.min  # doctest: +SKIP
-        -1.0
-
-        Notes
-        -----
-        Updating the minimum may clamp the current value if it falls below the
-        new bound.
+        Basic use::
+        
+            obj = FloatSlider(...)
+            current = obj.min
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
         """
         return float(self.slider.min)
 
     @min.setter
     def min(self, value: float) -> None:
         """Set the minimum slider limit.
-
+        
+        Full API
+        --------
+        ``obj.min = value``
+        
         Parameters
         ----------
         value : float
-            New minimum value.
-
+            New or current value for the relevant property, control, or calculation. Required.
+        
         Returns
         -------
         None
-
-        See Also
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
         --------
-        max : Update the upper bound.
+        Basic use::
+        
+            obj = FloatSlider(...)
+            obj.min = value
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
         """
         new_min = float(value)
         if new_min > float(self.slider.max):
@@ -1153,41 +1396,95 @@ class FloatSlider(widgets.VBox):
     @property
     def max(self) -> float:
         """Return the current maximum slider limit.
-
+        
+        Full API
+        --------
+        ``obj.max -> float``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
         Returns
         -------
         float
-            Maximum slider value.
-
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> slider = FloatSlider(min=-1.0, max=1.0)  # doctest: +SKIP
-        >>> slider.max  # doctest: +SKIP
-        1.0
-
-        Notes
-        -----
-        Updating the maximum may clamp the current value if it exceeds the
-        new bound.
+        Basic use::
+        
+            obj = FloatSlider(...)
+            current = obj.max
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
         """
         return float(self.slider.max)
 
     @max.setter
     def max(self, value: float) -> None:
         """Set the maximum slider limit.
-
+        
+        Full API
+        --------
+        ``obj.max = value``
+        
         Parameters
         ----------
         value : float
-            New maximum value.
-
+            New or current value for the relevant property, control, or calculation. Required.
+        
         Returns
         -------
         None
-
-        See Also
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
         --------
-        min : Update the lower bound.
+        Basic use::
+        
+            obj = FloatSlider(...)
+            obj.max = value
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
         """
         new_max = float(value)
         if new_max < float(self.slider.min):
@@ -1198,68 +1495,238 @@ class FloatSlider(widgets.VBox):
     @property
     def step(self) -> float:
         """Return the current slider step.
-
+        
+        Full API
+        --------
+        ``obj.step -> float``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
         Returns
         -------
         float
-            Step size for the slider.
-
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> slider = FloatSlider(step=0.25)  # doctest: +SKIP
-        >>> slider.step  # doctest: +SKIP
-        0.25
-
-        Notes
-        -----
-        The step size affects both the slider and the settings panel control.
+        Basic use::
+        
+            obj = FloatSlider(...)
+            current = obj.step
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
         """
         return float(self.slider.step)
 
     @step.setter
     def step(self, value: float) -> None:
         """Set the slider step size.
-
+        
+        Full API
+        --------
+        ``obj.step = value``
+        
         Parameters
         ----------
         value : float
-            New step size.
-
+            New or current value for the relevant property, control, or calculation. Required.
+        
         Returns
         -------
         None
-
-        See Also
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
         --------
-        default_value : Set the reset target without changing the current value.
+        Basic use::
+        
+            obj = FloatSlider(...)
+            obj.step = value
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
         """
         self.slider.step = float(value)
 
     def reset(self) -> None:
         """Reset the slider value to its initial default.
-
+        
+        Full API
+        --------
+        ``obj.reset() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
         Returns
         -------
         None
-
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> slider = FloatSlider(value=2.0)  # doctest: +SKIP
-        >>> slider.reset()  # doctest: +SKIP
-
-        Notes
-        -----
-        This uses the stored ``default_value``.
+        Basic use::
+        
+            obj = FloatSlider(...)
+            obj.reset(...)
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
         """
         self._reset(None)
 
     @property
     def animation_time(self) -> float:
-        """Seconds needed to traverse the current numeric range once."""
+        """Seconds needed to traverse the current numeric range once.
+        
+        Full API
+        --------
+        ``obj.animation_time -> float``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        float
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FloatSlider(...)
+            current = obj.animation_time
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
+        """
         return float(self._animation.animation_time)
 
     @animation_time.setter
     def animation_time(self, value: float) -> None:
+        """Work with animation time on ``FloatSlider``.
+        
+        Full API
+        --------
+        ``obj.animation_time = value``
+        
+        Parameters
+        ----------
+        value : float
+            New or current value for the relevant property, control, or calculation. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FloatSlider(...)
+            obj.animation_time = value
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
+        """
+
         self._animation.animation_time = float(value)
         self._syncing_animation_settings = True
         try:
@@ -1269,11 +1736,98 @@ class FloatSlider(widgets.VBox):
 
     @property
     def animation_mode(self) -> str:
-        """Animation mode token for this slider."""
+        """Animation mode token for this slider.
+        
+        Full API
+        --------
+        ``obj.animation_mode -> str``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FloatSlider(...)
+            current = obj.animation_mode
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
+        """
         return str(self._animation.animation_mode)
 
     @animation_mode.setter
     def animation_mode(self, value: str) -> None:
+        """Work with animation mode on ``FloatSlider``.
+        
+        Full API
+        --------
+        ``obj.animation_mode = value``
+        
+        Parameters
+        ----------
+        value : str
+            New or current value for the relevant property, control, or calculation. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FloatSlider(...)
+            obj.animation_mode = value
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
+        """
+
         self._animation.animation_mode = str(value)
         self._syncing_animation_settings = True
         try:
@@ -1284,50 +1838,233 @@ class FloatSlider(widgets.VBox):
 
     @property
     def animation_running(self) -> bool:
-        """Whether the slider is currently animating."""
+        """Whether the slider is currently animating.
+        
+        Full API
+        --------
+        ``obj.animation_running -> bool``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FloatSlider(...)
+            current = obj.animation_running
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
+        """
         return bool(self._animation.running)
 
     def start_animation(self) -> None:
-        """Start animating the slider value."""
+        """Start animating the slider value.
+        
+        Full API
+        --------
+        ``obj.start_animation() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FloatSlider(...)
+            obj.start_animation(...)
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
+        """
         self._animation.start()
 
     def stop_animation(self) -> None:
-        """Stop animating the slider value."""
+        """Stop animating the slider value.
+        
+        Full API
+        --------
+        ``obj.stop_animation() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FloatSlider(...)
+            obj.stop_animation(...)
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
+        """
         self._animation.stop()
 
     def toggle_animation(self) -> None:
-        """Toggle the slider animation state."""
+        """Toggle the slider animation state.
+        
+        Full API
+        --------
+        ``obj.toggle_animation() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FloatSlider(...)
+            obj.toggle_animation(...)
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
+        """
         self._animation.toggle()
 
     def make_refs(self, symbols: Sequence[Any]) -> dict[Any, Any]:
         """Create ParamRef mappings for provided symbols.
-
+        
+        Full API
+        --------
+        ``obj.make_refs(symbols: Sequence[Any]) -> dict[Any, Any]``
+        
         Parameters
         ----------
-        symbols : sequence[sympy.Symbol]
-            Symbols to bind to this control (must contain exactly one symbol).
-
+        symbols : Sequence[Any]
+            Parameter symbols, names, or other accepted parameter keys. Required.
+        
         Returns
         -------
-        dict
-            Mapping of the symbol to a ``ProxyParamRef``.
-
-        Raises
-        ------
-        ValueError
-            If more than one symbol is provided.
-
+        dict[Any, Any]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
         Examples
         --------
-        >>> slider = FloatSlider()  # doctest: +SKIP
-        >>> import sympy as sp  # doctest: +SKIP
-        >>> a = sp.symbols("a")  # doctest: +SKIP
-        >>> slider.make_refs([a])  # doctest: +SKIP
-
-        Notes
-        -----
-        This method exists to integrate with :class:`ParameterManager` and
-        :class:`Figure` parameter creation.
+        Basic use::
+        
+            obj = FloatSlider(...)
+            result = obj.make_refs(...)
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
         """
         if len(symbols) != 1:
             raise ValueError("FloatSlider only supports a single symbol.")
@@ -1338,16 +2075,48 @@ class FloatSlider(widgets.VBox):
 
     def set_modal_host(self, host: widgets.Box | None) -> None:
         """Attach the settings modal to a host container.
-
+        
+        Full API
+        --------
+        ``obj.set_modal_host(host: widgets.Box | None) -> None``
+        
         Parameters
         ----------
-        host : ipywidgets.Box or None
-            Host container to overlay. If ``None``, the modal stays local to the slider.
-
+        host : widgets.Box | None
+            Value for ``host`` in this API. Required.
+        
         Returns
         -------
         None
-            Updates widget parenting/layout in place.
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FloatSlider``. Parameter behavior is name-authoritative and flows through ParamRef/ParameterManager abstractions so widgets, hooks, and animation all stay synchronized. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FloatSlider(...)
+            obj.set_modal_host(...)
+        
+        Discovery-oriented use::
+        
+            help(FloatSlider)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/parameter-key-semantics.md``.
+        - Guide: ``docs/guides/parameter-animation.md``.
+        - Runtime discovery tip: inspect ``fig.parameters``, ``ParamRef.capabilities``, and the slider/animation helpers together to understand the live parameter model.
+        - In a notebook or REPL, run ``help(FloatSlider)`` and ``dir(FloatSlider)`` to inspect adjacent members.
         """
         if host is self._modal_host:
             return

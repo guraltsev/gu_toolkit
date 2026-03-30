@@ -16,22 +16,69 @@ from typing import Any
 @dataclass(frozen=True)
 class PlotStyleSpec:
     """Structured metadata describing one accepted plot-style keyword.
-
+    
+    Full API
+    --------
+    ``PlotStyleSpec(name: str, aliases: tuple[str, Ellipsis]=(), type_doc: str='', default_doc: str='', description: str='', accepted_values: tuple[str, Ellipsis]=())``
+    
+    Public members exposed from this class: ``format_help``, ``format_alias_help``
+    
     Parameters
     ----------
-    name:
-        Canonical public keyword.
-    aliases:
-        Alternative keyword spellings accepted for compatibility.
-    type_doc:
-        Human-readable type description used in discoverability output.
-    default_doc:
-        Human-readable default behavior description.
-    description:
-        Plain-language explanation of what the keyword controls.
-    accepted_values:
-        Optional fixed set of accepted string values. When present, the same
-        metadata is used for both documentation and lightweight validation.
+    name : str
+        Human-readable or canonical name for the target object. Required.
+    
+    aliases : tuple[str, Ellipsis], optional
+        Value for ``aliases`` in this API. Defaults to ``()``.
+    
+    type_doc : str, optional
+        Value for ``type_doc`` in this API. Defaults to ``''``.
+    
+    default_doc : str, optional
+        Value for ``default_doc`` in this API. Defaults to ``''``.
+    
+    description : str, optional
+        Value for ``description`` in this API. Defaults to ``''``.
+    
+    accepted_values : tuple[str, Ellipsis], optional
+        Value for ``accepted_values`` in this API. Defaults to ``()``.
+    
+    Returns
+    -------
+    PlotStyleSpec
+        New ``PlotStyleSpec`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``aliases=()``: Value for ``aliases`` in this API.
+    - ``type_doc=''``: Value for ``type_doc`` in this API.
+    - ``default_doc=''``: Value for ``default_doc`` in this API.
+    - ``description=''``: Value for ``description`` in this API.
+    - ``accepted_values=()``: Value for ``accepted_values`` in this API.
+    
+    Architecture note
+    -----------------
+    ``PlotStyleSpec`` lives in ``gu_toolkit.figure_plot_style``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_plot_style import PlotStyleSpec
+        obj = PlotStyleSpec(...)
+    
+    Discovery-oriented use::
+    
+        help(PlotStyleSpec)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(PlotStyleSpec)`` and ``dir(PlotStyleSpec)`` to inspect adjacent members.
     """
 
     name: str
@@ -42,7 +89,49 @@ class PlotStyleSpec:
     accepted_values: tuple[str, ...] = ()
 
     def format_help(self) -> str:
-        """Return the user-facing help text for the canonical keyword."""
+        """Return the user-facing help text for the canonical keyword.
+        
+        Full API
+        --------
+        ``obj.format_help() -> str``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``PlotStyleSpec``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = PlotStyleSpec(...)
+            result = obj.format_help(...)
+        
+        Discovery-oriented use::
+        
+            help(PlotStyleSpec)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/legend-plot-editor.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+        - In a notebook or REPL, run ``help(PlotStyleSpec)`` and ``dir(PlotStyleSpec)`` to inspect adjacent members.
+        """
         parts: list[str] = [self.description.rstrip(".") + "."] if self.description else []
         if self.accepted_values:
             parts.append(
@@ -58,7 +147,50 @@ class PlotStyleSpec:
         return " ".join(parts)
 
     def format_alias_help(self, alias: str) -> str:
-        """Return help text for one alias keyword."""
+        """Return help text for one alias keyword.
+        
+        Full API
+        --------
+        ``obj.format_alias_help(alias: str) -> str``
+        
+        Parameters
+        ----------
+        alias : str
+            Value for ``alias`` in this API. Required.
+        
+        Returns
+        -------
+        str
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``PlotStyleSpec``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = PlotStyleSpec(...)
+            result = obj.format_alias_help(...)
+        
+        Discovery-oriented use::
+        
+            help(PlotStyleSpec)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/legend-plot-editor.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+        - In a notebook or REPL, run ``help(PlotStyleSpec)`` and ``dir(PlotStyleSpec)`` to inspect adjacent members.
+        """
         alias_name = str(alias)
         if alias_name not in self.aliases:
             raise KeyError(f"{alias_name!r} is not an alias of {self.name!r}")
@@ -149,12 +281,48 @@ _PLOT_STYLE_ALIAS_TO_CANONICAL = {
 
 def plot_style_option_docs(*, include_aliases: bool = True) -> dict[str, str]:
     """Return discoverability text for accepted plot-style keywords.
-
+    
+    Full API
+    --------
+    ``plot_style_option_docs(*, include_aliases: bool=True) -> dict[str, str]``
+    
     Parameters
     ----------
-    include_aliases:
-        When ``True``, include explicit entries for compatibility aliases such
-        as ``width`` and ``alpha``.
+    include_aliases : bool, optional
+        Value for ``include_aliases`` in this API. Defaults to ``True``.
+    
+    Returns
+    -------
+    dict[str, str]
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``include_aliases=True``: Value for ``include_aliases`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_plot_style``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_plot_style import plot_style_option_docs
+        result = plot_style_option_docs(...)
+    
+    Discovery-oriented use::
+    
+        help(plot_style_option_docs)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(plot_style_option_docs)`` and inspect sibling APIs in the same module.
     """
     docs: dict[str, str] = {}
     for spec in PLOT_STYLE_OPTIONS:
@@ -169,15 +337,51 @@ def resolve_style_kwargs(
     style_kwargs: dict[str, Any], *, caller: str = "plot()"
 ) -> dict[str, Any]:
     """Resolve alias keywords in ``style_kwargs`` into canonical names.
-
-    The returned dictionary preserves all non-style keys untouched and removes
-    alias keys once they have been folded into their canonical equivalents.
-
-    Raises
-    ------
-    ValueError
-        If a canonical keyword and one of its aliases are provided with
-        different values.
+    
+    Full API
+    --------
+    ``resolve_style_kwargs(style_kwargs: dict[str, Any], *, caller: str='plot()') -> dict[str, Any]``
+    
+    Parameters
+    ----------
+    style_kwargs : dict[str, Any]
+        Value for ``style_kwargs`` in this API. Required.
+    
+    caller : str, optional
+        Value for ``caller`` in this API. Defaults to ``'plot()'``.
+    
+    Returns
+    -------
+    dict[str, Any]
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``caller='plot()'``: Value for ``caller`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_plot_style``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_plot_style import resolve_style_kwargs
+        result = resolve_style_kwargs(...)
+    
+    Discovery-oriented use::
+    
+        help(resolve_style_kwargs)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(resolve_style_kwargs)`` and inspect sibling APIs in the same module.
     """
     resolved = dict(style_kwargs)
 
@@ -207,11 +411,51 @@ def validate_style_kwargs(
     style_kwargs: dict[str, Any], *, caller: str = "plot()"
 ) -> dict[str, Any]:
     """Resolve aliases and validate metadata-driven style constraints.
-
-    Validation is intentionally lightweight and only enforces constraints that
-    are encoded in :data:`PLOT_STYLE_OPTIONS`, such as the fixed set of
-    accepted ``dash`` values. More specialized validation (for example Plotly's
-    own field-level checks) remains the responsibility of downstream code.
+    
+    Full API
+    --------
+    ``validate_style_kwargs(style_kwargs: dict[str, Any], *, caller: str='plot()') -> dict[str, Any]``
+    
+    Parameters
+    ----------
+    style_kwargs : dict[str, Any]
+        Value for ``style_kwargs`` in this API. Required.
+    
+    caller : str, optional
+        Value for ``caller`` in this API. Defaults to ``'plot()'``.
+    
+    Returns
+    -------
+    dict[str, Any]
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``caller='plot()'``: Value for ``caller`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_plot_style``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_plot_style import validate_style_kwargs
+        result = validate_style_kwargs(...)
+    
+    Discovery-oriented use::
+    
+        help(validate_style_kwargs)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(validate_style_kwargs)`` and inspect sibling APIs in the same module.
     """
     resolved = resolve_style_kwargs(style_kwargs, caller=caller)
     for name, value in tuple(resolved.items()):
@@ -236,10 +480,60 @@ def resolve_style_aliases(
     caller: str = "plot()",
 ) -> tuple[int | float | None, int | float | None]:
     """Resolve supported alias pairs into canonical values.
-
-    This compatibility helper preserves the pre-refactor return shape used by a
-    few internal call sites while delegating the actual alias policy to the
-    structured metadata in :data:`PLOT_STYLE_OPTIONS`.
+    
+    Full API
+    --------
+    ``resolve_style_aliases(*, thickness: int | float | None, width: int | float | None, opacity: int | float | None, alpha: int | float | None, caller: str='plot()') -> tuple[int | float | None, int | float | None]``
+    
+    Parameters
+    ----------
+    thickness : int | float | None
+        Value for ``thickness`` in this API. Required.
+    
+    width : int | float | None
+        Value for ``width`` in this API. Required.
+    
+    opacity : int | float | None
+        Opacity value applied to the rendered output. Required.
+    
+    alpha : int | float | None
+        Value for ``alpha`` in this API. Required.
+    
+    caller : str, optional
+        Value for ``caller`` in this API. Defaults to ``'plot()'``.
+    
+    Returns
+    -------
+    tuple[int | float | None, int | float | None]
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``caller='plot()'``: Value for ``caller`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_plot_style``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_plot_style import resolve_style_aliases
+        result = resolve_style_aliases(...)
+    
+    Discovery-oriented use::
+    
+        help(resolve_style_aliases)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(resolve_style_aliases)`` and inspect sibling APIs in the same module.
     """
     resolved = resolve_style_kwargs(
         {

@@ -146,18 +146,62 @@ def _symbol_ref(sym: Symbol) -> str:
 @dataclass(frozen=True)
 class CodegenOptions:
     """Configuration knobs for :func:`figure_to_code`.
-
+    
+    Full API
+    --------
+    ``CodegenOptions(include_imports: bool=True, include_symbol_definitions: bool=True, interface_style: Literal['figure_methods', 'context_manager']='context_manager', include_dynamic_info_as_commented_blocks: bool=True)``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
     Parameters
     ----------
     include_imports : bool, optional
-        Whether to emit the import preamble.
+        Value for ``include_imports`` in this API. Defaults to ``True``.
+    
     include_symbol_definitions : bool, optional
-        Whether to emit ``sp.Symbol`` declarations.
-    interface_style : {"figure_methods", "context_manager"}, optional
-        Emission style for figure operations.
+        Value for ``include_symbol_definitions`` in this API. Defaults to ``True``.
+    
+    interface_style : Literal['figure_methods', 'context_manager'], optional
+        Value for ``interface_style`` in this API. Defaults to ``'context_manager'``.
+    
     include_dynamic_info_as_commented_blocks : bool, optional
-        Whether dynamic ``fig.info(...)`` cards should be rendered as commented
-        code blocks with recovery guidance.
+        Value for ``include_dynamic_info_as_commented_blocks`` in this API. Defaults to ``True``.
+    
+    Returns
+    -------
+    CodegenOptions
+        New ``CodegenOptions`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``include_imports=True``: Value for ``include_imports`` in this API.
+    - ``include_symbol_definitions=True``: Value for ``include_symbol_definitions`` in this API.
+    - ``interface_style='context_manager'``: Value for ``interface_style`` in this API.
+    - ``include_dynamic_info_as_commented_blocks=True``: Value for ``include_dynamic_info_as_commented_blocks`` in this API.
+    
+    Architecture note
+    -----------------
+    ``CodegenOptions`` lives in ``gu_toolkit.codegen``. Snapshots define the stable boundary between live notebook state and reproducible export/code-generation workflows. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.codegen import CodegenOptions
+        obj = CodegenOptions(...)
+    
+    Discovery-oriented use::
+    
+        help(CodegenOptions)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/render-batching-and-snapshots.md``.
+    - Regression/spec tests: ``tests/test_figure_snapshot_codegen.py``.
+    - Runtime discovery tip: create a snapshot in a notebook and inspect ``help(FigureSnapshot)`` or the generated code helpers side by side.
+    - In a notebook or REPL, run ``help(CodegenOptions)`` and ``dir(CodegenOptions)`` to inspect adjacent members.
     """
 
     include_imports: bool = True
@@ -175,28 +219,48 @@ class CodegenOptions:
 
 def sympy_to_code(expr: Expr) -> str:
     """Convert a SymPy expression to a Python source fragment.
-
-    The returned string is valid Python when evaluated in a scope where
-    ``import sympy as sp`` has been executed. Symbols with valid Python names
-    are emitted as bare locals; symbols with non-Python names are emitted
-    inline as ``sp.Symbol(...)`` expressions.
-
+    
+    Full API
+    --------
+    ``sympy_to_code(expr: Expr) -> str``
+    
     Parameters
     ----------
-    expr : sympy.Expr
-        The symbolic expression to convert.
-
+    expr : Expr
+        Symbolic expression payload. Required.
+    
     Returns
     -------
     str
-        Python source fragment.
-
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.codegen``. Snapshots define the stable boundary between live notebook state and reproducible export/code-generation workflows.
+    
     Examples
     --------
-    >>> import sympy as sp
-    >>> x, a = sp.symbols("x a")
-    >>> sympy_to_code(a * sp.sin(x) + 1)
-    'a*sp.sin(x) + 1'
+    Basic use::
+    
+        from gu_toolkit.codegen import sympy_to_code
+        result = sympy_to_code(...)
+    
+    Discovery-oriented use::
+    
+        help(sympy_to_code)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/render-batching-and-snapshots.md``.
+    - Regression/spec tests: ``tests/test_figure_snapshot_codegen.py``.
+    - Runtime discovery tip: create a snapshot in a notebook and inspect ``help(FigureSnapshot)`` or the generated code helpers side by side.
+    - In a notebook or REPL, run ``help(sympy_to_code)`` and inspect sibling APIs in the same module.
     """
     return _printer.doprint(expr)
 
@@ -518,22 +582,51 @@ def figure_to_code(
     snapshot: FigureSnapshot, options: CodegenOptions | None = None
 ) -> str:
     """Generate a self-contained Python script from a :class:`FigureSnapshot`.
-
-    The returned string, when executed in a Jupyter notebook or Python REPL
-    with ``gu_toolkit`` installed, recreates the figure with identical plots,
-    parameter values/ranges, styling, and static info cards.
-
+    
+    Full API
+    --------
+    ``figure_to_code(snapshot: FigureSnapshot, options: CodegenOptions | None=None) -> str``
+    
     Parameters
     ----------
     snapshot : FigureSnapshot
-        Immutable figure state captured via :meth:`Figure.snapshot`.
+        Snapshot object or snapshot payload used by this API. Required.
+    
     options : CodegenOptions | None, optional
-        Optional output-style and serialization policy configuration.
-
+        Value for ``options`` in this API. Defaults to ``None``.
+    
     Returns
     -------
     str
-        Complete Python source code.
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``options=None``: Value for ``options`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.codegen``. Snapshots define the stable boundary between live notebook state and reproducible export/code-generation workflows.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.codegen import figure_to_code
+        result = figure_to_code(...)
+    
+    Discovery-oriented use::
+    
+        help(figure_to_code)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/render-batching-and-snapshots.md``.
+    - Regression/spec tests: ``tests/test_figure_snapshot_codegen.py``.
+    - Runtime discovery tip: create a snapshot in a notebook and inspect ``help(FigureSnapshot)`` or the generated code helpers side by side.
+    - In a notebook or REPL, run ``help(figure_to_code)`` and inspect sibling APIs in the same module.
     """
     options = options or CodegenOptions()
     lines: list[str] = []

@@ -15,13 +15,57 @@ from typing import Any
 
 from ._widget_stubs import widgets
 from .ui_system import build_layout, build_section_panel, load_ui_css, shared_style_widget
-from IPython.display import display
+from IPython.display import clear_output, display
 
 from .layout_logging import layout_value_snapshot
 
 
 class OneShotOutput(widgets.Output):
-    """An ``Output`` widget that raises when displayed more than once."""
+    """An ``Output`` widget that raises when displayed more than once.
+    
+    Full API
+    --------
+    ``OneShotOutput()``
+    
+    Public members exposed from this class: ``has_been_displayed``, ``reset_display_state``
+    
+    Parameters
+    ----------
+    None. This API does not declare user-supplied parameters beyond implicit object context.
+    
+    Returns
+    -------
+    OneShotOutput
+        New ``OneShotOutput`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    ``OneShotOutput`` lives in ``gu_toolkit.figure_layout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_layout import OneShotOutput
+        obj = OneShotOutput(...)
+    
+    Discovery-oriented use::
+    
+        help(OneShotOutput)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/develop_guide.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+    - In a notebook or REPL, run ``help(OneShotOutput)`` and ``dir(OneShotOutput)`` to inspect adjacent members.
+    """
 
     __slots__ = ("_displayed",)
 
@@ -42,9 +86,97 @@ class OneShotOutput(widgets.Output):
 
     @property
     def has_been_displayed(self) -> bool:
+        """Return whether been displayed.
+        
+        Full API
+        --------
+        ``obj.has_been_displayed -> bool``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``OneShotOutput``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = OneShotOutput(...)
+            current = obj.has_been_displayed
+        
+        Discovery-oriented use::
+        
+            help(OneShotOutput)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(OneShotOutput)`` and ``dir(OneShotOutput)`` to inspect adjacent members.
+        """
+
         return self._displayed
 
     def reset_display_state(self) -> None:
+        """Work with reset display state on ``OneShotOutput``.
+        
+        Full API
+        --------
+        ``obj.reset_display_state() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``OneShotOutput``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = OneShotOutput(...)
+            obj.reset_display_state(...)
+        
+        Discovery-oriented use::
+        
+            help(OneShotOutput)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(OneShotOutput)`` and ``dir(OneShotOutput)`` to inspect adjacent members.
+        """
+
         self._displayed = False
 
 
@@ -59,7 +191,58 @@ class _ViewPage:
 
 
 class FigureLayout:
-    """Own the widget tree used by a figure instance."""
+    """Own the widget tree used by a figure instance.
+    
+    Full API
+    --------
+    ``FigureLayout(title: str='')``
+    
+    Public members exposed from this class: ``bind_layout_debug``, ``bind_reflow_request``, ``output_widget``, ``layout_snapshot``,
+        ``set_title``, ``get_title``, ``update_sidebar_visibility``, ``ensure_view_page``,
+        ``attach_view_widget``, ``remove_view_page``, ``set_view_order``,
+        ``set_active_view``, ``set_view_title``, ``observe_view_selection``,
+        ``observe_full_width_change``, ``bind_view_reflow``, ``content_layout_mode``,
+        ``set_plot_widget``, ``set_view_plot_widget``, ``set_view_tabs``,
+        ``trigger_reflow_for_view``, ``observe_tab_selection``
+    
+    Parameters
+    ----------
+    title : str, optional
+        Human-readable title text shown in the UI or stored in snapshots. Defaults to ``''``.
+    
+    Returns
+    -------
+    FigureLayout
+        New ``FigureLayout`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``title=''``: Human-readable title text shown in the UI or stored in snapshots.
+    
+    Architecture note
+    -----------------
+    ``FigureLayout`` lives in ``gu_toolkit.figure_layout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_layout import FigureLayout
+        obj = FigureLayout(...)
+    
+    Discovery-oriented use::
+    
+        help(FigureLayout)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/develop_guide.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+    - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+    """
 
     _STYLE_CSS = load_ui_css("figure_layout.css")
 
@@ -247,6 +430,54 @@ class FigureLayout:
         )
 
     def bind_layout_debug(self, emitter: Callable[..., Any], **base_fields: Any) -> None:
+        """Bind layout debug.
+        
+        Full API
+        --------
+        ``obj.bind_layout_debug(emitter: Callable[..., Any], **base_fields: Any) -> None``
+        
+        Parameters
+        ----------
+        emitter : Callable[Ellipsis, Any]
+            Value for ``emitter`` in this API. Required.
+        
+        **base_fields : Any, optional
+            Additional keyword arguments forwarded by this API. Optional variadic input.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        - ``**base_fields``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.bind_layout_debug(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
+
         self._layout_event_emitter = emitter
         self._layout_event_base = dict(base_fields)
 
@@ -258,18 +489,147 @@ class FigureLayout:
         self._layout_event_emitter(event=event, source="FigureLayout", phase=phase, **payload)
 
     def bind_reflow_request(self, callback: Callable[[str, str], Any] | None) -> None:
-        """Backward-compatible alias for :meth:`bind_view_reflow`."""
+        """Backward-compatible alias for :meth:`bind_view_reflow`.
+        
+        Full API
+        --------
+        ``obj.bind_reflow_request(callback: Callable[[str, str], Any] | None) -> None``
+        
+        Parameters
+        ----------
+        callback : Callable[[str, str], Any] | None
+            Callable that is invoked when the relevant event fires. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.bind_reflow_request(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
         self._reflow_callback = callback
 
     @property
     def output_widget(self) -> OneShotOutput:
+        """Work with output widget on ``FigureLayout``.
+        
+        Full API
+        --------
+        ``obj.output_widget -> OneShotOutput``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        OneShotOutput
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            current = obj.output_widget
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
+
         out = OneShotOutput()
         with out:
             display(self.root_widget)
         return out
 
     def layout_snapshot(self) -> dict[str, Any]:
-        """Return a structural snapshot of the figure layout widget tree."""
+        """Return a structural snapshot of the figure layout widget tree.
+        
+        Full API
+        --------
+        ``obj.layout_snapshot() -> dict[str, Any]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        dict[str, Any]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            result = obj.layout_snapshot(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
         pages = {
             view_id: {
                 "title": page.title,
@@ -309,15 +669,153 @@ class FigureLayout:
         }
 
     def set_title(self, text: str) -> None:
+        """Set title.
+        
+        Full API
+        --------
+        ``obj.set_title(text: str) -> None``
+        
+        Parameters
+        ----------
+        text : str
+            Human-readable text payload or label content. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.set_title(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
+
         self.title_html.value = text
 
     def get_title(self) -> str:
+        """Return title.
+        
+        Full API
+        --------
+        ``obj.get_title() -> str``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            result = obj.get_title(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
+
         return self.title_html.value
 
     def update_sidebar_visibility(
         self, has_params: bool, has_info: bool, has_legend: bool
     ) -> bool:
-        """Apply sidebar section visibility and report geometry changes."""
+        """Apply sidebar section visibility and report geometry changes.
+        
+        Full API
+        --------
+        ``obj.update_sidebar_visibility(has_params: bool, has_info: bool, has_legend: bool) -> bool``
+        
+        Parameters
+        ----------
+        has_params : bool
+            Boolean flag or query related to availability of params. Required.
+        
+        has_info : bool
+            Boolean flag or query related to availability of info. Required.
+        
+        has_legend : bool
+            Boolean flag or query related to availability of legend. Required.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            result = obj.update_sidebar_visibility(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
         old_state = (
             self.params_header.layout.display,
             self.params_panel.panel.layout.display,
@@ -358,7 +856,53 @@ class FigureLayout:
         return changed
 
     def ensure_view_page(self, view_id: str, title: str) -> None:
-        """Ensure a persistent host page exists for ``view_id``."""
+        """Ensure a persistent host page exists for ``view_id``.
+        
+        Full API
+        --------
+        ``obj.ensure_view_page(view_id: str, title: str) -> None``
+        
+        Parameters
+        ----------
+        view_id : str
+            Identifier for the relevant view inside a figure. Required.
+        
+        title : str
+            Human-readable title text shown in the UI or stored in snapshots. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.ensure_view_page(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
         key = str(view_id)
         previous_order = self._ordered_view_ids
         page = self._view_pages.get(key)
@@ -411,7 +955,53 @@ class FigureLayout:
         self._apply_active_page_visibility()
 
     def attach_view_widget(self, view_id: str, widget: widgets.Widget) -> None:
-        """Attach ``widget`` to the persistent page for ``view_id``."""
+        """Attach ``widget`` to the persistent page for ``view_id``.
+        
+        Full API
+        --------
+        ``obj.attach_view_widget(view_id: str, widget: widgets.Widget) -> None``
+        
+        Parameters
+        ----------
+        view_id : str
+            Identifier for the relevant view inside a figure. Required.
+        
+        widget : widgets.Widget
+            Widget/control instance associated with this API. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.attach_view_widget(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
         key = str(view_id)
         if key in self._view_pages:
             title = self._view_pages[key].title
@@ -419,12 +1009,78 @@ class FigureLayout:
             title = key
         self.ensure_view_page(key, title=title)
         page = self._view_pages[key]
-        page.widget = widget
-        page.host_box.children = (widget,)
+        attached_widget: widgets.Widget
+        if isinstance(widget, widgets.Widget):
+            attached_widget = widget
+        else:
+            fallback = widgets.Output(
+                layout=build_layout(
+                    width="100%",
+                    height="100%",
+                    min_width="0",
+                    min_height="0",
+                    overflow="hidden",
+                )
+            )
+            add_class = getattr(fallback, "add_class", None)
+            if callable(add_class):
+                add_class("gu-figure-view-fallback-output")
+            try:
+                with fallback:
+                    clear_output(wait=True)
+                    display(widget)
+            except Exception:
+                pass
+            attached_widget = fallback
+        page.widget = attached_widget
+        page.host_box.children = (attached_widget,)
         self._emit_layout_event("view_widget_attached", phase="completed", view_id=view_id, widget_type=type(widget).__name__)
 
     def remove_view_page(self, view_id: str) -> None:
-        """Remove page bookkeeping for ``view_id`` if present."""
+        """Remove page bookkeeping for ``view_id`` if present.
+        
+        Full API
+        --------
+        ``obj.remove_view_page(view_id: str) -> None``
+        
+        Parameters
+        ----------
+        view_id : str
+            Identifier for the relevant view inside a figure. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.remove_view_page(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
         key = str(view_id)
         previous_order = self._ordered_view_ids
         page = self._view_pages.pop(key, None)
@@ -448,7 +1104,50 @@ class FigureLayout:
         self._apply_active_page_visibility()
 
     def set_view_order(self, view_ids: Sequence[str]) -> None:
-        """Set the visual order of registered view pages."""
+        """Set the visual order of registered view pages.
+        
+        Full API
+        --------
+        ``obj.set_view_order(view_ids: Sequence[str]) -> None``
+        
+        Parameters
+        ----------
+        view_ids : Sequence[str]
+            Collection of view identifiers associated with this object or update. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.set_view_order(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
         ordered = tuple(str(view_id) for view_id in view_ids if str(view_id) in self._view_pages)
         if ordered == self._ordered_view_ids:
             self._refresh_view_selector()
@@ -462,7 +1161,50 @@ class FigureLayout:
         self._apply_active_page_visibility()
 
     def set_active_view(self, view_id: str) -> None:
-        """Show only the active view page and sync selector selection."""
+        """Show only the active view page and sync selector selection.
+        
+        Full API
+        --------
+        ``obj.set_active_view(view_id: str) -> None``
+        
+        Parameters
+        ----------
+        view_id : str
+            Identifier for the relevant view inside a figure. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.set_active_view(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
         key = str(view_id)
         if key not in self._view_pages:
             raise KeyError(f"Unknown view page: {key}")
@@ -471,7 +1213,53 @@ class FigureLayout:
         self._refresh_view_selector()
 
     def set_view_title(self, view_id: str, title: str) -> None:
-        """Update the selector title for ``view_id``."""
+        """Update the selector title for ``view_id``.
+        
+        Full API
+        --------
+        ``obj.set_view_title(view_id: str, title: str) -> None``
+        
+        Parameters
+        ----------
+        view_id : str
+            Identifier for the relevant view inside a figure. Required.
+        
+        title : str
+            Human-readable title text shown in the UI or stored in snapshots. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.set_view_title(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
         page = self._view_pages.get(str(view_id))
         if page is None:
             return
@@ -479,7 +1267,50 @@ class FigureLayout:
         self._refresh_view_selector()
 
     def observe_view_selection(self, callback: Callable[[str], None]) -> None:
-        """Call ``callback`` whenever the selector chooses a new view."""
+        """Call ``callback`` whenever the selector chooses a new view.
+        
+        Full API
+        --------
+        ``obj.observe_view_selection(callback: Callable[[str], None]) -> None``
+        
+        Parameters
+        ----------
+        callback : Callable[[str], None]
+            Callable that is invoked when the relevant event fires. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.observe_view_selection(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
 
         def _on_selection(change: dict[str, Any]) -> None:
             if self._suspend_view_selector_events:
@@ -492,7 +1323,50 @@ class FigureLayout:
         self.view_selector.observe(_on_selection, names="value")
 
     def observe_full_width_change(self, callback: Callable[[bool], None]) -> None:
-        """Observe full-width layout toggle changes."""
+        """Observe full-width layout toggle changes.
+        
+        Full API
+        --------
+        ``obj.observe_full_width_change(callback: Callable[[bool], None]) -> None``
+        
+        Parameters
+        ----------
+        callback : Callable[[bool], None]
+            Callable that is invoked when the relevant event fires. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.observe_full_width_change(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
 
         def _on_full_width(change: dict[str, Any]) -> None:
             callback(bool(change.get("new")))
@@ -500,12 +1374,97 @@ class FigureLayout:
         self.full_width_checkbox.observe(_on_full_width, names="value")
 
     def bind_view_reflow(self, callback: Callable[[str, str], Any]) -> None:
-        """Register a callback used by compatibility reflow wrappers."""
+        """Register a callback used by compatibility reflow wrappers.
+        
+        Full API
+        --------
+        ``obj.bind_view_reflow(callback: Callable[[str, str], Any]) -> None``
+        
+        Parameters
+        ----------
+        callback : Callable[[str, str], Any]
+            Callable that is invoked when the relevant event fires. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.bind_view_reflow(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
         self._reflow_callback = callback
 
     @property
     def content_layout_mode(self) -> str:
-        """Return the current high-level content layout mode."""
+        """Return the current high-level content layout mode.
+        
+        Full API
+        --------
+        ``obj.content_layout_mode -> str``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            current = obj.content_layout_mode
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
         return self._content_layout_mode
 
     # ------------------------------------------------------------------
@@ -518,6 +1477,54 @@ class FigureLayout:
         *,
         reflow_callback: Callable[[], None] | None = None,
     ) -> None:
+        """Set plot widget.
+        
+        Full API
+        --------
+        ``obj.set_plot_widget(widget: widgets.Widget, *, reflow_callback: Callable[[], None] | None=None) -> None``
+        
+        Parameters
+        ----------
+        widget : widgets.Widget
+            Widget/control instance associated with this API. Required.
+        
+        reflow_callback : Callable[[], None] | None, optional
+            Value for ``reflow_callback`` in this API. Defaults to ``None``.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        - ``reflow_callback=None``: Value for ``reflow_callback`` in this API.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.set_plot_widget(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
+
         if reflow_callback is not None:
             self.bind_view_reflow(lambda _view_id, _reason: reflow_callback())
         self.ensure_view_page("main", "main")
@@ -532,16 +1539,160 @@ class FigureLayout:
         *,
         reflow_callback: Callable[[], None] | None = None,
     ) -> None:
+        """Set view plot widget.
+        
+        Full API
+        --------
+        ``obj.set_view_plot_widget(view_id: str, widget: widgets.Widget, *, reflow_callback: Callable[[], None] | None=None) -> None``
+        
+        Parameters
+        ----------
+        view_id : str
+            Identifier for the relevant view inside a figure. Required.
+        
+        widget : widgets.Widget
+            Widget/control instance associated with this API. Required.
+        
+        reflow_callback : Callable[[], None] | None, optional
+            Value for ``reflow_callback`` in this API. Defaults to ``None``.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        - ``reflow_callback=None``: Value for ``reflow_callback`` in this API.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.set_view_plot_widget(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
+
         if reflow_callback is not None:
             self.bind_view_reflow(lambda _view_id, _reason: reflow_callback())
         self.ensure_view_page(str(view_id), str(view_id))
         self.attach_view_widget(str(view_id), widget)
 
     def set_view_tabs(self, view_ids: Sequence[str], *, active_view_id: str) -> None:
+        """Set view tabs.
+        
+        Full API
+        --------
+        ``obj.set_view_tabs(view_ids: Sequence[str], *, active_view_id: str) -> None``
+        
+        Parameters
+        ----------
+        view_ids : Sequence[str]
+            Collection of view identifiers associated with this object or update. Required.
+        
+        active_view_id : str
+            Identifier for the currently selected view. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.set_view_tabs(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
+
         self.set_view_order(view_ids)
         self.set_active_view(active_view_id)
 
     def trigger_reflow_for_view(self, view_id: str) -> None:
+        """Work with trigger reflow for view on ``FigureLayout``.
+        
+        Full API
+        --------
+        ``obj.trigger_reflow_for_view(view_id: str) -> None``
+        
+        Parameters
+        ----------
+        view_id : str
+            Identifier for the relevant view inside a figure. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.trigger_reflow_for_view(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
+
         key = str(view_id)
         if self._reflow_callback is None:
             self._emit_layout_event(
@@ -561,6 +1712,51 @@ class FigureLayout:
         return None
 
     def observe_tab_selection(self, callback: Callable[[str], None]) -> None:
+        """Observe tab selection.
+        
+        Full API
+        --------
+        ``obj.observe_tab_selection(callback: Callable[[str], None]) -> None``
+        
+        Parameters
+        ----------
+        callback : Callable[[str], None]
+            Callable that is invoked when the relevant event fires. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureLayout``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureLayout(...)
+            obj.observe_tab_selection(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureLayout)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
+        """
+
         self.observe_view_selection(callback)
 
     # ------------------------------------------------------------------

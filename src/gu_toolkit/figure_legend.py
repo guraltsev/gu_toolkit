@@ -555,7 +555,77 @@ class _LegendInteractionBridge(anywidget.AnyWidget):
 
 @dataclass
 class LegendRowModel:
-    """Widget and state bundle for one legend row bound to a plot id."""
+    """Widget and state bundle for one legend row bound to a plot id.
+    
+    Full API
+    --------
+    ``LegendRowModel(plot_id: str, container: widgets.HBox, toggle: widgets.ToggleButton, label_widget: widgets.HTMLMath, sound_button: widgets.Button, style_widget: widgets.HTML, css_plot_id: str, edit_button: widgets.Button | None=None, is_visible_for_active_view: bool=False)``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
+    Parameters
+    ----------
+    plot_id : str
+        Stable plot identifier used for lookup or update. Required.
+    
+    container : widgets.HBox
+        Value for ``container`` in this API. Required.
+    
+    toggle : widgets.ToggleButton
+        Value for ``toggle`` in this API. Required.
+    
+    label_widget : widgets.HTMLMath
+        Value for ``label_widget`` in this API. Required.
+    
+    sound_button : widgets.Button
+        Value for ``sound_button`` in this API. Required.
+    
+    style_widget : widgets.HTML
+        Value for ``style_widget`` in this API. Required.
+    
+    css_plot_id : str
+        Value for ``css_plot_id`` in this API. Required.
+    
+    edit_button : widgets.Button | None, optional
+        Value for ``edit_button`` in this API. Defaults to ``None``.
+    
+    is_visible_for_active_view : bool, optional
+        Boolean flag or query related to visible for active view. Defaults to ``False``.
+    
+    Returns
+    -------
+    LegendRowModel
+        New ``LegendRowModel`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``edit_button=None``: Value for ``edit_button`` in this API.
+    - ``is_visible_for_active_view=False``: Boolean flag or query related to visible for active view.
+    
+    Architecture note
+    -----------------
+    ``LegendRowModel`` lives in ``gu_toolkit.figure_legend``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_legend import LegendRowModel
+        obj = LegendRowModel(...)
+    
+    Discovery-oriented use::
+    
+        help(LegendRowModel)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/develop_guide.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+    - In a notebook or REPL, run ``help(LegendRowModel)`` and ``dir(LegendRowModel)`` to inspect adjacent members.
+    """
 
     plot_id: str
     container: widgets.HBox
@@ -571,11 +641,62 @@ class LegendRowModel:
 @dataclass(frozen=True)
 class LegendStyleDialogState:
     """Snapshot of the dialog controls loaded from a plot.
-
-    The dialog now behaves like a traditional modal editor: the user can adjust
-    fields, confirm with **OK**, or dismiss with Escape / backdrop / close.
-    Capturing the loaded state lets the manager preserve untouched plot fields
-    exactly as they were instead of rewriting them on every widget edit.
+    
+    Full API
+    --------
+    ``LegendStyleDialogState(picker_color: str, width: float, opacity: float, dash: str, autonormalization: bool)``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
+    Parameters
+    ----------
+    picker_color : str
+        Value for ``picker_color`` in this API. Required.
+    
+    width : float
+        Value for ``width`` in this API. Required.
+    
+    opacity : float
+        Opacity value applied to the rendered output. Required.
+    
+    dash : str
+        Dash pattern used for contour or curve rendering. Required.
+    
+    autonormalization : bool
+        Value for ``autonormalization`` in this API. Required.
+    
+    Returns
+    -------
+    LegendStyleDialogState
+        New ``LegendStyleDialogState`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    ``LegendStyleDialogState`` lives in ``gu_toolkit.figure_legend``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_legend import LegendStyleDialogState
+        obj = LegendStyleDialogState(...)
+    
+    Discovery-oriented use::
+    
+        help(LegendStyleDialogState)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/develop_guide.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+    - In a notebook or REPL, run ``help(LegendStyleDialogState)`` and ``dir(LegendStyleDialogState)`` to inspect adjacent members.
     """
 
     picker_color: str
@@ -586,7 +707,70 @@ class LegendStyleDialogState:
 
 
 class LegendPanelManager:
-    """Manage legend sidebar rows and synchronize them with plot lifecycle events."""
+    """Manage legend sidebar rows and synchronize them with plot lifecycle events.
+    
+    Full API
+    --------
+    ``LegendPanelManager(layout_box: widgets.Box, modal_host: widgets.Box | None=None, root_widget: widgets.Box | None=None, header_toolbar: widgets.Box | None=None, enable_plot_editor: bool=False)``
+    
+    Public members exposed from this class: ``has_legend``, ``panel_visible``, ``bind_plot_editor_handler``,
+        ``bind_sound_enabled_handler``, ``set_sound_generation_enabled``,
+        ``set_sound_playing_plot``, ``on_plot_added``, ``on_plot_updated``,
+        ``on_plot_removed``, ``set_active_view``, ``refresh``
+    
+    Parameters
+    ----------
+    layout_box : widgets.Box
+        Value for ``layout_box`` in this API. Required.
+    
+    modal_host : widgets.Box | None, optional
+        Value for ``modal_host`` in this API. Defaults to ``None``.
+    
+    root_widget : widgets.Box | None, optional
+        Value for ``root_widget`` in this API. Defaults to ``None``.
+    
+    header_toolbar : widgets.Box | None, optional
+        Value for ``header_toolbar`` in this API. Defaults to ``None``.
+    
+    enable_plot_editor : bool, optional
+        Value for ``enable_plot_editor`` in this API. Defaults to ``False``.
+    
+    Returns
+    -------
+    LegendPanelManager
+        New ``LegendPanelManager`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``modal_host=None``: Value for ``modal_host`` in this API.
+    - ``root_widget=None``: Value for ``root_widget`` in this API.
+    - ``header_toolbar=None``: Value for ``header_toolbar`` in this API.
+    - ``enable_plot_editor=False``: Value for ``enable_plot_editor`` in this API.
+    
+    Architecture note
+    -----------------
+    ``LegendPanelManager`` lives in ``gu_toolkit.figure_legend``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_legend import LegendPanelManager
+        obj = LegendPanelManager(...)
+    
+    Discovery-oriented use::
+    
+        help(LegendPanelManager)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/develop_guide.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+    - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
+    """
 
     def __init__(
         self,
@@ -830,19 +1014,146 @@ class LegendPanelManager:
 
     @property
     def has_legend(self) -> bool:
-        """Return ``True`` when at least one row is visible for the active view."""
+        """Return ``True`` when at least one row is visible for the active view.
+        
+        Full API
+        --------
+        ``obj.has_legend -> bool``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``LegendPanelManager``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = LegendPanelManager(...)
+            current = obj.has_legend
+        
+        Discovery-oriented use::
+        
+            help(LegendPanelManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
+        """
         return any(row.is_visible_for_active_view for row in self._rows.values())
 
     @property
     def panel_visible(self) -> bool:
-        """Return whether the legend panel should occupy sidebar space."""
+        """Return whether the legend panel should occupy sidebar space.
+        
+        Full API
+        --------
+        ``obj.panel_visible -> bool``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``LegendPanelManager``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = LegendPanelManager(...)
+            current = obj.panel_visible
+        
+        Discovery-oriented use::
+        
+            help(LegendPanelManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
+        """
 
         return self._enable_plot_editor or self.has_legend
 
     def bind_plot_editor_handler(
         self, callback: Callable[[str | None], None] | None
     ) -> None:
-        """Bind the callback used by add/edit plot controls."""
+        """Bind the callback used by add/edit plot controls.
+        
+        Full API
+        --------
+        ``obj.bind_plot_editor_handler(callback: Callable[[str | None], None] | None) -> None``
+        
+        Parameters
+        ----------
+        callback : Callable[[str | None], None] | None
+            Callable that is invoked when the relevant event fires. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``LegendPanelManager``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = LegendPanelManager(...)
+            obj.bind_plot_editor_handler(...)
+        
+        Discovery-oriented use::
+        
+            help(LegendPanelManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
+        """
 
         self._plot_editor_handler = callback
         if self._plot_add_button is not None:
@@ -852,22 +1163,194 @@ class LegendPanelManager:
                 row.edit_button.disabled = callback is None
 
     def bind_sound_enabled_handler(self, callback: Any) -> None:
-        """Bind the figure-level sound enable/disable handler."""
+        """Bind the figure-level sound enable/disable handler.
+        
+        Full API
+        --------
+        ``obj.bind_sound_enabled_handler(callback: Any) -> None``
+        
+        Parameters
+        ----------
+        callback : Any
+            Callable that is invoked when the relevant event fires. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``LegendPanelManager``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = LegendPanelManager(...)
+            obj.bind_sound_enabled_handler(...)
+        
+        Discovery-oriented use::
+        
+            help(LegendPanelManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
+        """
         self._sound_enabled_handler = callback
 
     def set_sound_generation_enabled(self, enabled: bool) -> None:
-        """Show or hide per-row sound controls."""
+        """Show or hide per-row sound controls.
+        
+        Full API
+        --------
+        ``obj.set_sound_generation_enabled(enabled: bool) -> None``
+        
+        Parameters
+        ----------
+        enabled : bool
+            Boolean flag that turns a feature on or off. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``LegendPanelManager``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = LegendPanelManager(...)
+            obj.set_sound_generation_enabled(...)
+        
+        Discovery-oriented use::
+        
+            help(LegendPanelManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
+        """
         self._sound_generation_enabled = bool(enabled)
         self._context_bridge.sound_enabled = self._sound_generation_enabled
         self.refresh(reason="sound_generation_toggled")
 
     def set_sound_playing_plot(self, plot_id: str | None) -> None:
-        """Mark the row whose sound button should show the playing state."""
+        """Mark the row whose sound button should show the playing state.
+        
+        Full API
+        --------
+        ``obj.set_sound_playing_plot(plot_id: str | None) -> None``
+        
+        Parameters
+        ----------
+        plot_id : str | None
+            Stable plot identifier used for lookup or update. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``LegendPanelManager``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = LegendPanelManager(...)
+            obj.set_sound_playing_plot(...)
+        
+        Discovery-oriented use::
+        
+            help(LegendPanelManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
+        """
         self._sound_playing_plot_id = None if plot_id is None else str(plot_id)
         self.refresh(reason="sound_playback_state_changed")
 
     def on_plot_added(self, plot: Any) -> None:
-        """Register a plot and create a row if needed."""
+        """Register a plot and create a row if needed.
+        
+        Full API
+        --------
+        ``obj.on_plot_added(plot: Any) -> None``
+        
+        Parameters
+        ----------
+        plot : Any
+            Value for ``plot`` in this API. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``LegendPanelManager``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = LegendPanelManager(...)
+            obj.on_plot_added(...)
+        
+        Discovery-oriented use::
+        
+            help(LegendPanelManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
+        """
         plot_id = self._normalize_plot_id(getattr(plot, "id", None), fallback_prefix="plot")
         self._plots[plot_id] = plot
         if plot_id not in self._ordered_plot_ids:
@@ -877,7 +1360,50 @@ class LegendPanelManager:
         self.refresh(reason="plot_added")
 
     def on_plot_updated(self, plot: Any) -> None:
-        """Refresh row contents for an existing plot or lazily add it."""
+        """Refresh row contents for an existing plot or lazily add it.
+        
+        Full API
+        --------
+        ``obj.on_plot_updated(plot: Any) -> None``
+        
+        Parameters
+        ----------
+        plot : Any
+            Value for ``plot`` in this API. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``LegendPanelManager``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = LegendPanelManager(...)
+            obj.on_plot_updated(...)
+        
+        Discovery-oriented use::
+        
+            help(LegendPanelManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
+        """
         plot_id = self._normalize_plot_id(getattr(plot, "id", None), fallback_prefix="plot")
         if plot_id not in self._rows:
             self.on_plot_added(plot)
@@ -886,7 +1412,50 @@ class LegendPanelManager:
         self.refresh(reason="plot_updated")
 
     def on_plot_removed(self, plot_id: str) -> None:
-        """Unregister a plot and remove its row from the layout."""
+        """Unregister a plot and remove its row from the layout.
+        
+        Full API
+        --------
+        ``obj.on_plot_removed(plot_id: str) -> None``
+        
+        Parameters
+        ----------
+        plot_id : str
+            Stable plot identifier used for lookup or update. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``LegendPanelManager``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = LegendPanelManager(...)
+            obj.on_plot_removed(...)
+        
+        Discovery-oriented use::
+        
+            help(LegendPanelManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
+        """
         key = self._normalize_plot_id(plot_id, fallback_prefix="plot")
         self._plots.pop(key, None)
         self._ordered_plot_ids = [pid for pid in self._ordered_plot_ids if pid != key]
@@ -902,12 +1471,98 @@ class LegendPanelManager:
         self.refresh(reason="plot_removed")
 
     def set_active_view(self, view_id: str) -> None:
-        """Set the active view used for row filtering."""
+        """Set the active view used for row filtering.
+        
+        Full API
+        --------
+        ``obj.set_active_view(view_id: str) -> None``
+        
+        Parameters
+        ----------
+        view_id : str
+            Identifier for the relevant view inside a figure. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``LegendPanelManager``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = LegendPanelManager(...)
+            obj.set_active_view(...)
+        
+        Discovery-oriented use::
+        
+            help(LegendPanelManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
+        """
         self._active_view_id = str(view_id)
         self.refresh(reason="active_view_changed")
 
     def refresh(self, reason: str = "") -> None:
-        """Synchronize row widgets with latest plot state and active-view filtering."""
+        """Synchronize row widgets with latest plot state and active-view filtering.
+        
+        Full API
+        --------
+        ``obj.refresh(reason: str='') -> None``
+        
+        Parameters
+        ----------
+        reason : str, optional
+            Short machine/human-readable reason recorded for scheduling or rendering. Defaults to ``''``.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        - ``reason=''``: Short machine/human-readable reason recorded for scheduling or rendering.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``LegendPanelManager``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = LegendPanelManager(...)
+            obj.refresh(...)
+        
+        Discovery-oriented use::
+        
+            help(LegendPanelManager)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/develop_guide.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+        - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
+        """
         visible_rows: list[widgets.Widget] = []
         for plot_id in self._ordered_plot_ids:
             plot = self._plots.get(plot_id)

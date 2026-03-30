@@ -15,34 +15,56 @@ T = TypeVar("T", int, float, complex)
 
 
 def InputConvert(obj: Any, dest_type: type[T] = float, truncate: bool = True) -> T:
-    """
-    Convert `obj` to `dest_type`.
-
-    Supported destination types:
-    - float (strictly real)
-    - int
-    - complex
-
-    Rules:
-    - If `obj` is a number: cast via dest_type(obj).
-    - If `obj` is a string:
-        1) try float(s) or complex(s)
-        2) else parse as a SymPy expression, then evaluate.
-
-    Truncation Rules (`truncate`):
-    - When converting Complex -> Real (float/int):
-        - If `truncate=True`: Discard imaginary part (projection to real).
-        - If `truncate=False`: Raise ValueError if imaginary part != 0.
-    - When converting Float -> Int:
-        - If `truncate=True`: Truncate decimal part (e.g., 3.9 -> 3).
-        - If `truncate=False`: Require exact integer (e.g., 3.0 -> 3, 3.1 -> Error).
-
-    Raises
-    ------
-    NotImplementedError
-        If dest_type is unsupported.
-    ValueError
-        If conversion fails or violates truncation rules.
+    """Convert `obj` to `dest_type`.
+    
+    Full API
+    --------
+    ``InputConvert(obj: Any, dest_type: type[T]=float, truncate: bool=True) -> T``
+    
+    Parameters
+    ----------
+    obj : Any
+        Value for ``obj`` in this API. Required.
+    
+    dest_type : type[T], optional
+        Value for ``dest_type`` in this API. Defaults to ``float``.
+    
+    truncate : bool, optional
+        Value for ``truncate`` in this API. Defaults to ``True``.
+    
+    Returns
+    -------
+    T
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``dest_type=float``: Value for ``dest_type`` in this API.
+    - ``truncate=True``: Value for ``truncate`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.InputConvert``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.InputConvert import InputConvert
+        result = InputConvert(...)
+    
+    Discovery-oriented use::
+    
+        help(InputConvert)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+    - In a notebook or REPL, run ``help(InputConvert)`` and inspect sibling APIs in the same module.
     """
     if dest_type not in (float, int, complex):
         raise NotImplementedError(

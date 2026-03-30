@@ -210,10 +210,87 @@ def _try_mapping_lookup(mapping: Mapping[Any, Any], key: Any) -> tuple[bool, Any
 
 class NumericFunction:
     """Compiled SymPy->NumPy callable with optional frozen/dynamic bindings.
-
-    Parameter binding is name-authoritative: the logical key for a variable is
-    always ``symbol.name``. Symbol inputs remain accepted, but they are first
-    normalized to their string name before binding state is updated.
+    
+    Full API
+    --------
+    ``NumericFunction(fn: Callable[Ellipsis, Any], vars: _VarsInput | None=None, symbolic: sp.Basic | None=None, call_signature: tuple[tuple[sp.Symbol, str], Ellipsis] | None=None, source: str='', keyed_symbols: tuple[tuple[str, sp.Symbol], Ellipsis] | None=None, vars_spec: Any=None, parameter_context: ParameterContext | None=None, frozen: Mapping[ParameterKey, Any] | None=None, dynamic: Iterable[ParameterKey] | None=None)``
+    
+    Public members exposed from this class: ``vars``, ``all_vars``, ``var_names``, ``freeze``, ``unfreeze``,
+        ``set_parameter_context``, ``remove_parameter_context``, ``free_vars``,
+        ``free_var_signature``, ``is_live``
+    
+    Parameters
+    ----------
+    fn : Callable[Ellipsis, Any]
+        Value for ``fn`` in this API. Required.
+    
+    vars : _VarsInput | None, optional
+        Value for ``vars`` in this API. Defaults to ``None``.
+    
+    symbolic : sp.Basic | None, optional
+        Value for ``symbolic`` in this API. Defaults to ``None``.
+    
+    call_signature : tuple[tuple[sp.Symbol, str], Ellipsis] | None, optional
+        Value for ``call_signature`` in this API. Defaults to ``None``.
+    
+    source : str, optional
+        Value for ``source`` in this API. Defaults to ``''``.
+    
+    keyed_symbols : tuple[tuple[str, sp.Symbol], Ellipsis] | None, optional
+        Value for ``keyed_symbols`` in this API. Defaults to ``None``.
+    
+    vars_spec : Any, optional
+        Value for ``vars_spec`` in this API. Defaults to ``None``.
+    
+    parameter_context : ParameterContext | None, optional
+        Parameter context used when binding or freezing dynamic values. Defaults to ``None``.
+    
+    frozen : Mapping[ParameterKey, Any] | None, optional
+        Value for ``frozen`` in this API. Defaults to ``None``.
+    
+    dynamic : Iterable[ParameterKey] | None, optional
+        Value for ``dynamic`` in this API. Defaults to ``None``.
+    
+    Returns
+    -------
+    NumericFunction
+        New ``NumericFunction`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``vars=None``: Value for ``vars`` in this API.
+    - ``symbolic=None``: Value for ``symbolic`` in this API.
+    - ``call_signature=None``: Value for ``call_signature`` in this API.
+    - ``source=''``: Value for ``source`` in this API.
+    - ``keyed_symbols=None``: Value for ``keyed_symbols`` in this API.
+    - ``vars_spec=None``: Value for ``vars_spec`` in this API.
+    - ``parameter_context=None``: Parameter context used when binding or freezing dynamic values.
+    - ``frozen=None``: Value for ``frozen`` in this API.
+    - ``dynamic=None``: Value for ``dynamic`` in this API.
+    
+    Architecture note
+    -----------------
+    ``NumericFunction`` lives in ``gu_toolkit.numpify``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.numpify import NumericFunction
+        obj = NumericFunction(...)
+    
+    Discovery-oriented use::
+    
+        help(NumericFunction)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+    - In a notebook or REPL, run ``help(NumericFunction)`` and ``dir(NumericFunction)`` to inspect adjacent members.
     """
 
     __slots__ = (
@@ -461,14 +538,146 @@ class NumericFunction:
 
     @property
     def vars(self) -> _VarsView:
+        """Work with vars on ``NumericFunction``.
+        
+        Full API
+        --------
+        ``obj.vars -> _VarsView``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        _VarsView
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``NumericFunction``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = NumericFunction(...)
+            current = obj.vars
+        
+        Discovery-oriented use::
+        
+            help(NumericFunction)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+        - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+        - In a notebook or REPL, run ``help(NumericFunction)`` and ``dir(NumericFunction)`` to inspect adjacent members.
+        """
+
         return self._vars_view
 
     @property
     def all_vars(self) -> tuple[sp.Symbol, ...]:
+        """Work with all vars on ``NumericFunction``.
+        
+        Full API
+        --------
+        ``obj.all_vars -> tuple[sp.Symbol, Ellipsis]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[sp.Symbol, Ellipsis]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``NumericFunction``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = NumericFunction(...)
+            current = obj.all_vars
+        
+        Discovery-oriented use::
+        
+            help(NumericFunction)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+        - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+        - In a notebook or REPL, run ``help(NumericFunction)`` and ``dir(NumericFunction)`` to inspect adjacent members.
+        """
+
         return tuple(sym for sym, _ in self.call_signature)
 
     @property
     def var_names(self) -> tuple[str, ...]:
+        """Work with var names on ``NumericFunction``.
+        
+        Full API
+        --------
+        ``obj.var_names -> tuple[str, Ellipsis]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[str, Ellipsis]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``NumericFunction``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = NumericFunction(...)
+            current = obj.var_names
+        
+        Discovery-oriented use::
+        
+            help(NumericFunction)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+        - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+        - In a notebook or REPL, run ``help(NumericFunction)`` and ``dir(NumericFunction)`` to inspect adjacent members.
+        """
+
         return tuple(name for _, name in self.call_signature)
 
     def freeze(
@@ -480,16 +689,52 @@ class NumericFunction:
         **kwargs: Any,
     ) -> NumericFunction:
         """Return a clone with updated frozen/dynamic variable bindings.
-
-        Binding resolution is name-authoritative:
-
-        - ``Symbol`` keys resolve via ``symbol.name``.
-        - ``str`` keys resolve first as canonical parameter names, then fall
-          back to keyed ``vars=`` aliases and generated call-parameter names
-          for backward compatibility.
-
-        Values may be concrete values, :data:`DYNAMIC_PARAMETER`, or
-        :data:`UNFREEZE`.
+        
+        Full API
+        --------
+        ``obj.freeze(bindings: Mapping[ParameterKey, Any] | Iterable[tuple[ParameterKey, Any]] | None=None, /, **kwargs: Any) -> NumericFunction``
+        
+        Parameters
+        ----------
+        bindings : Mapping[ParameterKey, Any] | Iterable[tuple[ParameterKey, Any]] | None, optional
+            Value for ``bindings`` in this API. Defaults to ``None``.
+        
+        **kwargs : Any, optional
+            Additional keyword arguments forwarded by this API. Optional variadic input.
+        
+        Returns
+        -------
+        NumericFunction
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``bindings=None``: Value for ``bindings`` in this API.
+        - ``**kwargs``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``NumericFunction``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = NumericFunction(...)
+            result = obj.freeze(...)
+        
+        Discovery-oriented use::
+        
+            help(NumericFunction)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+        - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+        - In a notebook or REPL, run ``help(NumericFunction)`` and ``dir(NumericFunction)`` to inspect adjacent members.
         """
         updates = self._normalize_bindings(bindings, kwargs)
         out = self._clone()
@@ -506,7 +751,50 @@ class NumericFunction:
         return out
 
     def unfreeze(self, *keys: ParameterKey) -> NumericFunction:
-        """Return a clone with selected frozen/dynamic bindings removed."""
+        """Return a clone with selected frozen/dynamic bindings removed.
+        
+        Full API
+        --------
+        ``obj.unfreeze(*keys: ParameterKey) -> NumericFunction``
+        
+        Parameters
+        ----------
+        *keys : ParameterKey, optional
+            Additional positional arguments forwarded by this API. Optional variadic input.
+        
+        Returns
+        -------
+        NumericFunction
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``*keys``: Additional positional arguments are passed through when this API supports variadic input.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``NumericFunction``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = NumericFunction(...)
+            result = obj.unfreeze(...)
+        
+        Discovery-oriented use::
+        
+            help(NumericFunction)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+        - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+        - In a notebook or REPL, run ``help(NumericFunction)`` and ``dir(NumericFunction)`` to inspect adjacent members.
+        """
         if not keys:
             bound_names: list[str] = []
             seen: set[str] = set()
@@ -519,17 +807,150 @@ class NumericFunction:
         return self.freeze(dict.fromkeys(keys, UNFREEZE))
 
     def set_parameter_context(self, ctx: ParameterContext) -> NumericFunction:
+        """Set parameter context.
+        
+        Full API
+        --------
+        ``obj.set_parameter_context(ctx: ParameterContext) -> NumericFunction``
+        
+        Parameters
+        ----------
+        ctx : ParameterContext
+            Value for ``ctx`` in this API. Required.
+        
+        Returns
+        -------
+        NumericFunction
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``NumericFunction``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = NumericFunction(...)
+            result = obj.set_parameter_context(...)
+        
+        Discovery-oriented use::
+        
+            help(NumericFunction)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+        - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+        - In a notebook or REPL, run ``help(NumericFunction)`` and ``dir(NumericFunction)`` to inspect adjacent members.
+        """
+
         out = self._clone()
         out._parameter_context = ctx
         return out
 
     def remove_parameter_context(self) -> NumericFunction:
+        """Remove parameter context.
+        
+        Full API
+        --------
+        ``obj.remove_parameter_context() -> NumericFunction``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        NumericFunction
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``NumericFunction``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = NumericFunction(...)
+            result = obj.remove_parameter_context(...)
+        
+        Discovery-oriented use::
+        
+            help(NumericFunction)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+        - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+        - In a notebook or REPL, run ``help(NumericFunction)`` and ``dir(NumericFunction)`` to inspect adjacent members.
+        """
+
         out = self._clone()
         out._parameter_context = None
         return out
 
     @property
     def free_vars(self) -> tuple[sp.Symbol, ...]:
+        """Work with free vars on ``NumericFunction``.
+        
+        Full API
+        --------
+        ``obj.free_vars -> tuple[sp.Symbol, Ellipsis]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[sp.Symbol, Ellipsis]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``NumericFunction``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = NumericFunction(...)
+            current = obj.free_vars
+        
+        Discovery-oriented use::
+        
+            help(NumericFunction)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+        - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+        - In a notebook or REPL, run ``help(NumericFunction)`` and ``dir(NumericFunction)`` to inspect adjacent members.
+        """
+
         return tuple(
             sym
             for sym in self.all_vars
@@ -539,10 +960,98 @@ class NumericFunction:
 
     @property
     def free_var_signature(self) -> tuple[tuple[sp.Symbol, str], ...]:
+        """Work with free var signature on ``NumericFunction``.
+        
+        Full API
+        --------
+        ``obj.free_var_signature -> tuple[tuple[sp.Symbol, str], Ellipsis]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[tuple[sp.Symbol, str], Ellipsis]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``NumericFunction``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = NumericFunction(...)
+            current = obj.free_var_signature
+        
+        Discovery-oriented use::
+        
+            help(NumericFunction)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+        - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+        - In a notebook or REPL, run ``help(NumericFunction)`` and ``dir(NumericFunction)`` to inspect adjacent members.
+        """
+
         return tuple((sym, self.name_for_symbol[sym]) for sym in self.free_vars)
 
     @property
     def is_live(self) -> bool:
+        """Return whether live.
+        
+        Full API
+        --------
+        ``obj.is_live -> bool``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``NumericFunction``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = NumericFunction(...)
+            current = obj.is_live
+        
+        Discovery-oriented use::
+        
+            help(NumericFunction)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+        - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+        - In a notebook or REPL, run ``help(NumericFunction)`` and ``dir(NumericFunction)`` to inspect adjacent members.
+        """
+
         return self._parameter_context is not None
 
     @property
@@ -568,9 +1077,67 @@ def numpify(
     cache: bool = True,
 ) -> NumericFunction:
     """Compile a SymPy expression into a NumPy-evaluable function.
-
-    By default this uses the same LRU-backed cache as :func:`numpify_cached`.
-    Pass ``cache=False`` to force a fresh compile.
+    
+    Full API
+    --------
+    ``numpify(expr: Any, *, vars: _VarsInput | None=None, f_numpy: Mapping[_BindingKey, Any] | None=None, vectorize: bool=True, expand_definition: bool=True, cache: bool=True) -> NumericFunction``
+    
+    Parameters
+    ----------
+    expr : Any
+        Symbolic expression payload. Required.
+    
+    vars : _VarsInput | None, optional
+        Value for ``vars`` in this API. Defaults to ``None``.
+    
+    f_numpy : Mapping[_BindingKey, Any] | None, optional
+        Value for ``f_numpy`` in this API. Defaults to ``None``.
+    
+    vectorize : bool, optional
+        Value for ``vectorize`` in this API. Defaults to ``True``.
+    
+    expand_definition : bool, optional
+        Value for ``expand_definition`` in this API. Defaults to ``True``.
+    
+    cache : bool, optional
+        Value for ``cache`` in this API. Defaults to ``True``.
+    
+    Returns
+    -------
+    NumericFunction
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``vars=None``: Value for ``vars`` in this API.
+    - ``f_numpy=None``: Value for ``f_numpy`` in this API.
+    - ``vectorize=True``: Value for ``vectorize`` in this API.
+    - ``expand_definition=True``: Value for ``expand_definition`` in this API.
+    - ``cache=True``: Value for ``cache`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.numpify``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.numpify import numpify
+        result = numpify(...)
+    
+    Discovery-oriented use::
+    
+        help(numpify)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+    - In a notebook or REPL, run ``help(numpify)`` and inspect sibling APIs in the same module.
     """
     if cache:
         return numpify_cached(
@@ -1235,36 +1802,63 @@ def numpify_cached(
     expand_definition: bool = True,
 ) -> NumericFunction:
     """Cached version of :func:`numpify`.
-
-    This is a convenience wrapper for interactive sessions where the same SymPy
-    expression is compiled repeatedly.
-
-    Cache key
-    ---------
-    The cache key includes:
-
-    - the SymPy expression (after :func:`sympy.sympify`),
-    - the normalized vars tuple ``vars``,
-    - a normalized, hashable view of ``f_numpy``,
-    - and the options ``vectorize`` / ``expand_definition``.
-
+    
+    Full API
+    --------
+    ``numpify_cached(expr: Any, *, vars: _VarsInput | None=None, f_numpy: Mapping[_BindingKey, Any] | None=None, vectorize: bool=True, expand_definition: bool=True) -> NumericFunction``
+    
     Parameters
     ----------
-    expr, vars, f_numpy, vectorize, expand_definition:
-        Same meaning as in :func:`numpify`.
-
+    expr : Any
+        Symbolic expression payload. Required.
+    
+    vars : _VarsInput | None, optional
+        Value for ``vars`` in this API. Defaults to ``None``.
+    
+    f_numpy : Mapping[_BindingKey, Any] | None, optional
+        Value for ``f_numpy`` in this API. Defaults to ``None``.
+    
+    vectorize : bool, optional
+        Value for ``vectorize`` in this API. Defaults to ``True``.
+    
+    expand_definition : bool, optional
+        Value for ``expand_definition`` in this API. Defaults to ``True``.
+    
     Returns
     -------
-    Callable[..., Any]
-        The compiled callable, reused across cache hits.
-
-    Notes
-    -----
-    - If you mutate objects referenced by ``f_numpy`` (e.g. change entries of a
-      NumPy array), cached callables will see the mutated object because the
-      compiled function captures the object by reference.
-    - If you need a fresh compile, call :func:`numpify` with ``cache=False`` or clear the
-      cache via ``numpify_cached.cache_clear()``.
+    NumericFunction
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``vars=None``: Value for ``vars`` in this API.
+    - ``f_numpy=None``: Value for ``f_numpy`` in this API.
+    - ``vectorize=True``: Value for ``vectorize`` in this API.
+    - ``expand_definition=True``: Value for ``expand_definition`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.numpify``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.numpify import numpify_cached
+        result = numpify_cached(...)
+    
+    Discovery-oriented use::
+    
+        help(numpify_cached)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+    - In a notebook or REPL, run ``help(numpify_cached)`` and inspect sibling APIs in the same module.
     """
     # Normalize to SymPy and vars tuple exactly as numpify() does.
     expr_sym = cast(sp.Basic, sp.sympify(expr))

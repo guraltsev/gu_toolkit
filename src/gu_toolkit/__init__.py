@@ -102,8 +102,10 @@ from .animation import (
     AnimationController,
     DEFAULT_ANIMATION_HZ,
     DEFAULT_ANIMATION_TIME,
+    get_default_animation_clock,
 )
 from .Slider import FloatSlider
+from .runtime_support import runtime_diagnostics, runtime_support_performance_snapshot
 
 # Keep toolkit helpers authoritative after notebook namespace wildcard imports.
 # ``Notebook`` intentionally exports SymPy's ``plot`` helper via

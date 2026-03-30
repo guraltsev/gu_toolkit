@@ -92,6 +92,61 @@ def _resolve_numeric_callable(expr, x, freeze, freeze_kwargs):
 
 
 def NIntegrate(expr, var_and_limits, freeze=None, **freeze_kwargs):
+    """Numerically integrate a symbolic expression over a one-dimensional interval.
+    
+    Full API
+    --------
+    ``NIntegrate(expr, var_and_limits, freeze=None, **freeze_kwargs)``
+    
+    Parameters
+    ----------
+    expr : Any
+        Symbolic expression payload. Required.
+    
+    var_and_limits : Any
+        Tuple containing the variable and its numeric limits. Required.
+    
+    freeze : Any, optional
+        Boolean flag controlling whether dynamic parameters are frozen during evaluation. Defaults to ``None``.
+    
+    **freeze_kwargs : Any, optional
+        Additional keyword arguments forwarded by this API. Optional variadic input.
+    
+    Returns
+    -------
+    Any
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``freeze=None``: Boolean flag controlling whether dynamic parameters are frozen during evaluation.
+    - ``**freeze_kwargs``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.numeric_operations``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.numeric_operations import NIntegrate
+        result = NIntegrate(...)
+    
+    Discovery-oriented use::
+    
+        help(NIntegrate)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+    - In a notebook or REPL, run ``help(NIntegrate)`` and inspect sibling APIs in the same module.
+    """
+
     try:
         x, a, b = var_and_limits
     except Exception as exc:  # pragma: no cover
@@ -111,6 +166,65 @@ def NIntegrate(expr, var_and_limits, freeze=None, **freeze_kwargs):
 def NReal_Fourier_Series(
     expr, var_and_limits, samples=4000, freeze=None, **freeze_kwargs
 ):
+    """Compute real Fourier-series coefficients for a symbolic expression on an interval.
+    
+    Full API
+    --------
+    ``NReal_Fourier_Series(expr, var_and_limits, samples=4000, freeze=None, **freeze_kwargs)``
+    
+    Parameters
+    ----------
+    expr : Any
+        Symbolic expression payload. Required.
+    
+    var_and_limits : Any
+        Tuple containing the variable and its numeric limits. Required.
+    
+    samples : Any, optional
+        Sampling density used when evaluating a curve or field. Defaults to ``4000``.
+    
+    freeze : Any, optional
+        Boolean flag controlling whether dynamic parameters are frozen during evaluation. Defaults to ``None``.
+    
+    **freeze_kwargs : Any, optional
+        Additional keyword arguments forwarded by this API. Optional variadic input.
+    
+    Returns
+    -------
+    Any
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``samples=4000``: Sampling density used when evaluating a curve or field.
+    - ``freeze=None``: Boolean flag controlling whether dynamic parameters are frozen during evaluation.
+    - ``**freeze_kwargs``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.numeric_operations``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.numeric_operations import NReal_Fourier_Series
+        result = NReal_Fourier_Series(...)
+    
+    Discovery-oriented use::
+    
+        help(NReal_Fourier_Series)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+    - In a notebook or REPL, run ``help(NReal_Fourier_Series)`` and inspect sibling APIs in the same module.
+    """
+
     try:
         x, a, b = var_and_limits
     except Exception as exc:  # pragma: no cover
@@ -156,6 +270,61 @@ def NReal_Fourier_Series(
 
 
 def play(expr, var_and_limits, loop=False, autoplay=False):
+    """Render a symbolic expression as an inline HTML audio player.
+    
+    Full API
+    --------
+    ``play(expr, var_and_limits, loop=False, autoplay=False)``
+    
+    Parameters
+    ----------
+    expr : Any
+        Symbolic expression payload. Required.
+    
+    var_and_limits : Any
+        Tuple containing the variable and its numeric limits. Required.
+    
+    loop : Any, optional
+        Boolean flag controlling whether audio playback should loop. Defaults to ``False``.
+    
+    autoplay : Any, optional
+        Boolean flag controlling whether audio playback should start automatically. Defaults to ``False``.
+    
+    Returns
+    -------
+    Any
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``loop=False``: Boolean flag controlling whether audio playback should loop.
+    - ``autoplay=False``: Boolean flag controlling whether audio playback should start automatically.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.numeric_operations``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.numeric_operations import play
+        result = play(...)
+    
+    Discovery-oriented use::
+    
+        help(play)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+    - In a notebook or REPL, run ``help(play)`` and inspect sibling APIs in the same module.
+    """
+
     try:
         x, a, b = var_and_limits
     except Exception as exc:  # pragma: no cover

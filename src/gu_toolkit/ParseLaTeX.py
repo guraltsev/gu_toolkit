@@ -16,43 +16,104 @@ __all__ = ["LatexParseError", "parse_latex"]
 
 
 class LatexParseError(RuntimeError):
-    """Raised when both configured SymPy LaTeX backends fail to parse input."""
+    """Raised when both configured SymPy LaTeX backends fail to parse input.
+    
+    Full API
+    --------
+    ``LatexParseError()``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
+    Parameters
+    ----------
+    None. This API does not declare user-supplied parameters beyond implicit object context.
+    
+    Returns
+    -------
+    LatexParseError
+        New ``LatexParseError`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    ``LatexParseError`` lives in ``gu_toolkit.ParseLaTeX``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.ParseLaTeX import LatexParseError
+        obj = LatexParseError(...)
+    
+    Discovery-oriented use::
+    
+        help(LatexParseError)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+    - In a notebook or REPL, run ``help(LatexParseError)`` and ``dir(LatexParseError)`` to inspect adjacent members.
+    """
 
 
 def parse_latex(tex: str, *args: Any, **kwargs: Any):
     """Parse a LaTeX string into a SymPy expression with backend fallback.
-
+    
+    Full API
+    --------
+    ``parse_latex(tex: str, *args: Any, **kwargs: Any)``
+    
     Parameters
     ----------
     tex : str
-        LaTeX input expression.
-    *args : Any
-        Positional arguments forwarded to SymPy's parser.
-    **kwargs : Any
-        Keyword arguments forwarded to SymPy's parser. If ``backend`` is
-        supplied explicitly, the fallback flow is bypassed.
-
+        Value for ``tex`` in this API. Required.
+    
+    *args : Any, optional
+        Additional positional arguments forwarded by this API. Optional variadic input.
+    
+    **kwargs : Any, optional
+        Additional keyword arguments forwarded by this API. Optional variadic input.
+    
     Returns
     -------
-    sympy.Basic
-        Parsed symbolic expression.
-
-    Raises
-    ------
-    LatexParseError
-        If fallback mode is active and both ``lark`` and ``antlr`` fail.
-
+    Any
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``*args``: Additional positional arguments are passed through when this API supports variadic input.
+    - ``**kwargs``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.ParseLaTeX``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation.
+    
     Examples
     --------
-    >>> parse_latex(r"x^2 + 1")  # doctest: +SKIP
-    x**2 + 1
-    >>> parse_latex(r"\\frac{1}{x}", backend="antlr")  # doctest: +SKIP
-    1/x
-
-    See Also
-    --------
-    sympy.parsing.latex.parse_latex
-        Underlying SymPy parser wrapped by this helper.
+    Basic use::
+    
+        from gu_toolkit.ParseLaTeX import parse_latex
+        result = parse_latex(...)
+    
+    Discovery-oriented use::
+    
+        help(parse_latex)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+    - In a notebook or REPL, run ``help(parse_latex)`` and inspect sibling APIs in the same module.
     """
     backend = kwargs.get("backend")
 

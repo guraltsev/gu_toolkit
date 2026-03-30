@@ -87,19 +87,51 @@ def _rgb_to_hex(red: int, green: int, blue: int) -> str:
 
 def color_to_picker_hex(value: Any, *, fallback: str = "#6c757d") -> str:
     """Convert a color string to ``#rrggbb`` for browser color pickers.
-
-    Legend style editing now uses a graphical picker backed by the browser's
-    native ``<input type=\"color\">`` control. That control only accepts opaque
-    hexadecimal colors, so the toolkit normalizes the most common plot-style
-    inputs here.
-
-    Supported inputs:
-
-    - ``#rgb`` / ``#rgba`` / ``#rrggbb`` / ``#rrggbbaa`` (alpha ignored)
-    - ``rgb(r, g, b)`` / ``rgba(r, g, b, a)`` (alpha ignored)
-    - named colors when Pillow is available in the runtime environment
-
-    Values that cannot be normalized fall back to ``fallback``.
+    
+    Full API
+    --------
+    ``color_to_picker_hex(value: Any, *, fallback: str='#6c757d') -> str``
+    
+    Parameters
+    ----------
+    value : Any
+        New or current value for the relevant property, control, or calculation. Required.
+    
+    fallback : str, optional
+        Value for ``fallback`` in this API. Defaults to ``'#6c757d'``.
+    
+    Returns
+    -------
+    str
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``fallback='#6c757d'``: Value for ``fallback`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_color``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_color import color_to_picker_hex
+        result = color_to_picker_hex(...)
+    
+    Discovery-oriented use::
+    
+        help(color_to_picker_hex)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(color_to_picker_hex)`` and inspect sibling APIs in the same module.
     """
 
     text = _non_empty_color(value)
@@ -139,12 +171,48 @@ def color_to_picker_hex(value: Any, *, fallback: str = "#6c757d") -> str:
 
 def resolve_colorway(source: Any) -> tuple[str, ...]:
     """Resolve Plotly's active trace colorway from a figure or layout.
-
-    Resolution order matches Plotly's practical behavior as closely as possible:
-
-    1. An explicit ``layout.colorway`` on the figure.
-    2. The template's ``layout.colorway``.
-    3. Plotly's classic fallback colors.
+    
+    Full API
+    --------
+    ``resolve_colorway(source: Any) -> tuple[str, ...]``
+    
+    Parameters
+    ----------
+    source : Any
+        Value for ``source`` in this API. Required.
+    
+    Returns
+    -------
+    tuple[str, Ellipsis]
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_color``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_color import resolve_colorway
+        result = resolve_colorway(...)
+    
+    Discovery-oriented use::
+    
+        help(resolve_colorway)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(resolve_colorway)`` and inspect sibling APIs in the same module.
     """
     layout = getattr(source, "layout", source)
     if layout is None:
@@ -169,7 +237,56 @@ def color_for_trace_index(
     *,
     fallback: str = "#6c757d",
 ) -> str:
-    """Return the colorway entry that corresponds to ``trace_index``."""
+    """Return the colorway entry that corresponds to ``trace_index``.
+    
+    Full API
+    --------
+    ``color_for_trace_index(source: Any, trace_index: int, *, fallback: str='#6c757d') -> str``
+    
+    Parameters
+    ----------
+    source : Any
+        Value for ``source`` in this API. Required.
+    
+    trace_index : int
+        Value for ``trace_index`` in this API. Required.
+    
+    fallback : str, optional
+        Value for ``fallback`` in this API. Defaults to ``'#6c757d'``.
+    
+    Returns
+    -------
+    str
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``fallback='#6c757d'``: Value for ``fallback`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_color``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_color import color_for_trace_index
+        result = color_for_trace_index(...)
+    
+    Discovery-oriented use::
+    
+        help(color_for_trace_index)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(color_for_trace_index)`` and inspect sibling APIs in the same module.
+    """
     palette = resolve_colorway(source)
     if not palette:
         return fallback
@@ -183,13 +300,56 @@ def explicit_style_color(
     trace: Any = None,
 ) -> str | None:
     """Return an explicitly requested trace color when user style sets one.
-
-    The toolkit accepts color in several forms:
-
-    - ``color=...``
-    - ``line={"color": ...}``
-    - ``trace={"line": {"color": ...}}``
-    - ``trace={"line_color": ...}``
+    
+    Full API
+    --------
+    ``explicit_style_color(*, color: Any=None, line: Any=None, trace: Any=None) -> str | None``
+    
+    Parameters
+    ----------
+    color : Any, optional
+        Explicit color value. Defaults to ``None``.
+    
+    line : Any, optional
+        Value for ``line`` in this API. Defaults to ``None``.
+    
+    trace : Any, optional
+        Renderer-specific trace configuration mapping. Defaults to ``None``.
+    
+    Returns
+    -------
+    str | None
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``color=None``: Explicit color value.
+    - ``line=None``: Value for ``line`` in this API.
+    - ``trace=None``: Renderer-specific trace configuration mapping.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_color``. Cartesian plotting routes through normalization and style metadata before traces are sampled and rendered, so validation, legends, and code generation stay aligned.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_color import explicit_style_color
+        result = explicit_style_color(...)
+    
+    Discovery-oriented use::
+    
+        help(explicit_style_color)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/legend-plot-editor.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
+    - In a notebook or REPL, run ``help(explicit_style_color)`` and inspect sibling APIs in the same module.
     """
     direct = _non_empty_color(color)
     if direct is not None:

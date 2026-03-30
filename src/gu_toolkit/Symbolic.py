@@ -129,26 +129,55 @@ def _latex_function_application(self, printer) -> str:
 
 def symbols(names, *, cls=sp.Symbol, **args) -> Any:
     """Create one or more symbolic families with SymPy-compatible signature.
-
-    This helper intentionally keeps the same call signature as
-    :func:`sympy.symbols`, but maps common classes to toolkit families:
-
-    * ``cls=sympy.Symbol`` -> :class:`SymbolFamily`
-    * ``cls=sympy.Function`` -> :class:`FunctionFamily`
-
-    Any other ``cls`` is delegated directly to :func:`sympy.symbols`.
-
+    
+    Full API
+    --------
+    ``symbols(names, *, cls=sp.Symbol, **args) -> Any``
+    
+    Parameters
+    ----------
+    names : Any
+        Value for ``names`` in this API. Required.
+    
+    cls : Any, optional
+        Value for ``cls`` in this API. Defaults to ``sp.Symbol``.
+    
+    **args : Any, optional
+        Additional keyword arguments forwarded by this API. Optional variadic input.
+    
+    Returns
+    -------
+    Any
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``cls=sp.Symbol``: Value for ``cls`` in this API.
+    - ``**args``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.Symbolic``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation.
+    
     Examples
     --------
-    >>> x, y = symbols("x y")
-    >>> x[1], y[2]
-    (x_{1}, y_{2})
-    >>> f, g = symbols("f g", cls=sp.Function)
-    >>> f(sp.Symbol("t")), g[0](sp.Symbol("t"))
-    (f(t), g_{0}(t))
-    >>> n = symbols("n", integer=True)
-    >>> n[3].is_integer
-    True
+    Basic use::
+    
+        from gu_toolkit.Symbolic import symbols
+        result = symbols(...)
+    
+    Discovery-oriented use::
+    
+        help(symbols)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+    - In a notebook or REPL, run ``help(symbols)`` and inspect sibling APIs in the same module.
     """
 
     if cls in (sp.Symbol, SymbolFamily):
@@ -167,39 +196,49 @@ def symbols(names, *, cls=sp.Symbol, **args) -> Any:
 
 class SymbolFamily(sp.Symbol):
     """A SymPy symbol that lazily creates indexed child symbols.
-
+    
+    Full API
+    --------
+    ``SymbolFamily()``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
     Parameters
     ----------
-    name:
-        Base symbol name used for the family root (for example ``"x"``).
-        The stored SymPy name is normalized to a LaTeX-oriented form, so
-        ``"alpha"`` becomes ``"\\alpha"``.
-    **kwargs:
-        SymPy symbol assumptions (for example ``integer=True`` or
-        ``positive=True``). The same assumptions are propagated to all indexed
-        children produced by :meth:`__getitem__`.
-
-    Notes
-    -----
-    * ``SymbolFamily`` is itself a valid SymPy symbol and can be used directly
-      in expressions.
-    * Indexed children are named ``"{base}_{i,j,...}"`` with explicit braces.
-      String indices are rendered as ``\text{...}``.
-    * Child objects are cached per index tuple, so ``x[1] is x[1]`` is ``True``.
-
+    None. This API does not declare user-supplied parameters beyond implicit object context.
+    
+    Returns
+    -------
+    SymbolFamily
+        New ``SymbolFamily`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    ``SymbolFamily`` lives in ``gu_toolkit.Symbolic``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
     Examples
     --------
-    >>> x = SymbolFamily("x")
-    >>> x[0]
-    x_{0}
-    >>> x[1, 2]
-    x_{1,2}
-    >>> alpha = SymbolFamily("alpha")
-    >>> alpha.name
-    '\\alpha'
-    >>> n = SymbolFamily("n", integer=True)
-    >>> n[3].is_integer
-    True
+    Construction::
+    
+        from gu_toolkit.Symbolic import SymbolFamily
+        obj = SymbolFamily(...)
+    
+    Discovery-oriented use::
+    
+        help(SymbolFamily)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+    - In a notebook or REPL, run ``help(SymbolFamily)`` and ``dir(SymbolFamily)`` to inspect adjacent members.
     """
 
     def __new__(cls, name, **kwargs):
@@ -236,35 +275,53 @@ class SymbolFamily(sp.Symbol):
 
 class FunctionFamily:
     """A family of SymPy undefined functions supporting indexed lookup.
-
+    
+    Full API
+    --------
+    ``FunctionFamily(name, **kwargs)``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
     Parameters
     ----------
-    name:
-        Base function name used for the root function and indexed variants.
-        Single-letter plain names remain plain, while multi-letter plain names
-        are wrapped in ``\\operatorname{...}``. Existing explicit LaTeX names
-        are preserved.
-    **kwargs:
-        Optional keyword arguments forwarded to :func:`sympy.Function`.
-
-    Notes
-    -----
-    * Calling the family object directly (for example ``f(x)``) delegates to
-      the base function ``Function(name)``.
-    * Indexing creates function symbols named ``"{base}_{i,j,...}"``.
-    * Applied functions render in LaTeX without ``\\left``/``\\right``.
-    * Function symbols are cached by index tuple.
-
+    name : Any
+        Human-readable or canonical name for the target object. Required.
+    
+    **kwargs : Any, optional
+        Additional keyword arguments forwarded by this API. Optional variadic input.
+    
+    Returns
+    -------
+    FunctionFamily
+        New ``FunctionFamily`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``**kwargs``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+    
+    Architecture note
+    -----------------
+    ``FunctionFamily`` lives in ``gu_toolkit.Symbolic``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
     Examples
     --------
-    >>> f = FunctionFamily("f")
-    >>> f(sp.Symbol("x"))
-    f(x)
-    >>> g = FunctionFamily("foo")
-    >>> g.name
-    '\\operatorname{foo}'
-    >>> g[1](sp.Symbol("x"))
-    \\operatorname{foo}_{1}(x)
+    Construction::
+    
+        from gu_toolkit.Symbolic import FunctionFamily
+        obj = FunctionFamily(...)
+    
+    Discovery-oriented use::
+    
+        help(FunctionFamily)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+    - In a notebook or REPL, run ``help(FunctionFamily)`` and ``dir(FunctionFamily)`` to inspect adjacent members.
     """
 
     def __init__(self, name, **kwargs):
@@ -327,16 +384,50 @@ class FunctionFamily:
 
 class Infix:
     """Pipe-based infix operator adapter.
-
-    ``Infix`` wraps a two-argument callable so it can be used with the ``|``
-    operator:
-
-    ``left |Infix(func)| right``  -> ``func(left, right)``.
-
+    
+    Full API
+    --------
+    ``Infix(func)``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
     Parameters
     ----------
-    func:
-        Callable that accepts ``(left, right)`` and returns a value.
+    func : Any
+        Symbolic expression or callable to evaluate. Required.
+    
+    Returns
+    -------
+    Infix
+        New ``Infix`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    ``Infix`` lives in ``gu_toolkit.Symbolic``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.Symbolic import Infix
+        obj = Infix(...)
+    
+    Discovery-oriented use::
+    
+        help(Infix)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: compare symbolic authoring helpers with the numeric-callable tests/examples to see how symbolic inputs become numeric callables.
+    - In a notebook or REPL, run ``help(Infix)`` and ``dir(Infix)`` to inspect adjacent members.
     """
 
     __slots__ = ("func",)

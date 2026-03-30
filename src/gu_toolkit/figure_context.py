@@ -80,16 +80,48 @@ def _require_current_figure() -> Figure:
 
 def current_figure(*, required: bool = True) -> Figure | None:
     """Return the active Figure from the context stack.
-
+    
+    Full API
+    --------
+    ``current_figure(*, required: bool=True) -> Figure | None``
+    
     Parameters
     ----------
-    required : bool, default=True
-        If True, raise when no figure is currently active.
-
+    required : bool, optional
+        Value for ``required`` in this API. Defaults to ``True``.
+    
     Returns
     -------
-    Figure or None
-        Active figure, or None when ``required=False`` and no context is active.
+    Figure | None
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``required=True``: Value for ``required`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_context``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_context import current_figure
+        result = current_figure(...)
+    
+    Discovery-oriented use::
+    
+        help(current_figure)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/develop_guide.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
+    - In a notebook or REPL, run ``help(current_figure)`` and inspect sibling APIs in the same module.
     """
     fig = _current_figure()
     if fig is None and required:

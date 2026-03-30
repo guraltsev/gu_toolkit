@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -40,25 +41,69 @@ from .layout_logging import (
     emit_layout_event,
     is_layout_logger_explicitly_enabled,
 )
+from .performance_monitor import PerformanceMonitor
 
 
 @dataclass(frozen=True)
 class RenderRequest:
     """Immutable description of one dispatched figure render.
-
+    
+    Full API
+    --------
+    ``RenderRequest(reason: str, trigger: Any=None, queued_count: int=1, includes_param_change: bool=False, latest_param_change_trigger: Any=None)``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
     Parameters
     ----------
     reason : str
-        Most recent render reason merged into the dispatched request.
+        Short machine/human-readable reason recorded for scheduling or rendering. Required.
+    
     trigger : Any, optional
-        Payload associated with the most recent render reason.
-    queued_count : int, default=1
-        Number of requests coalesced into this dispatch.
-    includes_param_change : bool, default=False
-        Whether any queued request had ``reason == 'param_change'``.
+        Event object or trigger payload that caused the current action. Defaults to ``None``.
+    
+    queued_count : int, optional
+        Value for ``queued_count`` in this API. Defaults to ``1``.
+    
+    includes_param_change : bool, optional
+        Value for ``includes_param_change`` in this API. Defaults to ``False``.
+    
     latest_param_change_trigger : Any, optional
-        Trigger payload from the most recent parameter-change request in the
-        batch. This is the payload forwarded to parameter hooks.
+        Value for ``latest_param_change_trigger`` in this API. Defaults to ``None``.
+    
+    Returns
+    -------
+    RenderRequest
+        New ``RenderRequest`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``trigger=None``: Event object or trigger payload that caused the current action.
+    - ``queued_count=1``: Value for ``queued_count`` in this API.
+    - ``includes_param_change=False``: Value for ``includes_param_change`` in this API.
+    - ``latest_param_change_trigger=None``: Value for ``latest_param_change_trigger`` in this API.
+    
+    Architecture note
+    -----------------
+    ``RenderRequest`` lives in ``gu_toolkit.figure_render_scheduler``. This module centralizes one slice of toolkit behavior so notebook helpers, views, and export/snapshot flows share the same invariants. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_render_scheduler import RenderRequest
+        obj = RenderRequest(...)
+    
+    Discovery-oriented use::
+    
+        help(RenderRequest)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Runtime discovery tip: use ``help(...)`` and inspect nearby module members to discover adjacent helpers.
+    - In a notebook or REPL, run ``help(RenderRequest)`` and ``dir(RenderRequest)`` to inspect adjacent members.
     """
 
     reason: str
@@ -79,7 +124,52 @@ class _PendingRenderRequest:
     latest_param_change_trigger: Any = None
 
     @classmethod
-    def from_request(cls, *, reason: str, trigger: Any = None) -> _PendingRenderRequest:
+    def from_request(cls, *, reason: str, trigger: Any = None) -> "_PendingRenderRequest":
+        """Work with from request on ``_PendingRenderRequest``.
+        
+        Full API
+        --------
+        ``_PendingRenderRequest.from_request(*, reason: str, trigger: Any=None) -> '_PendingRenderRequest'``
+        
+        Parameters
+        ----------
+        reason : str
+            Short machine/human-readable reason recorded for scheduling or rendering. Required.
+        
+        trigger : Any, optional
+            Event object or trigger payload that caused the current action. Defaults to ``None``.
+        
+        Returns
+        -------
+        '_PendingRenderRequest'
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``trigger=None``: Event object or trigger payload that caused the current action.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``_PendingRenderRequest``. This module centralizes one slice of toolkit behavior so notebook helpers, views, and export/snapshot flows share the same invariants. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            result = _PendingRenderRequest.from_request(...)
+        
+        Discovery-oriented use::
+        
+            help(_PendingRenderRequest)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Runtime discovery tip: use ``help(...)`` and inspect nearby module members to discover adjacent helpers.
+        - In a notebook or REPL, run ``help(_PendingRenderRequest)`` and ``dir(_PendingRenderRequest)`` to inspect adjacent members.
+        """
+
         includes_param_change = str(reason) == "param_change"
         return cls(
             reason=str(reason),
@@ -90,7 +180,51 @@ class _PendingRenderRequest:
         )
 
     def merge(self, *, reason: str, trigger: Any = None) -> None:
-        """Merge a newly requested render into the pending dispatch state."""
+        """Merge a newly requested render into the pending dispatch state.
+        
+        Full API
+        --------
+        ``obj.merge(*, reason: str, trigger: Any=None) -> None``
+        
+        Parameters
+        ----------
+        reason : str
+            Short machine/human-readable reason recorded for scheduling or rendering. Required.
+        
+        trigger : Any, optional
+            Event object or trigger payload that caused the current action. Defaults to ``None``.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        - ``trigger=None``: Event object or trigger payload that caused the current action.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``_PendingRenderRequest``. This module centralizes one slice of toolkit behavior so notebook helpers, views, and export/snapshot flows share the same invariants. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = _PendingRenderRequest(...)
+            obj.merge(...)
+        
+        Discovery-oriented use::
+        
+            help(_PendingRenderRequest)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Runtime discovery tip: use ``help(...)`` and inspect nearby module members to discover adjacent helpers.
+        - In a notebook or REPL, run ``help(_PendingRenderRequest)`` and ``dir(_PendingRenderRequest)`` to inspect adjacent members.
+        """
         self.reason = str(reason)
         self.trigger = trigger
         self.queued_count += 1
@@ -99,7 +233,47 @@ class _PendingRenderRequest:
             self.latest_param_change_trigger = trigger
 
     def freeze(self) -> RenderRequest:
-        """Return an immutable snapshot of the pending dispatch state."""
+        """Return an immutable snapshot of the pending dispatch state.
+        
+        Full API
+        --------
+        ``obj.freeze() -> RenderRequest``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        RenderRequest
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``_PendingRenderRequest``. This module centralizes one slice of toolkit behavior so notebook helpers, views, and export/snapshot flows share the same invariants. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = _PendingRenderRequest(...)
+            result = obj.freeze(...)
+        
+        Discovery-oriented use::
+        
+            help(_PendingRenderRequest)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Runtime discovery tip: use ``help(...)`` and inspect nearby module members to discover adjacent helpers.
+        - In a notebook or REPL, run ``help(_PendingRenderRequest)`` and ``dir(_PendingRenderRequest)`` to inspect adjacent members.
+        """
         return RenderRequest(
             reason=self.reason,
             trigger=self.trigger,
@@ -111,19 +285,59 @@ class _PendingRenderRequest:
 
 class FigureRenderScheduler:
     """Coalesce figure render requests and dispatch them on a fixed cadence.
-
+    
+    Full API
+    --------
+    ``FigureRenderScheduler(dispatch_callback: Callable[[RenderRequest], Any], execute_every_ms: int=16, name: str='Figure.render', event_sink: Callable[Ellipsis, Any] | None=None)``
+    
+    Public members exposed from this class: ``has_pending``, ``performance_snapshot``, ``request``, ``flush``
+    
     Parameters
     ----------
-    dispatch_callback : callable
-        Synchronous callback receiving one :class:`RenderRequest` whenever a
-        queued render should be executed.
-    execute_every_ms : int, default=16
-        Dispatch cadence in milliseconds. ``16`` targets roughly 60 Hz.
-    name : str, default="Figure.render"
-        Human-readable owner name used in debug logging.
-    event_sink : callable, optional
-        Optional structured layout-log sink matching the signature used by
-        :class:`gu_toolkit.debouncing.QueuedDebouncer`.
+    dispatch_callback : Callable[[RenderRequest], Any]
+        Value for ``dispatch_callback`` in this API. Required.
+    
+    execute_every_ms : int, optional
+        Value for ``execute_every_ms`` in this API. Defaults to ``16``.
+    
+    name : str, optional
+        Human-readable or canonical name for the target object. Defaults to ``'Figure.render'``.
+    
+    event_sink : Callable[Ellipsis, Any] | None, optional
+        Value for ``event_sink`` in this API. Defaults to ``None``.
+    
+    Returns
+    -------
+    FigureRenderScheduler
+        New ``FigureRenderScheduler`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``execute_every_ms=16``: Value for ``execute_every_ms`` in this API.
+    - ``name='Figure.render'``: Human-readable or canonical name for the target object.
+    - ``event_sink=None``: Value for ``event_sink`` in this API.
+    
+    Architecture note
+    -----------------
+    ``FigureRenderScheduler`` lives in ``gu_toolkit.figure_render_scheduler``. This module centralizes one slice of toolkit behavior so notebook helpers, views, and export/snapshot flows share the same invariants. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_render_scheduler import FigureRenderScheduler
+        obj = FigureRenderScheduler(...)
+    
+    Discovery-oriented use::
+    
+        help(FigureRenderScheduler)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Runtime discovery tip: use ``help(...)`` and inspect nearby module members to discover adjacent helpers.
+    - In a notebook or REPL, run ``help(FigureRenderScheduler)`` and ``dir(FigureRenderScheduler)`` to inspect adjacent members.
     """
 
     def __init__(
@@ -142,6 +356,12 @@ class FigureRenderScheduler:
         self._lock = threading.Lock()
         self._pending: _PendingRenderRequest | None = None
         self._dispatching = False
+        self._performance = PerformanceMonitor(f"FigureRenderScheduler[{self._name}]")
+        self._performance.set_state(
+            execute_every_ms=int(execute_every_ms),
+            dispatching=False,
+            has_pending=False,
+        )
         self._debouncer = QueuedDebouncer(
             self._dispatch_from_tick,
             execute_every_ms=execute_every_ms,
@@ -183,23 +403,150 @@ class FigureRenderScheduler:
 
     @property
     def has_pending(self) -> bool:
-        """Whether a render request is currently waiting to be dispatched."""
+        """Whether a render request is currently waiting to be dispatched.
+        
+        Full API
+        --------
+        ``obj.has_pending -> bool``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureRenderScheduler``. This module centralizes one slice of toolkit behavior so notebook helpers, views, and export/snapshot flows share the same invariants. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureRenderScheduler(...)
+            current = obj.has_pending
+        
+        Discovery-oriented use::
+        
+            help(FigureRenderScheduler)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Runtime discovery tip: use ``help(...)`` and inspect nearby module members to discover adjacent helpers.
+        - In a notebook or REPL, run ``help(FigureRenderScheduler)`` and ``dir(FigureRenderScheduler)`` to inspect adjacent members.
+        """
         with self._lock:
             return self._pending is not None
 
+    def performance_snapshot(self, *, recent_event_limit: int = 25) -> dict[str, Any]:
+        """Work with performance snapshot on ``FigureRenderScheduler``.
+        
+        Full API
+        --------
+        ``obj.performance_snapshot(*, recent_event_limit: int=25) -> dict[str, Any]``
+        
+        Parameters
+        ----------
+        recent_event_limit : int, optional
+            Value for ``recent_event_limit`` in this API. Defaults to ``25``.
+        
+        Returns
+        -------
+        dict[str, Any]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``recent_event_limit=25``: Value for ``recent_event_limit`` in this API.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureRenderScheduler``. This module centralizes one slice of toolkit behavior so notebook helpers, views, and export/snapshot flows share the same invariants. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureRenderScheduler(...)
+            result = obj.performance_snapshot(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureRenderScheduler)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Runtime discovery tip: use ``help(...)`` and inspect nearby module members to discover adjacent helpers.
+        - In a notebook or REPL, run ``help(FigureRenderScheduler)`` and ``dir(FigureRenderScheduler)`` to inspect adjacent members.
+        """
+
+        snapshot = self._performance.snapshot(recent_limit=recent_event_limit)
+        snapshot["debouncer"] = self._debouncer.performance_snapshot(
+            recent_event_limit=recent_event_limit
+        )
+        snapshot["state"]["debouncer_timer_backend"] = self._debouncer.timer_backend
+        return snapshot
+
     def request(self, reason: str, trigger: Any = None, *, force: bool = False) -> None:
         """Queue or immediately flush a render request.
-
+        
+        Full API
+        --------
+        ``obj.request(reason: str, trigger: Any=None, *, force: bool=False) -> None``
+        
         Parameters
         ----------
         reason : str
-            Render reason string.
+            Short machine/human-readable reason recorded for scheduling or rendering. Required.
+        
         trigger : Any, optional
-            Associated event payload.
-        force : bool, default=False
-            If ``True``, attempt to dispatch the coalesced pending request
-            synchronously after merging this request. If a dispatch is already
-            in progress, the request is preserved and will run on the next tick.
+            Event object or trigger payload that caused the current action. Defaults to ``None``.
+        
+        force : bool, optional
+            Flag that requests eager execution or bypasses normal guards/debouncing. Defaults to ``False``.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        - ``trigger=None``: Event object or trigger payload that caused the current action.
+        - ``force=False``: Flag that requests eager execution or bypasses normal guards/debouncing.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureRenderScheduler``. This module centralizes one slice of toolkit behavior so notebook helpers, views, and export/snapshot flows share the same invariants. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureRenderScheduler(...)
+            obj.request(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureRenderScheduler)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Runtime discovery tip: use ``help(...)`` and inspect nearby module members to discover adjacent helpers.
+        - In a notebook or REPL, run ``help(FigureRenderScheduler)`` and ``dir(FigureRenderScheduler)`` to inspect adjacent members.
         """
         with self._lock:
             if self._pending is None:
@@ -209,8 +556,18 @@ class FigureRenderScheduler:
                 )
             else:
                 self._pending.merge(reason=reason, trigger=trigger)
+                self._performance.increment("coalesced_requests")
             snapshot = self._pending.freeze()
             dispatching = self._dispatching
+            self._performance.increment("requests")
+            if force:
+                self._performance.increment("forced_requests")
+            self._performance.set_state(
+                has_pending=True,
+                pending_reason=snapshot.reason,
+                pending_queued_count=snapshot.queued_count,
+                dispatching=dispatching,
+            )
 
         self._emit(
             "render_request_queued",
@@ -230,7 +587,48 @@ class FigureRenderScheduler:
             self.flush()
 
     def flush(self) -> None:
-        """Synchronously dispatch the newest pending request, if any."""
+        """Synchronously dispatch the newest pending request, if any.
+        
+        Full API
+        --------
+        ``obj.flush() -> None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``FigureRenderScheduler``. This module centralizes one slice of toolkit behavior so notebook helpers, views, and export/snapshot flows share the same invariants. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = FigureRenderScheduler(...)
+            obj.flush(...)
+        
+        Discovery-oriented use::
+        
+            help(FigureRenderScheduler)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Runtime discovery tip: use ``help(...)`` and inspect nearby module members to discover adjacent helpers.
+        - In a notebook or REPL, run ``help(FigureRenderScheduler)`` and ``dir(FigureRenderScheduler)`` to inspect adjacent members.
+        """
+        self._performance.increment("flush_calls")
         self._dispatch_once(origin="flush")
 
     def _dispatch_from_tick(self) -> None:
@@ -239,8 +637,10 @@ class FigureRenderScheduler:
 
     def _dispatch_once(self, *, origin: str) -> None:
         request: RenderRequest | None = None
+        dispatch_started = time.perf_counter()
         with self._lock:
             if self._dispatching:
+                self._performance.increment("dispatch_skipped_dispatching")
                 self._emit(
                     "render_request_dispatch_skipped",
                     phase="skipped",
@@ -249,6 +649,7 @@ class FigureRenderScheduler:
                 )
                 return
             if self._pending is None:
+                self._performance.increment("dispatch_skipped_empty")
                 self._emit(
                     "render_request_dispatch_skipped",
                     phase="skipped",
@@ -259,6 +660,14 @@ class FigureRenderScheduler:
             request = self._pending.freeze()
             self._pending = None
             self._dispatching = True
+            self._performance.increment("dispatches")
+            self._performance.set_state(
+                dispatching=True,
+                has_pending=False,
+                active_origin=origin,
+                active_reason=request.reason,
+                active_queued_count=request.queued_count,
+            )
 
         self._emit(
             "render_request_dispatch_started",
@@ -276,6 +685,7 @@ class FigureRenderScheduler:
             self._dispatch_callback(request)
         except Exception:  # pragma: no cover - defensive callback boundary
             failed = True
+            self._performance.increment("dispatch_failures")
             self._emit(
                 "render_request_dispatch_failed",
                 phase="failed",
@@ -286,9 +696,22 @@ class FigureRenderScheduler:
                 "FigureRenderScheduler dispatch failed"
             )
         finally:
+            duration_ms = (time.perf_counter() - dispatch_started) * 1000.0
+            self._performance.record_duration(
+                "dispatch_duration_ms",
+                duration_ms,
+                origin=origin,
+                reason=(request.reason if request is not None else None),
+                failed=failed,
+            )
             with self._lock:
                 self._dispatching = False
                 needs_reschedule = self._pending is not None
+                self._performance.set_state(
+                    dispatching=False,
+                    has_pending=needs_reschedule,
+                    active_origin=None,
+                )
 
         if not failed:
             self._emit(
@@ -302,6 +725,7 @@ class FigureRenderScheduler:
             )
 
         if needs_reschedule:
+            self._performance.increment("reschedules")
             self._emit(
                 "render_request_rescheduled",
                 phase="scheduled",

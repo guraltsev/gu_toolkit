@@ -50,11 +50,82 @@ from .ui_system import (
 
 class ModalDialogBridge(anywidget.AnyWidget):
     """Frontend bridge for modal dialog semantics and keyboard handling.
-
-    The bridge keeps hosted dialogs accessible without forcing feature modules
-    to embed JavaScript directly.  It handles ``Escape``/backdrop dismissal,
-    focus trapping, return-focus restoration, and optional focus routing to a
-    specific selector when validation needs to keep focus inside the dialog.
+    
+    Full API
+    --------
+    ``ModalDialogBridge(modal_class=traitlets.Unicode('').tag(sync=True), panel_selector=traitlets.Unicode('.gu-modal-panel').tag(sync=True), close_selector=traitlets.Unicode('.gu-icon-close-button').tag(sync=True), title_selector=traitlets.Unicode('.gu-modal-title-text').tag(sync=True), dialog_open=traitlets.Bool(False).tag(sync=True), dialog_label=traitlets.Unicode('Dialog').tag(sync=True), return_focus_selector=traitlets.Unicode('').tag(sync=True), focus_selector=traitlets.Unicode('').tag(sync=True), focus_nonce=traitlets.Int(0).tag(sync=True))``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
+    Parameters
+    ----------
+    modal_class : Any, optional
+        Value for ``modal_class`` in this API. Defaults to ``traitlets.Unicode('').tag(sync=True)``.
+    
+    panel_selector : Any, optional
+        Value for ``panel_selector`` in this API. Defaults to ``traitlets.Unicode('.gu-modal-panel').tag(sync=True)``.
+    
+    close_selector : Any, optional
+        Value for ``close_selector`` in this API. Defaults to ``traitlets.Unicode('.gu-icon-close-button').tag(sync=True)``.
+    
+    title_selector : Any, optional
+        Value for ``title_selector`` in this API. Defaults to ``traitlets.Unicode('.gu-modal-title-text').tag(sync=True)``.
+    
+    dialog_open : Any, optional
+        Value for ``dialog_open`` in this API. Defaults to ``traitlets.Bool(False).tag(sync=True)``.
+    
+    dialog_label : Any, optional
+        Value for ``dialog_label`` in this API. Defaults to ``traitlets.Unicode('Dialog').tag(sync=True)``.
+    
+    return_focus_selector : Any, optional
+        Value for ``return_focus_selector`` in this API. Defaults to ``traitlets.Unicode('').tag(sync=True)``.
+    
+    focus_selector : Any, optional
+        Value for ``focus_selector`` in this API. Defaults to ``traitlets.Unicode('').tag(sync=True)``.
+    
+    focus_nonce : Any, optional
+        Value for ``focus_nonce`` in this API. Defaults to ``traitlets.Int(0).tag(sync=True)``.
+    
+    Returns
+    -------
+    ModalDialogBridge
+        New ``ModalDialogBridge`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``modal_class=traitlets.Unicode('').tag(sync=True)``: Value for ``modal_class`` in this API.
+    - ``panel_selector=traitlets.Unicode('.gu-modal-panel').tag(sync=True)``: Value for ``panel_selector`` in this API.
+    - ``close_selector=traitlets.Unicode('.gu-icon-close-button').tag(sync=True)``: Value for ``close_selector`` in this API.
+    - ``title_selector=traitlets.Unicode('.gu-modal-title-text').tag(sync=True)``: Value for ``title_selector`` in this API.
+    - ``dialog_open=traitlets.Bool(False).tag(sync=True)``: Value for ``dialog_open`` in this API.
+    - ``dialog_label=traitlets.Unicode('Dialog').tag(sync=True)``: Value for ``dialog_label`` in this API.
+    - ``return_focus_selector=traitlets.Unicode('').tag(sync=True)``: Value for ``return_focus_selector`` in this API.
+    - ``focus_selector=traitlets.Unicode('').tag(sync=True)``: Value for ``focus_selector`` in this API.
+    - ``focus_nonce=traitlets.Int(0).tag(sync=True)``: Value for ``focus_nonce`` in this API.
+    
+    Architecture note
+    -----------------
+    ``ModalDialogBridge`` lives in ``gu_toolkit.widget_chrome``. Runtime, scheduling, and widget-chrome modules isolate notebook-specific concerns from the core plotting model so the main figure code remains testable. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.widget_chrome import ModalDialogBridge
+        obj = ModalDialogBridge(...)
+    
+    Discovery-oriented use::
+    
+        help(ModalDialogBridge)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/ui-layout-system.md``.
+    - Example notebook: ``examples/layout_debug.ipynb``.
+    - Runtime discovery tip: pair ``help(...)`` with ``examples/layout_debug.ipynb`` when debugging widget, CSS, or geometry behavior.
+    - In a notebook or REPL, run ``help(ModalDialogBridge)`` and ``dir(ModalDialogBridge)`` to inspect adjacent members.
     """
 
     modal_class = traitlets.Unicode("").tag(sync=True)
@@ -311,7 +382,64 @@ class ModalDialogBridge(anywidget.AnyWidget):
 
 
 class TabListBridge(anywidget.AnyWidget):
-    """Frontend bridge that adds accessible tab semantics and arrow navigation."""
+    """Frontend bridge that adds accessible tab semantics and arrow navigation.
+    
+    Full API
+    --------
+    ``TabListBridge(tablist_selector=traitlets.Unicode('.gu-tab-bar').tag(sync=True), tab_selector=traitlets.Unicode('.gu-action-button-tab').tag(sync=True), panel_selector=traitlets.Unicode('.gu-tab-panel').tag(sync=True), selected_index=traitlets.Int(0).tag(sync=True))``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
+    Parameters
+    ----------
+    tablist_selector : Any, optional
+        Value for ``tablist_selector`` in this API. Defaults to ``traitlets.Unicode('.gu-tab-bar').tag(sync=True)``.
+    
+    tab_selector : Any, optional
+        Value for ``tab_selector`` in this API. Defaults to ``traitlets.Unicode('.gu-action-button-tab').tag(sync=True)``.
+    
+    panel_selector : Any, optional
+        Value for ``panel_selector`` in this API. Defaults to ``traitlets.Unicode('.gu-tab-panel').tag(sync=True)``.
+    
+    selected_index : Any, optional
+        Value for ``selected_index`` in this API. Defaults to ``traitlets.Int(0).tag(sync=True)``.
+    
+    Returns
+    -------
+    TabListBridge
+        New ``TabListBridge`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``tablist_selector=traitlets.Unicode('.gu-tab-bar').tag(sync=True)``: Value for ``tablist_selector`` in this API.
+    - ``tab_selector=traitlets.Unicode('.gu-action-button-tab').tag(sync=True)``: Value for ``tab_selector`` in this API.
+    - ``panel_selector=traitlets.Unicode('.gu-tab-panel').tag(sync=True)``: Value for ``panel_selector`` in this API.
+    - ``selected_index=traitlets.Int(0).tag(sync=True)``: Value for ``selected_index`` in this API.
+    
+    Architecture note
+    -----------------
+    ``TabListBridge`` lives in ``gu_toolkit.widget_chrome``. Runtime, scheduling, and widget-chrome modules isolate notebook-specific concerns from the core plotting model so the main figure code remains testable. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.widget_chrome import TabListBridge
+        obj = TabListBridge(...)
+    
+    Discovery-oriented use::
+    
+        help(TabListBridge)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/ui-layout-system.md``.
+    - Example notebook: ``examples/layout_debug.ipynb``.
+    - Runtime discovery tip: pair ``help(...)`` with ``examples/layout_debug.ipynb`` when debugging widget, CSS, or geometry behavior.
+    - In a notebook or REPL, run ``help(TabListBridge)`` and ``dir(TabListBridge)`` to inspect adjacent members.
+    """
 
     tablist_selector = traitlets.Unicode(".gu-tab-bar").tag(sync=True)
     tab_selector = traitlets.Unicode(".gu-action-button-tab").tag(sync=True)

@@ -38,7 +38,58 @@ FieldGrid = tuple[int, int]
 
 @dataclass
 class FieldPlotHandle:
-    """Per-view runtime handle for a scalar-field trace binding."""
+    """Per-view runtime handle for a scalar-field trace binding.
+    
+    Full API
+    --------
+    ``FieldPlotHandle(plot_id: str, view_id: str, trace_handle: go.Contour | go.Heatmap | None)``
+    
+    Public members exposed from this class: No additional public methods are declared directly on this class.
+    
+    Parameters
+    ----------
+    plot_id : str
+        Stable plot identifier used for lookup or update. Required.
+    
+    view_id : str
+        Identifier for the relevant view inside a figure. Required.
+    
+    trace_handle : go.Contour | go.Heatmap | None
+        Value for ``trace_handle`` in this API. Required.
+    
+    Returns
+    -------
+    FieldPlotHandle
+        New ``FieldPlotHandle`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+    
+    Architecture note
+    -----------------
+    ``FieldPlotHandle`` lives in ``gu_toolkit.figure_field``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_field import FieldPlotHandle
+        obj = FieldPlotHandle(...)
+    
+    Discovery-oriented use::
+    
+        help(FieldPlotHandle)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(FieldPlotHandle)`` and ``dir(FieldPlotHandle)`` to inspect adjacent members.
+    """
 
     plot_id: str
     view_id: str
@@ -46,7 +97,197 @@ class FieldPlotHandle:
 
 
 class ScalarFieldPlot:
-    """A 2D scalar field rendered as a contour or heatmap trace."""
+    """A 2D scalar field rendered as a contour or heatmap trace.
+    
+    Full API
+    --------
+    ``ScalarFieldPlot(x_var: Symbol, y_var: Symbol, func: Expr, smart_figure: Figure, parameters: Sequence[Symbol]=(), x_domain: RangeLike | None=None, y_domain: RangeLike | None=None, grid: tuple[int | str, int | str] | None=None, label: str='', visible: VisibleSpec=True, render_mode: FieldRenderMode='heatmap', preset: str | None=None, colorscale: Any | None=None, z_range: RangeLike | None=None, z_step: int | float | None=None, under_color: str | None=None, over_color: str | None=None, show_colorbar: bool | None=None, opacity: int | float | None=None, reversescale: bool | None=None, colorbar: Mapping[str, Any] | None=None, trace: Mapping[str, Any] | None=None, levels: int | None=None, level_step: int | float | None=None, level_start: int | float | None=None, level_end: int | float | None=None, filled: bool | None=None, show_labels: bool | None=None, line_color: str | None=None, line_width: int | float | None=None, line_dash: str | None=None, smoothing: str | bool | None=None, connectgaps: bool | None=None, plot_id: str='', view_ids: Sequence[str] | None=None, numeric_function: NumericFunction | None=None)``
+    
+    Public members exposed from this class: ``set_func``, ``set_numeric_function``, ``figure``, ``render_mode``, ``preset``,
+        ``x_var``, ``y_var``, ``symbolic_expression``, ``numeric_expression``,
+        ``parameters``, ``views``, ``label``, ``color``, ``opacity``, ``colorscale``,
+        ``z_range``, ``z_step``, ``under_color``, ``over_color``, ``show_colorbar``,
+        ``reversescale``, ``colorbar``, ``levels``, ``level_step``, ``level_start``,
+        ``level_end``, ``filled``, ``show_labels``, ``line_color``, ``line_width``,
+        ``line_dash``, ``dash``, ``smoothing``, ``connectgaps``, ``x_domain``, ``y_domain``,
+        ``grid``, ``visible``, ``x_data``, ``y_data``, ``z_data``, ``add_to_view``,
+        ``remove_from_view``, ``add_views``, ``remove_views``, ``snapshot``, ``render``,
+        ``update``
+    
+    Parameters
+    ----------
+    x_var : Symbol
+        Symbol used as the horizontal variable. Required.
+    
+    y_var : Symbol
+        Symbol used as the vertical variable. Required.
+    
+    func : Expr
+        Symbolic expression or callable to evaluate. Required.
+    
+    smart_figure : Figure
+        Value for ``smart_figure`` in this API. Required.
+    
+    parameters : Sequence[Symbol], optional
+        Parameter symbols/keys that should stay bound to this operation. Defaults to ``()``.
+    
+    x_domain : RangeLike | None, optional
+        Numeric x-domain used for evaluation or rendering. Defaults to ``None``.
+    
+    y_domain : RangeLike | None, optional
+        Numeric y-domain used for evaluation or rendering. Defaults to ``None``.
+    
+    grid : tuple[int | str, int | str] | None, optional
+        Grid resolution or grid specification used for field sampling. Defaults to ``None``.
+    
+    label : str, optional
+        Human-readable label used in UI or plotting output. Defaults to ``''``.
+    
+    visible : VisibleSpec, optional
+        Visibility flag for a plot, field, panel, or UI element. Defaults to ``True``.
+    
+    render_mode : FieldRenderMode, optional
+        Rendering mode or plot kind to create. Defaults to ``'heatmap'``.
+    
+    preset : str | None, optional
+        Named preset that chooses a particular rendering style. Defaults to ``None``.
+    
+    colorscale : Any | None, optional
+        Colorscale specification passed to the renderer. Defaults to ``None``.
+    
+    z_range : RangeLike | None, optional
+        Numeric value range used for scalar-field color mapping. Defaults to ``None``.
+    
+    z_step : int | float | None, optional
+        Numeric spacing between scalar-field contour or color levels. Defaults to ``None``.
+    
+    under_color : str | None, optional
+        Color used below the represented scalar range. Defaults to ``None``.
+    
+    over_color : str | None, optional
+        Color used above the represented scalar range. Defaults to ``None``.
+    
+    show_colorbar : bool | None, optional
+        Boolean flag controlling whether a colorbar is shown. Defaults to ``None``.
+    
+    opacity : int | float | None, optional
+        Opacity value applied to the rendered output. Defaults to ``None``.
+    
+    reversescale : bool | None, optional
+        Boolean flag controlling whether the colorscale is reversed. Defaults to ``None``.
+    
+    colorbar : Mapping[str, Any] | None, optional
+        Renderer-specific colorbar configuration mapping. Defaults to ``None``.
+    
+    trace : Mapping[str, Any] | None, optional
+        Renderer-specific trace configuration mapping. Defaults to ``None``.
+    
+    levels : int | None, optional
+        Number of contour or scalar levels to generate. Defaults to ``None``.
+    
+    level_step : int | float | None, optional
+        Spacing between contour or scalar levels. Defaults to ``None``.
+    
+    level_start : int | float | None, optional
+        First contour/scalar level to include. Defaults to ``None``.
+    
+    level_end : int | float | None, optional
+        Last contour/scalar level to include. Defaults to ``None``.
+    
+    filled : bool | None, optional
+        Boolean flag controlling whether contour regions are filled. Defaults to ``None``.
+    
+    show_labels : bool | None, optional
+        Boolean flag controlling whether labels are drawn on contour lines. Defaults to ``None``.
+    
+    line_color : str | None, optional
+        Explicit line color for contour or curve rendering. Defaults to ``None``.
+    
+    line_width : int | float | None, optional
+        Line width used for contour or curve rendering. Defaults to ``None``.
+    
+    line_dash : str | None, optional
+        Dash pattern used for contour or curve rendering. Defaults to ``None``.
+    
+    smoothing : str | bool | None, optional
+        Smoothing option passed to the renderer or interpolation layer. Defaults to ``None``.
+    
+    connectgaps : bool | None, optional
+        Boolean flag controlling whether missing samples are connected. Defaults to ``None``.
+    
+    plot_id : str, optional
+        Stable plot identifier used for lookup or update. Defaults to ``''``.
+    
+    view_ids : Sequence[str] | None, optional
+        Collection of view identifiers associated with this object or update. Defaults to ``None``.
+    
+    numeric_function : NumericFunction | None, optional
+        Precompiled numeric callable used during rendering or evaluation. Defaults to ``None``.
+    
+    Returns
+    -------
+    ScalarFieldPlot
+        New ``ScalarFieldPlot`` instance configured according to the constructor arguments.
+    
+    Optional arguments
+    ------------------
+    - ``parameters=()``: Parameter symbols/keys that should stay bound to this operation.
+    - ``x_domain=None``: Numeric x-domain used for evaluation or rendering.
+    - ``y_domain=None``: Numeric y-domain used for evaluation or rendering.
+    - ``grid=None``: Grid resolution or grid specification used for field sampling.
+    - ``label=''``: Human-readable label used in UI or plotting output.
+    - ``visible=True``: Visibility flag for a plot, field, panel, or UI element.
+    - ``render_mode='heatmap'``: Rendering mode or plot kind to create.
+    - ``preset=None``: Named preset that chooses a particular rendering style.
+    - ``colorscale=None``: Colorscale specification passed to the renderer.
+    - ``z_range=None``: Numeric value range used for scalar-field color mapping.
+    - ``z_step=None``: Numeric spacing between scalar-field contour or color levels.
+    - ``under_color=None``: Color used below the represented scalar range.
+    - ``over_color=None``: Color used above the represented scalar range.
+    - ``show_colorbar=None``: Boolean flag controlling whether a colorbar is shown.
+    - ``opacity=None``: Opacity value applied to the rendered output.
+    - ``reversescale=None``: Boolean flag controlling whether the colorscale is reversed.
+    - ``colorbar=None``: Renderer-specific colorbar configuration mapping.
+    - ``trace=None``: Renderer-specific trace configuration mapping.
+    - ``levels=None``: Number of contour or scalar levels to generate.
+    - ``level_step=None``: Spacing between contour or scalar levels.
+    - ``level_start=None``: First contour/scalar level to include.
+    - ``level_end=None``: Last contour/scalar level to include.
+    - ``filled=None``: Boolean flag controlling whether contour regions are filled.
+    - ``show_labels=None``: Boolean flag controlling whether labels are drawn on contour lines.
+    - ``line_color=None``: Explicit line color for contour or curve rendering.
+    - ``line_width=None``: Line width used for contour or curve rendering.
+    - ``line_dash=None``: Dash pattern used for contour or curve rendering.
+    - ``smoothing=None``: Smoothing option passed to the renderer or interpolation layer.
+    - ``connectgaps=None``: Boolean flag controlling whether missing samples are connected.
+    - ``plot_id=''``: Stable plot identifier used for lookup or update.
+    - ``view_ids=None``: Collection of view identifiers associated with this object or update.
+    - ``numeric_function=None``: Precompiled numeric callable used during rendering or evaluation.
+    
+    Architecture note
+    -----------------
+    ``ScalarFieldPlot`` lives in ``gu_toolkit.figure_field``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use the class as the stable owner for this slice of state rather than reaching into collaborators directly.
+    
+    Examples
+    --------
+    Construction::
+    
+        from gu_toolkit.figure_field import ScalarFieldPlot
+        obj = ScalarFieldPlot(...)
+    
+    Discovery-oriented use::
+    
+        help(ScalarFieldPlot)
+        dir(obj)
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+    """
 
     DEFAULT_GRID: FieldGrid = (120, 120)
     supports_style_dialog: bool = False
@@ -717,6 +958,60 @@ class ScalarFieldPlot:
         func: Expr,
         parameters: Sequence[Symbol] = (),
     ) -> None:
+        """Set func.
+        
+        Full API
+        --------
+        ``obj.set_func(x_var: Symbol, y_var: Symbol, func: Expr, parameters: Sequence[Symbol]=()) -> None``
+        
+        Parameters
+        ----------
+        x_var : Symbol
+            Symbol used as the horizontal variable. Required.
+        
+        y_var : Symbol
+            Symbol used as the vertical variable. Required.
+        
+        func : Expr
+            Symbolic expression or callable to evaluate. Required.
+        
+        parameters : Sequence[Symbol], optional
+            Parameter symbols/keys that should stay bound to this operation. Defaults to ``()``.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        - ``parameters=()``: Parameter symbols/keys that should stay bound to this operation.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            obj.set_func(...)
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         parameters = list(parameters)
         self._numpified = numpify_cached(func, vars=[x_var, y_var, *parameters])
         self._x_var = x_var
@@ -733,6 +1028,64 @@ class ScalarFieldPlot:
         *,
         symbolic_expression: Expr | None = None,
     ) -> None:
+        """Set numeric function.
+        
+        Full API
+        --------
+        ``obj.set_numeric_function(x_var: Symbol, y_var: Symbol, numeric_function: NumericFunction, parameters: Sequence[Symbol]=(), *, symbolic_expression: Expr | None=None) -> None``
+        
+        Parameters
+        ----------
+        x_var : Symbol
+            Symbol used as the horizontal variable. Required.
+        
+        y_var : Symbol
+            Symbol used as the vertical variable. Required.
+        
+        numeric_function : NumericFunction
+            Precompiled numeric callable used during rendering or evaluation. Required.
+        
+        parameters : Sequence[Symbol], optional
+            Parameter symbols/keys that should stay bound to this operation. Defaults to ``()``.
+        
+        symbolic_expression : Expr | None, optional
+            Symbolic expression stored for display, round-tripping, or regeneration. Defaults to ``None``.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        - ``parameters=()``: Parameter symbols/keys that should stay bound to this operation.
+        - ``symbolic_expression=None``: Symbolic expression stored for display, round-tripping, or regeneration.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            obj.set_numeric_function(...)
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         self._numpified = numeric_function
         self._x_var = x_var
         self._y_var = y_var
@@ -775,52 +1128,581 @@ class ScalarFieldPlot:
 
     @property
     def figure(self) -> Figure:
+        """Work with figure on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.figure -> Figure``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        Figure
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.figure
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._smart_figure
 
     @property
     def render_mode(self) -> FieldRenderMode:
+        """Render mode.
+        
+        Full API
+        --------
+        ``obj.render_mode -> FieldRenderMode``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        FieldRenderMode
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.render_mode
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._render_mode
 
     @property
     def preset(self) -> str | None:
+        """Work with preset on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.preset -> str | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.preset
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._preset
 
     @property
     def x_var(self) -> Symbol:
+        """Work with x var on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.x_var -> Symbol``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        Symbol
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.x_var
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._x_var
 
     @property
     def y_var(self) -> Symbol:
+        """Work with y var on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.y_var -> Symbol``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        Symbol
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.y_var
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._y_var
 
     @property
     def symbolic_expression(self) -> Expr:
+        """Work with symbolic expression on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.symbolic_expression -> Expr``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        Expr
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.symbolic_expression
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._func
 
     @property
     def numeric_expression(self) -> NumericFunction:
+        """Work with numeric expression on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.numeric_expression -> NumericFunction``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        NumericFunction
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.numeric_expression
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._live_numeric_expression
 
     @property
     def parameters(self) -> tuple[Symbol, ...]:
+        """Work with parameters on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.parameters -> tuple[Symbol, Ellipsis]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[Symbol, Ellipsis]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.parameters
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return tuple(sym for sym in self._numpified.all_vars if sym not in {self._x_var, self._y_var})
 
     @property
     def views(self) -> tuple[str, ...]:
+        """Work with views on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.views -> tuple[str, Ellipsis]``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[str, Ellipsis]
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.views
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return tuple(sorted(self._view_ids))
 
     @property
     def label(self) -> str:
+        """Work with label on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.label -> str``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.label
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._label
 
     @label.setter
     def label(self, value: str) -> None:
+        """Work with label on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.label = value``
+        
+        Parameters
+        ----------
+        value : str
+            New or current value for the relevant property, control, or calculation. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            obj.label = value
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         self._label = str(value)
         for trace_handle in self._iter_trace_handles():
             trace_handle.name = value
 
     @property
     def color(self) -> str | None:
+        """Work with color on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.color -> str | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.color
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         if self._line_color:
             return self._line_color
         ref = self._reference_trace_handle()
@@ -856,99 +1738,1157 @@ class ScalarFieldPlot:
 
     @property
     def opacity(self) -> float | None:
+        """Work with opacity on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.opacity -> float | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        float | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.opacity
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._opacity
 
     @opacity.setter
     def opacity(self, value: int | float | None) -> None:
+        """Work with opacity on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.opacity = value``
+        
+        Parameters
+        ----------
+        value : int | float | None
+            New or current value for the relevant property, control, or calculation. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            obj.opacity = value
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         self._opacity = self._coerce_opacity(value)
         self._apply_style_to_all_trace_handles()
 
     @property
     def colorscale(self) -> Any | None:
+        """Work with colorscale on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.colorscale -> Any | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        Any | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.colorscale
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._colorscale
 
     @property
     def z_range(self) -> tuple[float, float] | None:
+        """Work with z range on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.z_range -> tuple[float, float] | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[float, float] | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.z_range
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._z_range
 
     @property
     def z_step(self) -> float | None:
+        """Work with z step on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.z_step -> float | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        float | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.z_step
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._z_step
 
     @property
     def under_color(self) -> str | None:
+        """Work with under color on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.under_color -> str | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.under_color
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._under_color
 
     @property
     def over_color(self) -> str | None:
+        """Work with over color on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.over_color -> str | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.over_color
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._over_color
 
     @property
     def show_colorbar(self) -> bool:
+        """Work with show colorbar on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.show_colorbar -> bool``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.show_colorbar
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._show_colorbar
 
     @property
     def reversescale(self) -> bool:
+        """Work with reversescale on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.reversescale -> bool``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.reversescale
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._reversescale
 
     @property
     def colorbar(self) -> dict[str, Any] | None:
+        """Work with colorbar on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.colorbar -> dict[str, Any] | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        dict[str, Any] | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.colorbar
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return None if self._colorbar is None else dict(self._colorbar)
 
     @property
     def levels(self) -> int | None:
+        """Work with levels on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.levels -> int | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        int | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.levels
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._levels
 
     @property
     def level_step(self) -> float | None:
+        """Work with level step on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.level_step -> float | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        float | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.level_step
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._level_step
 
     @property
     def level_start(self) -> float | None:
+        """Work with level start on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.level_start -> float | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        float | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.level_start
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._level_start
 
     @property
     def level_end(self) -> float | None:
+        """Work with level end on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.level_end -> float | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        float | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.level_end
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._level_end
 
     @property
     def filled(self) -> bool:
+        """Work with filled on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.filled -> bool``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.filled
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._filled
 
     @property
     def show_labels(self) -> bool:
+        """Work with show labels on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.show_labels -> bool``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.show_labels
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._show_labels
 
     @property
     def line_color(self) -> str | None:
+        """Work with line color on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.line_color -> str | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.line_color
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._line_color
 
     @property
     def line_width(self) -> float | None:
+        """Work with line width on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.line_width -> float | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        float | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.line_width
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._line_width
 
     @property
     def line_dash(self) -> str | None:
+        """Work with line dash on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.line_dash -> str | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.line_dash
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._line_dash
 
     @property
     def dash(self) -> str | None:
+        """Work with dash on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.dash -> str | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.dash
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._line_dash
 
     @property
     def smoothing(self) -> str | bool | None:
+        """Work with smoothing on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.smoothing -> str | bool | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        str | bool | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.smoothing
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._smoothing
 
     @property
     def connectgaps(self) -> bool | None:
+        """Work with connectgaps on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.connectgaps -> bool | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        bool | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.connectgaps
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._connectgaps
 
     @property
     def x_domain(self) -> tuple[float, float] | None:
+        """Work with x domain on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.x_domain -> tuple[float, float] | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[float, float] | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.x_domain
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._x_domain
 
     @x_domain.setter
     def x_domain(self, value: RangeLike | None) -> None:
+        """Work with x domain on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.x_domain = value``
+        
+        Parameters
+        ----------
+        value : RangeLike | None
+            New or current value for the relevant property, control, or calculation. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            obj.x_domain = value
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         if value is None or _is_figure_default(value):
             self._x_domain = None
         else:
@@ -957,10 +2897,99 @@ class ScalarFieldPlot:
 
     @property
     def y_domain(self) -> tuple[float, float] | None:
+        """Work with y domain on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.y_domain -> tuple[float, float] | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        tuple[float, float] | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.y_domain
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._y_domain
 
     @y_domain.setter
     def y_domain(self, value: RangeLike | None) -> None:
+        """Work with y domain on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.y_domain = value``
+        
+        Parameters
+        ----------
+        value : RangeLike | None
+            New or current value for the relevant property, control, or calculation. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            obj.y_domain = value
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         if value is None or _is_figure_default(value):
             self._y_domain = None
         else:
@@ -969,19 +2998,197 @@ class ScalarFieldPlot:
 
     @property
     def grid(self) -> FieldGrid | None:
+        """Work with grid on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.grid -> FieldGrid | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        FieldGrid | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.grid
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._grid
 
     @grid.setter
     def grid(self, value: tuple[int | str, int | str] | None) -> None:
+        """Work with grid on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.grid = value``
+        
+        Parameters
+        ----------
+        value : tuple[int | str, int | str] | None
+            New or current value for the relevant property, control, or calculation. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            obj.grid = value
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         self._grid = self._coerce_grid(value)
         self.render()
 
     @property
     def visible(self) -> VisibleSpec:
+        """Work with visible on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.visible -> VisibleSpec``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        VisibleSpec
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.visible
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return self._visible
 
     @visible.setter
     def visible(self, value: VisibleSpec) -> None:
+        """Work with visible on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.visible = value``
+        
+        Parameters
+        ----------
+        value : VisibleSpec
+            New or current value for the relevant property, control, or calculation. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            obj.visible = value
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         self._visible = value
         for view_id in self._view_ids:
             self._set_visibility_for_target_view(view_id)
@@ -990,6 +3197,50 @@ class ScalarFieldPlot:
 
     @property
     def x_data(self) -> np.ndarray | None:
+        """Work with x data on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.x_data -> np.ndarray | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        np.ndarray | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.x_data
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         if self._x_axis_values is None:
             return None
         values = self._x_axis_values.copy()
@@ -998,6 +3249,50 @@ class ScalarFieldPlot:
 
     @property
     def y_data(self) -> np.ndarray | None:
+        """Work with y data on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.y_data -> np.ndarray | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        np.ndarray | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.y_data
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         if self._y_axis_values is None:
             return None
         values = self._y_axis_values.copy()
@@ -1006,6 +3301,50 @@ class ScalarFieldPlot:
 
     @property
     def z_data(self) -> np.ndarray | None:
+        """Work with z data on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.z_data -> np.ndarray | None``
+        
+        Parameters
+        ----------
+        None. This API does not declare user-supplied parameters beyond implicit object context.
+        
+        Returns
+        -------
+        np.ndarray | None
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            current = obj.z_data
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         if self._z_data is None:
             return None
         values = self._z_data.copy()
@@ -1017,6 +3356,51 @@ class ScalarFieldPlot:
     # ------------------------------------------------------------------
 
     def add_to_view(self, view_id: str) -> None:
+        """Add to view.
+        
+        Full API
+        --------
+        ``obj.add_to_view(view_id: str) -> None``
+        
+        Parameters
+        ----------
+        view_id : str
+            Identifier for the relevant view inside a figure. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            obj.add_to_view(...)
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         if view_id in self._view_ids:
             return
         self._view_ids.add(view_id)
@@ -1025,6 +3409,51 @@ class ScalarFieldPlot:
             self.render(view_id=view_id)
 
     def remove_from_view(self, view_id: str) -> None:
+        """Remove from view.
+        
+        Full API
+        --------
+        ``obj.remove_from_view(view_id: str) -> None``
+        
+        Parameters
+        ----------
+        view_id : str
+            Identifier for the relevant view inside a figure. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            obj.remove_from_view(...)
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         if view_id not in self._view_ids:
             return
         self._view_ids.remove(view_id)
@@ -1032,6 +3461,51 @@ class ScalarFieldPlot:
         self._handles.pop(view_id, None)
 
     def add_views(self, views: str | Sequence[str]) -> None:
+        """Add views.
+        
+        Full API
+        --------
+        ``obj.add_views(views: str | Sequence[str]) -> None``
+        
+        Parameters
+        ----------
+        views : str | Sequence[str]
+            Collection of view identifiers associated with this object or update. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            obj.add_views(...)
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         if isinstance(views, str):
             self.add_to_view(views)
             return
@@ -1039,6 +3513,51 @@ class ScalarFieldPlot:
             self.add_to_view(view_id)
 
     def remove_views(self, views: str | Sequence[str]) -> None:
+        """Remove views.
+        
+        Full API
+        --------
+        ``obj.remove_views(views: str | Sequence[str]) -> None``
+        
+        Parameters
+        ----------
+        views : str | Sequence[str]
+            Collection of view identifiers associated with this object or update. Required.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        This API does not declare optional arguments in its Python signature.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            obj.remove_views(...)
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         if isinstance(views, str):
             self.remove_from_view(views)
             return
@@ -1046,6 +3565,51 @@ class ScalarFieldPlot:
             self.remove_from_view(view_id)
 
     def snapshot(self, *, id: str = "") -> FieldPlotSnapshot:
+        """Work with snapshot on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.snapshot(*, id: str='') -> FieldPlotSnapshot``
+        
+        Parameters
+        ----------
+        id : str, optional
+            Stable identifier used to create, update, or look up the target object. Defaults to ``''``.
+        
+        Returns
+        -------
+        FieldPlotSnapshot
+            Result produced by this API.
+        
+        Optional arguments
+        ------------------
+        - ``id=''``: Stable identifier used to create, update, or look up the target object.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            result = obj.snapshot(...)
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         return FieldPlotSnapshot(
             id=id,
             render_mode=self.render_mode,
@@ -1119,6 +3683,59 @@ class ScalarFieldPlot:
         use_batch_update: bool = True,
         refresh_parameter_snapshot: bool = True,
     ) -> None:
+        """Render value.
+        
+        Full API
+        --------
+        ``obj.render(view_id: str | None=None, *, use_batch_update: bool=True, refresh_parameter_snapshot: bool=True) -> None``
+        
+        Parameters
+        ----------
+        view_id : str | None, optional
+            Identifier for the relevant view inside a figure. Defaults to ``None``.
+        
+        use_batch_update : bool, optional
+            Value for ``use_batch_update`` in this API. Defaults to ``True``.
+        
+        refresh_parameter_snapshot : bool, optional
+            Value for ``refresh_parameter_snapshot`` in this API. Defaults to ``True``.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        - ``view_id=None``: Identifier for the relevant view inside a figure.
+        - ``use_batch_update=True``: Value for ``use_batch_update`` in this API.
+        - ``refresh_parameter_snapshot=True``: Value for ``refresh_parameter_snapshot`` in this API.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            obj.render(...)
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         target_view = view_id or self._smart_figure.views.current_id
         self._set_visibility_for_target_view(target_view)
         if target_view not in self._view_ids:
@@ -1178,6 +3795,11 @@ class ScalarFieldPlot:
         else:
             _apply_trace_update()
 
+        pane = getattr(fig.views[target_view], "pane", None)
+        getattr(pane, "refresh_plot_display", lambda **_kwargs: False)(
+            reason=f"render:{type(self).__name__}"
+        )
+
     # ------------------------------------------------------------------
     # In-place updates
     # ------------------------------------------------------------------
@@ -1235,6 +3857,51 @@ class ScalarFieldPlot:
         self._apply_style_to_all_trace_handles()
 
     def update(self, **kwargs: Any) -> None:
+        """Work with update on ``ScalarFieldPlot``.
+        
+        Full API
+        --------
+        ``obj.update(**kwargs: Any) -> None``
+        
+        Parameters
+        ----------
+        **kwargs : Any, optional
+            Additional keyword arguments forwarded by this API. Optional variadic input.
+        
+        Returns
+        -------
+        None
+            This call is used for side effects and does not return a value.
+        
+        Optional arguments
+        ------------------
+        - ``**kwargs``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+        
+        Architecture note
+        -----------------
+        This member belongs to ``ScalarFieldPlot``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
+        
+        Examples
+        --------
+        Basic use::
+        
+            obj = ScalarFieldPlot(...)
+            obj.update(...)
+        
+        Discovery-oriented use::
+        
+            help(ScalarFieldPlot)
+            # then follow the guide/test links listed below
+        
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+        - Guide: ``docs/guides/scalar-field-styling.md``.
+        - Example notebook: ``examples/Toolkit_overview.ipynb``.
+        - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+        - In a notebook or REPL, run ``help(ScalarFieldPlot)`` and ``dir(ScalarFieldPlot)`` to inspect adjacent members.
+        """
+
         render_requested = False
         previous_suspend = self._suspend_render
         self._suspend_render = True
@@ -1422,6 +4089,203 @@ def create_or_update_scalar_field_plot(
     vars: Any | None = None,
     caller: str = "scalar_field()",
 ) -> ScalarFieldPlot:
+    """Create or update scalar field plot.
+    
+    Full API
+    --------
+    ``create_or_update_scalar_field_plot(figure: Figure, func: Any, x: Any, y: Any, *, parameters: ParameterKeyOrKeys | None=None, id: str | None=None, label: str | None=None, visible: VisibleSpec=True, x_domain: RangeLike | None=None, y_domain: RangeLike | None=None, grid: tuple[int | str, int | str] | None=None, render_mode: FieldRenderMode='heatmap', preset: str | None=None, colorscale: Any | None=None, z_range: RangeLike | None=None, z_step: int | float | None=None, under_color: str | None=None, over_color: str | None=None, show_colorbar: bool | None=None, opacity: int | float | None=None, alpha: int | float | None=None, reversescale: bool | None=None, colorbar: Mapping[str, Any] | None=None, trace: Mapping[str, Any] | None=None, levels: int | None=None, level_step: int | float | None=None, level_start: int | float | None=None, level_end: int | float | None=None, filled: bool | None=None, show_labels: bool | None=None, line_color: str | None=None, line_width: int | float | None=None, line_dash: str | None=None, dash: str | None=None, smoothing: str | bool | None=None, zsmooth: str | bool | None=None, connectgaps: bool | None=None, view: str | Sequence[str] | None=None, vars: Any | None=None, caller: str='scalar_field()') -> ScalarFieldPlot``
+    
+    Parameters
+    ----------
+    figure : Figure
+        Figure instance that owns the relevant state. Required.
+    
+    func : Any
+        Symbolic expression or callable to evaluate. Required.
+    
+    x : Any
+        Primary symbolic variable or x-coordinate input. Required.
+    
+    y : Any
+        Primary symbolic variable or y-coordinate input. Required.
+    
+    parameters : ParameterKeyOrKeys | None, optional
+        Parameter symbols/keys that should stay bound to this operation. Defaults to ``None``.
+    
+    id : str | None, optional
+        Stable identifier used to create, update, or look up the target object. Defaults to ``None``.
+    
+    label : str | None, optional
+        Human-readable label used in UI or plotting output. Defaults to ``None``.
+    
+    visible : VisibleSpec, optional
+        Visibility flag for a plot, field, panel, or UI element. Defaults to ``True``.
+    
+    x_domain : RangeLike | None, optional
+        Numeric x-domain used for evaluation or rendering. Defaults to ``None``.
+    
+    y_domain : RangeLike | None, optional
+        Numeric y-domain used for evaluation or rendering. Defaults to ``None``.
+    
+    grid : tuple[int | str, int | str] | None, optional
+        Grid resolution or grid specification used for field sampling. Defaults to ``None``.
+    
+    render_mode : FieldRenderMode, optional
+        Rendering mode or plot kind to create. Defaults to ``'heatmap'``.
+    
+    preset : str | None, optional
+        Named preset that chooses a particular rendering style. Defaults to ``None``.
+    
+    colorscale : Any | None, optional
+        Colorscale specification passed to the renderer. Defaults to ``None``.
+    
+    z_range : RangeLike | None, optional
+        Numeric value range used for scalar-field color mapping. Defaults to ``None``.
+    
+    z_step : int | float | None, optional
+        Numeric spacing between scalar-field contour or color levels. Defaults to ``None``.
+    
+    under_color : str | None, optional
+        Color used below the represented scalar range. Defaults to ``None``.
+    
+    over_color : str | None, optional
+        Color used above the represented scalar range. Defaults to ``None``.
+    
+    show_colorbar : bool | None, optional
+        Boolean flag controlling whether a colorbar is shown. Defaults to ``None``.
+    
+    opacity : int | float | None, optional
+        Opacity value applied to the rendered output. Defaults to ``None``.
+    
+    alpha : int | float | None, optional
+        Value for ``alpha`` in this API. Defaults to ``None``.
+    
+    reversescale : bool | None, optional
+        Boolean flag controlling whether the colorscale is reversed. Defaults to ``None``.
+    
+    colorbar : Mapping[str, Any] | None, optional
+        Renderer-specific colorbar configuration mapping. Defaults to ``None``.
+    
+    trace : Mapping[str, Any] | None, optional
+        Renderer-specific trace configuration mapping. Defaults to ``None``.
+    
+    levels : int | None, optional
+        Number of contour or scalar levels to generate. Defaults to ``None``.
+    
+    level_step : int | float | None, optional
+        Spacing between contour or scalar levels. Defaults to ``None``.
+    
+    level_start : int | float | None, optional
+        First contour/scalar level to include. Defaults to ``None``.
+    
+    level_end : int | float | None, optional
+        Last contour/scalar level to include. Defaults to ``None``.
+    
+    filled : bool | None, optional
+        Boolean flag controlling whether contour regions are filled. Defaults to ``None``.
+    
+    show_labels : bool | None, optional
+        Boolean flag controlling whether labels are drawn on contour lines. Defaults to ``None``.
+    
+    line_color : str | None, optional
+        Explicit line color for contour or curve rendering. Defaults to ``None``.
+    
+    line_width : int | float | None, optional
+        Line width used for contour or curve rendering. Defaults to ``None``.
+    
+    line_dash : str | None, optional
+        Dash pattern used for contour or curve rendering. Defaults to ``None``.
+    
+    dash : str | None, optional
+        Dash pattern used for contour or curve rendering. Defaults to ``None``.
+    
+    smoothing : str | bool | None, optional
+        Smoothing option passed to the renderer or interpolation layer. Defaults to ``None``.
+    
+    zsmooth : str | bool | None, optional
+        Value for ``zsmooth`` in this API. Defaults to ``None``.
+    
+    connectgaps : bool | None, optional
+        Boolean flag controlling whether missing samples are connected. Defaults to ``None``.
+    
+    view : str | Sequence[str] | None, optional
+        View identifier or view-scoped target. When omitted, the active view is used. Defaults to ``None``.
+    
+    vars : Any | None, optional
+        Value for ``vars`` in this API. Defaults to ``None``.
+    
+    caller : str, optional
+        Value for ``caller`` in this API. Defaults to ``'scalar_field()'``.
+    
+    Returns
+    -------
+    ScalarFieldPlot
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``parameters=None``: Parameter symbols/keys that should stay bound to this operation.
+    - ``id=None``: Stable identifier used to create, update, or look up the target object.
+    - ``label=None``: Human-readable label used in UI or plotting output.
+    - ``visible=True``: Visibility flag for a plot, field, panel, or UI element.
+    - ``x_domain=None``: Numeric x-domain used for evaluation or rendering.
+    - ``y_domain=None``: Numeric y-domain used for evaluation or rendering.
+    - ``grid=None``: Grid resolution or grid specification used for field sampling.
+    - ``render_mode='heatmap'``: Rendering mode or plot kind to create.
+    - ``preset=None``: Named preset that chooses a particular rendering style.
+    - ``colorscale=None``: Colorscale specification passed to the renderer.
+    - ``z_range=None``: Numeric value range used for scalar-field color mapping.
+    - ``z_step=None``: Numeric spacing between scalar-field contour or color levels.
+    - ``under_color=None``: Color used below the represented scalar range.
+    - ``over_color=None``: Color used above the represented scalar range.
+    - ``show_colorbar=None``: Boolean flag controlling whether a colorbar is shown.
+    - ``opacity=None``: Opacity value applied to the rendered output.
+    - ``alpha=None``: Value for ``alpha`` in this API.
+    - ``reversescale=None``: Boolean flag controlling whether the colorscale is reversed.
+    - ``colorbar=None``: Renderer-specific colorbar configuration mapping.
+    - ``trace=None``: Renderer-specific trace configuration mapping.
+    - ``levels=None``: Number of contour or scalar levels to generate.
+    - ``level_step=None``: Spacing between contour or scalar levels.
+    - ``level_start=None``: First contour/scalar level to include.
+    - ``level_end=None``: Last contour/scalar level to include.
+    - ``filled=None``: Boolean flag controlling whether contour regions are filled.
+    - ``show_labels=None``: Boolean flag controlling whether labels are drawn on contour lines.
+    - ``line_color=None``: Explicit line color for contour or curve rendering.
+    - ``line_width=None``: Line width used for contour or curve rendering.
+    - ``line_dash=None``: Dash pattern used for contour or curve rendering.
+    - ``dash=None``: Dash pattern used for contour or curve rendering.
+    - ``smoothing=None``: Smoothing option passed to the renderer or interpolation layer.
+    - ``zsmooth=None``: Value for ``zsmooth`` in this API.
+    - ``connectgaps=None``: Boolean flag controlling whether missing samples are connected.
+    - ``view=None``: View identifier or view-scoped target. When omitted, the active view is used.
+    - ``vars=None``: Value for ``vars`` in this API.
+    - ``caller='scalar_field()'``: Value for ``caller`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_field``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_field import create_or_update_scalar_field_plot
+        result = create_or_update_scalar_field_plot(...)
+    
+    Discovery-oriented use::
+    
+        help(create_or_update_scalar_field_plot)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(create_or_update_scalar_field_plot)`` and inspect sibling APIs in the same module.
+    """
+
     id = resolve_plot_id(figure.plots, id)
     x_var_spec, x_domain = _normalize_axis_domain(
         x, axis_name="x", domain=x_domain, caller=caller
@@ -1638,6 +4502,199 @@ def scalar_field_method(
     view: str | Sequence[str] | None = None,
     vars: Any | None = None,
 ) -> ScalarFieldPlot:
+    """Work with scalar field method.
+    
+    Full API
+    --------
+    ``scalar_field_method(self: Figure, func: Any, x: Any, y: Any, parameters: ParameterKeyOrKeys | None=None, id: str | None=None, label: str | None=None, visible: VisibleSpec=True, x_domain: RangeLike | None=None, y_domain: RangeLike | None=None, grid: tuple[int | str, int | str] | None=None, render_mode: FieldRenderMode='heatmap', preset: str | None=None, colorscale: Any | None=None, z_range: RangeLike | None=None, z_step: int | float | None=None, under_color: str | None=None, over_color: str | None=None, show_colorbar: bool | None=None, opacity: int | float | None=None, alpha: int | float | None=None, reversescale: bool | None=None, colorbar: Mapping[str, Any] | None=None, trace: Mapping[str, Any] | None=None, levels: int | None=None, level_step: int | float | None=None, level_start: int | float | None=None, level_end: int | float | None=None, filled: bool | None=None, show_labels: bool | None=None, line_color: str | None=None, line_width: int | float | None=None, line_dash: str | None=None, dash: str | None=None, smoothing: str | bool | None=None, zsmooth: str | bool | None=None, connectgaps: bool | None=None, view: str | Sequence[str] | None=None, vars: Any | None=None) -> ScalarFieldPlot``
+    
+    Parameters
+    ----------
+    self : Figure
+        Value for ``self`` in this API. Required.
+    
+    func : Any
+        Symbolic expression or callable to evaluate. Required.
+    
+    x : Any
+        Primary symbolic variable or x-coordinate input. Required.
+    
+    y : Any
+        Primary symbolic variable or y-coordinate input. Required.
+    
+    parameters : ParameterKeyOrKeys | None, optional
+        Parameter symbols/keys that should stay bound to this operation. Defaults to ``None``.
+    
+    id : str | None, optional
+        Stable identifier used to create, update, or look up the target object. Defaults to ``None``.
+    
+    label : str | None, optional
+        Human-readable label used in UI or plotting output. Defaults to ``None``.
+    
+    visible : VisibleSpec, optional
+        Visibility flag for a plot, field, panel, or UI element. Defaults to ``True``.
+    
+    x_domain : RangeLike | None, optional
+        Numeric x-domain used for evaluation or rendering. Defaults to ``None``.
+    
+    y_domain : RangeLike | None, optional
+        Numeric y-domain used for evaluation or rendering. Defaults to ``None``.
+    
+    grid : tuple[int | str, int | str] | None, optional
+        Grid resolution or grid specification used for field sampling. Defaults to ``None``.
+    
+    render_mode : FieldRenderMode, optional
+        Rendering mode or plot kind to create. Defaults to ``'heatmap'``.
+    
+    preset : str | None, optional
+        Named preset that chooses a particular rendering style. Defaults to ``None``.
+    
+    colorscale : Any | None, optional
+        Colorscale specification passed to the renderer. Defaults to ``None``.
+    
+    z_range : RangeLike | None, optional
+        Numeric value range used for scalar-field color mapping. Defaults to ``None``.
+    
+    z_step : int | float | None, optional
+        Numeric spacing between scalar-field contour or color levels. Defaults to ``None``.
+    
+    under_color : str | None, optional
+        Color used below the represented scalar range. Defaults to ``None``.
+    
+    over_color : str | None, optional
+        Color used above the represented scalar range. Defaults to ``None``.
+    
+    show_colorbar : bool | None, optional
+        Boolean flag controlling whether a colorbar is shown. Defaults to ``None``.
+    
+    opacity : int | float | None, optional
+        Opacity value applied to the rendered output. Defaults to ``None``.
+    
+    alpha : int | float | None, optional
+        Value for ``alpha`` in this API. Defaults to ``None``.
+    
+    reversescale : bool | None, optional
+        Boolean flag controlling whether the colorscale is reversed. Defaults to ``None``.
+    
+    colorbar : Mapping[str, Any] | None, optional
+        Renderer-specific colorbar configuration mapping. Defaults to ``None``.
+    
+    trace : Mapping[str, Any] | None, optional
+        Renderer-specific trace configuration mapping. Defaults to ``None``.
+    
+    levels : int | None, optional
+        Number of contour or scalar levels to generate. Defaults to ``None``.
+    
+    level_step : int | float | None, optional
+        Spacing between contour or scalar levels. Defaults to ``None``.
+    
+    level_start : int | float | None, optional
+        First contour/scalar level to include. Defaults to ``None``.
+    
+    level_end : int | float | None, optional
+        Last contour/scalar level to include. Defaults to ``None``.
+    
+    filled : bool | None, optional
+        Boolean flag controlling whether contour regions are filled. Defaults to ``None``.
+    
+    show_labels : bool | None, optional
+        Boolean flag controlling whether labels are drawn on contour lines. Defaults to ``None``.
+    
+    line_color : str | None, optional
+        Explicit line color for contour or curve rendering. Defaults to ``None``.
+    
+    line_width : int | float | None, optional
+        Line width used for contour or curve rendering. Defaults to ``None``.
+    
+    line_dash : str | None, optional
+        Dash pattern used for contour or curve rendering. Defaults to ``None``.
+    
+    dash : str | None, optional
+        Dash pattern used for contour or curve rendering. Defaults to ``None``.
+    
+    smoothing : str | bool | None, optional
+        Smoothing option passed to the renderer or interpolation layer. Defaults to ``None``.
+    
+    zsmooth : str | bool | None, optional
+        Value for ``zsmooth`` in this API. Defaults to ``None``.
+    
+    connectgaps : bool | None, optional
+        Boolean flag controlling whether missing samples are connected. Defaults to ``None``.
+    
+    view : str | Sequence[str] | None, optional
+        View identifier or view-scoped target. When omitted, the active view is used. Defaults to ``None``.
+    
+    vars : Any | None, optional
+        Value for ``vars`` in this API. Defaults to ``None``.
+    
+    Returns
+    -------
+    ScalarFieldPlot
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``parameters=None``: Parameter symbols/keys that should stay bound to this operation.
+    - ``id=None``: Stable identifier used to create, update, or look up the target object.
+    - ``label=None``: Human-readable label used in UI or plotting output.
+    - ``visible=True``: Visibility flag for a plot, field, panel, or UI element.
+    - ``x_domain=None``: Numeric x-domain used for evaluation or rendering.
+    - ``y_domain=None``: Numeric y-domain used for evaluation or rendering.
+    - ``grid=None``: Grid resolution or grid specification used for field sampling.
+    - ``render_mode='heatmap'``: Rendering mode or plot kind to create.
+    - ``preset=None``: Named preset that chooses a particular rendering style.
+    - ``colorscale=None``: Colorscale specification passed to the renderer.
+    - ``z_range=None``: Numeric value range used for scalar-field color mapping.
+    - ``z_step=None``: Numeric spacing between scalar-field contour or color levels.
+    - ``under_color=None``: Color used below the represented scalar range.
+    - ``over_color=None``: Color used above the represented scalar range.
+    - ``show_colorbar=None``: Boolean flag controlling whether a colorbar is shown.
+    - ``opacity=None``: Opacity value applied to the rendered output.
+    - ``alpha=None``: Value for ``alpha`` in this API.
+    - ``reversescale=None``: Boolean flag controlling whether the colorscale is reversed.
+    - ``colorbar=None``: Renderer-specific colorbar configuration mapping.
+    - ``trace=None``: Renderer-specific trace configuration mapping.
+    - ``levels=None``: Number of contour or scalar levels to generate.
+    - ``level_step=None``: Spacing between contour or scalar levels.
+    - ``level_start=None``: First contour/scalar level to include.
+    - ``level_end=None``: Last contour/scalar level to include.
+    - ``filled=None``: Boolean flag controlling whether contour regions are filled.
+    - ``show_labels=None``: Boolean flag controlling whether labels are drawn on contour lines.
+    - ``line_color=None``: Explicit line color for contour or curve rendering.
+    - ``line_width=None``: Line width used for contour or curve rendering.
+    - ``line_dash=None``: Dash pattern used for contour or curve rendering.
+    - ``dash=None``: Dash pattern used for contour or curve rendering.
+    - ``smoothing=None``: Smoothing option passed to the renderer or interpolation layer.
+    - ``zsmooth=None``: Value for ``zsmooth`` in this API.
+    - ``connectgaps=None``: Boolean flag controlling whether missing samples are connected.
+    - ``view=None``: View identifier or view-scoped target. When omitted, the active view is used.
+    - ``vars=None``: Value for ``vars`` in this API.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_field``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_field import scalar_field_method
+        result = scalar_field_method(...)
+    
+    Discovery-oriented use::
+    
+        help(scalar_field_method)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(scalar_field_method)`` and inspect sibling APIs in the same module.
+    """
+
     return create_or_update_scalar_field_plot(
         self,
         func,
@@ -1684,6 +4741,63 @@ def scalar_field_method(
 
 
 def contour_method(self: Figure, func: Any, x: Any, y: Any, **kwargs: Any) -> ScalarFieldPlot:
+    """Work with contour method.
+    
+    Full API
+    --------
+    ``contour_method(self: Figure, func: Any, x: Any, y: Any, **kwargs: Any) -> ScalarFieldPlot``
+    
+    Parameters
+    ----------
+    self : Figure
+        Value for ``self`` in this API. Required.
+    
+    func : Any
+        Symbolic expression or callable to evaluate. Required.
+    
+    x : Any
+        Primary symbolic variable or x-coordinate input. Required.
+    
+    y : Any
+        Primary symbolic variable or y-coordinate input. Required.
+    
+    **kwargs : Any, optional
+        Additional keyword arguments forwarded by this API. Optional variadic input.
+    
+    Returns
+    -------
+    ScalarFieldPlot
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``**kwargs``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_field``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_field import contour_method
+        result = contour_method(...)
+    
+    Discovery-oriented use::
+    
+        help(contour_method)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(contour_method)`` and inspect sibling APIs in the same module.
+    """
+
     kwargs.setdefault("render_mode", "contour")
     kwargs.setdefault("filled", False)
     return create_or_update_scalar_field_plot(self, func, x, y, caller="contour()", **kwargs)
@@ -1691,12 +4805,126 @@ def contour_method(self: Figure, func: Any, x: Any, y: Any, **kwargs: Any) -> Sc
 
 
 def density_method(self: Figure, func: Any, x: Any, y: Any, **kwargs: Any) -> ScalarFieldPlot:
+    """Work with density method.
+    
+    Full API
+    --------
+    ``density_method(self: Figure, func: Any, x: Any, y: Any, **kwargs: Any) -> ScalarFieldPlot``
+    
+    Parameters
+    ----------
+    self : Figure
+        Value for ``self`` in this API. Required.
+    
+    func : Any
+        Symbolic expression or callable to evaluate. Required.
+    
+    x : Any
+        Primary symbolic variable or x-coordinate input. Required.
+    
+    y : Any
+        Primary symbolic variable or y-coordinate input. Required.
+    
+    **kwargs : Any, optional
+        Additional keyword arguments forwarded by this API. Optional variadic input.
+    
+    Returns
+    -------
+    ScalarFieldPlot
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``**kwargs``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_field``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_field import density_method
+        result = density_method(...)
+    
+    Discovery-oriented use::
+    
+        help(density_method)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(density_method)`` and inspect sibling APIs in the same module.
+    """
+
     kwargs.setdefault("render_mode", "heatmap")
     return create_or_update_scalar_field_plot(self, func, x, y, caller="density()", **kwargs)
 
 
 
 def temperature_method(self: Figure, func: Any, x: Any, y: Any, **kwargs: Any) -> ScalarFieldPlot:
+    """Work with temperature method.
+    
+    Full API
+    --------
+    ``temperature_method(self: Figure, func: Any, x: Any, y: Any, **kwargs: Any) -> ScalarFieldPlot``
+    
+    Parameters
+    ----------
+    self : Figure
+        Value for ``self`` in this API. Required.
+    
+    func : Any
+        Symbolic expression or callable to evaluate. Required.
+    
+    x : Any
+        Primary symbolic variable or x-coordinate input. Required.
+    
+    y : Any
+        Primary symbolic variable or y-coordinate input. Required.
+    
+    **kwargs : Any, optional
+        Additional keyword arguments forwarded by this API. Optional variadic input.
+    
+    Returns
+    -------
+    ScalarFieldPlot
+        Result produced by this API.
+    
+    Optional arguments
+    ------------------
+    - ``**kwargs``: Additional keyword arguments are forwarded to the underlying implementation. Use the guides and runtime-discovery tips below to see which names matter.
+    
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.figure_field``. Scalar-field helpers share the main figure pipeline while isolating palette metadata, normalization, and renderer-specific options in dedicated modules.
+    
+    Examples
+    --------
+    Basic use::
+    
+        from gu_toolkit.figure_field import temperature_method
+        result = temperature_method(...)
+    
+    Discovery-oriented use::
+    
+        help(temperature_method)
+        # then follow the guide/test links listed below
+    
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Guide: ``docs/guides/scalar-field-styling.md``.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Runtime discovery tip: call ``field_style_options()`` and ``field_palette_options()`` to see supported scalar-field keywords and palettes.
+    - In a notebook or REPL, run ``help(temperature_method)`` and inspect sibling APIs in the same module.
+    """
+
     kwargs.setdefault("render_mode", "heatmap")
     kwargs.setdefault("preset", "temperature")
     return create_or_update_scalar_field_plot(self, func, x, y, caller="temperature()", **kwargs)
