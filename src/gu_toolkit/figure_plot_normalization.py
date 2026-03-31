@@ -36,6 +36,7 @@ import inspect
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeAlias
 
+import numpy as np
 import sympy as sp
 from sympy.core.expr import Expr
 from sympy.core.symbol import Symbol
@@ -331,7 +332,27 @@ def normalize_plot_inputs(
         plot_var = coerce_symbol(var_or_range, role="plot variable")
 
     if plot_var not in bound_symbols:
-        if len(bound_symbols) == 1:
+        allow_missing_plot_var = (
+            numeric_fn is None
+            or vars_tuple is not None
+            or len(bound_symbols) == 0
+        )
+
+        if allow_missing_plot_var:
+            if numeric_fn is not None:
+                numeric_fn = _wrap_numeric_function_with_ignored_parameter(
+                    numeric_fn,
+                    parameter_var=plot_var,
+                    symbolic_expression=expr,
+                )
+                bound_symbols = tuple(numeric_fn.free_vars)
+            else:
+                bound_symbols = (plot_var, *bound_symbols)
+        elif len(bound_symbols) == 1:
+            # Preserve callable-first ergonomics for single-argument callables
+            # whose argument name differs from the explicit plotting symbol,
+            # e.g. ``plot(lambda t: t**2, x)``. Multi-argument callables remain
+            # ambiguous without ``vars=...``.
             bound_symbols = (plot_var,)
             if numeric_fn is not None:
                 numeric_fn = rebind_numeric_function_vars(
@@ -355,17 +376,29 @@ def _wrap_numeric_function_with_ignored_parameter(
     parameter_var: Symbol,
     symbolic_expression: Expr,
 ) -> NumericFunction:
-    """Return ``numeric_fn`` wrapped to ignore one leading plot parameter.
+    """Return ``numeric_fn`` wrapped to ignore and broadcast over one leading var.
 
-    Parametric plotting allows constant or parameter-only coordinate components,
-    such as ``x = a`` with ``y = t``. Those components still need to be called
-    with the shared parameter sample array during rendering. This helper creates
-    a numeric wrapper that accepts the leading parameter input and forwards the
-    remaining arguments to the original numeric function unchanged.
+    Plot-like renderers always sample a leading independent variable array. Some
+    normalized callables are constant or parameter-only with respect to that
+    variable, so they must accept the leading sample input, ignore it when
+    calling the original function, and still broadcast scalar results to the
+    sampled shape.
     """
 
     def wrapped(*args: Any) -> Any:
-        return numeric_fn(*args[1:])
+        result = numeric_fn(*args[1:])
+        if not args:
+            return result
+
+        leading_shape = np.asarray(args[0]).shape
+        if not leading_shape:
+            return result
+
+        result_array = np.asarray(result)
+        if result_array.shape != ():
+            return result
+
+        return result_array + np.zeros(leading_shape)
 
     return NumericFunction(
         wrapped,

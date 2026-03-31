@@ -1369,7 +1369,10 @@ def _numpify_uncached(
     t_codegen0: float | None = time.perf_counter() if log_debug else None
     expr_code = printer.doprint(expr_codegen)
     t_codegen_s = (time.perf_counter() - t_codegen0) if t_codegen0 is not None else None
-    is_constant = len(expr.free_symbols) == 0
+    used_arg_names = {name for sym, name in call_signature if sym in expr.free_symbols}
+    needs_arg_broadcast = vectorize and len(arg_names) > 0 and (
+        len(used_arg_names) < len(arg_names)
+    )
 
     lines: list[str] = []
     lines.append("def _generated(" + ", ".join(arg_names) + "):")
@@ -1383,7 +1386,7 @@ def _numpify_uncached(
         alias_name = sym_binding_names[raw_name]
         lines.append(f"    {alias_name} = _sym_bindings[{raw_name!r}]")
 
-    if vectorize and is_constant and len(arg_names) > 0:
+    if needs_arg_broadcast:
         lines.append(f"    _shape = numpy.broadcast({', '.join(arg_names)}).shape")
         lines.append(f"    return ({expr_code}) + numpy.zeros(_shape)")
     else:

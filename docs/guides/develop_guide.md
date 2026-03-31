@@ -233,6 +233,11 @@ structured `PlotStyleSpec` metadata. That metadata now drives:
 - alias resolution (for example `width -> thickness`, `alpha -> opacity`),
 - lightweight validation for fixed-choice options such as `dash`.
 
+Plot normalization also treats expressions and explicitly-declared callables
+that are independent of the plotting variable as valid horizontal curves. In
+that case the plot variable is still sampled, while any remaining symbols stay
+classified as figure parameters.
+
 When adding a new public style keyword, update:
 
 1. `figure_plot_style.py`
