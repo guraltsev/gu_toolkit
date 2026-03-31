@@ -1,0 +1,903 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+/* Shared design tokens for toolkit widgets.
+   Edit this file to tune compactness, emphasis, and icon sizing globally. */
+
+:root,
+.gu-theme-root {
+  --gu-space-1: 4px;
+  --gu-space-2: 8px;
+  --gu-space-3: 12px;
+  --gu-space-4: 16px;
+  --gu-space-5: 20px;
+
+  --gu-radius-sm: 8px;
+  --gu-radius-md: 12px;
+  --gu-radius-lg: 16px;
+
+  --gu-control-height-md: 36px;
+  --gu-control-height-lg: 40px;
+  --gu-control-padding-x: 12px;
+  --gu-control-padding-y: 8px;
+  --gu-control-border-width: 1px;
+  --gu-listbox-min-height: 96px;
+
+  --gu-panel-label-size: 13px;
+  --gu-panel-label-weight: 600;
+  --gu-panel-label-spacing: 6px;
+  --gu-section-padding-minimal: 10px 12px;
+  --gu-section-gap-minimal: 8px;
+
+  --gu-tab-height: 32px;
+  --gu-tab-padding-x: 12px;
+  --gu-tab-radius: 10px;
+  --gu-tab-bar-padding: 2px;
+
+  --gu-icon-hit-area: 28px;
+  --gu-icon-glyph-size: 17px;
+  --gu-icon-close-glyph-size: 15px;
+  --gu-legend-marker-diameter: 16px;
+
+  --gu-checkbox-size: 16px;
+  --gu-checkbox-accent: var(--jp-brand-color1, #0b76d1);
+
+  --gu-font-size-caption: 12px;
+  --gu-font-size-body: 14px;
+  --gu-font-size-title: 24px;
+  --gu-font-weight-medium: 500;
+  --gu-font-weight-semibold: 600;
+  --gu-font-weight-bold: 700;
+
+  --gu-color-text: #0f172a;
+  --gu-color-text-muted: #475569;
+  --gu-color-text-subtle: #64748b;
+  --gu-color-border-subtle: rgba(15, 23, 42, 0.10);
+  --gu-color-border-strong: rgba(15, 23, 42, 0.16);
+  --gu-color-surface: #ffffff;
+  --gu-color-surface-subtle: rgba(15, 23, 42, 0.03);
+  --gu-color-surface-muted: rgba(15, 23, 42, 0.05);
+  --gu-color-brand: var(--jp-brand-color1, #0b76d1);
+  --gu-color-brand-strong: #095fa7;
+  --gu-color-danger: #b42318;
+  --gu-color-danger-soft: rgba(180, 35, 24, 0.14);
+  --gu-color-danger-bg: rgba(180, 35, 24, 0.06);
+
+  --gu-focus-ring: 0 0 0 3px rgba(11, 118, 209, 0.18);
+
+  --gu-dialog-width-sm: 440px;
+  --gu-dialog-width-md: 560px;
+  --gu-dialog-width-lg: 720px;
+}
+
+/* Shared control families.
+   These selectors are intentionally family-specific so checkbox internals,
+   single-select dropdowns, and listboxes do not inherit text-field chrome. */
+
+.gu-readonly-value {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  min-height: var(--gu-control-height-md) !important;
+  padding: 0 var(--gu-control-padding-x) !important;
+  border-radius: var(--gu-radius-sm) !important;
+  border: var(--gu-control-border-width) solid var(--gu-color-border-strong) !important;
+  background: var(--gu-color-surface-subtle) !important;
+  color: var(--gu-color-text) !important;
+  font-size: var(--gu-font-size-body) !important;
+  line-height: 1.35 !important;
+}
+
+.gu-control,
+.gu-control > *,
+.gu-readonly-value {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+}
+
+.gu-control-text :is(input:not([type="checkbox"]):not([type="radio"]), textarea),
+.gu-control-numeric :is(input, textarea),
+.gu-control-color input[type="color"],
+.gu-control-dropdown select:not([multiple]),
+.gu-control-multiselect select[multiple],
+.gu-control-targets select[multiple],
+.gu-control-math :is(textarea, math-field),
+.gu-readonly-value {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  color: var(--gu-color-text) !important;
+  background: var(--gu-color-surface) !important;
+  border: var(--gu-control-border-width) solid var(--gu-color-border-strong) !important;
+  border-radius: var(--gu-radius-sm) !important;
+  box-shadow: none !important;
+  font-size: var(--gu-font-size-body) !important;
+  line-height: 1.35 !important;
+}
+
+.gu-control-text :is(input:not([type="checkbox"]):not([type="radio"]), textarea),
+.gu-control-numeric :is(input, textarea),
+.gu-control-dropdown select:not([multiple]),
+.gu-control-math :is(textarea, math-field) {
+  min-height: var(--gu-control-height-md) !important;
+  padding: 0 var(--gu-control-padding-x) !important;
+}
+
+.gu-control-text textarea,
+.gu-control-numeric textarea,
+.gu-control-math textarea,
+.gu-control-math math-field {
+  padding-top: var(--gu-control-padding-y) !important;
+  padding-bottom: var(--gu-control-padding-y) !important;
+}
+
+.gu-control-math math-field {
+  font-size: calc(var(--gu-font-size-body) + 2px) !important;
+  line-height: 1.1 !important;
+}
+
+.gu-control-color input[type="color"] {
+  min-height: var(--gu-control-height-md) !important;
+  padding: 4px !important;
+  cursor: pointer !important;
+}
+
+.gu-control-dropdown select:not([multiple]) {
+  min-height: var(--gu-control-height-md) !important;
+  height: var(--gu-control-height-md) !important;
+  padding: 0 34px 0 var(--gu-control-padding-x) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  overflow-y: hidden !important;
+  text-overflow: ellipsis !important;
+  appearance: auto !important;
+}
+
+.gu-control-multiselect select[multiple],
+.gu-control-targets select[multiple] {
+  min-height: var(--gu-listbox-min-height) !important;
+  padding: var(--gu-space-2) var(--gu-control-padding-x) !important;
+  resize: vertical !important;
+}
+
+.gu-control-dropdown,
+.gu-control-dropdown > *,
+.gu-control-dropdown :is(.widget-dropdown, .widget-select, select:not([multiple])) {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+}
+
+.gu-control-dropdown select:not([multiple]) {
+  display: block !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  line-height: calc(var(--gu-control-height-md) - 2px) !important;
+  overflow-y: clip !important;
+  scrollbar-width: none !important;
+}
+
+.gu-control-dropdown select:not([multiple])::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.gu-control-checkbox,
+.gu-control-checkbox > *,
+.gu-control-checkbox :is(label, .widget-label, .widget-checkbox, .widget-inline-hbox, .widget-hbox) {
+  box-sizing: border-box !important;
+  width: auto !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
+
+.gu-control-checkbox,
+.gu-control-checkbox :is(label, .widget-checkbox, .widget-inline-hbox, .widget-hbox) {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: var(--gu-space-2) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.gu-control-checkbox .widget-label,
+.gu-control-checkbox label {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  color: var(--gu-color-text) !important;
+  font-size: 13px !important;
+  line-height: 1.35 !important;
+  font-weight: 400 !important;
+}
+
+.gu-control-checkbox input[type="checkbox"] {
+  width: var(--gu-checkbox-size) !important;
+  height: var(--gu-checkbox-size) !important;
+  min-width: var(--gu-checkbox-size) !important;
+  min-height: var(--gu-checkbox-size) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  accent-color: var(--gu-checkbox-accent) !important;
+}
+
+.gu-control-text :is(input:not([type="checkbox"]):not([type="radio"]), textarea):focus-visible,
+.gu-control-numeric :is(input, textarea):focus-visible,
+.gu-control-color input[type="color"]:focus-visible,
+.gu-control-dropdown select:not([multiple]):focus-visible,
+.gu-control-multiselect select[multiple]:focus-visible,
+.gu-control-targets select[multiple]:focus-visible,
+.gu-control-math :is(textarea, math-field):focus-visible,
+.gu-action-button:is(button, .widget-button, .jupyter-button):focus-visible,
+.gu-action-button :is(button, .widget-button, .jupyter-button):focus-visible,
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button):is(button, .widget-button, .jupyter-button):focus-visible,
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button) :is(button, .widget-button, .jupyter-button):focus-visible {
+  outline: none !important;
+  box-shadow: var(--gu-focus-ring) !important;
+}
+
+:is(.mod-invalid.gu-control-text, .mod-invalid .gu-control-text) :is(input:not([type="checkbox"]):not([type="radio"]), textarea),
+:is(.mod-invalid.gu-control-numeric, .mod-invalid .gu-control-numeric) :is(input, textarea),
+:is(.mod-invalid.gu-control-color, .mod-invalid .gu-control-color) input[type="color"],
+:is(.mod-invalid.gu-control-dropdown, .mod-invalid .gu-control-dropdown) select:not([multiple]),
+:is(.mod-invalid.gu-control-multiselect, .mod-invalid .gu-control-multiselect) select[multiple],
+:is(.mod-invalid.gu-control-targets, .mod-invalid .gu-control-targets) select[multiple],
+:is(.mod-invalid.gu-control-math, .mod-invalid .gu-control-math) :is(textarea, math-field),
+.mod-invalid.gu-readonly-value {
+  border-color: var(--gu-color-danger) !important;
+  box-shadow: 0 0 0 1px var(--gu-color-danger-soft) !important;
+}
+
+/* Shared surfaces, dialogs, buttons, tabs, and icon chrome.
+   Many rules use !important to beat notebook frontend defaults. */
+
+.gu-theme-root,
+.gu-theme-root > *,
+.gu-panel,
+.gu-panel > *,
+.gu-panel-header,
+.gu-panel-header > *,
+.gu-panel-body,
+.gu-panel-body > *,
+.gu-modal-overlay,
+.gu-modal-overlay > *,
+.gu-modal-panel,
+.gu-modal-panel > *,
+.gu-modal-section,
+.gu-modal-section > *,
+.gu-modal-row,
+.gu-modal-row > *,
+.gu-form-field,
+.gu-form-field > *,
+.gu-action-bar,
+.gu-action-bar > *,
+.gu-tab-bar,
+.gu-tab-bar > *,
+.gu-inline-alert,
+.gu-inline-alert > *,
+.gu-boolean-field,
+.gu-boolean-field > * {
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+}
+
+.gu-panel,
+.gu-panel-body,
+.gu-modal-panel,
+.gu-modal-section,
+.gu-modal-row,
+.gu-form-field,
+.gu-action-bar,
+.gu-tab-bar,
+.gu-inline-alert,
+.gu-boolean-field,
+.gu-fill,
+.gu-fill > * {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.gu-panel,
+.gu-panel-body,
+.gu-modal-panel,
+.gu-modal-section,
+.gu-modal-row,
+.gu-form-field,
+.gu-action-bar,
+.gu-tab-bar,
+.gu-fill,
+.gu-inline-alert {
+  overflow-x: hidden !important;
+}
+
+.gu-wrap-row {
+  flex-wrap: wrap !important;
+  align-items: flex-start !important;
+}
+
+.gu-panel {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.gu-panel-variant-card {
+  border: 1px solid var(--gu-color-border-subtle) !important;
+  border-radius: var(--gu-radius-md) !important;
+  background: var(--gu-color-surface) !important;
+  overflow: hidden !important;
+}
+
+.gu-panel-header {
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: var(--gu-space-2) !important;
+}
+
+.gu-panel-header-variant-card {
+  padding: var(--gu-space-3) var(--gu-space-4) !important;
+  border-bottom: 1px solid var(--gu-color-border-subtle) !important;
+  background: var(--gu-color-surface-subtle) !important;
+}
+
+.gu-panel-body-variant-card {
+  padding: var(--gu-space-3) !important;
+  gap: var(--gu-space-2) !important;
+}
+
+.gu-panel-variant-minimal,
+.gu-panel-variant-toolbar {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: var(--gu-panel-label-spacing) !important;
+  border: none !important;
+  background: transparent !important;
+  overflow: visible !important;
+}
+
+.gu-panel-header-variant-minimal,
+.gu-panel-header-variant-toolbar {
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  min-height: 0 !important;
+}
+
+.gu-panel-header-variant-toolbar {
+  justify-content: flex-end !important;
+}
+
+.gu-panel-title {
+  margin: 0 !important;
+  color: var(--gu-color-text) !important;
+  line-height: 1.3 !important;
+}
+
+.gu-panel-title-variant-card {
+  font-size: 15px !important;
+  font-weight: var(--gu-font-weight-semibold) !important;
+}
+
+.gu-panel-title-variant-minimal {
+  font-size: var(--gu-panel-label-size) !important;
+  font-weight: var(--gu-panel-label-weight) !important;
+}
+
+.gu-panel-title-variant-toolbar {
+  display: none !important;
+}
+
+.gu-panel-toolbar {
+  width: auto !important;
+  flex: 0 0 auto !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  gap: var(--gu-space-1) !important;
+}
+
+.gu-panel-body-variant-minimal {
+  padding: var(--gu-section-padding-minimal) !important;
+  gap: var(--gu-section-gap-minimal) !important;
+  border: 1px solid var(--gu-color-border-subtle) !important;
+  border-radius: var(--gu-radius-md) !important;
+  background: var(--gu-color-surface) !important;
+}
+
+.gu-panel-body-variant-toolbar {
+  padding: 0 !important;
+  gap: var(--gu-space-1) !important;
+  border: none !important;
+  background: transparent !important;
+}
+
+.gu-modal-overlay,
+.smart-slider-settings-modal {
+  z-index: 99999 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow: hidden !important;
+  background: rgba(15, 23, 42, 0.12) !important;
+}
+
+.gu-modal-overlay-hosted,
+.smart-slider-settings-modal-hosted {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  padding: var(--gu-space-3) !important;
+}
+
+.gu-modal-overlay-global,
+.smart-slider-settings-modal-global {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  padding: var(--gu-space-3) !important;
+}
+
+.gu-modal-host,
+.smart-slider-modal-host {
+  position: relative !important;
+}
+
+.gu-modal-panel,
+.smart-slider-settings-panel {
+  border: 1px solid var(--gu-color-border-subtle) !important;
+  border-radius: var(--gu-radius-lg) !important;
+  background: var(--gu-color-surface) !important;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.24) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+}
+
+.gu-modal-header {
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: var(--gu-space-3) !important;
+  padding-bottom: var(--gu-space-3) !important;
+  border-bottom: 1px solid var(--gu-color-border-subtle) !important;
+}
+
+.gu-modal-header-copy {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+
+.gu-modal-title-row {
+  width: 100% !important;
+  align-items: center !important;
+  gap: var(--gu-space-2) !important;
+}
+
+.gu-modal-title-text {
+  margin: 0 !important;
+  color: var(--gu-color-text) !important;
+  font-size: var(--gu-font-size-title) !important;
+  line-height: 1.15 !important;
+  font-weight: var(--gu-font-weight-bold) !important;
+}
+
+.gu-modal-subtitle,
+.gu-help-text,
+.gu-views-note {
+  margin: 0 !important;
+  color: var(--gu-color-text-muted) !important;
+  font-size: var(--gu-font-size-caption) !important;
+  line-height: 1.45 !important;
+}
+
+.gu-title-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  min-height: 24px !important;
+  width: auto !important;
+  padding: 0 10px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(11, 118, 209, 0.16) !important;
+  background: rgba(11, 118, 209, 0.08) !important;
+  color: var(--gu-color-brand) !important;
+  font-size: 12px !important;
+  line-height: 1.2 !important;
+  font-weight: var(--gu-font-weight-semibold) !important;
+}
+
+.gu-form-section {
+  gap: var(--gu-space-2) !important;
+  padding-top: var(--gu-space-1) !important;
+}
+
+.gu-form-section-header,
+.gu-form-field-label {
+  margin: 0 !important;
+  color: var(--gu-color-text) !important;
+  font-size: 13px !important;
+  line-height: 1.35 !important;
+  font-weight: var(--gu-font-weight-semibold) !important;
+}
+
+.gu-boolean-field {
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 0 !important;
+  padding-top: 0 !important;
+  min-height: 0 !important;
+}
+
+.gu-boolean-field > * {
+  min-height: 0 !important;
+}
+
+.gu-inline-alert {
+  display: flex;
+  align-items: flex-start !important;
+  gap: var(--gu-space-2) !important;
+  padding: var(--gu-space-2) var(--gu-space-3) !important;
+  border-radius: var(--gu-radius-sm) !important;
+  border: 1px solid var(--gu-color-danger-soft) !important;
+  background: var(--gu-color-danger-bg) !important;
+  color: var(--gu-color-danger) !important;
+  font-size: var(--gu-font-size-body) !important;
+  line-height: 1.45 !important;
+}
+
+.gu-inline-alert::before {
+  content: "!";
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 auto !important;
+  width: 18px !important;
+  height: 18px !important;
+  margin-top: 1px !important;
+  border-radius: 999px !important;
+  background: var(--gu-color-danger) !important;
+  color: #ffffff !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  font-weight: var(--gu-font-weight-bold) !important;
+}
+
+.gu-action-bar {
+  padding-top: var(--gu-space-2) !important;
+  border-top: 1px solid var(--gu-color-border-subtle) !important;
+}
+
+.gu-tab-bar {
+  padding: var(--gu-tab-bar-padding) !important;
+  gap: var(--gu-space-1) !important;
+  border-radius: var(--gu-radius-md) !important;
+  border: 1px solid var(--gu-color-border-subtle) !important;
+  background: var(--gu-color-surface-subtle) !important;
+  overflow-x: hidden !important;
+}
+
+.gu-action-button,
+.gu-action-button:hover,
+.gu-action-button:focus,
+.gu-action-button:active,
+.gu-action-button :is(button, .widget-button, .jupyter-button),
+.gu-action-button :is(button, .widget-button, .jupyter-button):hover,
+.gu-action-button :is(button, .widget-button, .jupyter-button):focus,
+.gu-action-button :is(button, .widget-button, .jupyter-button):active,
+.gu-action-button:is(button, .widget-button, .jupyter-button),
+.gu-action-button:is(button, .widget-button, .jupyter-button):hover,
+.gu-action-button:is(button, .widget-button, .jupyter-button):focus,
+.gu-action-button:is(button, .widget-button, .jupyter-button):active {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  text-shadow: none !important;
+}
+
+.gu-action-button {
+  width: auto !important;
+}
+
+.gu-action-button:is(button, .widget-button, .jupyter-button),
+.gu-action-button :is(button, .widget-button, .jupyter-button) {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: var(--gu-control-height-md) !important;
+  padding: 0 var(--gu-space-3) !important;
+  border-radius: var(--gu-radius-sm) !important;
+  border: 1px solid var(--gu-color-border-strong) !important;
+  background: var(--gu-color-surface) !important;
+  color: var(--gu-color-text) !important;
+  font-size: var(--gu-font-size-body) !important;
+  line-height: 1.2 !important;
+  font-weight: var(--gu-font-weight-semibold) !important;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease !important;
+}
+
+.gu-action-button-secondary:is(button, .widget-button, .jupyter-button),
+.gu-action-button-secondary :is(button, .widget-button, .jupyter-button) {
+  background: var(--gu-color-surface) !important;
+  color: var(--gu-color-text) !important;
+}
+
+.gu-action-button-secondary:hover:is(button, .widget-button, .jupyter-button),
+.gu-action-button-secondary:hover :is(button, .widget-button, .jupyter-button),
+.gu-action-button-secondary:focus-visible:is(button, .widget-button, .jupyter-button),
+.gu-action-button-secondary:focus-visible :is(button, .widget-button, .jupyter-button) {
+  background: var(--gu-color-surface-subtle) !important;
+  border-color: rgba(15, 23, 42, 0.24) !important;
+}
+
+.gu-action-button-primary:is(button, .widget-button, .jupyter-button),
+.gu-action-button-primary :is(button, .widget-button, .jupyter-button) {
+  background: var(--gu-color-brand) !important;
+  border-color: var(--gu-color-brand) !important;
+  color: #ffffff !important;
+}
+
+.gu-action-button-primary:hover:is(button, .widget-button, .jupyter-button),
+.gu-action-button-primary:hover :is(button, .widget-button, .jupyter-button),
+.gu-action-button-primary:focus-visible:is(button, .widget-button, .jupyter-button),
+.gu-action-button-primary:focus-visible :is(button, .widget-button, .jupyter-button) {
+  background: var(--gu-color-brand-strong) !important;
+  border-color: var(--gu-color-brand-strong) !important;
+}
+
+.gu-action-button-tab:is(button, .widget-button, .jupyter-button),
+.gu-action-button-tab :is(button, .widget-button, .jupyter-button) {
+  min-height: var(--gu-tab-height) !important;
+  padding: 0 var(--gu-tab-padding-x) !important;
+  border-radius: var(--gu-tab-radius) !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  color: var(--gu-color-text-muted) !important;
+}
+
+.gu-action-button-tab:hover:is(button, .widget-button, .jupyter-button),
+.gu-action-button-tab:hover :is(button, .widget-button, .jupyter-button),
+.gu-action-button-tab:focus-visible:is(button, .widget-button, .jupyter-button),
+.gu-action-button-tab:focus-visible :is(button, .widget-button, .jupyter-button) {
+  background: rgba(15, 23, 42, 0.06) !important;
+  border-color: rgba(15, 23, 42, 0.10) !important;
+  color: var(--gu-color-text) !important;
+}
+
+.gu-action-button-tab.mod-selected:is(button, .widget-button, .jupyter-button),
+.gu-action-button-tab.mod-selected :is(button, .widget-button, .jupyter-button) {
+  background: var(--gu-color-surface) !important;
+  border-color: rgba(11, 118, 209, 0.16) !important;
+  color: var(--gu-color-brand) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08) !important;
+}
+
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button),
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button):hover,
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button):focus,
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button):active,
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button) :is(button, .widget-button, .jupyter-button),
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button) :is(button, .widget-button, .jupyter-button):hover,
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button) :is(button, .widget-button, .jupyter-button):focus,
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button) :is(button, .widget-button, .jupyter-button):active,
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button):is(button, .widget-button, .jupyter-button),
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button):is(button, .widget-button, .jupyter-button):hover,
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button):is(button, .widget-button, .jupyter-button):focus,
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button):is(button, .widget-button, .jupyter-button):active {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button) {
+  position: relative !important;
+  overflow: hidden !important;
+  border-radius: 999px !important;
+  color: var(--gu-color-text-muted) !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+}
+
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button)::before {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  font-size: var(--gu-icon-glyph-size) !important;
+  line-height: 1 !important;
+}
+
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button):hover,
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button):focus-visible {
+  background-color: rgba(15, 23, 42, 0.06) !important;
+}
+
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button) :is(button, .widget-button, .jupyter-button),
+:is(.gu-icon-button, .smart-slider-icon-button, .gu-inline-icon-button, .gu-legend-inline-button):is(button, .widget-button, .jupyter-button) {
+  padding: 0 !important;
+  min-width: 0 !important;
+}
+
+.smart-slider-animate-button::before { content: ">>"; }
+.smart-slider-animate-button.mod-mode-once::before { content: ">"; }
+.smart-slider-animate-button.mod-mode-loop::before { content: ">>"; }
+.smart-slider-animate-button.mod-mode-bounce::before { content: "<>"; }
+.smart-slider-animate-button.mod-running {
+  color: var(--gu-color-brand) !important;
+  background-color: rgba(11, 118, 209, 0.08) !important;
+}
+.smart-slider-animate-button.mod-running::before { content: "⏸"; }
+.smart-slider-reset-button::before { content: "↺"; }
+.smart-slider-settings-button::before { content: "⚙"; }
+.smart-slider-close-button::before,
+.gu-icon-close-button::before {
+  content: "✕";
+  font-size: var(--gu-icon-close-glyph-size) !important;
+}
+.gu-icon-plus-button::before {
+  content: "+";
+  font-weight: var(--gu-font-weight-semibold) !important;
+}
+.gu-icon-edit-button::before { content: "✎"; }
+
+/* Legend-specific rows, markers, and context menu styles. */
+
+.gu-legend-context-menu-item,
+.gu-legend-context-menu-item:hover,
+.gu-legend-context-menu-item:focus,
+.gu-legend-context-menu-item:active {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.gu-legend-context-menu :is(input, button):focus-visible {
+  outline: 2px solid var(--jp-brand-color1, #0b76d1) !important;
+  outline-offset: 1px !important;
+}
+
+.gu-legend-context-menu {
+  position: fixed !important;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 196px;
+  padding: 6px;
+  background: white;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22);
+  z-index: 1001;
+}
+
+.gu-legend-context-menu-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  width: 100% !important;
+  padding: 6px 8px !important;
+  border-radius: 6px !important;
+  color: #111827 !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  font: inherit !important;
+}
+
+.gu-legend-context-menu-checkbox input {
+  margin: 0 !important;
+}
+
+.gu-legend-context-menu-item:hover,
+.gu-legend-context-menu-item:focus-visible {
+  background: rgba(15, 23, 42, 0.06) !important;
+}
+
+.gu-legend-empty-state {
+  color: #475569 !important;
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+
+.gu-legend-row {
+  overflow: hidden !important;
+}
+
+.gu-legend-toggle,
+.gu-legend-sound-toggle,
+.gu-legend-edit-button,
+.gu-legend-add-plot-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 auto !important;
+}
+
+.gu-legend-toggle {
+  color: var(--gu-legend-marker-color, var(--gu-color-text-subtle)) !important;
+}
+
+.gu-legend-toggle::before,
+.gu-legend-toggle::after {
+  content: none !important;
+}
+
+.gu-legend-toggle:is(button, .widget-button, .jupyter-button),
+.gu-legend-toggle :is(button, .widget-button, .jupyter-button) {
+  position: relative !important;
+}
+
+.gu-legend-toggle:is(button, .widget-button, .jupyter-button)::before,
+.gu-legend-toggle :is(button, .widget-button, .jupyter-button)::before {
+  content: "";
+  display: inline-flex !important;
+  width: var(--gu-legend-marker-diameter) !important;
+  height: var(--gu-legend-marker-diameter) !important;
+  border-radius: 999px !important;
+  border: 2px solid var(--gu-legend-marker-color, currentColor) !important;
+  background: var(--gu-legend-marker-color, currentColor) !important;
+  box-sizing: border-box !important;
+}
+
+.gu-legend-toggle.mod-hidden:is(button, .widget-button, .jupyter-button)::before,
+.gu-legend-toggle.mod-hidden :is(button, .widget-button, .jupyter-button)::before {
+  background: transparent !important;
+  opacity: 0.78 !important;
+}
+
+.gu-legend-toggle.mod-hidden:is(button, .widget-button, .jupyter-button)::after,
+.gu-legend-toggle.mod-hidden :is(button, .widget-button, .jupyter-button)::after {
+  content: "";
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  width: calc(var(--gu-legend-marker-diameter) + 4px) !important;
+  height: 2px !important;
+  border-radius: 999px !important;
+  background: var(--gu-legend-marker-color, currentColor) !important;
+  transform: translate(-50%, -50%) rotate(-40deg) !important;
+}
+
+.gu-legend-sound-toggle::before {
+  font-size: 15px !important;
+}
+
+.gu-legend-sound-toggle.mod-muted::before {
+  content: "🔇";
+}
+
+.gu-legend-sound-toggle.mod-playing::before {
+  content: "🔊";
+}
+
+
+.gu-legend-plot-id-test.gu-legend-toggle,
+.gu-legend-plot-id-test.gu-legend-inline-button,
+.gu-legend-plot-id-test.gu-legend-toggle :is(button, .widget-button, .jupyter-button),
+.gu-legend-plot-id-test.gu-legend-inline-button :is(button, .widget-button, .jupyter-button) {
+  --gu-legend-marker-color: #636efa !important;
+  color: #636efa !important;
+}
+body{padding:40px;font-family:sans-serif}
+.row{display:flex;align-items:center;gap:6px;width:300px}
+label{margin-left:8px}
+</style>
+</head>
+<body>
+<div class="row gu-legend-row gu-legend-plot-id-test">
+  <button class="gu-icon-button smart-slider-icon-button gu-inline-icon-button gu-legend-toggle gu-legend-inline-button gu-legend-plot-id-test" aria-label="toggle"></button>
+  <div style="flex:1">sin(x)</div>
+  <button class="gu-icon-button smart-slider-icon-button gu-inline-icon-button gu-icon-edit-button gu-legend-edit-button gu-legend-inline-button gu-legend-plot-id-test" aria-label="edit"></button>
+  <button class="gu-icon-button smart-slider-icon-button gu-inline-icon-button gu-legend-sound-toggle gu-legend-inline-button gu-legend-plot-id-test mod-muted" aria-label="sound"></button>
+</div>
+</body>
+</html>
