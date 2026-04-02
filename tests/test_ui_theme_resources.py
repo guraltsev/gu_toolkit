@@ -153,6 +153,30 @@ def test_legend_marker_css_uses_plot_color_variable_and_mathlive_font_is_tuned()
     assert 'node.style.fontSize = "var(--gu-math-font-size, 18px)";' in MathLiveField._esm
 
 
+def test_mathlive_frontend_defers_semantic_runtime_options_until_mount() -> None:
+    from gu_toolkit._mathlive_widget import MathLiveField
+
+    esm = MathLiveField._esm
+
+    assert 'node.addEventListener("mount", handleMount, { once: true });' in esm
+    assert 'if (!node.__guMounted) {' in esm
+    assert 'node.__guBaseInlineShortcuts = { ...(node.inlineShortcuts || {}) };' in esm
+    assert esm.index("el.appendChild(input);") < esm.index("syncFromModel();")
+
+
+def test_mathlive_frontend_integrates_compute_engine_transport() -> None:
+    from gu_toolkit._mathlive_widget import MathLiveField
+
+    esm = MathLiveField._esm
+
+    assert 'import("https://esm.run/@cortex-js/compute-engine")' in esm
+    assert 'node.computeEngine = ce;' in esm
+    assert 'model.set(key, snapshot[key]);' in esm
+    assert 'transport_valid' in esm
+    assert 'model.on("change:semantic_context", onSemantic);' in esm
+    assert 'serialize: (serializer, expr) =>' in esm
+
+
 def test_legend_runtime_style_widget_includes_row_specific_marker_colors() -> None:
     import sympy as sp
 

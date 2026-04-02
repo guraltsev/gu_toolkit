@@ -36,7 +36,7 @@ on the existing code paths.
 Discoverability
 ---------------
 See :mod:`gu_toolkit.figure_legend` for the toolbar/buttons that launch the
-composer and :mod:`gu_toolkit._mathlive_widget` for the MathLive field wrapper.
+composer and :mod:`gu_toolkit.math_inputs` for the figure-independent semantic MathLive widgets.
 """
 
 from __future__ import annotations
@@ -57,14 +57,15 @@ from sympy.parsing.sympy_parser import (
     standard_transformations,
 )
 
-from ._mathlive_widget import MathLiveField
+from .expression_context import ExpressionContext
+from .identifier_policy import identifier_to_latex, parse_identifier, render_latex, symbol
+from .math_inputs import ExpressionInput, IdentifierInput
 from ._widget_stubs import widgets
 from .figure_color import color_for_trace_index, color_to_picker_hex
 from .figure_field import ScalarFieldPlot
 from .figure_parametric_plot import ParametricPlot
 from .figure_plot import Plot
 from .parameter_keys import parameter_name
-from .ParseLaTeX import LatexParseError, parse_latex
 from .widget_chrome import (
     ModalDialogBridge,
     TabListBridge,
@@ -532,63 +533,146 @@ def _parse_plain_math_text(text: str) -> Expr:
     return parsed
 
 
-def _latex_to_expression(value: str, *, role: str) -> Expr:
-    r"""Parse one MathLive/LaTeX field into a SymPy expression.
+def _default_expression_context() -> ExpressionContext:
+    """Return one minimal semantic context for editor parsing helpers."""
 
-    Parsing first uses the toolkit's resilient LaTeX parser and then falls back
-    to a lightweight MathLive/LaTeX normalizer plus :func:`parse_expr`. This
-    keeps the editor usable even when users paste non-LaTeX expressions such as
-    ``a*x + 1`` or lightweight MathLive output such as ``2\pi``.
-    """
+    ctx = ExpressionContext()
+    ctx.register_named_functions()
+    for name in ("x", "y", "t"):
+        ctx.register_symbol(name)
+    return ctx
 
-    text = str(value or "").strip()
-    if not text:
-        raise ValueError(f"{role} is required.")
 
-    latex_error: Exception | None = None
-    try:
-        parsed = parse_latex(text)
-        if isinstance(parsed, Expr):
-            return parsed
-    except (LatexParseError, TypeError, ValueError, SyntaxError) as exc:
-        latex_error = exc
-    except Exception as exc:  # pragma: no cover - defensive parser guard
-        latex_error = exc
+def _iter_plot_context_values(plot: Any) -> tuple[Any, ...]:
+    """Yield symbols/expressions from one existing plot for semantic context."""
 
-    parse_errors: list[Exception] = []
-    candidates = []
-    normalized = _normalize_latexish_text(text)
-    if normalized:
-        candidates.append(normalized)
-    if text not in candidates:
-        candidates.append(text)
+    if plot is None:
+        return ()
+    if isinstance(plot, Plot):
+        return (getattr(plot, "symbolic_expression", None), getattr(plot, "_var", None))
+    if isinstance(plot, ParametricPlot):
+        return (
+            getattr(plot, "x_expression", None),
+            getattr(plot, "y_expression", None),
+            getattr(plot, "parameter_var", None),
+            *tuple(getattr(plot, "parameter_domain", ()) or ()),
+        )
+    if isinstance(plot, ScalarFieldPlot):
+        return (
+            getattr(plot, "symbolic_expression", None),
+            getattr(plot, "x_var", None),
+            getattr(plot, "y_var", None),
+        )
+    return ()
 
-    for candidate in candidates:
+
+def _iter_draft_identifier_sources(draft: PlotEditorDraft | None) -> tuple[tuple[str | None, str, str], ...]:
+    """Return identifier-like draft fields that can enrich the semantic context."""
+
+    if draft is None:
+        return ()
+    return (
+        (draft.cartesian_var_latex, "x", "Cartesian free variable"),
+        (draft.parameter_var_latex, "t", "Parametric parameter"),
+        (draft.field_x_var_latex, "x", "Field x variable"),
+        (draft.field_y_var_latex, "y", "Field y variable"),
+    )
+
+
+def _figure_expression_context(
+    figure: Figure | None = None,
+    *,
+    draft: PlotEditorDraft | None = None,
+    existing_plot: Any | None = None,
+) -> ExpressionContext:
+    """Build one semantic expression context from the current figure/editor state."""
+
+    ctx = _default_expression_context()
+
+    if figure is not None:
         try:
-            return _parse_plain_math_text(candidate)
-        except Exception as exc:
-            parse_errors.append(exc)
+            parameter_names = tuple(str(name) for name in figure.parameters.keys())
+        except Exception:
+            parameter_names = ()
+        for name in parameter_names:
+            try:
+                ctx.register_symbol(name)
+            except Exception:
+                continue
 
-    detail = f" LaTeX parser error: {latex_error}" if latex_error is not None else ""
-    if parse_errors:
-        detail += f" Plain-text parser error: {parse_errors[-1]}"
-    raise ValueError(f"Could not parse {role}.{detail}")
+    for value in _iter_plot_context_values(existing_plot):
+        if value is None:
+            continue
+        if isinstance(value, sp.Symbol):
+            try:
+                ctx.register_symbol(value)
+            except Exception:
+                continue
+        else:
+            try:
+                ctx.register_expression(value)
+            except Exception:
+                continue
+
+    for raw_value, default_value, role in _iter_draft_identifier_sources(draft):
+        source = str(raw_value or "").strip() or default_value
+        if not source:
+            continue
+        try:
+            ctx.register_symbol(ctx.parse_identifier(source, role=role))
+        except Exception:
+            continue
+
+    return ctx
 
 
-def _latex_to_symbol(value: str, *, role: str, default_latex: str | None = None) -> Symbol:
-    """Parse a symbol-entry field and ensure it resolves to exactly one symbol."""
+def _latex_to_expression(
+    value: str,
+    *,
+    role: str,
+    context: ExpressionContext | None = None,
+) -> Expr:
+    """Parse one semantic expression field into a SymPy expression."""
+
+    ctx = context.copy() if context is not None else _default_expression_context()
+    try:
+        return ctx.parse_expression(value, role=role)
+    except ValueError as exc:
+        message = str(exc)
+        prefix = f"Could not parse {role}:"
+        if message.startswith(prefix):
+            raise ValueError(f"Could not parse {role}. {message[len(prefix):].strip()}") from exc
+        raise
+
+
+def _latex_to_symbol(
+    value: str,
+    *,
+    role: str,
+    default_latex: str | None = None,
+    context: ExpressionContext | None = None,
+) -> Symbol:
+    """Parse a symbol-entry field and resolve it to one canonical symbol."""
 
     source = str(value or "").strip() or str(default_latex or "").strip()
     if not source:
         raise ValueError(f"{role} is required.")
-    parsed = _latex_to_expression(source, role=role)
-    if not isinstance(parsed, Symbol):
-        raise ValueError(f"{role} must be a single symbol, got {parsed!r}.")
-    return parsed
+    ctx = context.copy() if context is not None else _default_expression_context()
+    try:
+        canonical = ctx.parse_identifier(source, role=role)
+    except ValueError as exc:
+        message = str(exc)
+        prefix = f"Could not parse {role}:"
+        if message.startswith(prefix):
+            raise ValueError(f"Could not parse {role}. {message[len(prefix):].strip()}") from exc
+        raise
+    if canonical in ctx.symbols:
+        return ctx.symbols[canonical].symbol
+    return symbol(canonical)
 
 
 def _to_latex(value: Any, *, default: str = "") -> str:
-    """Serialize a symbolic or numeric value into LaTeX for editor fields."""
+    """Serialize a symbolic or numeric value into semantic LaTeX for editor fields."""
 
     if value is None:
         return default
@@ -596,17 +680,22 @@ def _to_latex(value: Any, *, default: str = "") -> str:
         stripped = value.strip()
         return stripped or default
     try:
-        return sp.latex(sp.sympify(value))
+        return render_latex(value)
     except Exception:
         text = str(value)
         return text if text else default
 
 
 def _title_symbol_latex(value: str, *, default: str) -> str:
-    """Return the compact LaTeX symbol string shown in responsive field titles."""
+    """Return the compact normalized LaTeX shown in responsive field titles."""
 
-    source = str(value or "").strip()
-    return source or default
+    source = str(value or "").strip() or str(default or "").strip()
+    if not source:
+        return ""
+    try:
+        return identifier_to_latex(parse_identifier(source))
+    except Exception:
+        return source
 
 
 def _parametric_axis_title_latex(axis_name: str, parameter_latex: str) -> str:
@@ -750,7 +839,12 @@ def _sorted_unique_names(symbols: set[Symbol]) -> tuple[str, ...]:
     return tuple(sorted({parameter_name(symbol) for symbol in symbols}))
 
 
-def _infer_draft_parameter_symbols(draft: PlotEditorDraft) -> set[Symbol]:
+def _infer_draft_parameter_symbols(
+    draft: PlotEditorDraft,
+    *,
+    figure: Figure | None = None,
+    existing_plot: Any | None = None,
+) -> set[Symbol]:
     """Return parameter-like free symbols implied by one editor draft.
 
     The helper mirrors the public plotting APIs while filling in one important
@@ -759,6 +853,8 @@ def _infer_draft_parameter_symbols(draft: PlotEditorDraft) -> set[Symbol]:
     parameter set too.
     """
 
+    context = _figure_expression_context(figure, draft=draft, existing_plot=existing_plot)
+
     excluded: set[Symbol]
     expressions: list[Expr]
     if draft.kind == "cartesian":
@@ -766,6 +862,7 @@ def _infer_draft_parameter_symbols(draft: PlotEditorDraft) -> set[Symbol]:
             _latex_to_expression(
                 draft.cartesian_expression_latex,
                 role="Cartesian expression",
+                context=context,
             )
         ]
         excluded = {
@@ -773,6 +870,7 @@ def _infer_draft_parameter_symbols(draft: PlotEditorDraft) -> set[Symbol]:
                 draft.cartesian_var_latex,
                 role="Cartesian free variable",
                 default_latex="x",
+                context=context,
             )
         }
     elif draft.kind == "parametric":
@@ -781,15 +879,18 @@ def _infer_draft_parameter_symbols(draft: PlotEditorDraft) -> set[Symbol]:
                 draft.parameter_var_latex,
                 role="Parametric parameter",
                 default_latex="t",
+                context=context,
             )
         }
         parameter_min = _latex_to_expression(
             draft.parameter_min_latex,
             role="Parameter minimum",
+            context=context,
         )
         parameter_max = _latex_to_expression(
             draft.parameter_max_latex,
             role="Parameter maximum",
+            context=context,
         )
         bound_symbols = (set(parameter_min.free_symbols) | set(parameter_max.free_symbols)) - excluded
         if bound_symbols:
@@ -799,14 +900,15 @@ def _infer_draft_parameter_symbols(draft: PlotEditorDraft) -> set[Symbol]:
                 f"symbolic bounds are not supported yet ({names})."
             )
         expressions = [
-            _latex_to_expression(draft.parametric_x_latex, role="Parametric x(t)"),
-            _latex_to_expression(draft.parametric_y_latex, role="Parametric y(t)"),
+            _latex_to_expression(draft.parametric_x_latex, role="Parametric x(t)", context=context),
+            _latex_to_expression(draft.parametric_y_latex, role="Parametric y(t)", context=context),
         ]
     else:
         expressions = [
             _latex_to_expression(
                 draft.field_expression_latex,
                 role="Scalar-field expression",
+                context=context,
             )
         ]
         excluded = {
@@ -814,11 +916,13 @@ def _infer_draft_parameter_symbols(draft: PlotEditorDraft) -> set[Symbol]:
                 draft.field_x_var_latex,
                 role="Field x variable",
                 default_latex="x",
+                context=context,
             ),
             _latex_to_symbol(
                 draft.field_y_var_latex,
                 role="Field y variable",
                 default_latex="y",
+                context=context,
             ),
         }
 
@@ -828,11 +932,18 @@ def _infer_draft_parameter_symbols(draft: PlotEditorDraft) -> set[Symbol]:
     return parameter_symbols
 
 
-def _draft_parameter_preview(figure: Figure, draft: PlotEditorDraft) -> ParameterPreview:
+def _draft_parameter_preview(
+    figure: Figure,
+    draft: PlotEditorDraft,
+    *,
+    existing_plot: Any | None = None,
+) -> ParameterPreview:
     """Infer which parameter symbols the draft would create or reuse."""
 
     try:
-        names = _sorted_unique_names(_infer_draft_parameter_symbols(draft))
+        names = _sorted_unique_names(
+            _infer_draft_parameter_symbols(draft, figure=figure, existing_plot=existing_plot)
+        )
         if not names:
             return ParameterPreview((), ())
         existing_names = set(figure.parameters.keys())
@@ -900,6 +1011,8 @@ def apply_plot_editor_draft(
     - In a notebook or REPL, run ``help(apply_plot_editor_draft)`` and inspect sibling APIs in the same module.
     """
 
+    context = _figure_expression_context(figure, draft=draft, existing_plot=existing_plot)
+
     plot_id = draft.plot_id or getattr(existing_plot, "id", None)
     if draft.view_ids:
         view_arg: str | tuple[str, ...] = (
@@ -932,11 +1045,13 @@ def apply_plot_editor_draft(
         expression = _latex_to_expression(
             draft.cartesian_expression_latex,
             role="Cartesian expression",
+            context=context,
         )
         variable = _latex_to_symbol(
             draft.cartesian_var_latex,
             role="Cartesian free variable",
             default_latex="x",
+            context=context,
         )
         return figure.plot(
             expression,
@@ -947,17 +1062,21 @@ def apply_plot_editor_draft(
         )
 
     if draft.kind == "parametric":
-        x_expression = _latex_to_expression(draft.parametric_x_latex, role="Parametric x(t)")
-        y_expression = _latex_to_expression(draft.parametric_y_latex, role="Parametric y(t)")
+        x_expression = _latex_to_expression(draft.parametric_x_latex, role="Parametric x(t)", context=context)
+        y_expression = _latex_to_expression(draft.parametric_y_latex, role="Parametric y(t)", context=context)
         parameter_var = _latex_to_symbol(
             draft.parameter_var_latex,
             role="Parametric parameter",
             default_latex="t",
+            context=context,
         )
-        parameter_min = _latex_to_expression(draft.parameter_min_latex, role="Parameter minimum")
-        parameter_max = _latex_to_expression(draft.parameter_max_latex, role="Parameter maximum")
+        parameter_min = _latex_to_expression(draft.parameter_min_latex, role="Parameter minimum", context=context)
+        parameter_max = _latex_to_expression(draft.parameter_max_latex, role="Parameter maximum", context=context)
         parameter_symbols = tuple(
-            sp.Symbol(name) for name in _sorted_unique_names(_infer_draft_parameter_symbols(draft))
+            symbol(name)
+            for name in _sorted_unique_names(
+                _infer_draft_parameter_symbols(draft, figure=figure, existing_plot=existing_plot)
+            )
         )
         return figure.parametric_plot(
             (x_expression, y_expression),
@@ -971,16 +1090,19 @@ def apply_plot_editor_draft(
     field_expression = _latex_to_expression(
         draft.field_expression_latex,
         role="Scalar-field expression",
+        context=context,
     )
     x_variable = _latex_to_symbol(
         draft.field_x_var_latex,
         role="Field x variable",
         default_latex="x",
+        context=context,
     )
     y_variable = _latex_to_symbol(
         draft.field_y_var_latex,
         role="Field y variable",
         default_latex="y",
+        context=context,
     )
     grid = (int(draft.field_grid_x), int(draft.field_grid_y))
 
@@ -1098,11 +1220,11 @@ class PlotComposerDialog:
         )
         configure_control(self._visible_toggle, family="checkbox")
 
-        self._cartesian_expression = MathLiveField(
+        self._cartesian_expression = ExpressionInput(
             placeholder=r"x^2 + a x + b",
             aria_label="Cartesian expression",
         )
-        self._cartesian_variable = MathLiveField(
+        self._cartesian_variable = IdentifierInput(
             value="x",
             placeholder="x",
             aria_label="Cartesian variable",
@@ -1116,25 +1238,25 @@ class PlotComposerDialog:
         )
         configure_control(self._cartesian_samples, family="numeric")
 
-        self._parametric_x = MathLiveField(
+        self._parametric_x = ExpressionInput(
             placeholder=r"\cos(t)",
             aria_label="Parametric x(t)",
         )
-        self._parametric_y = MathLiveField(
+        self._parametric_y = ExpressionInput(
             placeholder=r"\sin(t)",
             aria_label="Parametric y(t)",
         )
-        self._parameter_variable = MathLiveField(
+        self._parameter_variable = IdentifierInput(
             value="t",
             placeholder="t",
             aria_label="Parametric parameter",
         )
-        self._parameter_min = MathLiveField(
+        self._parameter_min = ExpressionInput(
             value="0",
             placeholder="0",
             aria_label="Parametric parameter minimum",
         )
-        self._parameter_max = MathLiveField(
+        self._parameter_max = ExpressionInput(
             value=r"2\pi",
             placeholder=r"2\pi",
             aria_label="Parametric parameter maximum",
@@ -1148,16 +1270,16 @@ class PlotComposerDialog:
         )
         configure_control(self._parametric_samples, family="numeric")
 
-        self._field_expression = MathLiveField(
+        self._field_expression = ExpressionInput(
             placeholder=r"x^2 + y^2",
             aria_label="Scalar-field expression",
         )
-        self._field_x_variable = MathLiveField(
+        self._field_x_variable = IdentifierInput(
             value="x",
             placeholder="x",
             aria_label="Scalar-field x variable",
         )
-        self._field_y_variable = MathLiveField(
+        self._field_y_variable = IdentifierInput(
             value="y",
             placeholder="y",
             aria_label="Scalar-field y variable",
@@ -1765,8 +1887,12 @@ class PlotComposerDialog:
         self._parametric_samples_row = self._parametric_resolution_row
         self._field_grid_row = self._field_resolution_row
         self._kind.observe(self._on_kind_changed, names="value")
+        self._cartesian_variable.observe(self._on_identifier_field_changed, names="value")
         self._parameter_variable.observe(self._on_parameter_variable_changed, names="value")
+        self._field_x_variable.observe(self._on_identifier_field_changed, names="value")
+        self._field_y_variable.observe(self._on_identifier_field_changed, names="value")
 
+        self._refresh_math_input_context()
         self._update_parametric_prompt_copy()
         self._set_tab("expression")
         self._sync_section_visibility()
@@ -2069,11 +2195,20 @@ class PlotComposerDialog:
         tab_name = {0: "expression", 1: "style", 2: "advanced"}.get(new_index, "expression")
         self._set_tab(tab_name, sync_bridge=False)
 
+    def _on_identifier_field_changed(self, _change: dict[str, Any]) -> None:
+        """Refresh semantic widget context when one identifier field changes."""
+
+        if self._suspend_observers:
+            return
+        self._refresh_math_input_context()
+        self._update_parameter_preview()
+
     def _on_parameter_variable_changed(self, _change: dict[str, Any]) -> None:
         """Refresh compact parametric labels when the parameter symbol changes."""
 
         if self._suspend_observers:
             return
+        self._refresh_math_input_context()
         self._update_parametric_prompt_copy()
         self._update_parameter_preview()
 
@@ -2185,6 +2320,7 @@ class PlotComposerDialog:
             )
         finally:
             self._suspend_observers = False
+            self._refresh_math_input_context()
             self._update_parametric_prompt_copy()
             self._sync_section_visibility()
             self._update_parameter_preview()
@@ -2229,6 +2365,7 @@ class PlotComposerDialog:
             self._set_curve_style_baseline(_curve_style_baseline_for_plot(plot, figure=self._figure))
         finally:
             self._suspend_observers = False
+            self._refresh_math_input_context()
             self._update_parametric_prompt_copy()
             self._sync_section_visibility()
             self._update_parameter_preview()
@@ -2287,6 +2424,39 @@ class PlotComposerDialog:
         """Keep the advanced placement section mounted around the view selector."""
 
         self._placement_body.children = (self._views_field,)
+
+    def _current_editing_plot(self) -> Any | None:
+        """Return the plot currently being edited, if any."""
+
+        if self._editing_plot_id is None:
+            return None
+        try:
+            return self._figure.plots.get(self._editing_plot_id)
+        except Exception:
+            return None
+
+    def _refresh_math_input_context(self) -> None:
+        """Propagate the current semantic context into all math input widgets."""
+
+        draft = self._collect_draft()
+        context = _figure_expression_context(
+            self._figure,
+            draft=draft,
+            existing_plot=self._current_editing_plot(),
+        )
+        for widget in (
+            self._cartesian_expression,
+            self._cartesian_variable,
+            self._parametric_x,
+            self._parametric_y,
+            self._parameter_variable,
+            self._parameter_min,
+            self._parameter_max,
+            self._field_expression,
+            self._field_x_variable,
+            self._field_y_variable,
+        ):
+            widget.set_context(context)
 
     def _collect_draft(self) -> PlotEditorDraft:
         """Collect the current widget values into a detached draft."""
@@ -2521,6 +2691,7 @@ class PlotComposerDialog:
 
         if self._suspend_observers:
             return
+        self._refresh_math_input_context()
         self._update_parametric_prompt_copy()
         self._sync_section_visibility()
         self._update_parameter_preview()
@@ -2543,7 +2714,11 @@ class PlotComposerDialog:
     def _update_parameter_preview(self) -> None:
         """Refresh compact parameter inference microcopy under the expression tab."""
 
-        preview = _draft_parameter_preview(self._figure, self._collect_draft())
+        preview = _draft_parameter_preview(
+            self._figure,
+            self._collect_draft(),
+            existing_plot=self._current_editing_plot(),
+        )
         if preview.error is not None:
             self._parameter_preview.value = ""
             self._parameter_preview.layout.display = "none"

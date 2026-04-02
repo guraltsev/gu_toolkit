@@ -102,10 +102,22 @@ from typing import Protocol, cast
 
 import sympy as sp
 
+from .identifier_policy import (
+    function_head_to_latex,
+    function_latex_method,
+    render_latex,
+    symbol,
+    validate_identifier,
+)
+
 __all__ = [
     # Public API
     "NamedFunction",
+    "get_named_function_registry",
 ]
+
+
+_NAMED_FUNCTION_REGISTRY: dict[str, type[sp.Function]] = {}
 
 
 # === SECTION: Types & protocols [id: types]===
@@ -281,52 +293,73 @@ _GREEK_LETTERS: set[str] = {
 }
 
 
-def _get_smart_latex_symbol(name: str) -> sp.Symbol:
-    """Return a Symbol with a helpful LaTeX name.
+def get_named_function_registry() -> dict[str, type[sp.Function]]:
+    """Return a snapshot of the global canonical NamedFunction registry.
 
-    Rules
-    -----
-    - Greek letter names are rendered as Greek in LaTeX (``alpha`` -> ``\\alpha``).
-    - Multi-letter words are wrapped in ``\\mathrm{...}``.
-    - Underscores are interpreted as subscripts (``x_val`` -> ``x_{val}``).
+    Full API
+    --------
+    ``get_named_function_registry() -> dict[str, type[sp.Function]]``
 
-    Notes
-    -----
-    This affects LaTeX rendering only. The symbol's *SymPy name* remains unchanged.
+    Parameters
+    ----------
+    None. This API does not declare user-supplied parameters beyond implicit object context.
+
+    Returns
+    -------
+    dict[str, type[sp.Function]]
+        Mapping from canonical function names to the generated SymPy Function classes.
+
+    Optional arguments
+    ------------------
+    This API does not declare optional arguments in its Python signature.
+
+    Architecture note
+    -----------------
+    This callable lives in ``gu_toolkit.NamedFunction``. These helpers bridge symbolic authoring with numeric execution so notebook expressions can stay concise without giving up compiled evaluation.
 
     Examples
     --------
-    >>> import sympy as sp
-    >>> from NamedFunction import _get_smart_latex_symbol  # internal helper
-    >>> s = _get_smart_latex_symbol("x_val")
-    >>> sp.latex(s)
-    'x_{val}'
+    Basic use::
+
+        from gu_toolkit.NamedFunction import get_named_function_registry
+        registry = get_named_function_registry()
+
+    Discovery-oriented use::
+
+        help(get_named_function_registry)
+        # then follow the guide/test links listed below
+
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
+    - Example notebook: ``examples/Toolkit_overview.ipynb``.
+    - Regression/spec tests: ``tests/test_numeric_callable_api.py``.
+    - Runtime discovery tip: inspect the returned mapping together with ``NamedFunction`` examples to see which symbolic heads are available in the current session.
+    - In a notebook or REPL, run ``help(get_named_function_registry)`` and inspect sibling APIs in the same module.
     """
-    if not name:
-        return sp.Symbol(name)
 
-    if "_" in name:
-        head, sub = name.split("_", 1)
-    else:
-        head, sub = name, None
+    return dict(_NAMED_FUNCTION_REGISTRY)
 
-    if len(head) > 1 and head not in _GREEK_LETTERS:
-        tex_head = f"\\mathrm{{{head}}}"
-    else:
-        tex_head = f"\\{head}" if head in _GREEK_LETTERS else head
 
-    tex = f"{tex_head}_{{{sub}}}" if sub else tex_head
-    return sp.Symbol(name, latex_name=tex)
+def _register_named_function(func_cls: type[sp.Function]) -> type[sp.Function]:
+    """Register one generated NamedFunction class by canonical name."""
+
+    name = getattr(func_cls, "__gu_name__", getattr(func_cls, "__name__", ""))
+    if isinstance(name, str) and name:
+        _NAMED_FUNCTION_REGISTRY[name] = func_cls
+    return func_cls
+
+
+def _get_smart_latex_symbol(name: str) -> sp.Symbol:
+    """Return one canonical Symbol for documentation placeholders."""
+
+    return symbol(validate_identifier(name, role="symbol"))
 
 
 def _latex_function_name(name: str) -> str:
-    """Return a LaTeX string for a function name."""
-    if len(name) > 1 and name not in _GREEK_LETTERS:
-        return f"\\mathrm{{{name}}}"
-    if name in _GREEK_LETTERS:
-        return f"\\{name}"
-    return name
+    """Return the semantic LaTeX head for one canonical function name."""
 
+    return function_head_to_latex(validate_identifier(name, role="function"))
 
 # === SECTION: Sympify & documentation helpers [id: docs]===
 #
@@ -492,8 +525,8 @@ def _build_definition_strings(
     code_def = f"`{lhs_code} = {rhs_code}`"
 
     # LaTeX-style definition.
-    args_latex = ", ".join(sp.latex(s) for s in syms)
-    rhs_latex = sp.latex(expr)
+    args_latex = ", ".join(render_latex(s) for s in syms)
+    rhs_latex = render_latex(expr)
     latex_def = f"{_latex_function_name(func_name)}({args_latex}) = {rhs_latex}"
     return code_def, latex_def
 
@@ -568,6 +601,12 @@ def NamedFunction(
 
 def _handle_function_decoration(func: _SymbolicCallable) -> type[sp.Function]:
     """Create a SymPy Function class from a plain function."""
+    canonical_name = validate_identifier(
+        str(getattr(func, "__gu_name__", getattr(func, "__name__", ""))),
+        role="function",
+    )
+    latex_head = getattr(func, "__gu_latex__", None) or function_head_to_latex(canonical_name)
+
     sig = inspect.signature(func)
     nargs = _validate_fixed_positional_signature(
         sig, what=f"function {getattr(func, '__name__', '<callable>')}"
@@ -576,7 +615,7 @@ def _handle_function_decoration(func: _SymbolicCallable) -> type[sp.Function]:
     callable(getattr(func, "f_numpy", None))
 
     definition_code, definition_latex = _build_definition_strings(
-        func_name=func.__name__,
+        func_name=canonical_name,
         sig=sig,
         nargs=nargs,
         call_symbolic=func,
@@ -615,17 +654,26 @@ def _handle_function_decoration(func: _SymbolicCallable) -> type[sp.Function]:
         "_eval_evalf": _eval_evalf,
         "__module__": func.__module__,
         "__doc__": new_doc,
+        "__gu_name__": canonical_name,
+        "__gu_latex__": latex_head,
+        "_latex": function_latex_method,
         "_original_func": staticmethod(func),
         "f_numpy": getattr(func, "f_numpy", None),
     }
 
-    NewClass = _SignedFunctionMeta(func.__name__, (sp.Function,), class_dict)
+    NewClass = _SignedFunctionMeta(canonical_name, (sp.Function,), class_dict)
     NewClass._custom_signature = sig
-    return cast(type[sp.Function], NewClass)
+    return cast(type[sp.Function], _register_named_function(NewClass))
 
 
 def _handle_class_decoration(cls: type[_NamedFunctionSpec]) -> type[sp.Function]:
     """Create a SymPy Function class from a spec class (symbolic + numeric)."""
+    canonical_name = validate_identifier(
+        str(getattr(cls, "__gu_name__", getattr(cls, "__name__", ""))),
+        role="function",
+    )
+    latex_head = getattr(cls, "__gu_latex__", None) or function_head_to_latex(canonical_name)
+
     if not hasattr(cls, "symbolic") or not hasattr(cls, "numeric"):
         raise ValueError(
             f"Class {cls.__name__} decorated with @NamedFunction must define both "
@@ -656,7 +704,7 @@ def _handle_class_decoration(cls: type[_NamedFunctionSpec]) -> type[sp.Function]
         raise ValueError(f"{cls.__name__}.symbolic must accept at least 'self'.")
 
     definition_code, definition_latex = _build_definition_strings(
-        func_name=cls.__name__,
+        func_name=canonical_name,
         sig=sig_sym,
         nargs=nargs,
         call_symbolic=symbolic_func,
@@ -702,10 +750,13 @@ def _handle_class_decoration(cls: type[_NamedFunctionSpec]) -> type[sp.Function]
         "_eval_evalf": _eval_evalf,
         "__module__": cls.__module__,
         "__doc__": new_doc,
+        "__gu_name__": canonical_name,
+        "__gu_latex__": latex_head,
+        "_latex": function_latex_method,
         "f_numpy": f_numpy,
         "_original_class": cls,
     }
 
-    NewClass = _SignedFunctionMeta(cls.__name__, (sp.Function,), class_dict)
+    NewClass = _SignedFunctionMeta(canonical_name, (sp.Function,), class_dict)
     NewClass._custom_signature = public_sig
-    return cast(type[sp.Function], NewClass)
+    return cast(type[sp.Function], _register_named_function(NewClass))

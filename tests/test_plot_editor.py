@@ -345,3 +345,47 @@ def test_apply_plot_editor_draft_creates_contour_and_temperature_plots() -> None
     assert temperature.visible is True
     assert temperature.grid == (42, 39)
     assert temperature.label == "Heat"
+
+
+from gu_toolkit.NamedFunction import NamedFunction
+
+
+@NamedFunction
+def PlotForce(x):
+    return x
+
+
+def test_apply_plot_editor_draft_preserves_known_multi_letter_parameter_names() -> None:
+    fig = Figure()
+    fig.parameter(sp.Symbol("velocity"), value=1.0)
+
+    plot = apply_plot_editor_draft(
+        fig,
+        _blank_draft(
+            kind="cartesian",
+            plot_id="velocity-line",
+            cartesian_expression_latex="velocity*x + 1",
+            cartesian_var_latex="x",
+        ),
+    )
+
+    assert isinstance(plot, Plot)
+    assert plot.symbolic_expression == sp.Symbol("velocity") * sp.Symbol("x") + 1
+
+
+def test_apply_plot_editor_draft_parses_named_functions_atomically() -> None:
+    fig = Figure()
+
+    plot = apply_plot_editor_draft(
+        fig,
+        _blank_draft(
+            kind="cartesian",
+            plot_id="force-line",
+            cartesian_expression_latex=r"\mathrm{PlotForce}(x)",
+            cartesian_var_latex="x",
+        ),
+    )
+
+    assert isinstance(plot, Plot)
+    assert plot.symbolic_expression.func.__gu_name__ == "PlotForce"
+    assert plot.symbolic_expression.args == (sp.Symbol("x"),)

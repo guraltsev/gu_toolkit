@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sympy as sp
 
-from gu_toolkit.NamedFunction import NamedFunction
+from gu_toolkit.NamedFunction import NamedFunction, get_named_function_registry
 
 
 def test_docstring_latex_from_sympy_expr() -> None:
@@ -12,7 +12,7 @@ def test_docstring_latex_from_sympy_expr() -> None:
         return x**2 + 1
 
     doc = SquarePlusOne.__doc__ or ""
-    assert r"\mathrm{SquarePlusOne}(x) = x^{2} + 1" in doc, doc
+    assert r"\operatorname{SquarePlusOne}(x) = x^{2} + 1" in doc, doc
     assert r"\mathtt{\text{x**2 + 1}}" not in doc, doc
 
 
@@ -23,7 +23,7 @@ def test_docstring_latex_from_string_expr() -> None:
         return "x**2 + 1"
 
     doc = SquarePlusOneStr.__doc__ or ""
-    assert r"\mathrm{SquarePlusOneStr}(x) = x^{2} + 1" in doc, doc
+    assert r"\operatorname{SquarePlusOneStr}(x) = x^{2} + 1" in doc, doc
     assert r"\mathtt{\text{x**2 + 1}}" not in doc, doc
 
 
@@ -47,3 +47,23 @@ def test_opaque_definition_stays_opaque() -> None:
 
     expr = G(x).rewrite("expand_definition")
     assert expr == G(x), expr
+
+
+def test_named_function_exposes_semantic_name_and_latex_head() -> None:
+    @NamedFunction
+    def Force(x):
+        return x
+
+    x = sp.Symbol("x")
+    assert Force.__gu_name__ == "Force"
+    assert Force.__gu_latex__ == r"\operatorname{Force}"
+    assert sp.latex(Force(x)) == r"\operatorname{Force}(x)"
+
+
+def test_named_function_registry_tracks_generated_classes() -> None:
+    @NamedFunction
+    def Velocity(x):
+        return x
+
+    registry = get_named_function_registry()
+    assert registry["Velocity"] is Velocity
