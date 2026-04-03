@@ -28,7 +28,7 @@ from typing import Any
 
 import sympy as sp
 
-from .identifier_policy import (
+from .identifiers import (
     function_head_to_latex,
     function_latex_method,
     identifier_to_latex,

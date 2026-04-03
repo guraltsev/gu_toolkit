@@ -36,7 +36,7 @@ on the existing code paths.
 Discoverability
 ---------------
 See :mod:`gu_toolkit.figure_legend` for the toolbar/buttons that launch the
-composer and :mod:`gu_toolkit.math_inputs` for the figure-independent semantic MathLive widgets.
+composer and :mod:`gu_toolkit.mathlive.inputs` for the figure-independent semantic MathLive widgets.
 """
 
 from __future__ import annotations
@@ -57,9 +57,9 @@ from sympy.parsing.sympy_parser import (
     standard_transformations,
 )
 
-from .expression_context import ExpressionContext
-from .identifier_policy import identifier_to_latex, parse_identifier, render_latex, symbol
-from .math_inputs import ExpressionInput, IdentifierInput
+from .mathlive.context import ExpressionContext
+from .identifiers import identifier_to_latex, parse_identifier, render_latex, symbol
+from .mathlive.inputs import ExpressionInput, IdentifierInput
 from ._widget_stubs import widgets
 from .figure_color import color_for_trace_index, color_to_picker_hex
 from .figure_field import ScalarFieldPlot

@@ -115,8 +115,10 @@ The feature is intentionally split across three modules with clear roles:
   - parameter preview
   - routing back through `Figure.plot(...)`, `Figure.parametric_plot(...)`,
     `Figure.contour(...)`, `Figure.density(...)`, and `Figure.temperature(...)`
-- `src/gu_toolkit/_mathlive_widget.py`
-  - the small MathLive-backed expression widget used by the editor
+- `src/gu_toolkit/mathlive/inputs.py`
+  - the public figure-independent semantic MathLive widgets used by the editor
+- `src/gu_toolkit/mathlive/widget.py`
+  - the low-level MathLive-backed widget backend used by those public widgets
 
 This split keeps the legend responsible for row lifecycle, the editor
 responsible for form state and symbolic validation, and `Figure` responsible for

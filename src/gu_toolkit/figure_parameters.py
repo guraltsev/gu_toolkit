@@ -19,7 +19,7 @@ from sympy.core.symbol import Symbol
 from .ParameterSnapshot import ParameterSnapshot, ParameterValueSnapshot
 from .ParamEvent import ParamEvent
 from .ParamRef import ParamRef
-from .identifier_policy import render_latex
+from .identifiers import render_latex
 from .Slider import FloatSlider
 from .performance_monitor import PerformanceMonitor, format_performance_snapshot
 from .parameter_keys import (

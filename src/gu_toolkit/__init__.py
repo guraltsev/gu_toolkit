@@ -83,9 +83,9 @@ from .Figure import (
 from .FigureSnapshot import FigureSnapshot, InfoCardSnapshot, ViewSnapshot
 from .FieldPlotSnapshot import FieldPlotSnapshot
 from .NamedFunction import NamedFunction as NamedFunction
-from .expression_context import ExpressionContext
-from .identifier_policy import parse_identifier, render_latex, symbol
-from .math_inputs import ExpressionInput, IdentifierInput
+from .mathlive import ExpressionContext
+from .identifiers import parse_identifier, render_latex, symbol
+from .mathlive import ExpressionInput, IdentifierInput
 from .Notebook import *
 from .numeric_callable import (
     DYNAMIC_PARAMETER,

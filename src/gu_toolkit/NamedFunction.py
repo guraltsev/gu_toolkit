@@ -102,7 +102,7 @@ from typing import Protocol, cast
 
 import sympy as sp
 
-from .identifier_policy import (
+from .identifiers import (
     function_head_to_latex,
     function_latex_method,
     render_latex,

@@ -29,6 +29,7 @@ This folder uses a lightweight lifecycle model:
 - `guides/scalar-field-styling.md`: contour and temperature styling, palettes, range control, and diffraction-oriented examples.
 - `guides/api-discovery.md`: task-oriented map from user goals to the right public APIs, guides, examples, and tests.
 - `guides/public-api-documentation-structure.md`: required structure and discoverability rules for public docstrings.
+- `guides/semantic-math-refactoring-philosophy.md`: canonical identifier + MathLive architecture goals, boundaries, and refactoring checklist.
 
 ---
 
