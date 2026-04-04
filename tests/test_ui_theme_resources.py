@@ -161,7 +161,8 @@ def test_mathlive_frontend_defers_semantic_runtime_options_until_mount() -> None
     assert 'node.addEventListener("mount", handleMount, { once: true });' in esm
     assert 'if (!node.__guMounted) {' in esm
     assert 'node.__guBaseInlineShortcuts = { ...(node.inlineShortcuts || {}) };' in esm
-    assert esm.index("el.appendChild(input);") < esm.index("syncFromModel();")
+    assert "requestAnimationFrame" in esm
+    assert "el.appendChild(input);\n        scheduleSyncFromModel();" in esm
 
 
 def test_mathlive_frontend_integrates_compute_engine_transport() -> None:

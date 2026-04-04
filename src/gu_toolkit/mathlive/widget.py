@@ -547,15 +547,19 @@ class MathLiveField(anywidget.AnyWidget):
       }
     }
 
-    function bindValueBridge(node, model) {
+    function bindValueBridge(node, scheduleCommit) {
       const commit = () => {
-        commitTransport(node, model);
+        scheduleCommit();
       };
       node.addEventListener("input", commit);
       node.addEventListener("change", commit);
+      node.addEventListener("blur", commit);
+      node.addEventListener("focusout", commit);
       return () => {
         node.removeEventListener("input", commit);
         node.removeEventListener("change", commit);
+        node.removeEventListener("blur", commit);
+        node.removeEventListener("focusout", commit);
       };
     }
 
@@ -603,6 +607,13 @@ class MathLiveField(anywidget.AnyWidget):
 
     async function buildMathField(model) {
       await ensureMathLive();
+      if (globalThis.customElements && typeof globalThis.customElements.whenDefined === "function") {
+        try {
+          await globalThis.customElements.whenDefined("math-field");
+        } catch (_error) {
+          // Ignore registration timing errors and let the browser try to create the element.
+        }
+      }
       const field = document.createElement("math-field");
       field.setAttribute("math-virtual-keyboard-policy", "auto");
       field.setAttribute("virtual-keyboard-mode", "manual");
@@ -646,7 +657,30 @@ class MathLiveField(anywidget.AnyWidget):
           input = buildTextarea();
         }
 
-        const cleanupBridge = bindValueBridge(input, model);
+        let disposed = false;
+        let syncFrame = 0;
+        let commitFrame = 0;
+
+        const scheduleCommit = (maxRetries = 6) => {
+          if (disposed) return;
+          if (commitFrame) {
+            cancelAnimationFrame(commitFrame);
+            commitFrame = 0;
+          }
+          const run = (retriesLeft) => {
+            commitFrame = requestAnimationFrame(() => {
+              if (disposed) return;
+              if (!(input && input.isConnected) && retriesLeft > 0) {
+                run(retriesLeft - 1);
+                return;
+              }
+              commitFrame = 0;
+              commitTransport(input, model);
+            });
+          };
+          run(maxRetries);
+        };
+
         const syncFromModel = () => {
           setCommonState(input, model);
           applyTransportContext(input, model);
@@ -654,27 +688,36 @@ class MathLiveField(anywidget.AnyWidget):
             applyValue(input, model.get("value"));
           }
           applySemanticState(input, model);
-          commitTransport(input, model);
+          scheduleCommit();
         };
 
-        const onValue = () => {
-          applyTransportContext(input, model);
-          applyValue(input, model.get("value"));
-          commitTransport(input, model);
+        const scheduleSyncFromModel = (maxRetries = 6) => {
+          if (disposed) return;
+          if (syncFrame) {
+            cancelAnimationFrame(syncFrame);
+            syncFrame = 0;
+          }
+          const run = (retriesLeft) => {
+            syncFrame = requestAnimationFrame(() => {
+              if (disposed) return;
+              if (!(input && input.isConnected) && retriesLeft > 0) {
+                run(retriesLeft - 1);
+                return;
+              }
+              syncFrame = 0;
+              syncFromModel();
+            });
+          };
+          run(maxRetries);
         };
-        const onMathJson = () => {
-          applyTransportContext(input, model);
-          applyMathJson(input, model);
-          applySemanticState(input, model);
-          commitTransport(input, model);
-        };
-        const onPlaceholder = () => setCommonState(input, model);
-        const onReadOnly = () => setCommonState(input, model);
-        const onSemantic = () => {
-          applyTransportContext(input, model);
-          applySemanticState(input, model);
-          commitTransport(input, model);
-        };
+
+        const cleanupBridge = bindValueBridge(input, scheduleCommit);
+
+        const onValue = () => scheduleSyncFromModel();
+        const onMathJson = () => scheduleSyncFromModel();
+        const onPlaceholder = () => scheduleSyncFromModel();
+        const onReadOnly = () => scheduleSyncFromModel();
+        const onSemantic = () => scheduleSyncFromModel();
         model.on("change:value", onValue);
         model.on("change:math_json", onMathJson);
         model.on("change:placeholder", onPlaceholder);
@@ -692,13 +735,22 @@ class MathLiveField(anywidget.AnyWidget):
           if (input.__guPendingSemantic) {
             applySemanticState(input, model);
           }
-          commitTransport(input, model);
+          scheduleSyncFromModel();
         });
 
         el.appendChild(input);
-        syncFromModel();
+        scheduleSyncFromModel();
 
         return () => {
+          disposed = true;
+          if (syncFrame) {
+            cancelAnimationFrame(syncFrame);
+            syncFrame = 0;
+          }
+          if (commitFrame) {
+            cancelAnimationFrame(commitFrame);
+            commitFrame = 0;
+          }
           cleanupBridge();
           cleanupMount();
           model.off("change:value", onValue);

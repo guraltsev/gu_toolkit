@@ -55,7 +55,7 @@ def test_expression_input_transport_manifest_separates_symbols_and_functions() -
 def test_identifier_input_parse_value_prefers_mathjson_transport() -> None:
     """Structured MathJSON input should win over the plain text field when both are present."""
 
-    widget = IdentifierInput(value="")
+    widget = IdentifierInput()
     widget.math_json = ["Subscript", "a", ["Tuple", 1, 2]]
 
     assert widget.parse_value() == "a_1_2"
@@ -72,7 +72,7 @@ def test_expression_input_parse_value_prefers_mathjson_transport_and_context() -
         include_named_functions=False,
     )
 
-    widget = ExpressionInput(context=ctx, value="")
+    widget = ExpressionInput(context=ctx)
     widget.math_json = ["Add", ["WidgetForce", "theta__x"], ["Multiply", "velocity", 2]]
 
     assert widget.parse_value() == WidgetForce(theta_x) + 2 * velocity
@@ -81,7 +81,8 @@ def test_expression_input_parse_value_prefers_mathjson_transport_and_context() -
 def test_identifier_input_text_edits_override_older_mathjson_transport() -> None:
     """Changing the visible text after a structured payload should not keep returning a stale identifier."""
 
-    widget = IdentifierInput(value=r"a_{1,2}")
+    widget = IdentifierInput()
+    widget.value = r"a_{1,2}"
     widget.math_json = ["Subscript", "a", ["Tuple", 1, 2]]
 
     widget.value = "x"
@@ -95,7 +96,8 @@ def test_expression_input_text_edits_override_older_mathjson_transport() -> None
     x = symbol("x")
     y = symbol("y")
     ctx = ExpressionContext.from_symbols([x, y], include_named_functions=False)
-    widget = ExpressionInput(context=ctx, value="x")
+    widget = ExpressionInput(context=ctx)
+    widget.value = "x"
     widget.math_json = "x"
 
     widget.value = "y"
@@ -106,7 +108,8 @@ def test_expression_input_text_edits_override_older_mathjson_transport() -> None
 def test_transport_source_value_keeps_matching_mathjson_authoritative_even_if_sync_order_varies() -> None:
     """An explicit frontend source snapshot should preserve MathJSON authority once it matches the visible text again."""
 
-    widget = IdentifierInput(value=r"a_{1,2}")
+    widget = IdentifierInput()
+    widget.value = r"a_{1,2}"
     widget.math_json = ["Subscript", "a", ["Tuple", 1, 2]]
     widget.value = "x"
     assert widget.parse_value() == "x"
@@ -153,7 +156,7 @@ def test_legacy_math_inputs_import_still_points_at_the_public_widgets() -> None:
 def test_expression_input_rejects_empty_sentinel_mathjson_when_no_text_is_present() -> None:
     """An empty MathJSON sentinel should behave like missing input, not like the number zero."""
 
-    widget = ExpressionInput(value="")
+    widget = ExpressionInput()
     widget.math_json = "Nothing"
 
     with pytest.raises(ValueError, match="required"):
@@ -165,7 +168,8 @@ def test_expression_input_ignores_empty_sentinel_mathjson_when_text_is_present()
 
     x = symbol("x")
     ctx = ExpressionContext.from_symbols([x], include_named_functions=False)
-    widget = ExpressionInput(context=ctx, value="x")
+    widget = ExpressionInput(context=ctx)
+    widget.value = "x"
     widget.math_json = "Nothing"
 
     assert widget.parse_value() == x
@@ -174,7 +178,7 @@ def test_expression_input_ignores_empty_sentinel_mathjson_when_text_is_present()
 def test_identifier_input_rejects_empty_sentinel_mathjson_when_no_text_is_present() -> None:
     """Identifier widgets should reject empty/sentinel transport instead of accepting a fake identifier."""
 
-    widget = IdentifierInput(value="")
+    widget = IdentifierInput()
     widget.math_json = "Nothing"
 
     with pytest.raises(ValueError, match="required"):
@@ -184,7 +188,8 @@ def test_identifier_input_rejects_empty_sentinel_mathjson_when_no_text_is_presen
 def test_identifier_input_ignores_empty_sentinel_mathjson_when_text_is_present() -> None:
     """Visible text should win when the MathJSON payload only says that the field is empty."""
 
-    widget = IdentifierInput(value="x")
+    widget = IdentifierInput()
+    widget.value = "x"
     widget.math_json = "Nothing"
 
     assert widget.parse_value() == "x"
@@ -206,3 +211,18 @@ def test_low_level_mathjson_helpers_reject_empty_sentinel_payloads() -> None:
             mathjson_to_identifier(payload)
         with pytest.raises(MathJSONParseError, match="empty"):
             mathjson_to_sympy(payload)
+
+
+def test_mathlive_widget_frontend_sync_waits_for_connected_dom_and_mount_cycle() -> None:
+    """The frontend bridge should defer sync/commit work until the MathLive element is ready to reflect it."""
+
+    source = (Path(__file__).resolve().parents[2] / "src" / "gu_toolkit" / "mathlive" / "widget.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'customElements.whenDefined("math-field")' in source
+    assert "requestAnimationFrame" in source
+    assert "scheduleSyncFromModel" in source
+    assert "bindValueBridge(input, scheduleCommit)" in source
+    assert 'node.addEventListener("focusout", commit);' in source
+    assert "el.appendChild(input);\n        scheduleSyncFromModel();" in source

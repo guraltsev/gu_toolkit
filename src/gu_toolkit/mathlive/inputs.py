@@ -202,7 +202,7 @@ class IdentifierInput(_SemanticMathInput):
         Optional semantic context that should define which identifiers remain atomic and which functions are callable.
     
     **kwargs : object
-        Keyword arguments forwarded to ``MathLiveField``. Common examples are ``value=``, ``placeholder=``, ``read_only=``, and ``math_json=``.
+        Keyword arguments forwarded to ``MathLiveField``. Common examples are ``placeholder=``, ``read_only=``, ``math_json=``, and later ``widget.value = ...`` assignments.
     
     Returns
     -------
@@ -225,7 +225,8 @@ class IdentifierInput(_SemanticMathInput):
     
         from gu_toolkit.mathlive import IdentifierInput
     
-        widget = IdentifierInput(value=r"\\theta")
+        widget = IdentifierInput()
+        widget.value = r"\theta"
     
     Discovery-oriented use::
     
@@ -283,7 +284,8 @@ class IdentifierInput(_SemanticMathInput):
         
             from gu_toolkit.mathlive import IdentifierInput
         
-            widget = IdentifierInput(value=r"\\theta")
+            widget = IdentifierInput()
+            widget.value = r"\theta"
             widget.parse_value()
         
         Discovery-oriented use::
@@ -323,7 +325,7 @@ class ExpressionInput(_SemanticMathInput):
         Optional semantic context that should define which names the widget may treat as registered symbols/functions.
     
     **kwargs : object
-        Keyword arguments forwarded to ``MathLiveField``. Common examples are ``value=``, ``placeholder=``, ``read_only=``, and ``math_json=``.
+        Keyword arguments forwarded to ``MathLiveField``. Common examples are ``placeholder=``, ``read_only=``, ``math_json=``, and later ``widget.value = ...`` assignments.
     
     Returns
     -------
@@ -346,7 +348,9 @@ class ExpressionInput(_SemanticMathInput):
     
         from gu_toolkit.mathlive import ExpressionInput
     
-        widget = ExpressionInput(value="x + 1")
+        widget = ExpressionInput()
+
+        widget.value = "x + 1"
     
     Discovery-oriented use::
     
@@ -404,7 +408,8 @@ class ExpressionInput(_SemanticMathInput):
         
             from gu_toolkit.mathlive import ExpressionInput
         
-            widget = ExpressionInput(value="x + 1")
+            widget = ExpressionInput()
+            widget.value = "x + 1"
             widget.parse_value()
         
         Discovery-oriented use::

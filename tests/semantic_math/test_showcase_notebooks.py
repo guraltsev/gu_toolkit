@@ -144,6 +144,43 @@ def test_mathlive_showcase_separates_identifier_manual_demo_from_regression_chec
     assert "identifier_widget.math_json =" not in _cell_source(cells[regression_cell])
 
 
+def test_mathlive_showcase_visible_demo_widgets_start_empty_and_use_browser_side_injection() -> None:
+    """The visible demo widgets should no longer be constructor-seeded with ``value=``."""
+
+    raw = json.loads(MATHLIVE_NOTEBOOK.read_text(encoding="utf-8"))
+    cells = raw["cells"]
+
+    identifier_display_cell = next(
+        cell
+        for cell in cells
+        if cell["cell_type"] == "code" and 'aria_label="Identifier demo input"' in _cell_source(cell)
+    )
+    expression_display_cell = next(
+        cell
+        for cell in cells
+        if cell["cell_type"] == "code" and 'aria_label="Expression demo input"' in _cell_source(cell)
+    )
+    identifier_injection_cell = next(
+        cell
+        for cell in cells
+        if cell["cell_type"] == "code"
+        and "display(Javascript(" in _cell_source(cell)
+        and "Identifier demo input" in _cell_source(cell)
+    )
+    expression_injection_cell = next(
+        cell
+        for cell in cells
+        if cell["cell_type"] == "code"
+        and "display(Javascript(" in _cell_source(cell)
+        and "Expression demo input" in _cell_source(cell)
+    )
+
+    assert "value=" not in _cell_source(identifier_display_cell)
+    assert "value=" not in _cell_source(expression_display_cell)
+    assert "field.setValue" in _cell_source(identifier_injection_cell)
+    assert "field.setValue" in _cell_source(expression_injection_cell)
+
+
 def test_mathlive_showcase_uses_fresh_widgets_for_transport_regressions() -> None:
     """The MathJSON regression cells should not mutate the earlier visible teaching widgets."""
 
