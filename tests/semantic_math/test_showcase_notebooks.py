@@ -46,6 +46,8 @@ def test_showcase_notebooks_are_markdown_first_and_cover_their_topic(path: Path,
 
     assert len(markdown_cells) >= len(code_cells)
     assert len(markdown_cells) >= 6
+    assert "#BUG" not in text
+    assert "# BUG" not in text
     assert "%pip" not in text
     assert "from gu_toolkit import Figure" not in text
     assert "Figure(" not in text

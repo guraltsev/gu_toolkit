@@ -59,6 +59,7 @@ This order is intentional:
 | Snapshot or export a figure | `Figure.snapshot`, `Figure.to_code`, `figure_to_code`, `FigureSnapshot`, `PlotSnapshot` | `help(Figure.snapshot)`, `help(figure_to_code)` | `docs/guides/render-batching-and-snapshots.md`, `tests/test_figure_snapshot_codegen.py` |
 | Convert symbolic input to numeric callables | `numpify`, `numpify_cached`, `NumericFunction`, `NamedFunction` | `help(numpify)`, `help(NumericFunction)` | `tests/test_numeric_callable_api.py`, `examples/Toolkit_overview.ipynb` |
 | Work with symbolic-family helpers | `symbols`, `SymbolFamily`, `FunctionFamily`, `ParseLaTeX.parse_latex` | `help(symbols)`, `help(parse_latex)` | `tests/test_parse_latex_regression.py`, `tests/test_symbolic_families_helper.py` |
+| Author semantic identifiers and MathLive-backed expressions | `symbol`, `ExpressionContext`, `IdentifierInput`, `ExpressionInput`, `mathjson_to_identifier`, `build_mathlive_transport_manifest` | `help(symbol)`, `help(ExpressionContext)`, `dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))`, `help(IdentifierInput.parse_value)` | `docs/guides/semantic-math-refactoring-philosophy.md`, `examples/MathLive_identifier_system_showcase.ipynb`, `examples/Robust_identifier_system_showcase.ipynb`, `tests/semantic_math/test_identifier_policy.py`, `tests/semantic_math/test_expression_context.py`, `tests/semantic_math/test_mathlive_inputs.py` |
 | Generate or inspect sound output | `Figure.sound`, `FigureSoundManager`, `play` | `help(play)`, `help(Figure.sound)` | `examples/Fourier-Sounds.ipynb`, `tests/test_figure_sound.py` |
 | Diagnose runtime, layout, or performance issues | `runtime_diagnostics`, `figure_runtime_diagnostics`, `layout_logging`, `PerformanceMonitor` | `help(runtime_diagnostics)`, `help(PerformanceMonitor)` | `docs/guides/ui-layout-system.md`, `examples/layout_debug.ipynb`, `tests/test_runtime_support_backends.py` |
 
@@ -108,6 +109,7 @@ round-trip expectations, and bug regressions.
 - **Parameters and animation**: `ParamRef.py`, `ParamEvent.py`, `Slider.py`, `animation.py`, `parameter_keys.py`
 - **Snapshots and codegen**: `FigureSnapshot.py`, `PlotSnapshot.py`, `FieldPlotSnapshot.py`, `codegen.py`
 - **Symbolic/numeric bridge**: `Symbolic.py`, `numpify.py`, `NamedFunction.py`, `InputConvert.py`, `ParseLaTeX.py`, `numeric_operations.py`
+- **Semantic math / MathLive**: `identifiers/policy.py`, `mathlive/context.py`, `mathlive/transport.py`, `mathlive/inputs.py`, `mathlive/widget.py`
 - **Runtime/UI infrastructure**: `PlotlyPane.py`, `ui_system.py`, `widget_chrome.py`, `runtime_support.py`, `layout_logging.py`, `performance_monitor.py`
 
 ## Public docstring contract

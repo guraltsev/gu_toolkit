@@ -151,41 +151,55 @@ _RESERVED_HEADS = {
 
 
 class MathJSONParseError(ValueError):
-    """Public semantic-math helper class for MathJSONParseError.
+    """Exception raised when MathJSON cannot be normalized into a canonical identifier or SymPy expression.
     
     Full API
     --------
-    ``MathJSONParseError``
+    ``MathJSONParseError(*args: object)``
     
     Parameters
     ----------
-    Constructor parameters follow the Python signature for this class.
+    *args : object
+        Positional message fragments forwarded to ``ValueError``.
     
     Returns
     -------
     MathJSONParseError
-        New ``MathJSONParseError`` instance configured according to the constructor arguments.
+        Exception instance raised when the structured MathJSON payload is empty, unsupported, ambiguous, or inconsistent with the requested semantic role.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    This exception type does not define toolkit-specific optional arguments; any ``*args`` are forwarded to ``ValueError``.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.mathlive.transport`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.mathlive.transport``, the MathJSON boundary between frontend MathLive widgets and backend SymPy objects. It stays figure-independent so semantic parsing can be reused outside plot editors.
     
     Examples
     --------
     Basic use::
     
-        obj = MathJSONParseError(...)
+        from gu_toolkit.mathlive import MathJSONParseError, mathjson_to_identifier
+    
+        try:
+            mathjson_to_identifier(1)
+        except MathJSONParseError:
+            pass
+    
+    Discovery-oriented use::
+    
+        from gu_toolkit.mathlive import ExpressionContext, mathjson_to_sympy
+    
+        help(mathjson_to_sympy)
+        help(ExpressionContext.transport_manifest)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(MathJSONParseError)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
     """
 
 
@@ -246,41 +260,56 @@ def build_mathlive_transport_manifest(
     *,
     field_role: str = "math",
 ) -> dict[str, Any]:
-    """Public semantic-math helper callable for build_mathlive_transport_manifest.
+    """Build the frontend manifest that tells MathLive which registered names are semantic symbols and which are functions.
     
     Full API
     --------
-    ``build_mathlive_transport_manifest(...)``
+    ``build_mathlive_transport_manifest(context: 'Any', *, field_role: 'str' = 'math') -> 'dict[str, Any]'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    context : Any
+        Object exposing ``symbols`` and ``functions`` registries, usually an ``ExpressionContext``.
+    
+    field_role : str, optional
+        Frontend role string copied into the manifest so the browser can tell identifier fields, expression fields, and general math fields apart.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    dict[str, Any]
+        JSON-safe manifest with ``version``, ``fieldRole``, ``symbols``, and ``functions`` entries that the frontend can use to seed MathLive shortcuts and menus.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``field_role='math'``: Frontend role string copied into the manifest so the browser can tell identifier fields, expression fields, and general math fields apart.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.mathlive.transport`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This helper sits at the transport boundary rather than on the widget class itself because the manifest is derived from semantic registrations, not from browser state. ``ExpressionContext.transport_manifest()`` simply delegates here.
     
     Examples
     --------
     Basic use::
     
-        result = build_mathlive_transport_manifest(...)
+        from gu_toolkit.mathlive import ExpressionContext, build_mathlive_transport_manifest
+    
+        ctx = ExpressionContext.from_symbols(["x"], functions=["Force_t"], include_named_functions=False)
+        build_mathlive_transport_manifest(ctx, field_role="expression")
+    
+    Discovery-oriented use::
+    
+        from gu_toolkit.mathlive import ExpressionContext, mathjson_to_sympy
+    
+        help(mathjson_to_sympy)
+        help(ExpressionContext.transport_manifest)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(build_mathlive_transport_manifest)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
     """
 
     manifest: dict[str, Any] = {
@@ -366,41 +395,59 @@ def mathjson_to_identifier(
     context: Any | None = None,
     role: str = "identifier",
 ) -> str:
-    """Public semantic-math helper callable for mathjson_to_identifier.
+    """Convert MathJSON identifier payloads into canonical identifier strings.
     
     Full API
     --------
-    ``mathjson_to_identifier(...)``
+    ``mathjson_to_identifier(math_json: 'Any', *, context: 'Any | None' = None, role: 'str' = 'identifier') -> 'str'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    math_json : Any
+        MathJSON node that should represent one identifier spelling or a supported subscripted identifier form.
+    
+    context : Any | None, optional
+        Optional context used to disambiguate names that would otherwise be ambiguous in transport space.
+    
+    role : str, optional
+        Human-readable noun used in error messages, typically ``"identifier"`` or ``"function"``.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    str
+        Canonical identifier spelling recovered from the MathJSON payload. Context registration can disambiguate names such as ``theta_x`` that would otherwise be rejected.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``context=None``: Optional context used to disambiguate names that would otherwise be ambiguous in transport space.
+    - ``role='identifier'``: Human-readable noun used in error messages, typically ``"identifier"`` or ``"function"``.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.mathlive.transport`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.mathlive.transport``, the MathJSON boundary between frontend MathLive widgets and backend SymPy objects. It stays figure-independent so semantic parsing can be reused outside plot editors.
     
     Examples
     --------
     Basic use::
     
-        result = mathjson_to_identifier(...)
+        from gu_toolkit.mathlive import mathjson_to_identifier
+    
+        mathjson_to_identifier(["Subscript", "a", ["Tuple", 1, 2]])
+    
+    Discovery-oriented use::
+    
+        from gu_toolkit.mathlive import ExpressionContext, mathjson_to_sympy
+    
+        help(mathjson_to_sympy)
+        help(ExpressionContext.transport_manifest)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(mathjson_to_identifier)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
     """
 
     if math_json is None:
@@ -492,41 +539,56 @@ def _build_function_application(head: Any, args: list[Any], *, context: Any | No
 
 
 def mathjson_to_sympy(math_json: Any, *, context: Any | None = None) -> sp.Expr:
-    """Public semantic-math helper callable for mathjson_to_sympy.
+    """Convert MathJSON expression payloads into SymPy expressions using an optional semantic context.
     
     Full API
     --------
-    ``mathjson_to_sympy(...)``
+    ``mathjson_to_sympy(math_json: 'Any', *, context: 'Any | None' = None) -> 'sp.Expr'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    math_json : Any
+        MathJSON node that should be converted into a SymPy expression tree.
+    
+    context : Any | None, optional
+        Optional context used to resolve registered symbols and functions before falling back to default conversions.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    sp.Expr
+        SymPy expression built from the MathJSON payload, using registered symbols and functions from ``context`` when available.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``context=None``: Optional context used to resolve registered symbols and functions before falling back to default conversions.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.mathlive.transport`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.mathlive.transport``, the MathJSON boundary between frontend MathLive widgets and backend SymPy objects. It stays figure-independent so semantic parsing can be reused outside plot editors.
     
     Examples
     --------
     Basic use::
     
-        result = mathjson_to_sympy(...)
+        from gu_toolkit.mathlive import ExpressionContext, mathjson_to_sympy
+    
+        ctx = ExpressionContext.from_symbols(["velocity"], include_named_functions=False)
+        mathjson_to_sympy(["Add", "velocity", 1], context=ctx)
+    
+    Discovery-oriented use::
+    
+        from gu_toolkit.mathlive import ExpressionContext, mathjson_to_sympy
+    
+        help(mathjson_to_sympy)
+        help(ExpressionContext.transport_manifest)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(mathjson_to_sympy)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
     """
 
     if math_json is None:

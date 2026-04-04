@@ -31,41 +31,52 @@ class _SemanticMathInput(MathLiveField):
 
     @property
     def context(self) -> ExpressionContext:
-        """Public semantic-math helper on ``_SemanticMathInput`` for context.
+        """Return the ``ExpressionContext`` currently mirrored into the widget's synced state.
         
         Full API
         --------
-        ``obj.context(...)``
+        ``widget.context -> ExpressionContext``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        This property does not accept call arguments. Read it to inspect the registry currently mirrored into the widget's synced state.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        ExpressionContext
+            The widget's current semantic context. The returned context is the source of truth used to populate ``semantic_context``, ``inline_shortcuts``, ``menu_items``, and known-name traits.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        This property has no call-time optional arguments because it is an attribute-style read of the current semantic context.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.inputs`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        The context is stored on the shared semantic-input base class because both ``IdentifierInput`` and ``ExpressionInput`` need the same registry-to-widget synchronization logic.
         
         Examples
         --------
         Basic use::
         
-            result = obj.context(...)
+            from gu_toolkit.mathlive import IdentifierInput
+        
+            widget = IdentifierInput()
+            widget.context
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionInput, IdentifierInput
+        
+            help(ExpressionInput)
+            help(IdentifierInput.parse_value)
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(_SemanticMathInput)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
         """
         return self._context
 
@@ -79,82 +90,115 @@ class _SemanticMathInput(MathLiveField):
         self.known_functions = list(self._context.functions.keys())
 
     def set_context(self, context: ExpressionContext | None) -> None:
-        """Public semantic-math helper on ``_SemanticMathInput`` for set_context.
+        """Replace the widget's semantic context and refresh the synced frontend manifest.
         
         Full API
         --------
-        ``obj.set_context(...)``
+        ``widget.set_context(context: ExpressionContext | None) -> None``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        context : ExpressionContext | None
+            ``ExpressionContext`` (or context-like object) that should resolve registered semantic names.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        None
+            ``None``. The method clones the supplied context (or creates an empty one) and refreshes the frontend-facing semantic metadata.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        - ``context=None``: replace the current context with a fresh empty ``ExpressionContext`` before resynchronizing widget state.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.inputs`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This mutator lives on the shared semantic-input base class because both public widgets need to clone the new context and refresh the same frontend-facing semantic metadata.
         
         Examples
         --------
         Basic use::
         
-            result = obj.set_context(...)
+            from gu_toolkit.mathlive import ExpressionContext, IdentifierInput
+        
+            widget = IdentifierInput()
+            widget.set_context(ExpressionContext.from_symbols(["x"], include_named_functions=False))
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionInput, IdentifierInput
+        
+            help(ExpressionInput)
+            help(IdentifierInput.parse_value)
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(_SemanticMathInput)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
         """
         self._context = context.copy() if context is not None else ExpressionContext()
         self._refresh_semantic_context()
 
 
 class IdentifierInput(_SemanticMathInput):
-    """Public semantic-math helper class for IdentifierInput.
+    """MathLive-backed widget for entering one canonical identifier.
     
     Full API
     --------
-    ``IdentifierInput``
+    ``IdentifierInput(*args: object, context: ExpressionContext | None = None, **kwargs: object)``
+    
+    Key members: ``widget.context``, ``widget.set_context(...)``, and ``widget.parse_value()``.
     
     Parameters
     ----------
-    Constructor parameters follow the Python signature for this class.
+    *args : object
+        Positional arguments forwarded to ``MathLiveField``/``AnyWidget``.
+    
+    context : ExpressionContext | None, optional
+        Optional semantic context that should define which identifiers remain atomic and which functions are callable.
+    
+    **kwargs : object
+        Keyword arguments forwarded to ``MathLiveField``. Common examples are ``value=``, ``placeholder=``, ``read_only=``, and ``math_json=``.
     
     Returns
     -------
     IdentifierInput
-        New ``IdentifierInput`` instance configured according to the constructor arguments.
+        Widget instance specialized for identifier entry. It defaults ``field_role`` to ``"identifier"`` and exposes ``context``, ``set_context()``, and ``parse_value()``.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``context=None``: start with an empty ``ExpressionContext`` and let callers register names later.
+    - ``**kwargs``: forwarded to ``MathLiveField`` and may set synced traits such as ``value``, ``placeholder``, ``read_only``, or ``math_json``.
+    - The constructor also defaults ``aria_label`` to ``"Identifier input"`` and ``field_role`` to ``"identifier"`` unless you override them.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.mathlive.inputs`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This class lives in ``gu_toolkit.mathlive.inputs`` and specializes ``MathLiveField`` for the single-identifier workflow. It does not own parsing rules itself; instead it delegates to ``ExpressionContext.parse_identifier()`` so widget behavior matches the rest of the semantic-math stack.
     
     Examples
     --------
     Basic use::
     
-        obj = IdentifierInput(...)
+        from gu_toolkit.mathlive import IdentifierInput
+    
+        widget = IdentifierInput(value=r"\\theta")
+    
+    Discovery-oriented use::
+    
+        from gu_toolkit.mathlive import ExpressionInput, IdentifierInput
+    
+        help(ExpressionInput)
+        help(IdentifierInput.parse_value)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(IdentifierInput)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
     """
 
     def __init__(self, *args: object, context: ExpressionContext | None = None, **kwargs: object) -> None:
@@ -163,82 +207,119 @@ class IdentifierInput(_SemanticMathInput):
         super().__init__(*args, context=context, **kwargs)
 
     def parse_value(self, *, context: ExpressionContext | None = None, role: str = "identifier") -> str:
-        """Public semantic-math helper on ``IdentifierInput`` for parse_value.
+        """Parse the widget's current value as a canonical identifier, preferring MathJSON when available.
         
         Full API
         --------
-        ``obj.parse_value(...)``
+        ``widget.parse_value(*, context: 'ExpressionContext | None' = None, role: 'str' = 'identifier') -> 'str'``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        context : ExpressionContext | None, optional
+            ``ExpressionContext`` (or context-like object) that should resolve registered semantic names.
+        
+        role : str, optional
+            Human-readable noun used in error messages when validation or parsing fails.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        str
+            Canonical identifier spelling parsed from the widget's current state. When ``math_json`` is present it is preferred over plain text so MathLive can preserve semantic structure.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        - ``context=None``: ``ExpressionContext`` (or context-like object) that should resolve registered semantic names.
+        - ``role='identifier'``: Human-readable noun used in error messages when validation or parsing fails.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.inputs`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.inputs``, the notebook-facing widget layer. It mirrors an ``ExpressionContext`` into synced widget traits and delegates parsing/transport to the semantic-math backend.
         
         Examples
         --------
         Basic use::
         
-            result = obj.parse_value(...)
+            from gu_toolkit.mathlive import IdentifierInput
+        
+            widget = IdentifierInput(value=r"\\theta")
+            widget.parse_value()
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionInput, IdentifierInput
+        
+            help(ExpressionInput)
+            help(IdentifierInput.parse_value)
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(IdentifierInput)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
         """
         ctx = context if context is not None else self._context
         return ctx.parse_identifier(self.value, role=role, math_json=self.math_json)
 
 
 class ExpressionInput(_SemanticMathInput):
-    """Public semantic-math helper class for ExpressionInput.
+    """MathLive-backed widget for entering a SymPy expression that uses semantic names.
     
     Full API
     --------
-    ``ExpressionInput``
+    ``ExpressionInput(*args: object, context: ExpressionContext | None = None, **kwargs: object)``
+    
+    Key members: ``widget.context``, ``widget.set_context(...)``, and ``widget.parse_value()``.
     
     Parameters
     ----------
-    Constructor parameters follow the Python signature for this class.
+    *args : object
+        Positional arguments forwarded to ``MathLiveField``/``AnyWidget``.
+    
+    context : ExpressionContext | None, optional
+        Optional semantic context that should define which names the widget may treat as registered symbols/functions.
+    
+    **kwargs : object
+        Keyword arguments forwarded to ``MathLiveField``. Common examples are ``value=``, ``placeholder=``, ``read_only=``, and ``math_json=``.
     
     Returns
     -------
     ExpressionInput
-        New ``ExpressionInput`` instance configured according to the constructor arguments.
+        Widget instance specialized for expression entry. It defaults ``field_role`` to ``"expression"`` and exposes ``context``, ``set_context()``, and ``parse_value()``.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``context=None``: start with an empty ``ExpressionContext`` and let callers register names later.
+    - ``**kwargs``: forwarded to ``MathLiveField`` and may set synced traits such as ``value``, ``placeholder``, ``read_only``, or ``math_json``.
+    - The constructor also defaults ``aria_label`` to ``"Expression input"`` and ``field_role`` to ``"expression"`` unless you override them.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.mathlive.inputs`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This class lives in ``gu_toolkit.mathlive.inputs`` and specializes ``MathLiveField`` for general expressions. It delegates parsing and transport decisions to ``ExpressionContext.parse_expression()`` so widget behavior matches the rest of the semantic-math stack.
     
     Examples
     --------
     Basic use::
     
-        obj = ExpressionInput(...)
+        from gu_toolkit.mathlive import ExpressionInput
+    
+        widget = ExpressionInput(value="x + 1")
+    
+    Discovery-oriented use::
+    
+        from gu_toolkit.mathlive import ExpressionInput, IdentifierInput
+    
+        help(ExpressionInput)
+        help(IdentifierInput.parse_value)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(ExpressionInput)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
     """
 
     def __init__(self, *args: object, context: ExpressionContext | None = None, **kwargs: object) -> None:
@@ -247,41 +328,57 @@ class ExpressionInput(_SemanticMathInput):
         super().__init__(*args, context=context, **kwargs)
 
     def parse_value(self, *, context: ExpressionContext | None = None, role: str = "expression") -> Any:
-        """Public semantic-math helper on ``ExpressionInput`` for parse_value.
+        """Parse the widget's current value as a SymPy expression, preferring MathJSON when available.
         
         Full API
         --------
-        ``obj.parse_value(...)``
+        ``widget.parse_value(*, context: 'ExpressionContext | None' = None, role: 'str' = 'expression') -> 'Any'``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        context : ExpressionContext | None, optional
+            ``ExpressionContext`` (or context-like object) that should resolve registered semantic names.
+        
+        role : str, optional
+            Human-readable noun used in error messages when validation or parsing fails.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        Any
+            Parsed SymPy expression produced from the widget's current state. When ``math_json`` is present it is preferred over plain text so MathLive can preserve semantic structure.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        - ``context=None``: ``ExpressionContext`` (or context-like object) that should resolve registered semantic names.
+        - ``role='expression'``: Human-readable noun used in error messages when validation or parsing fails.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.inputs`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.inputs``, the notebook-facing widget layer. It mirrors an ``ExpressionContext`` into synced widget traits and delegates parsing/transport to the semantic-math backend.
         
         Examples
         --------
         Basic use::
         
-            result = obj.parse_value(...)
+            from gu_toolkit.mathlive import ExpressionInput
+        
+            widget = ExpressionInput(value="x + 1")
+            widget.parse_value()
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionInput, IdentifierInput
+        
+            help(ExpressionInput)
+            help(IdentifierInput.parse_value)
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionInput)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
         """
         ctx = context if context is not None else self._context
         return ctx.parse_expression(self.value, role=role, math_json=self.math_json)

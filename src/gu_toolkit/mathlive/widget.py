@@ -14,41 +14,59 @@ from .._widget_stubs import anywidget, widgets
 
 
 class MathLiveField(anywidget.AnyWidget):
-    """Public semantic-math helper class for MathLiveField.
+    """Low-level AnyWidget wrapper around a MathLive field with synced transport traits used by higher-level semantic widgets.
     
     Full API
     --------
-    ``MathLiveField``
+    ``MathLiveField(*args: object, **kwargs: object)``
+    
+    Important synced traits include ``value``, ``math_json``, ``semantic_context``,
+    ``inline_shortcuts``, ``menu_items``, ``transport_valid``, and ``transport_errors``.
     
     Parameters
     ----------
-    Constructor parameters follow the Python signature for this class.
+    *args : object
+        Positional arguments forwarded to ``anywidget.AnyWidget``.
+    
+    **kwargs : object
+        Keyword arguments forwarded to ``anywidget.AnyWidget``. In practice callers most often set synced traits such as ``value``, ``placeholder``, ``aria_label``, ``field_role``, ``math_json``, or ``read_only``.
     
     Returns
     -------
     MathLiveField
-        New ``MathLiveField`` instance configured according to the constructor arguments.
+        AnyWidget instance with synced traits such as ``value``, ``math_json``, ``semantic_context``, and ``transport_errors`` that a frontend MathLive field can bind to.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``**kwargs``: forwarded to ``anywidget.AnyWidget`` and may initialize synced traits such as ``value``, ``placeholder``, ``aria_label``, ``field_role``, ``math_json``, or ``read_only``.
+    - The constructor also installs the shared ``gu-control`` / ``gu-control-math`` CSS classes and a full-width widget layout.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.mathlive.widget`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This class lives in ``gu_toolkit.mathlive.widget``, the low-level AnyWidget backend. Higher-level notebook code should usually start from ``IdentifierInput`` or ``ExpressionInput`` and let them manage context synchronization on top of this transport surface.
     
     Examples
     --------
     Basic use::
     
-        obj = MathLiveField(...)
+        from gu_toolkit.mathlive.widget import MathLiveField
+    
+        field = MathLiveField(placeholder="Enter an expression")
+    
+    Discovery-oriented use::
+    
+        from gu_toolkit.mathlive.widget import MathLiveField
+    
+        help(MathLiveField)
+        dir(MathLiveField())
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(MathLiveField)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
     """
 
     value = traitlets.Unicode("").tag(sync=True)

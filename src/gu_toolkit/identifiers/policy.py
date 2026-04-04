@@ -107,81 +107,108 @@ _SEMANTIC_FUNCTION_CACHE: dict[str, type[sp.Function]] = {}
 
 
 class IdentifierError(ValueError):
-    """Public semantic-math helper class for IdentifierError.
+    """Exception raised when an identifier cannot be validated or parsed under the toolkit's canonical naming rules.
     
     Full API
     --------
-    ``IdentifierError``
+    ``IdentifierError(*args: object)``
     
     Parameters
     ----------
-    Constructor parameters follow the Python signature for this class.
+    *args : object
+        Positional message fragments forwarded to ``ValueError``.
     
     Returns
     -------
     IdentifierError
-        New ``IdentifierError`` instance configured according to the constructor arguments.
+        Exception instance raised by the identifier layer and reused by higher-level semantic-math helpers.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    This exception type does not define toolkit-specific optional arguments; any ``*args`` are forwarded to ``ValueError``.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        obj = IdentifierError(...)
+        from gu_toolkit.identifiers import IdentifierError, validate_identifier
+    
+        try:
+            validate_identifier(r"\\theta")
+        except IdentifierError:
+            pass
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(IdentifierError)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
 
 @dataclass(frozen=True)
 class IdentifierScanResult:
-    """Public semantic-math helper class for IdentifierScanResult.
+    """Structured result for scanning one identifier-sized segment out of a larger text buffer.
     
     Full API
     --------
-    ``IdentifierScanResult``
+    ``IdentifierScanResult(canonical: 'str', end: 'int', explicit: 'bool') -> None``
     
     Parameters
     ----------
-    Constructor parameters follow the Python signature for this class.
+    canonical : str
+        Canonical identifier spelling that was scanned from the source text.
+    
+    end : int
+        Index just past the scanned identifier segment.
+    
+    explicit : bool
+        Whether the scanned spelling was explicit enough to stand on its own (for example a wrapped or subscripted form) rather than context-dependent.
     
     Returns
     -------
     IdentifierScanResult
-        New ``IdentifierScanResult`` instance configured according to the constructor arguments.
+        Immutable record containing the canonical name, the scan end offset, and whether the matched spelling was explicit rather than context-dependent.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    This record has no optional fields; all three constructor arguments are required because a scan result is only meaningful when it has a canonical name, end offset, and explicitness flag.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        obj = IdentifierScanResult(...)
+        from gu_toolkit.identifiers.policy import scan_identifier_segment
+    
+        scan_identifier_segment(r"\\theta + x", 0)
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(IdentifierScanResult)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     canonical: str
@@ -191,82 +218,101 @@ class IdentifierScanResult:
 
 @dataclass(frozen=True)
 class ExpressionRenderContext:
-    """Public semantic-math helper class for ExpressionRenderContext.
+    """Immutable record carrying explicit SymPy symbol-to-LaTeX overrides for semantic rendering.
     
     Full API
     --------
-    ``ExpressionRenderContext``
+    ``ExpressionRenderContext(symbol_names: 'dict[sp.Symbol, str]') -> None``
     
     Parameters
     ----------
-    Constructor parameters follow the Python signature for this class.
+    symbol_names : dict[sp.Symbol, str]
+        Explicit mapping from SymPy symbols to the LaTeX strings that should represent them during rendering.
     
     Returns
     -------
     ExpressionRenderContext
-        New ``ExpressionRenderContext`` instance configured according to the constructor arguments.
+        Immutable record whose ``symbol_names`` mapping can be handed to SymPy's LaTeX printer or to ``render_latex()``.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    This record has no optional fields. Pass an explicit ``symbol_names`` mapping whenever you need rendering to use a specific display form.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        obj = ExpressionRenderContext(...)
+        from gu_toolkit.identifiers import symbol
+        from gu_toolkit.identifiers.policy import ExpressionRenderContext
+    
+        ExpressionRenderContext(symbol_names={symbol("theta__x"): r"\\mathrm{theta\\_x}"})
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(ExpressionRenderContext)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     symbol_names: dict[sp.Symbol, str]
 
 
 def strip_math_delimiters(text: str) -> str:
-    """Public semantic-math helper callable for strip_math_delimiters.
+    """Remove outer ``$...$``, ``\\(...\\)``, or ``\\[...\\]`` delimiters from a math fragment.
     
     Full API
     --------
-    ``strip_math_delimiters(...)``
+    ``strip_math_delimiters(text: 'str') -> 'str'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    text : str
+        User-supplied identifier or expression text. The text may already be canonical or may use one of the supported display-LaTeX spellings.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    str
+        The input text without an outer inline/display math wrapper. Inner content is left unchanged apart from surrounding whitespace trimming.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    This API has no optional parameters.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = strip_math_delimiters(...)
+        from gu_toolkit.identifiers import strip_math_delimiters
+    
+        strip_math_delimiters(r"$\\theta$")
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(strip_math_delimiters)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     stripped = str(text or "").strip()
@@ -280,41 +326,53 @@ def strip_math_delimiters(text: str) -> str:
 
 
 def validate_identifier(name: str, *, role: str = "identifier") -> str:
-    """Public semantic-math helper callable for validate_identifier.
+    """Validate that a name already uses the toolkit's canonical identifier grammar.
     
     Full API
     --------
-    ``validate_identifier(...)``
+    ``validate_identifier(name: 'str', *, role: 'str' = 'identifier') -> 'str'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    name : str
+        Canonical identifier or function name. Canonical names are plain validated strings such as ``theta__x`` or ``a_1_2`` rather than raw display LaTeX.
+    
+    role : str, optional
+        Human-readable noun used in error messages when validation or parsing fails.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    str
+        The validated canonical identifier. The returned string is suitable for storage, ``sympy.Symbol`` names, and context registration.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``role='identifier'``: Human-readable noun used in error messages when validation or parsing fails.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = validate_identifier(...)
+        from gu_toolkit.identifiers import validate_identifier
+    
+        validate_identifier("theta__x")
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(validate_identifier)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     text = str(name or "").strip()
@@ -327,41 +385,53 @@ def validate_identifier(name: str, *, role: str = "identifier") -> str:
 
 
 def split_identifier_atoms(name: str, *, _validated: bool = False) -> tuple[str, ...]:
-    """Public semantic-math helper callable for split_identifier_atoms.
+    """Decode a canonical identifier into the atoms that define its base name and subscript parts.
     
     Full API
     --------
-    ``split_identifier_atoms(...)``
+    ``split_identifier_atoms(name: 'str', *, _validated: 'bool' = False) -> 'tuple[str, ...]'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    name : str
+        Canonical identifier or function name. Canonical names are plain validated strings such as ``theta__x`` or ``a_1_2`` rather than raw display LaTeX.
+    
+    _validated : bool, optional
+        Value for ``_validated`` in this API.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    tuple[str, ...]
+        Canonical atoms such as ``("a", "1", "2")`` for ``"a_1_2"`` or ``("theta_x",)`` for ``"theta__x"``.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``_validated=False``: Value for ``_validated`` in this API.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = split_identifier_atoms(...)
+        from gu_toolkit.identifiers.policy import split_identifier_atoms
+    
+        split_identifier_atoms("a_1_2")
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(split_identifier_atoms)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     text = str(name or "").strip()
@@ -396,41 +466,53 @@ def split_identifier_atoms(name: str, *, _validated: bool = False) -> tuple[str,
 
 
 def encode_identifier_atoms(atoms: Iterable[str], *, role: str = "identifier") -> str:
-    """Public semantic-math helper callable for encode_identifier_atoms.
+    """Encode identifier atoms back into the canonical storage spelling used by the toolkit.
     
     Full API
     --------
-    ``encode_identifier_atoms(...)``
+    ``encode_identifier_atoms(atoms: 'Iterable[str]', *, role: 'str' = 'identifier') -> 'str'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    atoms : Iterable[str]
+        Display atoms that should be encoded into one canonical identifier. Literal underscores stay inside an atom; subscript boundaries become separate atoms.
+    
+    role : str, optional
+        Human-readable noun used in error messages when validation or parsing fails.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    str
+        Canonical identifier spelling that round-trips through ``split_identifier_atoms()`` and keeps literal underscores encoded with doubled underscores.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``role='identifier'``: Human-readable noun used in error messages when validation or parsing fails.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = encode_identifier_atoms(...)
+        from gu_toolkit.identifiers.policy import encode_identifier_atoms
+    
+        encode_identifier_atoms(["theta_x"])
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(encode_identifier_atoms)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     pieces = [str(atom).strip() for atom in atoms]
@@ -478,41 +560,53 @@ def _render_identifier(name: str, *, text_command: str, role: str) -> str:
 
 
 def identifier_to_latex(name: str, *, latex_expr: str | None = None) -> str:
-    """Public semantic-math helper callable for identifier_to_latex.
+    """Render a canonical identifier name as display LaTeX.
     
     Full API
     --------
-    ``identifier_to_latex(...)``
+    ``identifier_to_latex(name: 'str', *, latex_expr: 'str | None' = None) -> 'str'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    name : str
+        Canonical identifier or function name. Canonical names are plain validated strings such as ``theta__x`` or ``a_1_2`` rather than raw display LaTeX.
+    
+    latex_expr : str | None, optional
+        Display-LaTeX override for a symbol. When omitted or empty, the display form is derived automatically from the canonical name.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    str
+        Display LaTeX for the identifier. Single-letter and Greek names stay compact; multi-letter atoms fall back to readable ``\\mathrm{...}`` forms unless an override is supplied.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``latex_expr=None``: Display-LaTeX override for a symbol. When omitted or empty, the display form is derived automatically from the canonical name.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = identifier_to_latex(...)
+        from gu_toolkit.identifiers import identifier_to_latex
+    
+        identifier_to_latex("theta__x")
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(identifier_to_latex)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     if latex_expr is not None:
@@ -523,41 +617,57 @@ def identifier_to_latex(name: str, *, latex_expr: str | None = None) -> str:
 
 
 def symbol(name: str, *, latex_expr: str | None = None, **kwargs: Any) -> sp.Symbol:
-    """Public semantic-math helper callable for symbol.
+    """Create a SymPy symbol whose ``.name`` is a validated canonical identifier.
     
     Full API
     --------
-    ``symbol(...)``
+    ``symbol(name: 'str', *, latex_expr: 'str | None' = None, **kwargs: 'Any') -> 'sp.Symbol'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    name : str
+        Canonical identifier or function name. Canonical names are plain validated strings such as ``theta__x`` or ``a_1_2`` rather than raw display LaTeX.
+    
+    latex_expr : str | None, optional
+        Display-LaTeX override for a symbol. When omitted or empty, the display form is derived automatically from the canonical name.
+    
+    **kwargs : Any
+        Keyword arguments forwarded to the underlying SymPy or widget constructor. For widget classes these may include synced traits such as ``value``, ``placeholder``, ``read_only``, or ``math_json``.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    sp.Symbol
+        SymPy symbol whose ``.name`` is the validated canonical identifier. If ``latex_expr`` is supplied, the display override is stored for later rendering.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``latex_expr=None``: Display-LaTeX override for a symbol. When omitted or empty, the display form is derived automatically from the canonical name.
+    - ``**kwargs``: Keyword arguments forwarded to the underlying SymPy or widget constructor. For widget classes these may include synced traits such as ``value``, ``placeholder``, ``read_only``, or ``math_json``.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = symbol(...)
+        from gu_toolkit.identifiers import symbol
+    
+        theta_x = symbol("theta__x", real=True)
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(symbol)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     canonical = validate_identifier(name, role="symbol")
@@ -567,41 +677,54 @@ def symbol(name: str, *, latex_expr: str | None = None, **kwargs: Any) -> sp.Sym
 
 
 def register_symbol_latex(symbol_or_name: str | sp.Symbol, latex_expr: str) -> None:
-    """Public semantic-math helper callable for register_symbol_latex.
+    """Register or clear a display-LaTeX override for a canonical symbol name.
     
     Full API
     --------
-    ``register_symbol_latex(...)``
+    ``register_symbol_latex(symbol_or_name: 'str | sp.Symbol', latex_expr: 'str') -> 'None'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    symbol_or_name : str | sp.Symbol
+        Canonical symbol name or a ``sympy.Symbol`` whose ``.name`` should be used.
+    
+    latex_expr : str
+        Display-LaTeX override for a symbol. When omitted or empty, the display form is derived automatically from the canonical name.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    None
+        ``None``. The call updates module-level display metadata used by ``symbol_latex_override()``, ``build_symbol_names()``, and ``render_latex()``.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    This API has no optional parameters.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = register_symbol_latex(...)
+        from gu_toolkit.identifiers import register_symbol_latex, symbol
+    
+        theta_x = symbol("theta__x")
+        register_symbol_latex(theta_x, r"\\vartheta_x")
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(register_symbol_latex)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     if isinstance(symbol_or_name, sp.Symbol):
@@ -617,41 +740,52 @@ def register_symbol_latex(symbol_or_name: str | sp.Symbol, latex_expr: str) -> N
 
 
 def symbol_latex_override(symbol_or_name: str | sp.Symbol) -> str | None:
-    """Public semantic-math helper callable for symbol_latex_override.
+    """Look up the stored display-LaTeX override for a canonical symbol, if one has been registered.
     
     Full API
     --------
-    ``symbol_latex_override(...)``
+    ``symbol_latex_override(symbol_or_name: 'str | sp.Symbol') -> 'str | None'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    symbol_or_name : str | sp.Symbol
+        Canonical symbol name or a ``sympy.Symbol`` whose ``.name`` should be used.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    str | None
+        Registered display-LaTeX override for the symbol name, or ``None`` when the symbol should render from canonical spelling alone.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    This API has no optional parameters.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = symbol_latex_override(...)
+        from gu_toolkit.identifiers import symbol
+        from gu_toolkit.identifiers.policy import symbol_latex_override
+    
+        theta_x = symbol("theta__x", latex_expr=r"\\vartheta_x")
+        symbol_latex_override(theta_x)
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(symbol_latex_override)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     if isinstance(symbol_or_name, sp.Symbol):
@@ -666,41 +800,55 @@ def build_symbol_names(
     *,
     explicit: dict[sp.Symbol, str] | None = None,
 ) -> dict[sp.Symbol, str]:
-    """Public semantic-math helper callable for build_symbol_names.
+    """Build the ``symbol_names`` mapping consumed by SymPy's LaTeX printer for semantic rendering.
     
     Full API
     --------
-    ``build_symbol_names(...)``
+    ``build_symbol_names(expr: 'Any', *, explicit: 'dict[sp.Symbol, str] | None' = None) -> 'dict[sp.Symbol, str]'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    expr : Any
+        Expression, symbol, or SymPy-compatible value to inspect, render, or parse against.
+    
+    explicit : dict[sp.Symbol, str] | None, optional
+        Explicit ``sympy.Symbol -> latex`` overrides that should win over automatically derived display names.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    dict[sp.Symbol, str]
+        Mapping from SymPy symbols to the display-LaTeX strings that should override SymPy's default rendering for the given expression.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``explicit=None``: Explicit ``sympy.Symbol -> latex`` overrides that should win over automatically derived display names.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = build_symbol_names(...)
+        from gu_toolkit.identifiers import symbol
+        from gu_toolkit.identifiers.policy import build_symbol_names
+    
+        expr = symbol("theta__x") + symbol("velocity")
+        build_symbol_names(expr)
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(build_symbol_names)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     mapping: dict[sp.Symbol, str] = {}
@@ -732,41 +880,54 @@ def render_latex(
     *,
     symbol_names: dict[sp.Symbol, str] | None = None,
 ) -> str:
-    """Public semantic-math helper callable for render_latex.
+    """Render a SymPy expression using canonical identifier display rules and stored symbol overrides.
     
     Full API
     --------
-    ``render_latex(...)``
+    ``render_latex(expr: 'Any', *, symbol_names: 'dict[sp.Symbol, str] | None' = None) -> 'str'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    expr : Any
+        Expression, symbol, or SymPy-compatible value to inspect, render, or parse against.
+    
+    symbol_names : dict[sp.Symbol, str] | None, optional
+        Explicit ``sympy.Symbol -> latex`` overrides passed to the renderer. These are merged with any stored semantic symbol metadata.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    str
+        LaTeX string produced from the expression after semantic symbol-name overrides have been merged into SymPy's printer.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``symbol_names=None``: Explicit ``sympy.Symbol -> latex`` overrides passed to the renderer. These are merged with any stored semantic symbol metadata.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = render_latex(...)
+        from gu_toolkit.identifiers import render_latex, symbol
+    
+        expr = symbol("theta__x") + symbol("velocity")
+        render_latex(expr)
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(render_latex)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     if isinstance(expr, str):
@@ -782,41 +943,53 @@ def render_latex(
 
 
 def function_head_to_latex(name: str, *, latex_head: str | None = None) -> str:
-    """Public semantic-math helper callable for function_head_to_latex.
+    """Render a canonical function name as the LaTeX head used in a call expression.
     
     Full API
     --------
-    ``function_head_to_latex(...)``
+    ``function_head_to_latex(name: 'str', *, latex_head: 'str | None' = None) -> 'str'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    name : str
+        Canonical identifier or function name. Canonical names are plain validated strings such as ``theta__x`` or ``a_1_2`` rather than raw display LaTeX.
+    
+    latex_head : str | None, optional
+        Display-LaTeX override for a function head. When omitted, the head is derived automatically from the canonical function name.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    str
+        Display LaTeX for a semantic function head, typically a single letter, a Greek macro, or an ``\\operatorname{...}`` form with optional subscript atoms.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``latex_head=None``: Display-LaTeX override for a function head. When omitted, the head is derived automatically from the canonical function name.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = function_head_to_latex(...)
+        from gu_toolkit.identifiers import function_head_to_latex
+    
+        function_head_to_latex("Force_t")
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(function_head_to_latex)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     if latex_head is not None:
@@ -827,41 +1000,52 @@ def function_head_to_latex(name: str, *, latex_head: str | None = None) -> str:
 
 
 def function_latex_method(self: sp.Function, printer: Any) -> str:
-    """Public semantic-math helper callable for function_latex_method.
+    """SymPy ``_latex`` hook installed on semantic function classes created by ``semantic_function()``.
     
     Full API
     --------
-    ``function_latex_method(...)``
+    ``function_latex_method(printer: 'Any') -> 'str'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    printer : Any
+        SymPy LaTeX printer instance calling the installed ``_latex`` hook.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    str
+        LaTeX string for the current function application. This hook is installed on semantic function classes so ``sp.latex(...)`` renders their heads semantically.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    This API has no optional parameters.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This hook lives in ``gu_toolkit.identifiers.policy`` but is not meant to be the primary entry point. ``semantic_function()`` installs it on generated SymPy function classes so ``sp.latex(...)`` prints semantic call heads consistently.
     
     Examples
     --------
     Basic use::
     
-        result = function_latex_method(...)
+        import sympy as sp
+        from gu_toolkit.identifiers.policy import semantic_function
+    
+        Force_t = semantic_function("Force_t")
+        sp.latex(Force_t(sp.Symbol("x")))
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(function_latex_method)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     func = self.func
@@ -873,41 +1057,53 @@ def function_latex_method(self: sp.Function, printer: Any) -> str:
 
 
 def semantic_function(name: str, *, latex_head: str | None = None) -> type[sp.Function]:
-    """Public semantic-math helper callable for semantic_function.
+    """Create or reuse a SymPy function class that preserves canonical name and display-head metadata.
     
     Full API
     --------
-    ``semantic_function(...)``
+    ``semantic_function(name: 'str', *, latex_head: 'str | None' = None) -> 'type[sp.Function]'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    name : str
+        Canonical identifier or function name. Canonical names are plain validated strings such as ``theta__x`` or ``a_1_2`` rather than raw display LaTeX.
+    
+    latex_head : str | None, optional
+        Display-LaTeX override for a function head. When omitted, the head is derived automatically from the canonical function name.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    type[sp.Function]
+        Cached SymPy function class whose canonical name lives in ``__gu_name__`` and whose display head lives in ``__gu_latex__``.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``latex_head=None``: Display-LaTeX override for a function head. When omitted, the head is derived automatically from the canonical function name.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = semantic_function(...)
+        from gu_toolkit.identifiers.policy import semantic_function
+    
+        Force_t = semantic_function("Force_t")
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(semantic_function)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     canonical = validate_identifier(name, role="function")
@@ -1079,41 +1275,50 @@ def _rewrite_wrapped_text_group(group: str) -> str | None:
 
 
 def rewrite_wrapped_identifier_calls(text: str) -> str:
-    r"""Public semantic-math helper callable for rewrite_wrapped_identifier_calls.
+    """Rewrite wrapped identifier/function call heads that MathLive emits inside ``\\mathrm{...}`` or ``\\operatorname{...}`` groups.
     
     Full API
     --------
-    ``rewrite_wrapped_identifier_calls(...)``
+    ``rewrite_wrapped_identifier_calls(text: 'str') -> 'str'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    text : str
+        User-supplied identifier or expression text. The text may already be canonical or may use one of the supported display-LaTeX spellings.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    str
+        Rewritten text where wrapped function-call heads such as ``\\mathrm{Force\\left(x\\right)}`` become explicit semantic call heads that the parser can understand.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    This API has no optional parameters.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = rewrite_wrapped_identifier_calls(...)
+        from gu_toolkit.identifiers.policy import rewrite_wrapped_identifier_calls
+    
+        rewrite_wrapped_identifier_calls(r"\\mathrm{Force\\left(x\\right)}")
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(rewrite_wrapped_identifier_calls)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     source = str(text or "")
@@ -1160,41 +1365,50 @@ def rewrite_wrapped_identifier_calls(text: str) -> str:
 
 
 def parse_identifier(text: str) -> str:
-    """Public semantic-math helper callable for parse_identifier.
+    """Parse canonical text or supported display LaTeX back into a canonical identifier name.
     
     Full API
     --------
-    ``parse_identifier(...)``
+    ``parse_identifier(text: 'str') -> 'str'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    text : str
+        User-supplied identifier or expression text. The text may already be canonical or may use one of the supported display-LaTeX spellings.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    str
+        Canonical identifier spelling recovered from the supplied text. Unsupported or ambiguous input raises ``IdentifierError``.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    This API has no optional parameters.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = parse_identifier(...)
+        from gu_toolkit.identifiers import parse_identifier
+    
+        parse_identifier(r"\\mathrm{theta\\_x}")
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(parse_identifier)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     source = strip_math_delimiters(str(text or "")).strip()
@@ -1278,41 +1492,53 @@ def _scan_word_identifier(text: str, start: int) -> IdentifierScanResult | None:
 
 
 def scan_identifier_segment(text: str, start: int) -> IdentifierScanResult | None:
-    """Public semantic-math helper callable for scan_identifier_segment.
+    """Scan one identifier-like segment from a larger text buffer without parsing the whole string.
     
     Full API
     --------
-    ``scan_identifier_segment(...)``
+    ``scan_identifier_segment(text: 'str', start: 'int') -> 'IdentifierScanResult | None'``
     
     Parameters
     ----------
-    This API accepts the parameters declared in its Python signature.
+    text : str
+        User-supplied identifier or expression text. The text may already be canonical or may use one of the supported display-LaTeX spellings.
+    
+    start : int
+        Zero-based offset where scanning should begin inside ``text``.
     
     Returns
     -------
-    object
-        Result produced by this API.
+    IdentifierScanResult | None
+        Scan record for the identifier that starts at ``start``, or ``None`` if the text at that offset cannot begin an identifier.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    This API has no optional parameters.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
     Basic use::
     
-        result = scan_identifier_segment(...)
+        from gu_toolkit.identifiers.policy import scan_identifier_segment
+    
+        scan_identifier_segment(r"\\theta + x", 0)
+    
+    Discovery-oriented use::
+    
+        help(symbol)
+        help(parse_identifier)
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(scan_identifier_segment)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
 
     if start >= len(text):

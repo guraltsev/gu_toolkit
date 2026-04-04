@@ -74,41 +74,60 @@ _LATEX_SPACING_COMMANDS = (r"\,", r"\;", r"\!", r"\quad", r"\qquad")
 
 @dataclass(frozen=True)
 class SymbolSpec:
-    """Public semantic-math helper class for SymbolSpec.
+    """Immutable record describing one registered symbol inside an ``ExpressionContext``.
     
     Full API
     --------
-    ``SymbolSpec``
+    ``SymbolSpec(name: 'str', symbol: 'sp.Symbol', latex_expr: 'str') -> None``
     
     Parameters
     ----------
-    Constructor parameters follow the Python signature for this class.
+    name : str
+        Canonical symbol name stored in the context registry.
+    
+    symbol : sp.Symbol
+        Actual ``sympy.Symbol`` instance that should be used during parsing and expression building.
+    
+    latex_expr : str
+        Display LaTeX that should represent the symbol in notebook rendering and MathLive menus.
     
     Returns
     -------
     SymbolSpec
-        New ``SymbolSpec`` instance configured according to the constructor arguments.
+        Immutable registry record bundling the canonical name, the actual ``sympy.Symbol`` instance, and the display LaTeX that should represent it.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    This record has no optional fields. Build it when you already know the canonical symbol name, the actual ``sympy.Symbol`` instance, and the display LaTeX you want the frontend to show.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
     
     Examples
     --------
     Basic use::
     
-        obj = SymbolSpec(...)
+        from gu_toolkit.identifiers import symbol
+        from gu_toolkit.mathlive.context import SymbolSpec
+    
+        x = symbol("x")
+        SymbolSpec(name="x", symbol=x, latex_expr="x")
+    
+    Discovery-oriented use::
+    
+        from gu_toolkit.mathlive import ExpressionContext
+    
+        help(ExpressionContext)
+        dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(SymbolSpec)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
     """
 
     name: str
@@ -118,41 +137,63 @@ class SymbolSpec:
 
 @dataclass(frozen=True)
 class FunctionSpec:
-    """Public semantic-math helper class for FunctionSpec.
+    """Immutable record describing one registered semantic function head inside an ``ExpressionContext``.
     
     Full API
     --------
-    ``FunctionSpec``
+    ``FunctionSpec(name: 'str', function: 'type[sp.Function]', latex_head: 'str', arity: 'int | None' = None) -> None``
     
     Parameters
     ----------
-    Constructor parameters follow the Python signature for this class.
+    name : str
+        Canonical function name stored in the context registry.
+    
+    function : type[sp.Function]
+        Callable SymPy function class that should be invoked when the canonical name parses as a call head.
+    
+    latex_head : str
+        Display LaTeX for the function head in rendering, menus, and templates.
+    
+    arity : int | None, optional
+        Optional fixed number of positional arguments. ``None`` means the frontend should not assume a fixed arity.
     
     Returns
     -------
     FunctionSpec
-        New ``FunctionSpec`` instance configured according to the constructor arguments.
+        Immutable registry record bundling the canonical function name, the callable SymPy function class, its display head, and optional arity metadata.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    - ``arity=None``: leave arity unspecified when the frontend should not assume a fixed number of arguments.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
     
     Examples
     --------
     Basic use::
     
-        obj = FunctionSpec(...)
+        from gu_toolkit.identifiers.policy import semantic_function
+        from gu_toolkit.mathlive.context import FunctionSpec
+    
+        Force_t = semantic_function("Force_t")
+        FunctionSpec(name="Force_t", function=Force_t, latex_head=r"\\operatorname{Force}_{t}")
+    
+    Discovery-oriented use::
+    
+        from gu_toolkit.mathlive import ExpressionContext
+    
+        help(ExpressionContext)
+        dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(FunctionSpec)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
     """
 
     name: str
@@ -169,41 +210,59 @@ class _NormalizedExpression:
 
 @dataclass
 class ExpressionContext:
-    """Public semantic-math helper class for ExpressionContext.
+    """Registry of canonical symbols and functions used to parse, render, and transport semantic math input.
     
     Full API
     --------
-    ``ExpressionContext``
+    ``ExpressionContext(symbols: dict[str, SymbolSpec] = ..., functions: dict[str, FunctionSpec] = ...)``
+    
+    Most users next inspect ``ExpressionContext.from_symbols()``, ``register_symbol()``,
+    ``register_function()``, ``parse_expression()``, and ``transport_manifest()``.
     
     Parameters
     ----------
-    Constructor parameters follow the Python signature for this class.
+    symbols : dict[str, SymbolSpec], optional
+        Optional starting ``name -> SymbolSpec`` registry. Most callers prefer ``ExpressionContext.from_symbols()`` over constructing these dictionaries by hand.
+    
+    functions : dict[str, FunctionSpec], optional
+        Optional starting ``name -> FunctionSpec`` registry. Most callers prefer ``ExpressionContext.from_symbols()`` or ``register_function()``.
     
     Returns
     -------
     ExpressionContext
-        New ``ExpressionContext`` instance configured according to the constructor arguments.
+        Registry object that keeps symbol parsing, expression parsing, LaTeX rendering, and MathJSON transport aligned around the same canonical names.
     
     Optional arguments
     ------------------
-    Optional arguments follow the defaults declared in the Python signature when present.
+    Both constructor dictionaries are optional. In user code, ``ExpressionContext.from_symbols(...)`` is usually clearer than constructing ``SymbolSpec``/``FunctionSpec`` dictionaries by hand.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+    This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
     
     Examples
     --------
     Basic use::
     
-        obj = ExpressionContext(...)
+        from gu_toolkit.mathlive import ExpressionContext
+    
+        ctx = ExpressionContext.from_symbols(["velocity"], include_named_functions=False)
+        ctx.parse_expression("velocity + x")
+    
+    Discovery-oriented use::
+    
+        from gu_toolkit.mathlive import ExpressionContext
+    
+        help(ExpressionContext)
+        dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
     
     Learn more / explore
     --------------------
-    - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-    - Example notebook: ``examples/Toolkit_overview.ipynb``.
-    - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-    - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+    - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+    - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+    - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
     """
 
     symbols: dict[str, SymbolSpec] = field(default_factory=dict)
@@ -217,41 +276,60 @@ class ExpressionContext:
         functions: Iterable[Any] = (),
         include_named_functions: bool = True,
     ) -> "ExpressionContext":
-        """Public semantic-math helper on ``ExpressionContext`` for from_symbols.
+        """Build a context seeded from canonical symbols and semantic function heads.
         
         Full API
         --------
-        ``obj.from_symbols(...)``
+        ``ExpressionContext.from_symbols(symbols: 'Iterable[str | sp.Symbol]' = (), *, functions: 'Iterable[Any]' = (), include_named_functions: 'bool' = True) -> "'ExpressionContext'"``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        symbols : Iterable[str | sp.Symbol], optional
+            Canonical names or ``sympy.Symbol`` objects that should be treated as atomic symbols when parsing and rendering.
+        
+        functions : Iterable[Any], optional
+            Semantic function heads to register alongside the symbols. Items may be strings, semantic function classes, or already-built ``FunctionSpec`` objects.
+        
+        include_named_functions : bool, optional
+            Whether to merge in every function currently exposed through the global ``NamedFunction`` registry.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        ExpressionContext
+            Fresh context populated with the requested symbols and functions and, by default, any functions registered through ``NamedFunction``.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        - ``symbols=()``: Canonical names or ``sympy.Symbol`` objects that should be treated as atomic symbols when parsing and rendering.
+        - ``functions=()``: Semantic function heads to register alongside the symbols. Items may be strings, semantic function classes, or already-built ``FunctionSpec`` objects.
+        - ``include_named_functions=True``: Whether to merge in every function currently exposed through the global ``NamedFunction`` registry.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.from_symbols(...)
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            ExpressionContext.from_symbols(["velocity", "theta__x"], include_named_functions=False)
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         ctx = cls()
         for sym in symbols:
@@ -269,41 +347,57 @@ class ExpressionContext:
         *,
         include_named_functions: bool = True,
     ) -> "ExpressionContext":
-        """Public semantic-math helper on ``ExpressionContext`` for from_expression.
+        """Infer a context from the free symbols and semantic functions already present in an expression.
         
         Full API
         --------
-        ``obj.from_expression(...)``
+        ``ExpressionContext.from_expression(expr: 'Any', *, include_named_functions: 'bool' = True) -> "'ExpressionContext'"``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        expr : Any
+            Expression to inspect for free symbols and semantic function applications.
+        
+        include_named_functions : bool, optional
+            Whether the returned context should also import the current global ``NamedFunction`` registry in addition to whatever the expression contains.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        ExpressionContext
+            Fresh context containing the free symbols and semantic function heads discovered in the supplied expression.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        - ``include_named_functions=True``: Whether the returned context should also import the current global ``NamedFunction`` registry in addition to whatever the expression contains.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.from_expression(...)
+            from gu_toolkit.identifiers import symbol
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            x = symbol("x")
+            ExpressionContext.from_expression(x + 1, include_named_functions=False)
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         ctx = cls.from_symbols((), include_named_functions=include_named_functions)
         try:
@@ -322,80 +416,102 @@ class ExpressionContext:
         return ctx
 
     def copy(self) -> "ExpressionContext":
-        """Public semantic-math helper on ``ExpressionContext`` for copy.
+        """Return a shallow copy of the symbol and function registries held by this context.
         
         Full API
         --------
-        ``obj.copy(...)``
+        ``ExpressionContext.copy() -> "'ExpressionContext'"``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        This API does not define user-supplied parameters.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        ExpressionContext
+            New context with copied ``symbols`` and ``functions`` dictionaries. The contained ``SymbolSpec`` and ``FunctionSpec`` records are reused because they are immutable.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        This API has no optional parameters.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.copy(...)
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            ctx = ExpressionContext.from_symbols(["x"], include_named_functions=False)
+            clone = ctx.copy()
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         return ExpressionContext(symbols=dict(self.symbols), functions=dict(self.functions))
 
     def register_named_functions(self) -> "ExpressionContext":
-        """Public semantic-math helper on ``ExpressionContext`` for register_named_functions.
+        """Import and register every function currently present in the ``NamedFunction`` registry.
         
         Full API
         --------
-        ``obj.register_named_functions(...)``
+        ``ExpressionContext.register_named_functions() -> "'ExpressionContext'"``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        This API does not define user-supplied parameters.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        ExpressionContext
+            ``self`` so calls can be chained after importing the current ``NamedFunction`` registry.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        This API has no optional parameters.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.register_named_functions(...)
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            ctx = ExpressionContext()
+            ctx.register_named_functions()
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         try:
             from ..NamedFunction import get_named_function_registry
@@ -411,41 +527,56 @@ class ExpressionContext:
         *,
         latex_expr: str | None = None,
     ) -> sp.Symbol:
-        """Public semantic-math helper on ``ExpressionContext`` for register_symbol.
+        """Add a canonical symbol and its display form to the context registry.
         
         Full API
         --------
-        ``obj.register_symbol(...)``
+        ``ExpressionContext.register_symbol(value: 'str | sp.Symbol | SymbolSpec', *, latex_expr: 'str | None' = None) -> 'sp.Symbol'``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        value : str | sp.Symbol | SymbolSpec
+            Canonical symbol name, ``sympy.Symbol``, or prebuilt ``SymbolSpec`` to store in the registry.
+        
+        latex_expr : str | None, optional
+            Optional display-LaTeX override to associate with the symbol when ``value`` is not already a ``SymbolSpec``.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        sp.Symbol
+            Registered SymPy symbol. The matching ``SymbolSpec`` is stored in ``self.symbols`` under its canonical name.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        - ``latex_expr=None``: Optional display-LaTeX override to associate with the symbol when ``value`` is not already a ``SymbolSpec``.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.register_symbol(...)
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            ctx = ExpressionContext()
+            ctx.register_symbol("theta__x")
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         if isinstance(value, SymbolSpec):
             spec = value
@@ -468,41 +599,60 @@ class ExpressionContext:
         latex_head: str | None = None,
         arity: int | None = None,
     ) -> type[sp.Function]:
-        """Public semantic-math helper on ``ExpressionContext`` for register_function.
+        """Add a canonical semantic function head and its display form to the context registry.
         
         Full API
         --------
-        ``obj.register_function(...)``
+        ``ExpressionContext.register_function(value: 'str | type[sp.Function] | FunctionSpec', *, latex_head: 'str | None' = None, arity: 'int | None' = None) -> 'type[sp.Function]'``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        value : str | type[sp.Function] | FunctionSpec
+            Canonical function name, semantic function class, or prebuilt ``FunctionSpec`` to store in the registry.
+        
+        latex_head : str | None, optional
+            Optional display-LaTeX override for the function head when ``value`` is not already a ``FunctionSpec``.
+        
+        arity : int | None, optional
+            Optional fixed arity metadata stored in the resulting ``FunctionSpec``.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        type[sp.Function]
+            Registered semantic function class. The matching ``FunctionSpec`` is stored in ``self.functions`` under its canonical name.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        - ``latex_head=None``: Optional display-LaTeX override for the function head when ``value`` is not already a ``FunctionSpec``.
+        - ``arity=None``: Optional fixed arity metadata stored in the resulting ``FunctionSpec``.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.register_function(...)
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            ctx = ExpressionContext()
+            ctx.register_function("Force_t")
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         if isinstance(value, FunctionSpec):
             spec = value
@@ -524,41 +674,55 @@ class ExpressionContext:
         return spec.function
 
     def register_expression(self, expr: Any) -> "ExpressionContext":
-        """Public semantic-math helper on ``ExpressionContext`` for register_expression.
+        """Merge the symbols and semantic function heads found in an expression into the context.
         
         Full API
         --------
-        ``obj.register_expression(...)``
+        ``ExpressionContext.register_expression(expr: 'Any') -> "'ExpressionContext'"``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        expr : Any
+            Expression, symbol, or SymPy-compatible value to inspect, render, or parse against.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        ExpressionContext
+            ``self`` after merging any free symbols and semantic function heads found in the supplied expression.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        This API has no optional parameters.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.register_expression(...)
+            from gu_toolkit.identifiers import symbol
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            x = symbol("x")
+            ctx = ExpressionContext()
+            ctx.register_expression(x + 1)
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         other = ExpressionContext.from_expression(expr, include_named_functions=False)
         self.symbols.update(other.symbols)
@@ -566,41 +730,52 @@ class ExpressionContext:
         return self
 
     def local_dict(self) -> dict[str, Any]:
-        """Public semantic-math helper on ``ExpressionContext`` for local_dict.
+        """Return the parse dictionary that maps registered canonical names to SymPy objects.
         
         Full API
         --------
-        ``obj.local_dict(...)``
+        ``ExpressionContext.local_dict() -> 'dict[str, Any]'``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        This API does not define user-supplied parameters.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        dict[str, Any]
+            Dictionary suitable for ``parse_expr(..., local_dict=...)`` so registered names resolve as atomic symbols or callable function heads.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        This API has no optional parameters.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.local_dict(...)
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            ctx = ExpressionContext.from_symbols(["x"], include_named_functions=False)
+            ctx.local_dict()["x"]
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         mapping: dict[str, Any] = {}
         for spec in self.symbols.values():
@@ -610,160 +785,210 @@ class ExpressionContext:
         return mapping
 
     def symbol_name_map(self, expr: Any) -> dict[sp.Symbol, str]:
-        """Public semantic-math helper on ``ExpressionContext`` for symbol_name_map.
+        """Build the explicit ``symbol_names`` mapping used to render an expression with this context's display names.
         
         Full API
         --------
-        ``obj.symbol_name_map(...)``
+        ``ExpressionContext.symbol_name_map(expr: 'Any') -> 'dict[sp.Symbol, str]'``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        expr : Any
+            Expression, symbol, or SymPy-compatible value to inspect, render, or parse against.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        dict[sp.Symbol, str]
+            SymPy ``symbol_names`` mapping derived from this context's registered symbol display forms and any overrides already attached to the expression.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        This API has no optional parameters.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.symbol_name_map(...)
+            from gu_toolkit.identifiers import symbol
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            theta_x = symbol("theta__x")
+            ctx = ExpressionContext.from_symbols([theta_x], include_named_functions=False)
+            ctx.symbol_name_map(theta_x)
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         explicit = {spec.symbol: spec.latex_expr for spec in self.symbols.values()}
         return build_symbol_names(expr, explicit=explicit)
 
     def render_latex(self, expr: Any) -> str:
-        """Public semantic-math helper on ``ExpressionContext`` for render_latex.
+        """Render an expression using this context's semantic symbol registry.
         
         Full API
         --------
-        ``obj.render_latex(...)``
+        ``ExpressionContext.render_latex(expr: 'Any') -> 'str'``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        expr : Any
+            Expression, symbol, or SymPy-compatible value to inspect, render, or parse against.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        str
+            LaTeX string for the expression, rendered with the context's semantic symbol display rules.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        This API has no optional parameters.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.render_latex(...)
+            from gu_toolkit.identifiers import symbol
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            theta_x = symbol("theta__x")
+            ctx = ExpressionContext.from_symbols([theta_x], include_named_functions=False)
+            ctx.render_latex(theta_x + 1)
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         return render_latex(expr, symbol_names=self.symbol_name_map(expr))
 
     def known_identifiers(self) -> tuple[str, ...]:
-        """Public semantic-math helper on ``ExpressionContext`` for known_identifiers.
+        """Return the sorted union of registered symbol names and function names.
         
         Full API
         --------
-        ``obj.known_identifiers(...)``
+        ``ExpressionContext.known_identifiers() -> 'tuple[str, ...]'``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        This API does not define user-supplied parameters.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        tuple[str, ...]
+            Sorted tuple containing every canonical symbol name and function name registered in the context.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        This API has no optional parameters.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.known_identifiers(...)
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            ctx = ExpressionContext.from_symbols(["x"], functions=["Force_t"], include_named_functions=False)
+            ctx.known_identifiers()
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         names = set(self.symbols) | set(self.functions)
         return tuple(sorted(names))
 
     def inline_shortcuts(self) -> dict[str, str]:
-        """Public semantic-math helper on ``ExpressionContext`` for inline_shortcuts.
+        """Return the shortcut map sent to MathLive for registered symbols and function heads.
         
         Full API
         --------
-        ``obj.inline_shortcuts(...)``
+        ``ExpressionContext.inline_shortcuts() -> 'dict[str, str]'``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        This API does not define user-supplied parameters.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        dict[str, str]
+            Mapping from canonical names to the LaTeX snippets the frontend should insert when users choose a registered symbol or function.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        This API has no optional parameters.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.inline_shortcuts(...)
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            ctx = ExpressionContext.from_symbols(["x"], functions=["Force_t"], include_named_functions=False)
+            ctx.inline_shortcuts()
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         mapping: dict[str, str] = {}
         for spec in self.symbols.values():
@@ -773,41 +998,52 @@ class ExpressionContext:
         return mapping
 
     def menu_items(self) -> list[dict[str, str]]:
-        """Public semantic-math helper on ``ExpressionContext`` for menu_items.
+        """Return the menu entries sent to MathLive for registered symbols and function heads.
         
         Full API
         --------
-        ``obj.menu_items(...)``
+        ``ExpressionContext.menu_items() -> 'list[dict[str, str]]'``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        This API does not define user-supplied parameters.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        list[dict[str, str]]
+            Sorted list of frontend menu-item dictionaries describing each registered symbol and function.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        This API has no optional parameters.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.menu_items(...)
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            ctx = ExpressionContext.from_symbols(["x"], functions=["Force_t"], include_named_functions=False)
+            ctx.menu_items()
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         items: list[dict[str, str]] = []
         for spec in sorted(self.symbols.values(), key=lambda item: item.name.lower()):
@@ -834,81 +1070,112 @@ class ExpressionContext:
         return items
 
     def transport_manifest(self, *, field_role: str = "math") -> dict[str, Any]:
-        """Public semantic-math helper on ``ExpressionContext`` for transport_manifest.
+        """Build the JSON-safe semantic context manifest sent to the MathLive frontend.
         
         Full API
         --------
-        ``obj.transport_manifest(...)``
+        ``ExpressionContext.transport_manifest(*, field_role: 'str' = 'math') -> 'dict[str, Any]'``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        field_role : str, optional
+            Frontend hint describing what the widget is editing, for example ``"identifier"``, ``"expression"``, or ``"math"``.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        dict[str, Any]
+            JSON-safe manifest describing the registered symbol/function names, their display LaTeX, and frontend trigger metadata for MathLive.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        - ``field_role='math'``: Frontend hint describing what the widget is editing, for example ``"identifier"``, ``"expression"``, or ``"math"``.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This method stays on ``ExpressionContext`` because the context owns the symbol/function registry. The method delegates to ``build_mathlive_transport_manifest()`` so widgets and tests can share the same manifest-building rules.
         
         Examples
         --------
         Basic use::
         
-            result = obj.transport_manifest(...)
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            ctx = ExpressionContext.from_symbols(["x"], functions=["Force_t"], include_named_functions=False)
+            ctx.transport_manifest(field_role="expression")
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
 
         return build_mathlive_transport_manifest(self, field_role=field_role)
 
     def parse_identifier(self, text: str, *, role: str = "identifier", math_json: Any | None = None) -> str:
-        """Public semantic-math helper on ``ExpressionContext`` for parse_identifier.
+        """Parse identifier input using this context and, when available, the accompanying MathJSON payload.
         
         Full API
         --------
-        ``obj.parse_identifier(...)``
+        ``ExpressionContext.parse_identifier(text: 'str', *, role: 'str' = 'identifier', math_json: 'Any | None' = None) -> 'str'``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        text : str
+            User-supplied identifier or expression text. The text may already be canonical or may use one of the supported display-LaTeX spellings.
+        
+        role : str, optional
+            Human-readable noun used in error messages when validation or parsing fails.
+        
+        math_json : Any | None, optional
+            Structured MathJSON payload emitted by MathLive. When valid, it is preferred over plain text because it preserves semantic structure.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        str
+            Canonical identifier spelling produced from ``text`` or, when provided, from the accompanying MathJSON payload.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        - ``role='identifier'``: Human-readable noun used in error messages when validation or parsing fails.
+        - ``math_json=None``: Structured MathJSON payload emitted by MathLive. When valid, it is preferred over plain text because it preserves semantic structure.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.parse_identifier(...)
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            ctx = ExpressionContext()
+            ctx.parse_identifier(r"\\theta")
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         if math_json is not None:
             try:
@@ -923,41 +1190,60 @@ class ExpressionContext:
             raise ValueError(f"Could not parse {role}: {exc}") from exc
 
     def parse_expression(self, text: str, *, role: str = "expression", math_json: Any | None = None) -> Expr:
-        """Public semantic-math helper on ``ExpressionContext`` for parse_expression.
+        """Parse expression input using this context and, when available, the accompanying MathJSON payload.
         
         Full API
         --------
-        ``obj.parse_expression(...)``
+        ``ExpressionContext.parse_expression(text: 'str', *, role: 'str' = 'expression', math_json: 'Any | None' = None) -> 'Expr'``
         
         Parameters
         ----------
-        This member accepts the parameters declared in its Python signature.
+        text : str
+            User-supplied identifier or expression text. The text may already be canonical or may use one of the supported display-LaTeX spellings.
+        
+        role : str, optional
+            Human-readable noun used in error messages when validation or parsing fails.
+        
+        math_json : Any | None, optional
+            Structured MathJSON payload emitted by MathLive. When valid, it is preferred over plain text because it preserves semantic structure.
         
         Returns
         -------
-        object
-            Result produced by this API.
+        Expr
+            SymPy expression parsed from ``text`` or, when provided and valid, from the accompanying MathJSON payload.
         
         Optional arguments
         ------------------
-        Optional arguments follow the defaults declared in the Python signature when present.
+        - ``role='expression'``: Human-readable noun used in error messages when validation or parsing fails.
+        - ``math_json=None``: Structured MathJSON payload emitted by MathLive. When valid, it is preferred over plain text because it preserves semantic structure.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context`` and participates in the toolkit's canonical identifier, parsing, or semantic math-input infrastructure.
+        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
         
         Examples
         --------
         Basic use::
         
-            result = obj.parse_expression(...)
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            ctx = ExpressionContext.from_symbols(["velocity"], include_named_functions=False)
+            ctx.parse_expression("velocity + x")
+        
+        Discovery-oriented use::
+        
+            from gu_toolkit.mathlive import ExpressionContext
+        
+            help(ExpressionContext)
+            dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))
         
         Learn more / explore
         --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Regression/spec tests: inspect the targeted tests covering symbolic parsing and math widgets.
-        - In a notebook or REPL, run ``help(ExpressionContext)`` and inspect neighboring APIs in the same module.
+        - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
+        - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
+        - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+        - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
+        - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
         source = str(text or "").strip()
 
