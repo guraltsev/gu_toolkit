@@ -100,6 +100,35 @@ When the guide and docstring answer “how do I call this?” but you still need
 high-value API references in this repository because they encode real contracts,
 round-trip expectations, and bug regressions.
 
+### Semantic-math quick orientation
+
+When you are working in the semantic-math / MathLive slice, keep four
+boundaries straight:
+
+- `symbol()` is the toolkit-aware wrapper around `sympy.Symbol(...)`. It
+  validates one canonical identifier, can store a display-LaTeX override, and
+  forwards normal SymPy assumptions. Use `sympy.Symbol(...)` for raw
+  construction and `sympy.symbols(...)` when you want many plain SymPy symbols
+  at once.
+- `ExpressionContext.render_latex(...)` and
+  `gu_toolkit.identifiers.render_latex(...)` are convenience wrappers around
+  `sympy.latex(...)`. The toolkit supplies semantic symbol/function metadata;
+  SymPy remains the actual printer.
+- `ExpressionContext.transport_manifest()` and
+  `build_mathlive_transport_manifest()` return a derived frontend snapshot. The
+  small schema worth knowing is `version`, `fieldRole`, `symbols`, and
+  `functions`, with function entries exposing `latexHead` and `template`. Use
+  that manifest for transport/debugging, not as the primary Python authoring
+  interface.
+- Empty MathJSON sentinels such as `Nothing` mean `no input`. They should fall
+  back to the visible text field or raise a required-input error; they should
+  not parse as `0` or as an identifier literally named `Nothing`.
+- Non-empty MathJSON is preferred only while it still matches the current
+  visible widget text. If a widget's text changes after an older structured
+  payload was captured, `IdentifierInput.parse_value()` /
+  `ExpressionInput.parse_value()` fall back to the newer text instead of
+  returning stale transport.
+
 ## Module families
 
 - **Figure/core orchestration**: `Figure.py`, `figure_api.py`, `figure_view.py`, `figure_layout.py`, `figure_parameters.py`, `figure_info.py`, `figure_legend.py`

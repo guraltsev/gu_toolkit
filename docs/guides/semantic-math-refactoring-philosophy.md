@@ -72,11 +72,13 @@ editor or `Figure`.
 Figure-centric code may compose these widgets, but it should not own their core
 semantics.
 
-### 4. Prefer MathJSON over ad-hoc string guessing
+### 4. Prefer synchronized MathJSON over ad-hoc string guessing
 
-When MathLive can provide MathJSON, treat it as the preferred backend transport.
-LaTeX and plain-text parsing remain useful as fallback and for user-facing
-examples, but structured transport is easier to validate and easier to test.
+When MathLive can provide MathJSON **that still matches the current visible
+field state**, treat it as the preferred backend transport. LaTeX and plain-text
+parsing remain useful as fallback and for user-facing examples, and they should
+win temporarily when the browser/kernel bridge is out of sync so the backend
+does not return a stale structured result.
 
 ### 5. Ambiguity should fail early
 
@@ -108,6 +110,49 @@ The showcase notebooks are also part of the contract:
 
 They should remain markdown-heavy, minimal in code, and runnable as lightweight
 integration examples.
+
+## Practical boundary reminders
+
+### Choosing `symbol()` vs SymPy constructors
+
+`symbol()` is a toolkit-aware wrapper around `sympy.Symbol(...)`. Use it when
+you want one canonical identifier checked by the toolkit and, optionally, a
+display-LaTeX override stored for later rendering.
+
+Use `sympy.Symbol(...)` when you explicitly want raw SymPy construction without
+toolkit validation or metadata. Use `sympy.symbols(...)` when you want many
+plain SymPy symbols at once; if each name should be toolkit-validated, call
+`symbol()` for each one instead of bypassing the identifier policy.
+
+### Rendering boundary: SymPy prints, toolkit supplies metadata
+
+`render_latex()` and `ExpressionContext.render_latex()` are convenience
+wrappers, not a competing LaTeX engine. The toolkit's job is to prepare
+semantic symbol-name mappings and function-head hooks; the final string is still
+produced by `sympy.latex(...)`.
+
+That boundary should stay legible in docs and notebooks. Prefer examples that
+make it obvious how `ctx.symbol_name_map(expr)` flows into `sympy.latex(...)`.
+
+### Transport manifests are derived contracts
+
+`ExpressionContext.transport_manifest()` and
+`build_mathlive_transport_manifest()` return a derived frontend snapshot used by
+the browser. It is appropriate for debugging and frontend integration, but it
+is not the main Python-side authoring interface.
+
+If the manifest is shown in tutorials, teach it after the user-facing workflow
+and include the small schema readers actually need: top-level `version`,
+`fieldRole`, `symbols`, `functions`, plus function-entry keys such as
+`latexHead` and `template`.
+
+### Empty/sentinel MathJSON is not semantic input
+
+An empty frontend field may round-trip through MathJSON as a sentinel such as
+`Nothing`. Treat that payload as `no input`, not as semantic content. On the
+backend it should either fall back to the visible text field or raise a
+required-input style error; it should never silently become `0` or a literal
+identifier named `Nothing`.
 
 ## Refactoring checklist for future changes
 

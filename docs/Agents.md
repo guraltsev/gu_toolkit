@@ -8,6 +8,12 @@ This file applies to everything under `docs/`.
 - Completed projects move to `docs/issues/_completed/`(note the underscrore).
 - Make sure `docs/README.md` is up to date with current best practices and organization of this project. Do not include specific bug information in `docs/README.md`
 - NEVER delete issues/projects. Just move them to closed/completed when they are done.
+- Treat #BUG comments as symptoms of underlying issues, not issues themselves.
+	They are not to be removed unless:
+
+	The underlying issue is fully resolved, and
+	A corresponding issue in docs/issues is marked closed, and
+	The fix has been validated (tests or demonstrated behavior)
 
 ## Required structure for bug files (markdown)
 

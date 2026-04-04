@@ -86,7 +86,6 @@ _STANDARD_SYMBOLS: dict[str, sp.Expr] = {
     "Infinity": sp.oo,
     "NegativeInfinity": -sp.oo,
     "ComplexInfinity": sp.zoo,
-    "Nothing": sp.Integer(0),
     # Allow already-normalized toolkit spellings too.
     "pi": sp.pi,
     "E": sp.E,
@@ -277,7 +276,7 @@ def build_mathlive_transport_manifest(
     Returns
     -------
     dict[str, Any]
-        JSON-safe manifest with ``version``, ``fieldRole``, ``symbols``, and ``functions`` entries that the frontend can use to seed MathLive shortcuts and menus.
+        JSON-safe derived frontend snapshot. The top level contains ``version``, ``fieldRole``, ``symbols``, and ``functions``. Symbol entries carry ``name`` and ``latex`` metadata plus trigger hints; function entries carry ``name``, ``latexHead``, ``template``, and optional ``arity`` metadata.
     
     Optional arguments
     ------------------
@@ -285,7 +284,7 @@ def build_mathlive_transport_manifest(
     
     Architecture note
     -----------------
-    This helper sits at the transport boundary rather than on the widget class itself because the manifest is derived from semantic registrations, not from browser state. ``ExpressionContext.transport_manifest()`` simply delegates here.
+    This helper sits at the transport boundary rather than on the widget class itself because the manifest is derived from semantic registrations, not from browser state. ``ExpressionContext.transport_manifest()`` simply delegates here. Treat the returned dict as a frontend transport contract, not as the primary Python authoring interface.
     
     Examples
     --------
@@ -350,6 +349,56 @@ def _coerce_mathjson_array(node: Any) -> list[Any] | None:
     return None
 
 
+_EMPTY_MATHJSON_SYMBOLS = frozenset({"Nothing"})
+_EMPTY_MATHJSON_MESSAGE = "MathJSON payload is empty."
+
+
+def _is_hold_head(node: Any) -> bool:
+    if node == "Hold":
+        return True
+    if isinstance(node, dict) and set(node) == {"sym"}:
+        return node["sym"] == "Hold"
+    array = _coerce_mathjson_array(node)
+    return array is not None and len(array) == 1 and _is_hold_head(array[0])
+
+
+def _is_empty_mathjson_payload(node: Any) -> bool:
+    """Return whether a MathJSON payload is the frontend's empty/sentinel value."""
+
+    if node is None:
+        return True
+    if isinstance(node, str):
+        return not node.strip() or node.strip() in _EMPTY_MATHJSON_SYMBOLS
+    if isinstance(node, dict):
+        if not node:
+            return True
+        if set(node) == {"sym"}:
+            return _is_empty_mathjson_payload(node["sym"])
+        if set(node) == {"num"}:
+            return _is_empty_mathjson_payload(node["num"])
+        if "fn" in node:
+            fn = node["fn"]
+            args = list(node.get("args", []))
+            if not args:
+                return _is_empty_mathjson_payload(fn)
+            if len(args) == 1 and _is_hold_head(fn):
+                return _is_empty_mathjson_payload(args[0])
+        return False
+
+    array = _coerce_mathjson_array(node)
+    if array is None:
+        return False
+    if not array:
+        return True
+    if len(array) == 1:
+        return _is_empty_mathjson_payload(array[0])
+
+    head = array[0]
+    if _is_hold_head(head) and len(array) == 2:
+        return _is_empty_mathjson_payload(array[1])
+    return False
+
+
 def _collect_subscript_components(node: Any, *, context: Any | None) -> list[str]:
     array = _coerce_mathjson_array(node)
     if array is not None and array:
@@ -404,7 +453,7 @@ def mathjson_to_identifier(
     Parameters
     ----------
     math_json : Any
-        MathJSON node that should represent one identifier spelling or a supported subscripted identifier form.
+        MathJSON node that should represent one identifier spelling or a supported subscripted identifier form. Empty/sentinel payloads such as top-level ``Nothing`` are treated as missing input and therefore raise ``MathJSONParseError``.
     
     context : Any | None, optional
         Optional context used to disambiguate names that would otherwise be ambiguous in transport space.
@@ -450,8 +499,8 @@ def mathjson_to_identifier(
     - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
     """
 
-    if math_json is None:
-        raise MathJSONParseError("MathJSON payload is empty.")
+    if _is_empty_mathjson_payload(math_json):
+        raise MathJSONParseError(_EMPTY_MATHJSON_MESSAGE)
 
     if isinstance(math_json, bool):
         raise MathJSONParseError("Boolean values are not valid identifiers.")
@@ -548,7 +597,7 @@ def mathjson_to_sympy(math_json: Any, *, context: Any | None = None) -> sp.Expr:
     Parameters
     ----------
     math_json : Any
-        MathJSON node that should be converted into a SymPy expression tree.
+        MathJSON node that should be converted into a SymPy expression tree. Empty/sentinel payloads such as top-level ``Nothing`` are treated as missing input and therefore raise ``MathJSONParseError``.
     
     context : Any | None, optional
         Optional context used to resolve registered symbols and functions before falling back to default conversions.
@@ -591,8 +640,8 @@ def mathjson_to_sympy(math_json: Any, *, context: Any | None = None) -> sp.Expr:
     - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
     """
 
-    if math_json is None:
-        raise MathJSONParseError("MathJSON payload is empty.")
+    if _is_empty_mathjson_payload(math_json):
+        raise MathJSONParseError(_EMPTY_MATHJSON_MESSAGE)
 
     if isinstance(math_json, bool):
         return sp.true if math_json else sp.false

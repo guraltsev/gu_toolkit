@@ -142,6 +142,22 @@ def test_context_render_latex_uses_operatorname_for_named_functions() -> None:
     assert ctx.render_latex(ContextForce(x)) == r"\operatorname{ContextForce}(x)"
 
 
+def test_context_render_latex_matches_the_underlying_sympy_printer_configuration() -> None:
+    """The convenience wrapper should be equivalent to calling ``sympy.latex`` with context metadata."""
+
+    velocity = symbol("velocity")
+    theta_x = symbol("theta__x")
+    ctx = ExpressionContext.from_symbols(
+        [velocity, theta_x],
+        functions=[ContextForce],
+        include_named_functions=False,
+    )
+
+    expr = ContextForce(theta_x) + velocity
+
+    assert ctx.render_latex(expr) == sp.latex(expr, symbol_names=ctx.symbol_name_map(expr))
+
+
 def test_lambda_symbol_can_be_protected_via_context() -> None:
     """Context registration should let users opt into names that would otherwise look special."""
 

@@ -38,6 +38,7 @@ from ..identifiers.policy import (
 )
 from .transport import (
     MathJSONParseError,
+    _is_empty_mathjson_payload,
     build_mathlive_transport_manifest,
     mathjson_to_identifier,
     mathjson_to_sympy,
@@ -288,10 +289,10 @@ class ExpressionContext:
             Canonical names or ``sympy.Symbol`` objects that should be treated as atomic symbols when parsing and rendering.
         
         functions : Iterable[Any], optional
-            Semantic function heads to register alongside the symbols. Items may be strings, semantic function classes, or already-built ``FunctionSpec`` objects.
+            Semantic callable heads to register alongside the symbols. Items may be strings, semantic function classes, or already-built ``FunctionSpec`` objects.
         
         include_named_functions : bool, optional
-            Whether to merge in every function currently exposed through the global ``NamedFunction`` registry.
+            Whether to merge in every function currently exposed through the global ``NamedFunction`` registry. Pass ``False`` when you want the context to contain only the functions named explicitly in ``functions=``.
         
         Returns
         -------
@@ -301,12 +302,12 @@ class ExpressionContext:
         Optional arguments
         ------------------
         - ``symbols=()``: Canonical names or ``sympy.Symbol`` objects that should be treated as atomic symbols when parsing and rendering.
-        - ``functions=()``: Semantic function heads to register alongside the symbols. Items may be strings, semantic function classes, or already-built ``FunctionSpec`` objects.
-        - ``include_named_functions=True``: Whether to merge in every function currently exposed through the global ``NamedFunction`` registry.
+        - ``functions=()``: Semantic callable heads to register alongside the symbols.
+        - ``include_named_functions=True``: Merge the global ``NamedFunction`` registry in addition to the explicit ``functions=`` list.
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
+        Symbols and functions are tracked separately on purpose: ``velocity`` is an atomic symbol name, while ``Force(x)`` has a callable head plus arguments. Parsing, rendering, and transport need that distinction, so this constructor asks for ``symbols=`` and ``functions=`` separately. If you already have a SymPy expression, prefer ``from_expression(...)`` to infer both categories from the tree. If you are building a context incrementally, use ``register_symbol(...)`` and ``register_function(...)``.
         
         Examples
         --------
@@ -314,7 +315,11 @@ class ExpressionContext:
         
             from gu_toolkit.mathlive import ExpressionContext
         
-            ExpressionContext.from_symbols(["velocity", "theta__x"], include_named_functions=False)
+            ExpressionContext.from_symbols(
+                ["velocity", "theta__x"],
+                functions=["Force_t"],
+                include_named_functions=False,
+            )
         
         Discovery-oriented use::
         
@@ -853,7 +858,7 @@ class ExpressionContext:
         Returns
         -------
         str
-            LaTeX string for the expression, rendered with the context's semantic symbol display rules.
+            LaTeX string for the expression, produced by ``sympy.latex(...)`` after the context supplies semantic ``symbol_names`` metadata and function-head hooks.
         
         Optional arguments
         ------------------
@@ -861,7 +866,7 @@ class ExpressionContext:
         
         Architecture note
         -----------------
-        This API lives in ``gu_toolkit.mathlive.context``, the reusable registry between identifier policy and notebook widgets. It owns semantic name registration so parsing, rendering, and transport all consult the same context rather than hidden global state.
+        This is a convenience wrapper, not a competing LaTeX engine. ``ExpressionContext.render_latex(...)`` delegates to ``gu_toolkit.identifiers.render_latex(...)``, which in turn calls ``sympy.latex(...)`` with ``self.symbol_name_map(expr)`` so registered symbol display names and semantic function hooks reach SymPy's printer.
         
         Examples
         --------
@@ -1084,7 +1089,7 @@ class ExpressionContext:
         Returns
         -------
         dict[str, Any]
-            JSON-safe manifest describing the registered symbol/function names, their display LaTeX, and frontend trigger metadata for MathLive.
+            Derived frontend snapshot with top-level ``version``, ``fieldRole``, ``symbols``, and ``functions`` keys. Symbol entries expose ``name``/``latex`` metadata; function entries expose ``name``/``latexHead``/``template`` metadata.
         
         Optional arguments
         ------------------
@@ -1092,7 +1097,7 @@ class ExpressionContext:
         
         Architecture note
         -----------------
-        This method stays on ``ExpressionContext`` because the context owns the symbol/function registry. The method delegates to ``build_mathlive_transport_manifest()`` so widgets and tests can share the same manifest-building rules.
+        This method stays on ``ExpressionContext`` because the context owns the symbol/function registry. The method delegates to ``build_mathlive_transport_manifest()`` so widgets and tests can share the same manifest-building rules. Treat the result as a derived frontend transport contract, not as the primary Python authoring interface; most users should inspect ``self.symbols`` and ``self.functions`` first.
         
         Examples
         --------
@@ -1137,7 +1142,7 @@ class ExpressionContext:
             Human-readable noun used in error messages when validation or parsing fails.
         
         math_json : Any | None, optional
-            Structured MathJSON payload emitted by MathLive. When valid, it is preferred over plain text because it preserves semantic structure.
+            Structured MathJSON payload emitted by MathLive. When valid and non-empty, it is preferred over plain text because it preserves semantic structure.
         
         Returns
         -------
@@ -1147,7 +1152,7 @@ class ExpressionContext:
         Optional arguments
         ------------------
         - ``role='identifier'``: Human-readable noun used in error messages when validation or parsing fails.
-        - ``math_json=None``: Structured MathJSON payload emitted by MathLive. When valid, it is preferred over plain text because it preserves semantic structure.
+        - ``math_json=None``: Structured MathJSON payload emitted by MathLive. When valid and non-empty, it is preferred over plain text because it preserves semantic structure.
         
         Architecture note
         -----------------
@@ -1177,15 +1182,20 @@ class ExpressionContext:
         - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
         - Focused tests: ``tests/semantic_math/test_expression_context.py`` and ``tests/semantic_math/test_mathlive_inputs.py``.
         """
-        if math_json is not None:
+        source = str(text or "").strip()
+
+        if math_json is not None and not _is_empty_mathjson_payload(math_json):
             try:
                 return mathjson_to_identifier(math_json, context=self, role=role)
             except MathJSONParseError as exc:
-                if not str(text or "").strip():
+                if not source:
                     raise ValueError(f"Could not parse {role}: {exc}") from exc
 
+        if not source:
+            raise ValueError(f"{role} is required.")
+
         try:
-            return parse_identifier(text)
+            return parse_identifier(source)
         except IdentifierError as exc:
             raise ValueError(f"Could not parse {role}: {exc}") from exc
 
@@ -1205,7 +1215,7 @@ class ExpressionContext:
             Human-readable noun used in error messages when validation or parsing fails.
         
         math_json : Any | None, optional
-            Structured MathJSON payload emitted by MathLive. When valid, it is preferred over plain text because it preserves semantic structure.
+            Structured MathJSON payload emitted by MathLive. When valid and non-empty, it is preferred over plain text because it preserves semantic structure.
         
         Returns
         -------
@@ -1215,7 +1225,7 @@ class ExpressionContext:
         Optional arguments
         ------------------
         - ``role='expression'``: Human-readable noun used in error messages when validation or parsing fails.
-        - ``math_json=None``: Structured MathJSON payload emitted by MathLive. When valid, it is preferred over plain text because it preserves semantic structure.
+        - ``math_json=None``: Structured MathJSON payload emitted by MathLive. When valid and non-empty, it is preferred over plain text because it preserves semantic structure.
         
         Architecture note
         -----------------
@@ -1247,7 +1257,7 @@ class ExpressionContext:
         """
         source = str(text or "").strip()
 
-        if math_json is not None:
+        if math_json is not None and not _is_empty_mathjson_payload(math_json):
             try:
                 parsed = mathjson_to_sympy(math_json, context=self)
             except MathJSONParseError as exc:

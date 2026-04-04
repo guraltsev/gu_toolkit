@@ -65,10 +65,8 @@ def iter_source_modules() -> list[Path]:
     return sorted(path for path in SRC_ROOT.rglob("*.py") if "__pycache__" not in path.parts)
 
 
-
 def parse_module(path: Path) -> ast.Module:
     return ast.parse(path.read_text(encoding="utf-8"))
-
 
 
 def iter_public_api_nodes(tree: ast.Module):
@@ -81,7 +79,6 @@ def iter_public_api_nodes(tree: ast.Module):
             for member in node.body:
                 if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)) and not member.name.startswith("_"):
                     yield member
-
 
 
 def docstrings_by_qualname(path: Path) -> dict[str, str]:
@@ -97,12 +94,10 @@ def docstrings_by_qualname(path: Path) -> dict[str, str]:
     return docs
 
 
-
 def test_every_source_module_has_a_module_docstring() -> None:
     for path in iter_source_modules():
         tree = parse_module(path)
         assert ast.get_docstring(tree), f"{path} is missing a module docstring"
-
 
 
 def test_public_api_docstrings_use_the_uniform_structure() -> None:
@@ -118,11 +113,9 @@ def test_public_api_docstrings_use_the_uniform_structure() -> None:
                 )
 
 
-
 def test_recursive_docstring_scan_reaches_semantic_math_modules() -> None:
     scanned = set(iter_source_modules())
     assert set(SEMANTIC_MATH_FILES).issubset(scanned)
-
 
 
 def test_semantic_math_docstrings_avoid_placeholders_and_link_to_targeted_resources() -> None:
@@ -138,7 +131,6 @@ def test_semantic_math_docstrings_avoid_placeholders_and_link_to_targeted_resour
             assert "tests/semantic_math/" in doc, (
                 f"{path}:{qualname} should point to focused semantic-math regression tests"
             )
-
 
 
 def test_api_discovery_guide_includes_semantic_math_navigation_entry() -> None:
@@ -159,3 +151,76 @@ def test_api_discovery_guide_includes_semantic_math_navigation_entry() -> None:
         "**Semantic math / MathLive**",
     ):
         assert token in guide
+
+
+def test_semantic_math_docstrings_explain_authoring_vs_transport_boundaries() -> None:
+    policy_docs = docstrings_by_qualname(SRC_ROOT / "identifiers" / "policy.py")
+    context_docs = docstrings_by_qualname(SRC_ROOT / "mathlive" / "context.py")
+    transport_docs = docstrings_by_qualname(SRC_ROOT / "mathlive" / "transport.py")
+
+    symbol_doc = policy_docs["symbol"]
+    assert "sympy.Symbol" in symbol_doc
+    assert "sympy.symbols" in symbol_doc
+    assert "validation" in symbol_doc
+    assert "LaTeX metadata" in symbol_doc or "LaTeX override" in symbol_doc
+
+    from_symbols_doc = context_docs["ExpressionContext.from_symbols"]
+    assert "Symbols and functions are tracked separately" in from_symbols_doc
+    assert "from_expression(...)" in from_symbols_doc
+    assert "register_symbol(...)" in from_symbols_doc
+    assert "register_function(...)" in from_symbols_doc
+    assert "include_named_functions" in from_symbols_doc
+
+    render_doc = context_docs["ExpressionContext.render_latex"]
+    assert "convenience wrapper" in render_doc
+    assert "sympy.latex(...)" in render_doc
+    assert "not a competing LaTeX engine" in render_doc
+
+    for doc in (
+        context_docs["ExpressionContext.transport_manifest"],
+        transport_docs["build_mathlive_transport_manifest"],
+    ):
+        assert "derived frontend" in doc
+        for token in ("fieldRole", "latexHead", "template"):
+            assert token in doc
+
+    for doc in (
+        transport_docs["mathjson_to_identifier"],
+        transport_docs["mathjson_to_sympy"],
+    ):
+        assert "Nothing" in doc
+        assert "missing input" in doc
+        assert "MathJSONParseError" in doc
+
+
+def test_semantic_math_guides_explain_sympy_relationships_and_empty_transport() -> None:
+    api_discovery = (GUIDES_ROOT / "api-discovery.md").read_text(encoding="utf-8")
+    philosophy = (GUIDES_ROOT / "semantic-math-refactoring-philosophy.md").read_text(encoding="utf-8")
+
+    for token in (
+        "sympy.Symbol(...)",
+        "sympy.symbols(...)",
+        "sympy.latex(...)",
+        "derived frontend snapshot",
+        "fieldRole",
+        "latexHead",
+        "template",
+        "Nothing",
+        "no input",
+    ):
+        assert token in api_discovery
+
+    for token in (
+        "Choosing `symbol()` vs SymPy constructors",
+        "Rendering boundary: SymPy prints, toolkit supplies metadata",
+        "Transport manifests are derived contracts",
+        "Empty/sentinel MathJSON is not semantic input",
+        "sympy.Symbol(...)",
+        "sympy.symbols(...)",
+        "sympy.latex(...)",
+        "fieldRole",
+        "latexHead",
+        "template",
+        "Nothing",
+    ):
+        assert token in philosophy

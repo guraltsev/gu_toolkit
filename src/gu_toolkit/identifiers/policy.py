@@ -617,7 +617,7 @@ def identifier_to_latex(name: str, *, latex_expr: str | None = None) -> str:
 
 
 def symbol(name: str, *, latex_expr: str | None = None, **kwargs: Any) -> sp.Symbol:
-    """Create a SymPy symbol whose ``.name`` is a validated canonical identifier.
+    """Create one toolkit-aware SymPy symbol by validating a canonical identifier before calling ``sympy.Symbol``.
     
     Full API
     --------
@@ -626,35 +626,37 @@ def symbol(name: str, *, latex_expr: str | None = None, **kwargs: Any) -> sp.Sym
     Parameters
     ----------
     name : str
-        Canonical identifier or function name. Canonical names are plain validated strings such as ``theta__x`` or ``a_1_2`` rather than raw display LaTeX.
+        Canonical identifier name. Canonical names are validated plain strings such as ``theta__x`` or ``a_1_2`` rather than raw display LaTeX.
     
     latex_expr : str | None, optional
-        Display-LaTeX override for a symbol. When omitted or empty, the display form is derived automatically from the canonical name.
+        Optional display-LaTeX override stored for later rendering. When omitted or empty, the display form is derived automatically from the canonical name.
     
     **kwargs : Any
-        Keyword arguments forwarded to the underlying SymPy or widget constructor. For widget classes these may include synced traits such as ``value``, ``placeholder``, ``read_only``, or ``math_json``.
+        Keyword arguments forwarded directly to ``sympy.Symbol``. Use them for normal SymPy assumptions such as ``real=True`` or ``positive=True``.
     
     Returns
     -------
     sp.Symbol
-        SymPy symbol whose ``.name`` is the validated canonical identifier. If ``latex_expr`` is supplied, the display override is stored for later rendering.
+        Regular ``sympy.Symbol`` instance whose ``.name`` is the validated canonical identifier. If ``latex_expr`` is supplied, the helper also records that override for later use by ``build_symbol_names()`` and ``render_latex()``.
     
     Optional arguments
     ------------------
-    - ``latex_expr=None``: Display-LaTeX override for a symbol. When omitted or empty, the display form is derived automatically from the canonical name.
-    - ``**kwargs``: Keyword arguments forwarded to the underlying SymPy or widget constructor. For widget classes these may include synced traits such as ``value``, ``placeholder``, ``read_only``, or ``math_json``.
+    - ``latex_expr=None``: Optional display-LaTeX override stored for later rendering.
+    - ``**kwargs``: Keyword arguments forwarded directly to ``sympy.Symbol``.
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This helper intentionally wraps ``sympy.Symbol`` rather than replacing SymPy's symbol model. Use ``symbol()`` when you want one symbol that participates in the toolkit's canonical-identifier validation and optional LaTeX metadata. Use ``sympy.Symbol(...)`` for raw SymPy construction without toolkit validation/metadata. Use ``sympy.symbols(...)`` when you want to create many plain SymPy symbols at once; if each name should be toolkit-validated, call ``symbol()`` for each one.
     
     Examples
     --------
     Basic use::
     
+        import sympy as sp
         from gu_toolkit.identifiers import symbol
     
-        theta_x = symbol("theta__x", real=True)
+        theta_x = symbol("theta__x", latex_expr=r"\\vartheta_x", real=True)
+        assert isinstance(theta_x, sp.Symbol)
     
     Discovery-oriented use::
     

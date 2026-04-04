@@ -4,15 +4,15 @@ This folder uses a lightweight lifecycle model:
 
 - **Bugs (`issues/`)** track defects with clear reproduction/fix criteria.
 - **Projects (`issues/`)** track scoped bodies of work with TODO checklists.
-- **Discussions (`Discussions/`)** hold exploratory design notes that are not yet executable plans.
+- **Discussions (`discussions/`)** hold exploratory design notes that are not yet executable plans.
 - **Developer guides (`guides/`)** document implementation behavior and architecture.
 
 ## Top-level sections
 
 - `issues/`: active bug reports and projects.
 - `issues/_closed/`: resolved issues and completed projects.
-- `Discussions/`: exploratory/decision content.
-- `develop_guide/`: durable implementation guides.
+- `discussions/`: exploratory/decision content.
+- `guides/`: durable implementation guides.
 
 ---
 
@@ -88,7 +88,7 @@ Legacy single-file projects may exist, but new projects should use the folder st
 
 When a project is done:
 
-1. Move file/folder to `projects/_completed/`.
+1. Move file/folder to `issues/_closed/` unless the repo introduces a separate completed-project bucket.
 2. Mark final status and completion date.
 3. Leave a concise summary of delivered outcomes.
 

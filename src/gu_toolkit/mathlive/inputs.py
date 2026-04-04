@@ -26,6 +26,12 @@ class _SemanticMathInput(MathLiveField):
     ) -> None:
         super().__init__(*args, **kwargs)
         self._context = ExpressionContext()
+        self._trait_change_serial = 0
+        self._value_change_serial = 0
+        self._math_json_change_serial = 0
+        self.observe(self._record_value_change, names="value")
+        self.observe(self._record_math_json_change, names="math_json")
+        self._seed_transport_change_order()
         self.smart_mode = False
         self.set_context(context)
 
@@ -79,6 +85,42 @@ class _SemanticMathInput(MathLiveField):
         - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
         """
         return self._context
+
+    def _next_trait_change_serial(self) -> int:
+        self._trait_change_serial += 1
+        return self._trait_change_serial
+
+    def _record_value_change(self, _change: dict[str, Any]) -> None:
+        self._value_change_serial = self._next_trait_change_serial()
+
+    def _record_math_json_change(self, _change: dict[str, Any]) -> None:
+        self._math_json_change_serial = self._next_trait_change_serial()
+
+    def _seed_transport_change_order(self) -> None:
+        if self.value:
+            self._value_change_serial = self._next_trait_change_serial()
+        if self.math_json is not None:
+            self._math_json_change_serial = self._next_trait_change_serial()
+
+    def _current_math_json_payload(self) -> Any | None:
+        payload = self.math_json
+        if payload is None:
+            return None
+
+        current_value = str(self.value or "").strip()
+        transport_source_value = str(self.transport_source_value or "").strip()
+
+        if transport_source_value:
+            return payload if transport_source_value == current_value else None
+
+        if (
+            self._math_json_change_serial
+            and self._value_change_serial
+            and self._math_json_change_serial < self._value_change_serial
+        ):
+            return None
+
+        return payload
 
     def _refresh_semantic_context(self) -> None:
         """Refresh the transport snapshot sent to the MathLive backend."""
@@ -207,7 +249,7 @@ class IdentifierInput(_SemanticMathInput):
         super().__init__(*args, context=context, **kwargs)
 
     def parse_value(self, *, context: ExpressionContext | None = None, role: str = "identifier") -> str:
-        """Parse the widget's current value as a canonical identifier, preferring MathJSON when available.
+        """Parse the widget's current value as a canonical identifier, preferring synchronized MathJSON when available.
         
         Full API
         --------
@@ -224,7 +266,7 @@ class IdentifierInput(_SemanticMathInput):
         Returns
         -------
         str
-            Canonical identifier spelling parsed from the widget's current state. When ``math_json`` is present it is preferred over plain text so MathLive can preserve semantic structure.
+            Canonical identifier spelling parsed from the widget's current state. When ``math_json`` is present **and still synchronized with the current visible text** it is preferred over plain text so MathLive can preserve semantic structure without returning stale transport.
         
         Optional arguments
         ------------------
@@ -260,7 +302,7 @@ class IdentifierInput(_SemanticMathInput):
         - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
         """
         ctx = context if context is not None else self._context
-        return ctx.parse_identifier(self.value, role=role, math_json=self.math_json)
+        return ctx.parse_identifier(self.value, role=role, math_json=self._current_math_json_payload())
 
 
 class ExpressionInput(_SemanticMathInput):
@@ -328,7 +370,7 @@ class ExpressionInput(_SemanticMathInput):
         super().__init__(*args, context=context, **kwargs)
 
     def parse_value(self, *, context: ExpressionContext | None = None, role: str = "expression") -> Any:
-        """Parse the widget's current value as a SymPy expression, preferring MathJSON when available.
+        """Parse the widget's current value as a SymPy expression, preferring synchronized MathJSON when available.
         
         Full API
         --------
@@ -345,7 +387,7 @@ class ExpressionInput(_SemanticMathInput):
         Returns
         -------
         Any
-            Parsed SymPy expression produced from the widget's current state. When ``math_json`` is present it is preferred over plain text so MathLive can preserve semantic structure.
+            Parsed SymPy expression produced from the widget's current state. When ``math_json`` is present **and still synchronized with the current visible text** it is preferred over plain text so MathLive can preserve semantic structure without returning stale transport.
         
         Optional arguments
         ------------------
@@ -381,4 +423,4 @@ class ExpressionInput(_SemanticMathInput):
         - Focused tests: ``tests/semantic_math/test_mathlive_inputs.py`` and ``tests/semantic_math/test_expression_context.py``.
         """
         ctx = context if context is not None else self._context
-        return ctx.parse_expression(self.value, role=role, math_json=self.math_json)
+        return ctx.parse_expression(self.value, role=role, math_json=self._current_math_json_payload())

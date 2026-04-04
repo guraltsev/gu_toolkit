@@ -20,8 +20,9 @@ class MathLiveField(anywidget.AnyWidget):
     --------
     ``MathLiveField(*args: object, **kwargs: object)``
     
-    Important synced traits include ``value``, ``math_json``, ``semantic_context``,
-    ``inline_shortcuts``, ``menu_items``, ``transport_valid``, and ``transport_errors``.
+    Important synced traits include ``value``, ``math_json``, ``transport_source_value``,
+    ``semantic_context``, ``inline_shortcuts``, ``menu_items``, ``transport_valid``,
+    and ``transport_errors``.
     
     Parameters
     ----------
@@ -34,7 +35,7 @@ class MathLiveField(anywidget.AnyWidget):
     Returns
     -------
     MathLiveField
-        AnyWidget instance with synced traits such as ``value``, ``math_json``, ``semantic_context``, and ``transport_errors`` that a frontend MathLive field can bind to.
+        AnyWidget instance with synced traits such as ``value``, ``math_json``, ``transport_source_value``, ``semantic_context``, and ``transport_errors`` that a frontend MathLive field can bind to.
     
     Optional arguments
     ------------------
@@ -78,6 +79,7 @@ class MathLiveField(anywidget.AnyWidget):
     math_json = traitlets.Any(default_value=None, allow_none=True).tag(sync=True)
     transport_valid = traitlets.Bool(True).tag(sync=True)
     transport_errors = traitlets.List(default_value=[]).tag(sync=True)
+    transport_source_value = traitlets.Unicode("").tag(sync=True)
     semantic_context = traitlets.Dict(default_value={}).tag(sync=True)
     inline_shortcuts = traitlets.Dict(default_value={}).tag(sync=True)
     menu_items = traitlets.List(default_value=[]).tag(sync=True)
@@ -154,6 +156,50 @@ class MathLiveField(anywidget.AnyWidget):
       } catch (_error) {
         return null;
       }
+    }
+
+    function isHoldHead(value) {
+      if (value === "Hold") return true;
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        const keys = Object.keys(value);
+        return keys.length === 1 && keys[0] === "sym" && value.sym === "Hold";
+      }
+      return Array.isArray(value) && value.length === 1 && isHoldHead(value[0]);
+    }
+
+    function isEmptyMathJsonPayload(value) {
+      if (value === undefined || value === null) return true;
+      if (typeof value === "string") {
+        const text = value.trim();
+        return text === "" || text === "Nothing";
+      }
+      if (Array.isArray(value)) {
+        if (value.length === 0) return true;
+        if (value.length === 1) return isEmptyMathJsonPayload(value[0]);
+        if (isHoldHead(value[0]) && value.length === 2) {
+          return isEmptyMathJsonPayload(value[1]);
+        }
+        return false;
+      }
+      if (typeof value === "object") {
+        const keys = Object.keys(value);
+        if (keys.length === 0) return true;
+        if (keys.length === 1 && keys[0] === "sym") return isEmptyMathJsonPayload(value.sym);
+        if (keys.length === 1 && keys[0] === "num") return isEmptyMathJsonPayload(value.num);
+        if (Object.prototype.hasOwnProperty.call(value, "fn")) {
+          const args = Array.isArray(value.args) ? value.args : [];
+          if (args.length === 0) return isEmptyMathJsonPayload(value.fn);
+          if (args.length === 1 && isHoldHead(value.fn)) {
+            return isEmptyMathJsonPayload(args[0]);
+          }
+        }
+      }
+      return false;
+    }
+
+    function normalizeMathJsonPayload(value) {
+      const cloned = cloneJson(value);
+      return isEmptyMathJsonPayload(cloned) ? null : cloned;
     }
 
     function valuesEqual(lhs, rhs) {
@@ -452,6 +498,7 @@ class MathLiveField(anywidget.AnyWidget):
           math_json: null,
           transport_valid: true,
           transport_errors: [],
+          transport_source_value: latex,
         };
       }
       try {
@@ -462,6 +509,7 @@ class MathLiveField(anywidget.AnyWidget):
             math_json: null,
             transport_valid: true,
             transport_errors: [],
+            transport_source_value: latex,
           };
         }
         const errors = Array.isArray(expr.errors)
@@ -469,9 +517,10 @@ class MathLiveField(anywidget.AnyWidget):
           : [];
         return {
           value: latex,
-          math_json: cloneJson(expr.json),
+          math_json: normalizeMathJsonPayload(expr.json),
           transport_valid: expr.isValid !== false && errors.length === 0,
           transport_errors: errors,
+          transport_source_value: latex,
         };
       } catch (error) {
         return {
@@ -479,6 +528,7 @@ class MathLiveField(anywidget.AnyWidget):
           math_json: null,
           transport_valid: false,
           transport_errors: [formatTransportError(error)],
+          transport_source_value: latex,
         };
       }
     }
