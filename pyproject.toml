@@ -37,7 +37,7 @@ include = ["gu_toolkit*"]
 
 
 [tool.setuptools.package-data]
-"gu_toolkit" = ["css/*.css"]
+"gu_toolkit" = ["css/*.css", "math_input/*.css", "math_input/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

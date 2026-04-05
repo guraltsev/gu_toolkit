@@ -1,7 +1,3 @@
-Paste the following as the working instructions for the next LLM.
-
----
-
 # MathLive Decontamination and Rebuild Instructions
 
 ## 1) What went wrong
@@ -123,116 +119,51 @@ Each visible demo in the notebook must answer:
 * Why should it happen?
 * What would indicate the implementation is still wrong?
 
-## 6) Phase 0: Decontamination and removal
+
+## Phase 1: Minimal raw Math input bridge based on MathLive
 
 ### Goal
 
-Identify and remove the maximum amount of existing MathLive-related code, tests, wrappers, policies, notebook hacks, demo logic, UI customizations, issue-driven workarounds, and supporting cruft.
+Reintroduce MathLive and stabilize the basic generic MathLive field contract.
 
-### Instruction
-
-Perform a repo-wide audit for anything related to MathLive, including:
-
-* source files
-* widget wrappers
-* JavaScript/TypeScript assets
-* CSS
-* tests
-* notebooks
-* demos
-* docs tightly coupled to the old implementation
-* special menu logic
-* semantic/identifier policies
-* hidden notebook artifacts
-* checkpoint notebooks
-* saved outputs
-* obsolete compatibility layers
-* issue-specific hacks
-
-Then remove as much of it as possible.
-
-Do not try to preserve behavior. Do not add shims just to keep broken functionality alive. Deletion is preferred.
-
-It is acceptable if this breaks downstream notebooks or features. That is the point of the reset.
-
-### Phase 0 notebook
-
-Update the canonical showcase notebook so it clearly says:
-
-* MathLive functionality has been intentionally removed
-* why it was removed
-* what is now unavailable
-* why this is necessary for rebuilding trust
-
-The notebook for this phase is explanatory, not interactive.
-
-### Phase 0 result
-
-The repo should contain little or no active MathLive functionality after this phase.
-
-Stop after this phase and return the repo for user review.
-
-## 7) Rebuild plan
-
-After Phase 0, rebuild in the following self-contained phases. Do not skip ahead. Do not combine phases.
-
----
-
-## Phase 1: Trusted baseline without MathLive
-
-### Goal
-
-Restore one minimal interactive notebook input flow using only simple, trusted notebook technology. No MathLive yet.
-
-### Why
-
-Before reintroducing MathLive, prove that the basic notebook interaction path works: user types, Python receives a value, and the displayed state is understandable.
-
-### Requirements
-
-Use the simplest possible implementation. Avoid custom frontend complexity. This phase is only about proving the notebook interaction loop.
-
-### Notebook must show
-
-* a simple input the user can edit
-* a visible way to confirm the backend sees the current value
-* a clear explanation of what should happen and why
-
-### Not implemented yet
-
-No MathLive. No semantic roles. No menu policies. No context integration.
-
-Stop and return the repo.
-
----
-
-## Phase 2: Minimal raw MathLive bridge
-
-### Goal
-
-Reintroduce MathLive in the smallest possible form.
 
 ### Why
 
 Prove that a basic MathLive field can render and synchronize a value between frontend and backend before adding any semantic behavior.
+The foundation must be trustworthy before adding specialized behavior.
+
 
 ### Requirements
+Setup a subfolder in src related to math input functionality. It will be done through mathlive but this should NOT be exposed. Mathlive is the backend.
+Define a class that represents a math input widget (generic). 
 
-* exactly one generic MathLive field
-* no identifier mode
+
+Keep the implementation small. Focus only on:
+
+* initialization from Python
+* display
+* user edits flowing back to Python
+* ability to set value from Python. 
+* clear serialization/value contract
+* predictable behavior on rerun or reset
+
+* minimal API surface
 * no special menu logic
 * no context-aware behavior
 * no custom semantic rules
 * no dynamic role switching
-* minimal API surface
+
+Documentation must be comprehensive and up to quality of the rest of the toolkit.
+
+
 
 ### Notebook must show
 
 * the field renders
-* the initial value appears
+* initial value set from Python
 * the user can edit it
 * the backend can read the new value
-* why this is the only thing being proven in this phase
+* a visible confirmation of round-trip behavior
 
 ### Not implemented yet
 
@@ -240,33 +171,6 @@ No restrictions, no role-aware behavior, no context suggestions, no unknown-name
 
 Stop and return the repo.
 
----
-
-## Phase 3: Stable value contract
-
-### Goal
-
-Stabilize the basic generic MathLive field contract.
-
-### Why
-
-The foundation must be trustworthy before adding specialized behavior.
-
-### Requirements
-
-Keep the implementation small. Focus only on:
-
-* initialization from Python
-* user edits flowing back to Python
-* clear serialization/value contract
-* predictable behavior on rerun or reset
-
-### Notebook must show
-
-* initial value set from Python
-* user edit changes the value
-* a visible confirmation of round-trip behavior
-* why these behaviors are foundational
 
 ### Not implemented yet
 
