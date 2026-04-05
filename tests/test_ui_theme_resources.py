@@ -18,7 +18,6 @@ def test_css_resources_exist_and_expose_tunable_tokens() -> None:
         "surfaces.css",
         "figure_layout.css",
         "legend.css",
-        "plot_editor.css",
         "slider.css",
     }
     assert expected_files.issubset({path.name for path in CSS_DIR.iterdir() if path.is_file()})
@@ -35,9 +34,9 @@ def test_css_resources_exist_and_expose_tunable_tokens() -> None:
         "--gu-legend-marker-diameter",
         "--gu-checkbox-size",
         "--gu-checkbox-accent",
-        "--gu-math-font-size",
     ):
         assert token in tokens
+    assert "--gu-math-font-size" not in tokens
 
 
 def test_shared_controls_css_uses_family_specific_selectors_without_blanket_input_rule() -> None:
@@ -54,6 +53,8 @@ def test_shared_controls_css_uses_family_specific_selectors_without_blanket_inpu
     assert '.gu-control-color input[type="color"]::-webkit-scrollbar' in controls
     assert "overflow-y: hidden !important;" in controls
     assert "scrollbar-width: none !important;" in controls
+    assert "gu-control-math" not in controls
+    assert "math-field" not in controls
 
 
 def test_surfaces_css_uses_panel_variants_and_dedicated_tab_icon_tokens() -> None:
@@ -98,20 +99,11 @@ def test_runtime_figure_panels_use_surface_variants_and_hide_legend_title() -> N
     assert layout.legend_header.layout.display == "none"
 
 
-def test_plot_editor_uses_boolean_field_and_local_css_only() -> None:
-    editor = Figure()._plot_editor
+def test_figure_phase0_decontamination_removes_plot_editor_wiring() -> None:
+    figure = Figure()
 
-    assert "gu-boolean-field" in editor._visibility_field._dom_classes
-    assert "gu-control-checkbox" in editor._visible_toggle._dom_classes
-    assert "gu-control-dropdown" in editor._kind._dom_classes
-    assert "gu-control-multiselect" in editor._views._dom_classes
-
-    css = editor._style.value
-    assert ".gu-plot-editor-kind-control" in css
-    assert ".gu-plot-editor-visibility-field" in css
-    assert ".gu-action-button" not in css
-    assert ".gu-modal-panel" not in css
-    assert "--gu-space-1" not in css
+    assert not hasattr(figure, "_plot_editor")
+    assert figure._layout.legend_header_toolbar.children == ()
 
 
 def test_surfaces_css_does_not_force_inline_alert_visibility() -> None:
@@ -139,45 +131,6 @@ def test_legend_and_slider_keep_local_css_separate_from_base_theme() -> None:
     assert "--gu-space-1" in slider._theme_style.value
 
 
-def test_legend_marker_css_uses_plot_color_variable_and_mathlive_font_is_tuned() -> None:
-    from gu_toolkit._mathlive_widget import MathLiveField
-
-    legend_css = load_ui_css("legend.css")
-    controls_css = load_ui_css("controls.css")
-    tokens_css = load_ui_css("tokens.css")
-
-    assert "--gu-legend-marker-color" in legend_css
-    assert "var(--gu-legend-marker-color, currentColor)" in legend_css
-    assert "--gu-math-font-size: 18px;" in tokens_css
-    assert "font-size: var(--gu-math-font-size) !important;" in controls_css
-    assert 'node.style.fontSize = "var(--gu-math-font-size, 18px)";' in MathLiveField._esm
-
-
-def test_mathlive_frontend_defers_semantic_runtime_options_until_mount() -> None:
-    from gu_toolkit._mathlive_widget import MathLiveField
-
-    esm = MathLiveField._esm
-
-    assert 'node.addEventListener("mount", handleMount, { once: true });' in esm
-    assert 'if (!node.__guMounted) {' in esm
-    assert 'node.__guBaseInlineShortcuts = { ...(node.inlineShortcuts || {}) };' in esm
-    assert "requestAnimationFrame" in esm
-    assert "el.appendChild(input);\n        scheduleSyncFromModel();" in esm
-
-
-def test_mathlive_frontend_integrates_compute_engine_transport() -> None:
-    from gu_toolkit._mathlive_widget import MathLiveField
-
-    esm = MathLiveField._esm
-
-    assert 'import("https://esm.run/@cortex-js/compute-engine")' in esm
-    assert 'node.computeEngine = ce;' in esm
-    assert 'model.set(key, snapshot[key]);' in esm
-    assert 'transport_valid' in esm
-    assert 'model.on("change:semantic_context", onSemantic);' in esm
-    assert 'serialize: (serializer, expr) =>' in esm
-
-
 def test_legend_runtime_style_widget_includes_row_specific_marker_colors() -> None:
     import sympy as sp
 
@@ -196,10 +149,7 @@ def test_legend_runtime_style_widget_includes_row_specific_marker_colors() -> No
 
 def test_checkbox_css_keeps_hidden_description_label_collapsed() -> None:
     controls_css = load_ui_css("controls.css")
-    plot_editor_css = load_ui_css("plot_editor.css")
 
     assert ".gu-control-checkbox .widget-label {" in controls_css
     assert "display: none !important;" in controls_css
     assert ".gu-control-checkbox .widget-label-basic {" in controls_css
-    assert ".gu-plot-editor-visibility-field .gu-control-checkbox .widget-label {" in plot_editor_css
-    assert ".gu-plot-editor-visibility-field .gu-control-checkbox .widget-label-basic {" in plot_editor_css

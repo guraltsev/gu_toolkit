@@ -5,7 +5,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = REPO_ROOT / "src" / "gu_toolkit"
-GUIDES_ROOT = REPO_ROOT / "docs" / "guides"
 
 REQUIRED_HEADINGS = (
     "Full API",
@@ -15,49 +14,6 @@ REQUIRED_HEADINGS = (
     "Architecture note",
     "Examples",
     "Learn more / explore",
-)
-
-PLACEHOLDER_PHRASES = (
-    "This API accepts the parameters declared in its Python signature.",
-    "Result produced by this API.",
-    "examples/Toolkit_overview.ipynb",
-    "obj = ",
-    "result = ",
-)
-
-SEMANTIC_MATH_FILES = (
-    SRC_ROOT / "identifiers" / "policy.py",
-    SRC_ROOT / "mathlive" / "context.py",
-    SRC_ROOT / "mathlive" / "transport.py",
-    SRC_ROOT / "mathlive" / "inputs.py",
-)
-
-REPRESENTATIVE_SEMANTIC_MATH_APIS = {
-    SRC_ROOT / "identifiers" / "policy.py": (
-        "identifier_to_latex",
-        "symbol",
-    ),
-    SRC_ROOT / "mathlive" / "context.py": (
-        "ExpressionContext",
-        "ExpressionContext.from_symbols",
-        "ExpressionContext.transport_manifest",
-    ),
-    SRC_ROOT / "mathlive" / "transport.py": (
-        "build_mathlive_transport_manifest",
-        "mathjson_to_identifier",
-    ),
-    SRC_ROOT / "mathlive" / "inputs.py": (
-        "IdentifierInput",
-        "IdentifierInput.parse_value",
-        "ExpressionInput",
-        "ExpressionInput.parse_value",
-    ),
-}
-
-REQUIRED_SEMANTIC_LINKS = (
-    "docs/guides/api-discovery.md",
-    "docs/guides/semantic-math-refactoring-philosophy.md",
-    "examples/MathLive_identifier_system_showcase.ipynb",
 )
 
 
@@ -81,19 +37,6 @@ def iter_public_api_nodes(tree: ast.Module):
                     yield member
 
 
-def docstrings_by_qualname(path: Path) -> dict[str, str]:
-    tree = parse_module(path)
-    docs = {"<module>": ast.get_docstring(tree) or ""}
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            docs[node.name] = ast.get_docstring(node) or ""
-            if isinstance(node, ast.ClassDef):
-                for member in node.body:
-                    if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        docs[f"{node.name}.{member.name}"] = ast.get_docstring(member) or ""
-    return docs
-
-
 def test_every_source_module_has_a_module_docstring() -> None:
     for path in iter_source_modules():
         tree = parse_module(path)
@@ -111,116 +54,3 @@ def test_public_api_docstrings_use_the_uniform_structure() -> None:
                     f"{path}:{getattr(node, 'name', '<module>')} is missing the section "
                     f"{heading!r}"
                 )
-
-
-def test_recursive_docstring_scan_reaches_semantic_math_modules() -> None:
-    scanned = set(iter_source_modules())
-    assert set(SEMANTIC_MATH_FILES).issubset(scanned)
-
-
-def test_semantic_math_docstrings_avoid_placeholders_and_link_to_targeted_resources() -> None:
-    for path, qualnames in REPRESENTATIVE_SEMANTIC_MATH_APIS.items():
-        docs = docstrings_by_qualname(path)
-        for qualname in qualnames:
-            doc = docs.get(qualname)
-            assert doc, f"{path}:{qualname} is missing a docstring"
-            for phrase in PLACEHOLDER_PHRASES:
-                assert phrase not in doc, f"{path}:{qualname} still contains placeholder text {phrase!r}"
-            for link in REQUIRED_SEMANTIC_LINKS:
-                assert link in doc, f"{path}:{qualname} is missing semantic-math cross-reference {link!r}"
-            assert "tests/semantic_math/" in doc, (
-                f"{path}:{qualname} should point to focused semantic-math regression tests"
-            )
-
-
-def test_api_discovery_guide_includes_semantic_math_navigation_entry() -> None:
-    guide = (GUIDES_ROOT / "api-discovery.md").read_text(encoding="utf-8")
-    assert "Author semantic identifiers and MathLive-backed expressions" in guide
-    for token in (
-        "symbol",
-        "ExpressionContext",
-        "IdentifierInput",
-        "ExpressionInput",
-        "mathjson_to_identifier",
-        "build_mathlive_transport_manifest",
-        "docs/guides/semantic-math-refactoring-philosophy.md",
-        "examples/MathLive_identifier_system_showcase.ipynb",
-        "tests/semantic_math/test_identifier_policy.py",
-        "tests/semantic_math/test_expression_context.py",
-        "tests/semantic_math/test_mathlive_inputs.py",
-        "**Semantic math / MathLive**",
-    ):
-        assert token in guide
-
-
-def test_semantic_math_docstrings_explain_authoring_vs_transport_boundaries() -> None:
-    policy_docs = docstrings_by_qualname(SRC_ROOT / "identifiers" / "policy.py")
-    context_docs = docstrings_by_qualname(SRC_ROOT / "mathlive" / "context.py")
-    transport_docs = docstrings_by_qualname(SRC_ROOT / "mathlive" / "transport.py")
-
-    symbol_doc = policy_docs["symbol"]
-    assert "sympy.Symbol" in symbol_doc
-    assert "sympy.symbols" in symbol_doc
-    assert "validation" in symbol_doc
-    assert "LaTeX metadata" in symbol_doc or "LaTeX override" in symbol_doc
-
-    from_symbols_doc = context_docs["ExpressionContext.from_symbols"]
-    assert "Symbols and functions are tracked separately" in from_symbols_doc
-    assert "from_expression(...)" in from_symbols_doc
-    assert "register_symbol(...)" in from_symbols_doc
-    assert "register_function(...)" in from_symbols_doc
-    assert "include_named_functions" in from_symbols_doc
-
-    render_doc = context_docs["ExpressionContext.render_latex"]
-    assert "convenience wrapper" in render_doc
-    assert "sympy.latex(...)" in render_doc
-    assert "not a competing LaTeX engine" in render_doc
-
-    for doc in (
-        context_docs["ExpressionContext.transport_manifest"],
-        transport_docs["build_mathlive_transport_manifest"],
-    ):
-        assert "derived frontend" in doc
-        for token in ("fieldRole", "latexHead", "template"):
-            assert token in doc
-
-    for doc in (
-        transport_docs["mathjson_to_identifier"],
-        transport_docs["mathjson_to_sympy"],
-    ):
-        assert "Nothing" in doc
-        assert "missing input" in doc
-        assert "MathJSONParseError" in doc
-
-
-def test_semantic_math_guides_explain_sympy_relationships_and_empty_transport() -> None:
-    api_discovery = (GUIDES_ROOT / "api-discovery.md").read_text(encoding="utf-8")
-    philosophy = (GUIDES_ROOT / "semantic-math-refactoring-philosophy.md").read_text(encoding="utf-8")
-
-    for token in (
-        "sympy.Symbol(...)",
-        "sympy.symbols(...)",
-        "sympy.latex(...)",
-        "derived frontend snapshot",
-        "fieldRole",
-        "latexHead",
-        "template",
-        "Nothing",
-        "no input",
-    ):
-        assert token in api_discovery
-
-    for token in (
-        "Choosing `symbol()` vs SymPy constructors",
-        "Rendering boundary: SymPy prints, toolkit supplies metadata",
-        "Transport manifests are derived contracts",
-        "Empty/sentinel MathJSON is not semantic input",
-        "sympy.Symbol(...)",
-        "sympy.symbols(...)",
-        "sympy.latex(...)",
-        "fieldRole",
-        "latexHead",
-        "template",
-        "Nothing",
-    ):
-        assert token in philosophy

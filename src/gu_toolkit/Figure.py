@@ -113,7 +113,6 @@ from .figure_context import (
 from .figure_info import InfoPanelManager
 from .figure_layout import FigureLayout
 from .figure_legend import LegendPanelManager
-from .figure_plot_editor import PlotComposerDialog
 from .figure_parameters import ParameterManager
 from .figure_sound import FigureSoundManager
 from .figure_parametric_plot import ParametricPlot, create_or_update_parametric_plot
@@ -232,7 +231,6 @@ class Figure:
         "_parameter_manager",
         "_info",
         "_legend",
-        "_plot_editor",
         "_sound",
         "_view_manager",
         "_views",
@@ -435,13 +433,11 @@ class Figure:
             modal_host=self._layout.root_widget,
             root_widget=self._layout.root_widget,
             header_toolbar=self._layout.legend_header_toolbar,
-            enable_plot_editor=True,
+            enable_plot_editor=False,
         )
-        self._plot_editor = PlotComposerDialog(
-            self,
-            modal_host=self._layout.root_widget,
-        )
-        self._legend.bind_plot_editor_handler(self._open_plot_editor)
+        # Phase 0 decontamination deliberately removes the legend-launched plot
+        # editor until a later rebuild phase reintroduces a smaller, auditable
+        # input path.
         self._sound = FigureSoundManager(
             self,
             self._legend,
@@ -1277,14 +1273,6 @@ class Figure:
         )
         if self._sync_sidebar_visibility():
             self._request_active_view_reflow("sidebar_visibility")
-
-    def _open_plot_editor(self, plot_id: str | None = None) -> None:
-        """Open the legend-driven plot composer for a new or existing plot."""
-
-        if plot_id is None:
-            self._plot_editor.open_for_new()
-            return
-        self._plot_editor.open_for_plot(str(plot_id))
 
 
     # --- Layout ---

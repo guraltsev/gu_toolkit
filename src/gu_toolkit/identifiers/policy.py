@@ -129,7 +129,7 @@ class IdentifierError(ValueError):
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -151,7 +151,7 @@ class IdentifierError(ValueError):
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -187,7 +187,7 @@ class IdentifierScanResult:
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -206,7 +206,7 @@ class IdentifierScanResult:
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -240,7 +240,7 @@ class ExpressionRenderContext:
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -260,7 +260,7 @@ class ExpressionRenderContext:
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -291,7 +291,7 @@ def strip_math_delimiters(text: str) -> str:
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -310,7 +310,7 @@ def strip_math_delimiters(text: str) -> str:
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -351,7 +351,7 @@ def validate_identifier(name: str, *, role: str = "identifier") -> str:
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -370,7 +370,7 @@ def validate_identifier(name: str, *, role: str = "identifier") -> str:
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -410,7 +410,7 @@ def split_identifier_atoms(name: str, *, _validated: bool = False) -> tuple[str,
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -429,7 +429,7 @@ def split_identifier_atoms(name: str, *, _validated: bool = False) -> tuple[str,
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -491,7 +491,7 @@ def encode_identifier_atoms(atoms: Iterable[str], *, role: str = "identifier") -
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -510,7 +510,7 @@ def encode_identifier_atoms(atoms: Iterable[str], *, role: str = "identifier") -
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -585,7 +585,7 @@ def identifier_to_latex(name: str, *, latex_expr: str | None = None) -> str:
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -604,7 +604,7 @@ def identifier_to_latex(name: str, *, latex_expr: str | None = None) -> str:
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -667,7 +667,7 @@ def symbol(name: str, *, latex_expr: str | None = None, **kwargs: Any) -> sp.Sym
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -704,7 +704,7 @@ def register_symbol_latex(symbol_or_name: str | sp.Symbol, latex_expr: str) -> N
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -724,7 +724,7 @@ def register_symbol_latex(symbol_or_name: str | sp.Symbol, latex_expr: str) -> N
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -764,7 +764,7 @@ def symbol_latex_override(symbol_or_name: str | sp.Symbol) -> str | None:
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -785,7 +785,7 @@ def symbol_latex_override(symbol_or_name: str | sp.Symbol) -> str | None:
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -827,7 +827,7 @@ def build_symbol_names(
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -848,7 +848,7 @@ def build_symbol_names(
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -907,7 +907,7 @@ def render_latex(
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -927,7 +927,7 @@ def render_latex(
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -970,7 +970,7 @@ def function_head_to_latex(name: str, *, latex_head: str | None = None) -> str:
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -989,7 +989,7 @@ def function_head_to_latex(name: str, *, latex_head: str | None = None) -> str:
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -1045,7 +1045,7 @@ def function_latex_method(self: sp.Function, printer: Any) -> str:
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -1084,7 +1084,7 @@ def semantic_function(name: str, *, latex_head: str | None = None) -> type[sp.Fu
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -1103,7 +1103,7 @@ def semantic_function(name: str, *, latex_head: str | None = None) -> type[sp.Fu
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -1299,7 +1299,7 @@ def rewrite_wrapped_identifier_calls(text: str) -> str:
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -1318,7 +1318,7 @@ def rewrite_wrapped_identifier_calls(text: str) -> str:
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -1389,7 +1389,7 @@ def parse_identifier(text: str) -> str:
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -1408,7 +1408,7 @@ def parse_identifier(text: str) -> str:
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """
@@ -1519,7 +1519,7 @@ def scan_identifier_segment(text: str, start: int) -> IdentifierScanResult | Non
     
     Architecture note
     -----------------
-    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers such as ``ExpressionContext``, MathJSON transport, and symbolic family utilities should call into this layer rather than inventing their own naming rules.
+    This API lives in ``gu_toolkit.identifiers.policy``, the source-of-truth layer for canonical identifier semantics. Higher-level helpers should call into this layer rather than inventing their own naming rules.
     
     Examples
     --------
@@ -1538,7 +1538,7 @@ def scan_identifier_segment(text: str, start: int) -> IdentifierScanResult | Non
     --------------------
     - Start with the semantic-math row in ``docs/guides/api-discovery.md``.
     - Guide: ``docs/guides/semantic-math-refactoring-philosophy.md``.
-    - Showcase notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
+    - Canonical rebuild notebook: ``examples/MathLive_identifier_system_showcase.ipynb``.
     - Secondary notebook: ``examples/Robust_identifier_system_showcase.ipynb``.
     - Focused tests: ``tests/semantic_math/test_identifier_policy.py`` and ``tests/semantic_math/test_symbolic_identifier_families.py``.
     """

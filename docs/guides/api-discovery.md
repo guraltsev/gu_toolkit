@@ -49,7 +49,7 @@ This order is intentional:
 | Task | Start here | Runtime discovery helpers | Read next |
 |---|---|---|---|
 | Create and manage interactive figures | `Figure`, `render`, `current_figure`, `figure_api.py` | `help(Figure)`, `dir(fig)`, `with fig:` | `docs/guides/develop_guide.md`, `examples/Toolkit_overview.ipynb` |
-| Plot regular curves | `Figure.plot`, `plot`, `Plot` | `plot_style_options()`, `help(Figure.plot)` | `docs/guides/legend-plot-editor.md`, `tests/test_figure_alias_api.py`, `tests/test_plot_editor.py` |
+| Plot regular curves | `Figure.plot`, `plot`, `Plot` | `plot_style_options()`, `help(Figure.plot)` | `tests/test_figure_alias_api.py`, `examples/Toolkit_overview.ipynb` |
 | Plot parametric curves | `Figure.parametric_plot`, `parametric_plot`, `ParametricPlot` | `help(Figure.parametric_plot)` | `docs/guides/parametric-plotting.md`, `tests/test_parametric_plot_api.py` |
 | Plot scalar fields / contour / density / temperature | `scalar_field`, `contour`, `density`, `temperature`, `ScalarFieldPlot` | `field_style_options()`, `field_palette_options()` | `docs/guides/scalar-field-styling.md`, `tests/test_scalar_field_api.py` |
 | Create parameters and sliders | `parameter`, `ParameterManager`, `ParamRef`, `FloatSlider` | `dir(fig.parameters)`, `help(ParamRef)`, `help(FloatSlider)` | `docs/guides/parameter-key-semantics.md`, `tests/test_param_change_hook_api.py`, `tests/test_slider_parsing.py` |
@@ -59,7 +59,6 @@ This order is intentional:
 | Snapshot or export a figure | `Figure.snapshot`, `Figure.to_code`, `figure_to_code`, `FigureSnapshot`, `PlotSnapshot` | `help(Figure.snapshot)`, `help(figure_to_code)` | `docs/guides/render-batching-and-snapshots.md`, `tests/test_figure_snapshot_codegen.py` |
 | Convert symbolic input to numeric callables | `numpify`, `numpify_cached`, `NumericFunction`, `NamedFunction` | `help(numpify)`, `help(NumericFunction)` | `tests/test_numeric_callable_api.py`, `examples/Toolkit_overview.ipynb` |
 | Work with symbolic-family helpers | `symbols`, `SymbolFamily`, `FunctionFamily`, `ParseLaTeX.parse_latex` | `help(symbols)`, `help(parse_latex)` | `tests/test_parse_latex_regression.py`, `tests/test_symbolic_families_helper.py` |
-| Author semantic identifiers and MathLive-backed expressions | `symbol`, `ExpressionContext`, `IdentifierInput`, `ExpressionInput`, `mathjson_to_identifier`, `build_mathlive_transport_manifest` | `help(symbol)`, `help(ExpressionContext)`, `dir(ExpressionContext.from_symbols(["x"], include_named_functions=False))`, `help(IdentifierInput.parse_value)` | `docs/guides/semantic-math-refactoring-philosophy.md`, `examples/MathLive_identifier_system_showcase.ipynb`, `examples/Robust_identifier_system_showcase.ipynb`, `tests/semantic_math/test_identifier_policy.py`, `tests/semantic_math/test_expression_context.py`, `tests/semantic_math/test_mathlive_inputs.py` |
 | Generate or inspect sound output | `Figure.sound`, `FigureSoundManager`, `play` | `help(play)`, `help(Figure.sound)` | `examples/Fourier-Sounds.ipynb`, `tests/test_figure_sound.py` |
 | Diagnose runtime, layout, or performance issues | `runtime_diagnostics`, `figure_runtime_diagnostics`, `layout_logging`, `PerformanceMonitor` | `help(runtime_diagnostics)`, `help(PerformanceMonitor)` | `docs/guides/ui-layout-system.md`, `examples/layout_debug.ipynb`, `tests/test_runtime_support_backends.py` |
 
@@ -100,45 +99,16 @@ When the guide and docstring answer “how do I call this?” but you still need
 high-value API references in this repository because they encode real contracts,
 round-trip expectations, and bug regressions.
 
-### Semantic-math quick orientation
-
-When you are working in the semantic-math / MathLive slice, keep four
-boundaries straight:
-
-- `symbol()` is the toolkit-aware wrapper around `sympy.Symbol(...)`. It
-  validates one canonical identifier, can store a display-LaTeX override, and
-  forwards normal SymPy assumptions. Use `sympy.Symbol(...)` for raw
-  construction and `sympy.symbols(...)` when you want many plain SymPy symbols
-  at once.
-- `ExpressionContext.render_latex(...)` and
-  `gu_toolkit.identifiers.render_latex(...)` are convenience wrappers around
-  `sympy.latex(...)`. The toolkit supplies semantic symbol/function metadata;
-  SymPy remains the actual printer.
-- `ExpressionContext.transport_manifest()` and
-  `build_mathlive_transport_manifest()` return a derived frontend snapshot. The
-  small schema worth knowing is `version`, `fieldRole`, `symbols`, and
-  `functions`, with function entries exposing `latexHead` and `template`. Use
-  that manifest for transport/debugging, not as the primary Python authoring
-  interface.
-- Empty MathJSON sentinels such as `Nothing` mean `no input`. They should fall
-  back to the visible text field or raise a required-input error; they should
-  not parse as `0` or as an identifier literally named `Nothing`.
-- Non-empty MathJSON is preferred only while it still matches the current
-  visible widget text. If a widget's text changes after an older structured
-  payload was captured, `IdentifierInput.parse_value()` /
-  `ExpressionInput.parse_value()` fall back to the newer text instead of
-  returning stale transport.
-
 ## Module families
 
 - **Figure/core orchestration**: `Figure.py`, `figure_api.py`, `figure_view.py`, `figure_layout.py`, `figure_parameters.py`, `figure_info.py`, `figure_legend.py`
-- **Curve plotting**: `figure_plot.py`, `figure_plot_style.py`, `figure_plot_normalization.py`, `figure_plot_editor.py`
+- **Curve plotting**: `figure_plot.py`, `figure_plot_style.py`, `figure_plot_normalization.py`
 - **Parametric plotting**: `figure_parametric_plot.py`
 - **Scalar fields**: `figure_field.py`, `figure_field_style.py`, `figure_field_normalization.py`
 - **Parameters and animation**: `ParamRef.py`, `ParamEvent.py`, `Slider.py`, `animation.py`, `parameter_keys.py`
 - **Snapshots and codegen**: `FigureSnapshot.py`, `PlotSnapshot.py`, `FieldPlotSnapshot.py`, `codegen.py`
 - **Symbolic/numeric bridge**: `Symbolic.py`, `numpify.py`, `NamedFunction.py`, `InputConvert.py`, `ParseLaTeX.py`, `numeric_operations.py`
-- **Semantic math / MathLive**: `identifiers/policy.py`, `mathlive/context.py`, `mathlive/transport.py`, `mathlive/inputs.py`, `mathlive/widget.py`
+- **Canonical identifiers**: `identifiers/policy.py`
 - **Runtime/UI infrastructure**: `PlotlyPane.py`, `ui_system.py`, `widget_chrome.py`, `runtime_support.py`, `layout_logging.py`, `performance_monitor.py`
 
 ## Public docstring contract

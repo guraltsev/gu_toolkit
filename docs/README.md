@@ -19,7 +19,6 @@ This folder uses a lightweight lifecycle model:
 ## Selected guides
 
 - `guides/develop_guide.md`: architecture ownership map and maintenance rules.
-- `guides/legend-plot-editor.md`: legend-driven plot creation and editing UI.
 - `guides/ui-layout-system.md`: shared tokens, primitives, invariants, and layout guardrails.
 - `guides/parametric-plotting.md`: public API and implementation notes for
   parametric curves.
@@ -29,7 +28,6 @@ This folder uses a lightweight lifecycle model:
 - `guides/scalar-field-styling.md`: contour and temperature styling, palettes, range control, and diffraction-oriented examples.
 - `guides/api-discovery.md`: task-oriented map from user goals to the right public APIs, guides, examples, and tests.
 - `guides/public-api-documentation-structure.md`: required structure and discoverability rules for public docstrings.
-- `guides/semantic-math-refactoring-philosophy.md`: canonical identifier + MathLive architecture goals, boundaries, and refactoring checklist.
 
 ---
 

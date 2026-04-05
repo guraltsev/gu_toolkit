@@ -19,12 +19,13 @@ def test_plot_lifecycle_updates_legend_and_sidebar_visibility() -> None:
     fig = Figure()
 
     assert fig._legend.has_legend is False
-    assert fig._legend.panel_visible is True
+    assert fig._legend.panel_visible is False
     assert fig._layout.legend_header.layout.display == "none"
-    assert fig._layout.legend_panel.panel.layout.display == "flex"
-    assert fig._layout.sidebar_container.layout.display == "flex"
-    assert getattr(fig._legend._plot_add_button, "disabled", True) is False
-    assert fig._layout.legend_header_toolbar.children == (fig._legend._plot_add_button,)
+    assert fig._layout.legend_panel.panel.layout.display == "none"
+    assert fig._layout.sidebar_container.layout.display == "none"
+    assert getattr(fig._legend, "_plot_add_button", None) is None
+    assert fig._layout.legend_header_toolbar.children == ()
+    assert not hasattr(fig, "_plot_editor")
 
     fig.plot(sp.sin(x), x, id="sin", label="sin(x)")
 

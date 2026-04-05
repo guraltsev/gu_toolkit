@@ -22,7 +22,6 @@ Figure (coordinator / entry point)
 ├── ParameterManager      # parameters, ParamRef registry, hooks
 ├── InfoPanelManager      # Info section, info cards, raw outputs
 ├── LegendPanelManager    # toolkit-owned legend sidebar
-├── PlotComposerDialog    # legend-launched modal for creating/editing plots
 ├── Plot registry         # plot_id -> Plot
 └── Snapshot / codegen    # FigureSnapshot + figure_to_code()
 ```
@@ -43,10 +42,8 @@ fields and branches to `Figure`.**
 | View registry and selection policy | `ViewManager` | Registration, active id, stale flags, removal rules |
 | Parameters and hooks | `ParameterManager` | Parameter-name -> `ParamRef`, symbol aliases via `symbol.name`, control reuse, hooks, snapshots |
 | One plotted curve | `Plot` | Numeric compilation, sampling, trace updates, styling |
-| Plot-composer modal | `figure_plot_editor.py` | Manual plot-kind selection, symbolic parsing, parameter preview, apply-through-public-API |
 | Info section | `InfoPanelManager` | Raw outputs, simple cards, view scoping |
-| Legend sidebar | `LegendPanelManager` | Rows filtered by active view, plus toolbar/edit triggers for the composer |
-| Math expression field widget | `_mathlive_widget.py` | Small MathLive-backed input used by the plot editor |
+| Legend sidebar | `LegendPanelManager` | Rows filtered by active view plus line-style controls |
 | Serializable state | `FigureSnapshot`, `PlotSnapshot`, `ParameterSnapshot` | Immutable snapshots |
 | Recreated source code | `codegen.py` | Converts snapshots into Python |
 
@@ -221,10 +218,8 @@ the helper used by `Figure.parametric_plot(...)`.
 `figure_field.py` owns scalar-field runtimes for contour, density, and
 temperature plots.
 
-`figure_plot_editor.py` owns the legend-launched modal used to author or edit
-plots interactively. It intentionally routes successful submissions back
-through the existing public figure methods instead of introducing a second plot
-mutation path.
+Phase 0 removed the previous legend-launched plot composer so the figure
+stack can be rebuilt from a smaller audited surface in later MathLive phases.
 
 The public style contract is centralized in `figure_plot_style.py` through
 structured `PlotStyleSpec` metadata. That metadata now drives:
@@ -253,11 +248,9 @@ When adding parametric-curve behavior, update the corresponding pieces in:
 3. `figure_api.parametric_plot(...)`
 4. `PlotSnapshot` / `codegen.py` if it must round-trip
 
-When changing legend-driven plot authoring, start in:
-
-1. `figure_legend.py` for toolbar and row-button triggers
-2. `figure_plot_editor.py` for form state, parsing, and apply behavior
-3. `_mathlive_widget.py` if expression-field behavior itself must change
+Phase 0 decontamination intentionally removed the legend-driven plot-authoring
+path. Future rebuild phases should reintroduce a much smaller surface instead
+of reviving the deleted modules.
 
 ---
 
