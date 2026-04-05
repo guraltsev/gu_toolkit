@@ -1,4 +1,28 @@
-const MATHLIVE_MODULE_URL = "https://esm.run/mathlive";
+const MATHLIVE_MODULE_URL = "https://esm.run/mathlive@0.109.0";
+const BOOTSTRAP_KEY = "__gu_toolkit_mathlive_bootstrap_v1";
+
+function getBootstrap() {
+  if (!globalThis[BOOTSTRAP_KEY]) {
+    globalThis[BOOTSTRAP_KEY] = {
+      modulePromise: null,
+      async ensureMathLive() {
+        if (!this.modulePromise) {
+          this.modulePromise = import(MATHLIVE_MODULE_URL).then(async (mathlive) => {
+            const MathfieldElement = mathlive?.MathfieldElement;
+            if (!MathfieldElement) {
+              throw new Error("MathLive module did not expose MathfieldElement.");
+            }
+            MathfieldElement.fontsDirectory = "";
+            await customElements.whenDefined("math-field");
+            return { MathfieldElement };
+          });
+        }
+        return this.modulePromise;
+      },
+    };
+  }
+  return globalThis[BOOTSTRAP_KEY];
+}
 
 function normalizeValue(value) {
   return typeof value === "string" ? value : "";
@@ -19,8 +43,7 @@ function setMathfieldValue(field, value) {
 }
 
 export default async function () {
-  await import(MATHLIVE_MODULE_URL);
-  await customElements.whenDefined("math-field");
+  await getBootstrap().ensureMathLive();
 
   return {
     render({ model, el }) {

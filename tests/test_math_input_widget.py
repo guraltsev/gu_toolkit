@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 from traitlets import TraitError
 
 import gu_toolkit
 from gu_toolkit import MathInput
+from gu_toolkit.math_input.widget import MATH_INPUT_CSS_PATH, MATH_INPUT_ESM_PATH
 
 
 def test_math_input_is_reexported_from_top_level() -> None:
@@ -39,5 +38,5 @@ def test_math_input_uses_its_own_state_and_assets() -> None:
 
     assert second.value == "y"
     assert getattr(first.layout, "width", None) == "100%"
-    assert Path(MathInput._esm).is_file()
-    assert Path(MathInput._css).is_file()
+    assert MATH_INPUT_ESM_PATH.is_file()
+    assert MATH_INPUT_CSS_PATH.is_file()

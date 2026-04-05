@@ -1,7 +1,7 @@
-"""Minimal audited math-input widget for the MathLive rebuild.
+"""Minimal audited generic math-input widget for the MathLive rebuild.
 
-Phase 1 deliberately keeps the math-input surface tiny and explicit. The public
-Python contract is a single ``value`` trait containing the raw LaTeX string
+``MathInput`` remains the small generic baseline in Phase 2. Its public Python
+contract is still a single ``value`` trait containing the raw LaTeX string
 owned by the widget model. Frontend rendering and synchronization are delegated
 to a small AnyWidget bridge that imports MathLive as an implementation detail,
 not as part of the public API.
@@ -45,6 +45,8 @@ import traitlets
 from .._widget_stubs import anywidget, widgets
 
 MODULE_DIR = Path(__file__).resolve().parent
+MATH_INPUT_ESM_PATH = MODULE_DIR / "_math_input_widget.js"
+MATH_INPUT_CSS_PATH = MODULE_DIR / "_math_input_widget.css"
 
 
 class MathInput(anywidget.AnyWidget):
@@ -60,7 +62,7 @@ class MathInput(anywidget.AnyWidget):
     ----------
     value : str, optional
         Raw LaTeX string used to initialize the field. This is the only
-        synchronized Phase 1 widget value and is mirrored directly to and from
+        synchronized generic widget value and is mirrored directly to and from
         the frontend math field. Defaults to ``""``.
 
     **kwargs : Any, optional
@@ -82,7 +84,7 @@ class MathInput(anywidget.AnyWidget):
 
     Architecture note
     -----------------
-    ``MathInput`` is the complete public Phase 1 math-input surface. It owns a
+    ``MathInput`` remains the complete generic math-input surface in Phase 2. It owns a
     single explicit contract—``value`` as a raw LaTeX string—and keeps the
     MathLive dependency behind the private frontend bridge inside
     ``gu_toolkit.math_input``. Later phases should add new behavior in small,
@@ -111,8 +113,8 @@ class MathInput(anywidget.AnyWidget):
     - Contract test: ``tests/test_math_input_widget.py``.
     """
 
-    _esm = MODULE_DIR / "_math_input_widget.js"
-    _css = MODULE_DIR / "_math_input_widget.css"
+    _esm = MATH_INPUT_ESM_PATH
+    _css = MATH_INPUT_CSS_PATH
 
     value = traitlets.Unicode("").tag(sync=True)
 
