@@ -1,5 +1,6 @@
 const MATHLIVE_MODULE_URL = "https://esm.run/mathlive@0.109.0";
-const BOOTSTRAP_KEY = "__gu_toolkit_mathlive_bootstrap_v1";
+const MATHLIVE_FONTS_URL = "https://cdn.jsdelivr.net/npm/mathlive@0.109.0/fonts";
+const BOOTSTRAP_KEY = "__gu_toolkit_mathlive_bootstrap_v2";
 
 function getBootstrap() {
   if (!globalThis[BOOTSTRAP_KEY]) {
@@ -12,7 +13,11 @@ function getBootstrap() {
             if (!MathfieldElement) {
               throw new Error("MathLive module did not expose MathfieldElement.");
             }
-            MathfieldElement.fontsDirectory = "";
+
+            MathfieldElement.fontsDirectory = MATHLIVE_FONTS_URL;
+            MathfieldElement.soundsDirectory = null;
+            MathfieldElement.plonkSound = null;
+
             await customElements.whenDefined("math-field");
             return { MathfieldElement };
           });
@@ -43,14 +48,14 @@ function setMathfieldValue(field, value) {
 }
 
 export default async function () {
-  await getBootstrap().ensureMathLive();
+  const { MathfieldElement } = await getBootstrap().ensureMathLive();
 
   return {
     render({ model, el }) {
       el.classList.add("gu-math-input-root");
       el.replaceChildren();
 
-      const field = document.createElement("math-field");
+      const field = new MathfieldElement();
       field.setAttribute("aria-label", "Math input");
       setMathfieldValue(field, model.get("value"));
 

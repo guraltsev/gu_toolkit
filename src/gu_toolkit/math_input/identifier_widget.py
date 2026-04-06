@@ -11,6 +11,10 @@ The public contract in this phase is:
 - ``context_names`` uses the exact same representation as ``value``.
 - ``context_policy`` is explicit and never inferred from the presence or
   absence of context names.
+- The Python ``value`` trait changes only when the frontend content is
+  accepted under the published rule.
+- Invalid frontend drafts may remain visible for correction, but they do not
+  overwrite the last accepted Python value.
 
 This widget deliberately does **not** reuse the broader identifier semantics in
 ``gu_toolkit.identifiers``. The goal here is a visibly constrained notebook
@@ -28,8 +32,8 @@ Create an identifier field that only accepts names from a provided context::
     )
     field
 
-Create an identifier field that suggests context names but also allows a new
-plain identifier::
+Create an identifier field that suggests context names through its menu but
+also allows a new plain identifier::
 
     field = IdentifierInput(
         context_names=["mass", "time", "speed"],
@@ -118,19 +122,21 @@ class IdentifierInput(MathInput):
     Parameters
     ----------
     value : str, optional
-        Plain identifier string synchronized between Python and the frontend.
-        The empty string is allowed. Any non-empty value must match
-        ``[A-Za-z][A-Za-z0-9]*``. Defaults to ``""``.
+        Plain identifier string synchronized between Python and the frontend
+        when the current frontend content is accepted. The empty string is
+        allowed. Any non-empty value must match ``[A-Za-z][A-Za-z0-9]*``.
+        Defaults to ``""``.
 
     context_names : Iterable[str], optional
-        Allowed or suggested identifier names, depending on ``context_policy``.
+        Allowed or menu-suggested identifier names, depending on ``context_policy``.
         Every entry must use the same plain-string identifier representation as
         ``value``. Defaults to ``()``.
 
     context_policy : str, optional
         Explicit identifier policy. Use ``"context_only"`` to accept only
         names listed in ``context_names``. Use ``"context_or_new"`` to suggest
-        names from ``context_names`` while still allowing a new plain
+        names from ``context_names`` through the identifier menu while still
+        allowing a new plain
         identifier that matches the published contract. Defaults to
         ``"context_only"``.
 
@@ -147,8 +153,8 @@ class IdentifierInput(MathInput):
 
     Optional arguments
     ------------------
-    - ``value=""``: Plain identifier string mirrored between Python and the frontend.
-    - ``context_names=()``: Context identifiers displayed as explicit suggestions.
+    - ``value=""``: Plain identifier string mirrored between Python and the frontend when accepted.
+    - ``context_names=()``: Context identifiers exposed through the identifier menu.
     - ``context_policy="context_only"``: Explicit identifier admission policy.
     - ``**kwargs``: Forwarded widget keywords. When omitted, the widget uses a
       simple full-width layout.
@@ -158,9 +164,12 @@ class IdentifierInput(MathInput):
     ``IdentifierInput`` is a separate subclass rather than a role flag layered
     onto ``MathInput``. It reuses the generic MathLive bridge only as a basic
     editable field and then adds a very small, explicit Phase 2 contract:
-    plain-name validation, context suggestions, and a more restricted menu and
-    shortcut surface. It intentionally does **not** adopt the broader
-    identifier semantics from ``gu_toolkit.identifiers``.
+    plain-name validation, explicit context policy, menu-based context
+    suggestions, and a more restricted menu surface. Invalid frontend drafts
+    may remain visible so
+    the user can correct them manually, but only accepted values propagate back
+    to the synchronized Python ``value`` trait. It intentionally does **not**
+    adopt the broader identifier semantics from ``gu_toolkit.identifiers``.
 
     Examples
     --------

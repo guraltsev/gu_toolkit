@@ -14,6 +14,9 @@ The design goal is auditability rather than completeness:
 - no role switching,
 - no semantic post-processing.
 
+The frontend bootstrap now also configures explicit MathLive asset paths instead
+of relying on broken implicit CDN-relative font or sound URLs.
+
 Examples
 --------
 Create and display a field in a notebook::
@@ -87,7 +90,9 @@ class MathInput(anywidget.AnyWidget):
     ``MathInput`` remains the complete generic math-input surface in Phase 2. It owns a
     single explicit contract—``value`` as a raw LaTeX string—and keeps the
     MathLive dependency behind the private frontend bridge inside
-    ``gu_toolkit.math_input``. Later phases should add new behavior in small,
+    ``gu_toolkit.math_input``. The frontend bridge also sets explicit MathLive
+    font and sound configuration so notebook rendering does not depend on
+    broken implicit asset paths. Later phases should add new behavior in small,
     visibly verifiable layers instead of mutating this class into a policy-heavy
     abstraction.
 

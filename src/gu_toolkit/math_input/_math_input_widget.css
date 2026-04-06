@@ -3,6 +3,10 @@
   width: 100%;
 }
 
+.gu-math-input-root math-field:not(:defined) {
+  display: none;
+}
+
 .gu-math-input-root math-field {
   box-sizing: border-box;
   display: block;
