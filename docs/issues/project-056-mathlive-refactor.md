@@ -120,138 +120,7 @@ Each visible demo in the notebook must answer:
 * What would indicate the implementation is still wrong?
 
 
-## Phase 1: Minimal raw Math input bridge based on MathLive
-
-### Goal
-
-Reintroduce MathLive and stabilize the basic generic MathLive field contract.
-
-
-### Why
-
-Prove that a basic MathLive field can render and synchronize a value between frontend and backend before adding any semantic behavior.
-The foundation must be trustworthy before adding specialized behavior.
-
-
-### Requirements
-Setup a subfolder in src related to math input functionality. It will be done through mathlive but this should NOT be exposed. Mathlive is the backend.
-Define a class that represents a math input widget (generic). 
-
-
-Keep the implementation small. Focus only on:
-
-* initialization from Python
-* display
-* user edits flowing back to Python
-* ability to set value from Python. 
-* clear serialization/value contract
-* predictable behavior on rerun or reset
-
-* minimal API surface
-* no special menu logic
-* no context-aware behavior
-* no custom semantic rules
-* no dynamic role switching
-
-Documentation must be comprehensive and up to quality of the rest of the toolkit.
-
-
-
-### Notebook must show
-
-* the field renders
-* initial value set from Python
-* the user can edit it
-* the backend can read the new value
-* a visible confirmation of round-trip behavior
-
-### Not implemented yet
-
-No restrictions, no role-aware behavior, no context suggestions, no unknown-name policy.
-
-Stop and return the repo.
-
-
-### Not implemented yet
-
-Still no identifier-specific behavior and no special menu restrictions.
-
-Stop and return the repo.
-
----
-
-## Phase 4: Minimal identifier field as a separate, simple feature
-
-### Goal
-
-Introduce identifier-specific behavior in the simplest possible way.
-
-### Why
-
-This is the first phase where role-aware UI behavior is allowed, but it must be visibly verifiable and kept small.
-
-### Requirements
-
-* prefer a separate simple identifier implementation over clever role mutation
-* explicitly restrict irrelevant generic MathLive actions
-* do not include broad semantic intelligence
-* do not guess policies implicitly
-
-At this stage, the identifier field should visibly differ from a generic expression field in a way the user can check directly.
-
-### Notebook must show
-
-* a generic expression field
-* an identifier field
-* instructions to open each menu and compare them
-* a plain-language explanation of why the identifier field is more constrained
-
-### Notebook must explicitly tell the user to verify
-
-* which menu items should not appear in the identifier field
-* why those items are inappropriate there
-
-### Not implemented yet
-
-No complex context-driven suggestions unless they are the sole feature of the next phase.
-
-Stop and return the repo.
-
----
-
-## Phase 5: Explicit context-aware identifier behavior
-
-### Goal
-
-Add one simple, explicit context policy for identifiers.
-
-### Why
-
-Only after the identifier field visibly behaves differently should context awareness be added.
-
-### Requirements
-
-Pick one small, explicit policy, for example:
-
-* identifiers may come only from a provided context, or
-* provided context names are suggested, with a clearly stated rule for unknown names
-
-Keep it simple and transparent. No hidden heuristics. No clever inference. No bundled extras.
-
-### Notebook must show
-
-* the provided context
-* what names should be accepted or suggested
-* what should happen for unknown names
-* why that rule exists
-
-### Notebook must instruct the user to try specific examples and compare the observed behavior to the stated rule.
-
-Stop and return the repo.
-
----
-
-## Phase 6 and beyond: Only one advanced feature per phase
+## RULE: Only one advanced feature per phase
 
 Do not add advanced behavior unless the user explicitly asks.
 
@@ -262,28 +131,7 @@ Any later phase must:
 * avoid bundling unrelated cleanup or abstractions
 * explain why the new capability is worth the added complexity
 
-## 8) Rules for tests during the rebuild
-
-During Phase 0, remove MathLive-related tests along with the old implementation.
-
-During rebuild phases, only add tests that directly support the current minimal implementation.
-
-Allowed tests:
-
-* small contract tests
-* direct value synchronization tests
-* explicit behavior tests tied to the current phase
-
-Not allowed:
-
-* tests about issue wording
-* tests about notebook honesty wording
-* tests whose main function is to support a narrative
-* broad speculative tests for features not implemented yet
-
-Tests are secondary evidence. The notebook is primary.
-
-## 9) Forbidden behaviors
+## Forbidden behaviors
 
 Do not do any of the following:
 
@@ -316,7 +164,3 @@ Do not say “fully fixed,” “resolved,” or “complete.”
 Say: **ready for user verification**.
 
 ---
-
-A good final operating principle is this:
-
-**Delete first. Rebuild small. Prove only one visible thing at a time. Let the user verify behavior, not the narrative.**
