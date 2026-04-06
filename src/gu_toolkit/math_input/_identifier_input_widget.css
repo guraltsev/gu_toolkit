@@ -3,6 +3,10 @@
   width: 100%;
 }
 
+.gu-identifier-input-root math-field:not(:defined) {
+  display: none;
+}
+
 .gu-identifier-input-root math-field {
   box-sizing: border-box;
   display: block;
@@ -10,7 +14,7 @@
   width: 100%;
 }
 
-.gu-identifier-input-root math-field::part(virtual-keyboard-toggle) {
+.gu-identifier-input-root.hide-keyboard-toggle math-field::part(virtual-keyboard-toggle) {
   display: none;
 }
 
