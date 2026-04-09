@@ -1,7 +1,5 @@
 # Project 057: Figure shell presentation/runtime refactor
 
-## Status
-Proposed
 
 ## Summary
 Refactor the figure shell so `Figure`, parameter management, legend handling, and tab/navigation handling each have a **logic half** and a **presentation half**, while preserving the existing stable per-view plotting runtime.

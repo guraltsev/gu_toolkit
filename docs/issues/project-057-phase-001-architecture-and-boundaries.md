@@ -120,3 +120,253 @@ Record what kinds of tests later phases must add or update:
 - [ ] Later phases can point to concrete internal contracts instead of inventing new boundaries ad hoc.
 - [ ] There is an explicit migration decision for `FigureLayout`, `ParameterManager`, `LegendPanelManager`, and tabs/navigation.
 - [ ] The project can proceed without ambiguity about where notebook-specific code should live and where HTML-specific mounting should live.
+
+# **Project 057 / Phase 001 — Addendum (Post-Failure Correction)**
+
+## Status
+
+Mandatory corrective addendum for next implementation attempt
+
+---
+
+## 1. Summary of failure
+
+The previous implementation failed because it introduced an **abstract shell architecture** instead of defining a **concrete mounting model**.
+
+Specifically, it:
+
+* introduced conceptual entities (e.g. “placement”, “regions”, “section protocols”) that do not correspond to real runtime behavior
+* attempted to design a generalized layout system prematurely
+* encoded architecture planning into Python classes instead of implementation seams
+* drifted away from how the system actually renders (widgets + DOM)
+
+This resulted in:
+
+* unnecessary indirection
+* unclear execution model
+* no direct path to HTML mounting
+* no improvement in real flexibility
+
+The failure is **not about incorrect details**.
+It is about choosing the wrong level of abstraction.
+
+---
+
+## 2. Core correction
+
+The shell must **not** be described by a Python model.
+
+The shell must be:
+
+> **authored as concrete DOM structure, with explicit mount points**
+
+There is **no layout DSL**, no placement system, and no abstract region model.
+
+---
+
+## 3. Required design direction
+
+### 3.1 One shell = one root
+
+Each figure owns a single root:
+
+```html
+<gufigure-shell>
+  ...
+</gufigure-shell>
+```
+
+All mounting is **strictly scoped to this root**.
+
+No global queries. No global ids.
+
+---
+
+### 3.2 Mount points are explicit elements
+
+Use semantic custom elements:
+
+```html
+<gufigure-title></gufigure-title>
+<gufigure-viewselector></gufigure-viewselector>
+<gufigure-plot name="main"></gufigure-plot>
+<gufigure-legend></gufigure-legend>
+<gufigure-parameters></gufigure-parameters>
+<gufigure-info></gufigure-info>
+<gufigure-output></gufigure-output>
+```
+
+Rules:
+
+* element name defines *what it is*
+* attributes (e.g. `name`) disambiguate multiples
+* layout is controlled by CSS, not Python
+
+---
+
+### 3.3 No “placement” abstraction
+
+The following must **not exist**:
+
+* placement classes
+* region enums
+* layout DSLs
+* “slot specification” objects
+* any abstraction describing layout instead of executing it
+
+Correct model:
+
+> elements exist → code finds them → widgets mount into them
+
+---
+
+### 3.4 Mounting contract (central rule)
+
+All sections must follow:
+
+* expose a **single stable root widget**
+* do **not** assume parent containers
+* do **not** mutate layout trees directly
+
+Mounting is performed by the shell host:
+
+```
+find element → attach widget view → done
+```
+
+Managers must **not**:
+
+* receive layout boxes
+* control parent structure
+* know where they are placed
+
+---
+
+### 3.5 Plot mounting and future-proofing
+
+Plot mounting must target:
+
+```html
+<gufigure-plot name="main"></gufigure-plot>
+```
+
+Important constraints:
+
+* current system still uses **one active View**
+* do not change View behavior
+* do not implement multi-plot yet
+
+But:
+
+* mounting must assume **multiple plot elements may exist later**
+* code must not hardcode “there is only one plot container”
+
+---
+
+### 3.6 Resizing model (non-negotiable)
+
+Each `<gufigure-plot>` element is the **source of truth for size**.
+
+Rules:
+
+* attach a `ResizeObserver` to each plot element
+* on resize → trigger PlotlyPane reflow
+* no Python-side width/height orchestration
+* no layout-driven pixel pushing
+
+Additionally trigger reflow on:
+
+* visibility changes
+* shell changes
+* (future) tab switches
+
+---
+
+### 3.7 Jupyter compatibility constraint
+
+Mounting must occur:
+
+> **inside a single widget-owned DOM subtree**
+
+That means:
+
+* shell is rendered by one host widget
+* all `<gufigure-*>` elements live inside it
+* child widgets are mounted inside those elements
+
+Do **not**:
+
+* mount into arbitrary document-level DOM
+* rely on global document structure
+
+---
+
+### 3.8 Display boundary (minimal)
+
+Only one abstraction is allowed:
+
+* a minimal mount surface for:
+
+  * notebook display
+  * future HTML bootstrap
+
+This must stay small and concrete:
+
+* no framework
+* no hierarchy of display classes
+
+---
+
+## 4. Explicit non-goals for next attempt
+
+The following are forbidden in Phase 001:
+
+* ❌ layout configuration systems
+* ❌ placement / region abstractions
+* ❌ presenter/controller protocol hierarchies
+* ❌ tab system redesign
+* ❌ view system changes
+* ❌ multi-plot implementation
+* ❌ HTML runtime implementation
+
+---
+
+## 5. Required minimal outcome
+
+The next implementation must achieve only:
+
+1. A shell host that renders `<gufigure-*>` structure
+2. Managers expose stable root widgets
+3. Mounting happens via DOM lookup within shell root
+4. Plot resizing driven by element size observation
+5. Figure display routed through a mount surface (not hardcoded display)
+
+Nothing more.
+
+---
+
+## 6. Sanity check (must pass)
+
+Before considering Phase 001 complete:
+
+* Can two figures render on the same page without conflict?
+* Can the legend be moved in HTML without touching Python?
+* Can a second `<gufigure-plot>` be added without changing core logic?
+* Does Plotly resize correctly when the plot container changes size?
+* Does any manager still assume a specific parent container?
+
+If any answer is “no”, the implementation is incorrect.
+
+---
+
+## 7. Guiding principle
+
+> **Prefer concrete DOM over abstract architecture.**
+
+If a concept cannot be directly mapped to:
+
+* an element,
+* a widget,
+* or a mount operation,
+
+it does not belong in this phase.
