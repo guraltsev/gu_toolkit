@@ -771,17 +771,24 @@ class LegendPanelManager:
 
     def __init__(
         self,
-        layout_box: widgets.Box,
+        layout_box: widgets.Box | None = None,
         *,
         modal_host: widgets.Box | None = None,
         root_widget: widgets.Box | None = None,
         header_toolbar: widgets.Box | None = None,
         enable_plot_editor: bool = False,
+        layout_manager: Any | None = None,
     ) -> None:
         """Initialize a legend manager bound to the provided layout box."""
+        self._layout_manager = layout_manager
         self._layout_box = layout_box
         self._modal_host = modal_host
+        self._root_widget = root_widget
         self._header_toolbar = header_toolbar
+        if self._layout_manager is None and self._layout_box is None:
+            raise TypeError(
+                "LegendPanelManager requires layout_manager or layout_box."
+            )
         self._enable_plot_editor = bool(enable_plot_editor)
         self._plot_editor_handler: Callable[[str | None], None] | None = None
         self._rows: dict[str, LegendRowModel] = {}
@@ -798,14 +805,11 @@ class LegendPanelManager:
 
         self._root_css_class = f"gu-figure-context-root-{uuid.uuid4().hex[:8]}"
         self._dialog_modal_class = f"{self._root_css_class}-legend-style-modal"
-        add_layout_class = getattr(self._layout_box, "add_class", None)
-        if callable(add_layout_class):
-            add_layout_class("gu-figure-legend-area")
-        if root_widget is not None:
-            add_class = getattr(root_widget, "add_class", None)
-            if callable(add_class):
-                add_class(self._root_css_class)
-                add_class("gu-figure-context-governed")
+        self._add_legend_body_class("gu-figure-legend-area")
+        self._add_root_classes(
+            self._root_css_class,
+            "gu-figure-context-governed",
+        )
         self._context_bridge = _LegendInteractionBridge(
             root_class=self._root_css_class,
             modal_class=self._dialog_modal_class,
@@ -966,8 +970,7 @@ class LegendPanelManager:
             modal_class=self._dialog_modal_class,
         )
 
-        attach_host_children(
-            self._modal_host,
+        self._attach_overlay_children(
             self._style_widget,
             self._dialog_modal,
             self._context_bridge,
@@ -989,8 +992,8 @@ class LegendPanelManager:
                 extra_classes=("gu-legend-add-plot-button", "gu-legend-inline-button"),
             )
             self._plot_add_button.on_click(lambda _button: self._request_plot_edit(None))
-            if self._header_toolbar is not None:
-                self._header_toolbar.children = (self._plot_add_button,)
+            if self._has_header_toolbar_host():
+                self._set_header_toolbar_children((self._plot_add_button,))
             else:
                 self._plot_toolbar = widgets.HBox(
                     [self._plot_add_button],
@@ -1008,6 +1011,62 @@ class LegendPanelManager:
                 layout=widgets.Layout(margin="0", width="100%"),
             )
             self._empty_state.add_class("gu-legend-empty-state")
+
+    def _add_legend_body_class(self, class_name: str) -> None:
+        if self._layout_manager is not None:
+            self._layout_manager._add_legend_body_class(class_name)
+            return
+        add_class = getattr(self._layout_box, "add_class", None)
+        if callable(add_class):
+            add_class(class_name)
+
+    def _add_root_classes(self, *class_names: str) -> None:
+        if self._layout_manager is not None:
+            self._layout_manager._add_root_classes(*class_names)
+            return
+        if self._root_widget is None:
+            return
+        add_class = getattr(self._root_widget, "add_class", None)
+        if not callable(add_class):
+            return
+        for class_name in class_names:
+            add_class(class_name)
+
+    def _attach_overlay_children(self, *children: widgets.Widget) -> None:
+        if self._layout_manager is not None:
+            self._layout_manager._attach_overlay_children(*children)
+            return
+        attach_host_children(self._modal_host, *children)
+
+    def _has_header_toolbar_host(self) -> bool:
+        if self._layout_manager is not None:
+            return bool(self._layout_manager._legend_has_toolbar_host)
+        return self._header_toolbar is not None
+
+    def _set_header_toolbar_children(self, children: tuple[widgets.Widget, ...]) -> None:
+        if self._layout_manager is not None:
+            self._layout_manager._set_legend_toolbar_children(children)
+            return
+        if self._header_toolbar is None:
+            return
+        desired = tuple(children)
+        if self._header_toolbar.children != desired:
+            self._header_toolbar.children = desired
+
+    def _body_children(self) -> tuple[widgets.Widget, ...]:
+        if self._layout_manager is not None:
+            return tuple(self._layout_manager._legend_body_children)
+        assert self._layout_box is not None
+        return tuple(self._layout_box.children)
+
+    def _set_body_children(self, children: tuple[widgets.Widget, ...]) -> None:
+        if self._layout_manager is not None:
+            self._layout_manager._set_legend_body_children(children)
+            return
+        assert self._layout_box is not None
+        desired = tuple(children)
+        if self._layout_box.children != desired:
+            self._layout_box.children = desired
 
     @property
     def has_legend(self) -> bool:
@@ -1580,8 +1639,8 @@ class LegendPanelManager:
                 desired_widgets.append(self._empty_state)
         desired_widgets.extend(visible_rows)
         desired_children = tuple(desired_widgets)
-        if self._layout_box.children != desired_children:
-            self._layout_box.children = desired_children
+        if self._body_children() != desired_children:
+            self._set_body_children(desired_children)
         if not self._settings_open:
             self._sync_dialog_from_plot_state()
 

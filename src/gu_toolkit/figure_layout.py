@@ -1,8 +1,9 @@
-"""Figure widget layout primitives.
+"""Figure widget layout manager.
 
-`FigureLayout` owns widget composition only. It builds the notebook widget tree,
-manages the view selector plus persistent per-view page hosts, and exposes the
-sidebar and output regions used by :class:`gu_toolkit.Figure.Figure`.
+`FigureLayout` is the notebook layout manager for a figure. It builds the
+notebook widget tree, owns the concrete section widgets used by the current
+shell, manages view-selector state, and provides the notebook display/mount
+helper used by :class:`gu_toolkit.Figure.Figure`.
 
 It does not own plot data, render policy, or pane reflow callbacks.
 """
@@ -18,6 +19,7 @@ from .ui_system import build_layout, build_section_panel, load_ui_css, shared_st
 from IPython.display import clear_output, display
 
 from .layout_logging import layout_value_snapshot
+from .widget_chrome import attach_host_children
 
 
 class OneShotOutput(widgets.Output):
@@ -255,6 +257,8 @@ class FigureLayout:
         self._suspend_view_selector_events = False
         self._reflow_callback: Callable[[str, str], Any] | None = None
         self._content_layout_mode = "wrapped"
+        self._view_selector_items: tuple[tuple[str, str], ...] = ()
+        self._view_selection_observers: list[Callable[[str], None]] = []
 
         # 1. Title bar
         self.title_html = widgets.HTMLMath(
@@ -284,6 +288,7 @@ class FigureLayout:
             value=None,
             layout=build_layout(display="none", width="100%", margin="0 0 6px 0"),
         )
+        self.view_selector.observe(self._on_view_selector_change, names="value")
         self.view_stage = widgets.Box(
             children=(),
             layout=build_layout(
@@ -418,6 +423,16 @@ class FigureLayout:
         )
         self.root_widget.add_class("gu-figure-root")
         self.root_widget.add_class("gu-theme-root")
+        self._section_widgets = {
+            "shell": self.root_widget,
+            "title": self._titlebar,
+            "navigation": self.view_selector,
+            "stage": self.view_stage,
+            "legend": self.legend_panel.panel,
+            "parameters": self.params_panel.panel,
+            "info": self.info_panel.panel,
+            "output": self.print_panel,
+        }
 
         self.full_width_checkbox.observe(self._on_full_width_change, names="value")
         self._apply_content_layout_mode(is_full=self.full_width_checkbox.value)
@@ -535,6 +550,70 @@ class FigureLayout:
         """
         self._reflow_callback = callback
 
+    def _materialize_display_output(self) -> OneShotOutput:
+        """Wrap the current shell root in a one-shot notebook output widget."""
+
+        out = OneShotOutput()
+        with out:
+            display(self.root_widget)
+        return out
+
+    def _mount_parameter_control(self, control: Any) -> None:
+        """Attach a parameter control to the notebook parameter section."""
+
+        attach_fn = getattr(control, "set_modal_host", None)
+        if callable(attach_fn):
+            attach_fn(self.root_widget)
+        if control not in self.params_box.children:
+            self.params_box.children = (*self.params_box.children, control)
+
+    @property
+    def _legend_has_toolbar_host(self) -> bool:
+        """Return whether the notebook legend section exposes a toolbar host."""
+
+        return self.legend_header_toolbar is not None
+
+    @property
+    def _legend_body_children(self) -> tuple[widgets.Widget, ...]:
+        """Return the widgets currently mounted in the notebook legend body."""
+
+        return tuple(self.legend_box.children)
+
+    def _add_legend_body_class(self, class_name: str) -> None:
+        """Add a CSS class to the legend body when supported by the widget."""
+
+        add_class = getattr(self.legend_box, "add_class", None)
+        if callable(add_class):
+            add_class(class_name)
+
+    def _add_root_classes(self, *class_names: str) -> None:
+        """Add CSS classes to the shell root widget."""
+
+        add_class = getattr(self.root_widget, "add_class", None)
+        if not callable(add_class):
+            return
+        for class_name in class_names:
+            add_class(class_name)
+
+    def _attach_overlay_children(self, *children: widgets.Widget) -> None:
+        """Attach modal and bridge widgets to the layout root."""
+
+        attach_host_children(self.root_widget, *children)
+
+    def _set_legend_toolbar_children(self, children: Sequence[widgets.Widget]) -> None:
+        """Replace the notebook legend toolbar widgets."""
+
+        desired = tuple(children)
+        if self.legend_header_toolbar.children != desired:
+            self.legend_header_toolbar.children = desired
+
+    def _set_legend_body_children(self, children: Sequence[widgets.Widget]) -> None:
+        """Replace the notebook legend body widgets."""
+
+        desired = tuple(children)
+        if self.legend_box.children != desired:
+            self.legend_box.children = desired
+
     @property
     def output_widget(self) -> OneShotOutput:
         """Work with output widget on ``FigureLayout``.
@@ -581,10 +660,7 @@ class FigureLayout:
         - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
         """
 
-        out = OneShotOutput()
-        with out:
-            display(self.root_widget)
-        return out
+        return self._materialize_display_output()
 
     def layout_snapshot(self) -> dict[str, Any]:
         """Return a structural snapshot of the figure layout widget tree.
@@ -1210,7 +1286,7 @@ class FigureLayout:
             raise KeyError(f"Unknown view page: {key}")
         self._active_view_id = key
         self._apply_active_page_visibility()
-        self._refresh_view_selector()
+        self._sync_view_selector_widget(selected_value=key)
 
     def set_view_title(self, view_id: str, title: str) -> None:
         """Update the selector title for ``view_id``.
@@ -1312,15 +1388,7 @@ class FigureLayout:
         - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
         """
 
-        def _on_selection(change: dict[str, Any]) -> None:
-            if self._suspend_view_selector_events:
-                return
-            new_value = change.get("new")
-            if new_value is None:
-                return
-            callback(str(new_value))
-
-        self.view_selector.observe(_on_selection, names="value")
+        self._view_selection_observers.append(callback)
 
     def observe_full_width_change(self, callback: Callable[[bool], None]) -> None:
         """Observe full-width layout toggle changes.
@@ -1763,6 +1831,42 @@ class FigureLayout:
     # Internal helpers.
     # ------------------------------------------------------------------
 
+    def _on_view_selector_change(self, change: dict[str, Any]) -> None:
+        if self._suspend_view_selector_events:
+            return
+        new_value = change.get("new")
+        if new_value is None:
+            return
+        key = str(new_value)
+        valid_values = {value for _, value in self._view_selector_items}
+        if key not in valid_values or key == self._active_view_id:
+            return
+        self._active_view_id = key
+        self._apply_active_page_visibility()
+        for callback in tuple(self._view_selection_observers):
+            callback(key)
+
+    def _sync_view_selector_widget(self, *, selected_value: str | None) -> None:
+        valid_values = {value for _, value in self._view_selector_items}
+        desired = selected_value if selected_value in valid_values else None
+        if desired is None and self._active_view_id in valid_values:
+            desired = self._active_view_id
+        if desired is None and self._view_selector_items:
+            desired = self._view_selector_items[0][1]
+        self._suspend_view_selector_events = True
+        try:
+            self.view_selector.options = self._view_selector_items
+            self.view_selector.layout.display = (
+                "flex" if len(self._view_selector_items) > 1 else "none"
+            )
+            if self.view_selector.value != desired:
+                self.view_selector.value = desired
+            elif desired is None and self.view_selector.value is not None:
+                self.view_selector.value = None
+        finally:
+            self._suspend_view_selector_events = False
+        self._active_view_id = desired
+
     def _rebuild_view_stage(self) -> None:
         self.view_stage.children = tuple(
             self._view_pages[view_id].host_box
@@ -1777,30 +1881,22 @@ class FigureLayout:
             self._emit_layout_event("view_page_visibility_changed", phase="completed", view_id=view_id, display_state=display, is_active=(view_id == self._active_view_id))
 
     def _refresh_view_selector(self) -> None:
-        options = [
+        options = tuple(
             (self._view_pages[view_id].title, view_id)
             for view_id in self._ordered_view_ids
             if view_id in self._view_pages
-        ]
-        show_selector = len(options) > 1
-        desired_value = None
-        if self._active_view_id is not None and any(val == self._active_view_id for _, val in options):
-            desired_value = self._active_view_id
-        elif options:
-            desired_value = options[0][1]
-            self._active_view_id = desired_value
-
-        self._suspend_view_selector_events = True
-        try:
-            self.view_selector.options = tuple(options)
-            self.view_selector.layout.display = "flex" if show_selector else "none"
-            if desired_value is None:
-                self.view_selector.value = None
-            elif self.view_selector.value != desired_value:
-                self.view_selector.value = desired_value
-        finally:
-            self._suspend_view_selector_events = False
-        self._emit_layout_event("view_selector_refreshed", phase="completed", options=[val for _, val in options], selector_display=self.view_selector.layout.display, active_view_id=self._active_view_id)
+        )
+        self._view_selector_items = tuple(
+            (str(label), str(value)) for label, value in options
+        )
+        self._sync_view_selector_widget(selected_value=self._active_view_id)
+        self._emit_layout_event(
+            "view_selector_refreshed",
+            phase="completed",
+            options=[value for _, value in self._view_selector_items],
+            selector_display=self.view_selector.layout.display,
+            active_view_id=self._active_view_id,
+        )
 
     def _apply_content_layout_mode(self, *, is_full: bool) -> None:
         layout = self.content_wrapper.layout

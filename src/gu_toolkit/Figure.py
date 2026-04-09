@@ -422,17 +422,13 @@ class Figure:
         # Note: we pass a callback for rendering so params can trigger updates
         self._parameter_manager = ParameterManager(
             self.render,
-            self._layout.params_box,
-            modal_host=self._layout.root_widget,
+            layout_manager=self._layout,
         )
         self._info = InfoPanelManager(self._layout.info_box)
         self._info.bind_figure(self)
         self._info.bind_layout_change_callback(self._on_info_panel_structure_changed)
         self._legend = LegendPanelManager(
-            self._layout.legend_box,
-            modal_host=self._layout.root_widget,
-            root_widget=self._layout.root_widget,
-            header_toolbar=self._layout.legend_header_toolbar,
+            layout_manager=self._layout,
             enable_plot_editor=False,
         )
         # Phase 0 decontamination deliberately removes the legend-launched plot
@@ -3826,7 +3822,7 @@ class Figure:
             level=logging.INFO,
             display_method="_ipython_display_",
         )
-        display(self._layout.output_widget)
+        display(self._layout._materialize_display_output())
 
     def show(self) -> None:
         """Display the figure in IPython/Jupyter.
@@ -3880,7 +3876,7 @@ class Figure:
             level=logging.INFO,
             display_method="show",
         )
-        display(self._layout.output_widget)
+        display(self._layout._materialize_display_output())
 
     def __enter__(self) -> Figure:
         """Enter a context where this figure becomes the current target.

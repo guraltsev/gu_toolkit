@@ -198,8 +198,10 @@ class ParameterManager(Mapping[str, ParamRef]):
     def __init__(
         self,
         render_callback: Callable[[str, ParamEvent], None],
-        layout_box: widgets.Box,
+        layout_box: widgets.Box | None = None,
         modal_host: widgets.Box | None = None,
+        *,
+        layout_manager: Any | None = None,
     ) -> None:
         self._refs: dict[str, ParamRef] = {}
         self._symbols: dict[str, Symbol] = {}
@@ -209,11 +211,27 @@ class ParameterManager(Mapping[str, ParamRef]):
         self._hooks: dict[Hashable, Callable[[ParamEvent], Any]] = {}
         self._hook_counter: int = 0
         self._render_callback = render_callback
+        self._layout_manager = layout_manager
         self._layout_box = layout_box
         self._modal_host = modal_host
+        if self._layout_manager is None and self._layout_box is None:
+            raise TypeError(
+                "ParameterManager requires layout_manager or layout_box."
+            )
         self._performance = PerformanceMonitor("ParameterManager")
         self._performance.increment("created")
         self._performance.set_state(parameter_count=0, control_count=0, hook_count=0)
+
+    def _mount_control(self, control: Any) -> None:
+        if self._layout_manager is not None:
+            self._layout_manager._mount_parameter_control(control)
+            return
+        attach_fn = getattr(control, "set_modal_host", None)
+        if callable(attach_fn):
+            attach_fn(self._modal_host)
+        assert self._layout_box is not None
+        if control not in self._layout_box.children:
+            self._layout_box.children = (*self._layout_box.children, control)
 
     def _resolve_name(self, key: ParameterKey) -> str:
         name = parameter_name(key, role="parameter")
@@ -348,7 +366,7 @@ class ParameterManager(Mapping[str, ParamRef]):
                     max=float(config["max"]),
                     step=float(config["step"]),
                 )
-                self._attach_modal_host(new_control)
+                self._mount_control(new_control)
                 refs = new_control.make_refs([symbol])
                 ref = self._lookup_control_ref(refs, name=name, symbol=symbol)
                 ref.observe(self._on_param_change)
@@ -357,10 +375,10 @@ class ParameterManager(Mapping[str, ParamRef]):
                 self._performance.increment("parameters_created")
                 if new_control not in self._controls:
                     self._controls.append(new_control)
-                    self._layout_box.children += (new_control,)
+                    self._performance.increment("controls_presented")
                     self._performance.increment("controls_created")
         elif missing:
-            self._attach_modal_host(control)
+            self._mount_control(control)
             refs = control.make_refs([symbol for _, symbol in missing])
             for name, symbol in missing:
                 ref = self._lookup_control_ref(refs, name=name, symbol=symbol)
@@ -370,7 +388,7 @@ class ParameterManager(Mapping[str, ParamRef]):
                 self._performance.increment("parameters_created")
             if control not in self._controls:
                 self._controls.append(control)
-                self._layout_box.children += (control,)
+                self._performance.increment("controls_presented")
                 self._performance.increment("custom_controls_bound")
 
         for name, symbol in requested:
@@ -395,14 +413,6 @@ class ParameterManager(Mapping[str, ParamRef]):
         if single:
             return self._refs[requested[0][0]]
         return {name: self._refs[name] for name, _ in requested}
-
-    def _attach_modal_host(self, control: Any) -> None:
-        """Attach modal host to controls that support it."""
-        if self._modal_host is None:
-            return
-        attach_fn = getattr(control, "set_modal_host", None)
-        if callable(attach_fn):
-            attach_fn(self._modal_host)
 
     def snapshot(
         self, *, full: bool = False
