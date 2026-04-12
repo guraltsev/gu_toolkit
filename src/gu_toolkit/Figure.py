@@ -294,6 +294,7 @@ class Figure:
         display: bool | None = None,
         x_range: RangeLike | None = None,
         y_range: RangeLike | None = None,
+        shell: str | None = None,
         **_deprecated_kwargs: Any,
     ) -> None:
         # Handle backwards-compatible keyword arguments that were removed from
@@ -413,7 +414,7 @@ class Figure:
         )
 
         # 1. Initialize Layout (View)
-        self._layout = FigureLayout(title=title)
+        self._layout = FigureLayout(title=title, shell=shell)
         if self._layout_debug_enabled:
             self._layout.bind_layout_debug(
                 self._emit_layout_event, figure_id=self._layout_debug_figure_id

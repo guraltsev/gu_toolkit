@@ -134,3 +134,5 @@ def test_figure_layout_records_stable_section_widgets_for_future_mounting() -> N
     assert widgets_by_name["parameters"] is layout.params_panel.panel
     assert widgets_by_name["info"] is layout.info_panel.panel
     assert widgets_by_name["output"] is layout.print_panel
+    assert widgets_by_name["page_tabs"] is layout.shell_page_tabs
+    assert widgets_by_name["page_content"] is layout.shell_page_content

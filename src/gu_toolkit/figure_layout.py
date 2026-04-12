@@ -15,11 +15,20 @@ from dataclasses import dataclass
 from typing import Any
 
 from ._widget_stubs import widgets
-from .ui_system import build_layout, build_section_panel, load_ui_css, shared_style_widget
+from .figure_shell import _FigureShellSpec, _ShellPageSpec, _resolve_figure_shell_spec
+from .ui_system import (
+    build_layout,
+    build_section_panel,
+    build_tab_bar,
+    configure_action_button,
+    load_ui_css,
+    set_tab_button_selected,
+    shared_style_widget,
+)
 from IPython.display import clear_output, display
 
 from .layout_logging import layout_value_snapshot
-from .widget_chrome import attach_host_children
+from .widget_chrome import TabListBridge, attach_host_children
 
 
 class OneShotOutput(widgets.Output):
@@ -192,6 +201,20 @@ class _ViewPage:
     widget: widgets.Widget | None = None
 
 
+@dataclass
+class _ShellPageState:
+    """Internal widget record for one persistent shell page host."""
+
+    spec: _ShellPageSpec
+    host_box: widgets.VBox
+    row_box: widgets.Box
+    center_box: widgets.VBox
+    left_box: widgets.VBox
+    right_box: widgets.VBox
+    bottom_box: widgets.VBox
+    tab_button: widgets.Button | None = None
+
+
 class FigureLayout:
     """Own the widget tree used by a figure instance.
     
@@ -248,7 +271,7 @@ class FigureLayout:
 
     _STYLE_CSS = load_ui_css("figure_layout.css")
 
-    def __init__(self, title: str = "") -> None:
+    def __init__(self, title: str = "", *, shell: str | None = None) -> None:
         self._view_pages: dict[str, _ViewPage] = {}
         self._layout_event_emitter: Callable[..., Any] | None = None
         self._layout_event_base: dict[str, Any] = {}
@@ -259,6 +282,20 @@ class FigureLayout:
         self._content_layout_mode = "wrapped"
         self._view_selector_items: tuple[tuple[str, str], ...] = ()
         self._view_selection_observers: list[Callable[[str], None]] = []
+        self._shell_spec: _FigureShellSpec = _resolve_figure_shell_spec(shell)
+        self._shell_pages: dict[str, _ShellPageState] = {}
+        self._ordered_shell_page_ids: tuple[str, ...] = ()
+        self._visible_shell_page_ids: tuple[str, ...] = ()
+        self._active_shell_page_id: str | None = None
+        self._shell_page_buttons: dict[str, widgets.Button] = {}
+        self._content_rows: tuple[widgets.Box, ...] = ()
+        self._center_boxes: tuple[widgets.VBox, ...] = ()
+        self._sidebar_slots: tuple[widgets.VBox, ...] = ()
+        self._section_visibility: dict[str, bool] = {
+            "legend": False,
+            "parameters": False,
+            "info": False,
+        }
 
         # 1. Title bar
         self.title_html = widgets.HTMLMath(
@@ -269,7 +306,11 @@ class FigureLayout:
             value=False,
             description="Full width plot",
             indent=False,
-            layout=build_layout(width="160px", margin="0px"),
+            layout=build_layout(
+                width="160px",
+                margin="0px",
+                display=("flex" if self._shell_spec.show_full_width_toggle else "none"),
+            ),
         )
         self._titlebar = widgets.HBox(
             [self.title_html, self.full_width_checkbox],
@@ -307,7 +348,7 @@ class FigureLayout:
         self.view_stage.add_class("gu-figure-view-stage")
         self.view_stage.add_class("gu-figure-context-governed")
 
-        # 3. Controls sidebar
+        # 3. Stable section roots.
         self.legend_panel = build_section_panel(
             "Legend",
             variant="toolbar",
@@ -339,28 +380,7 @@ class FigureLayout:
         self.info_header = self.info_panel.title
         self.info_box = self.info_panel.body
 
-        self.sidebar_container = widgets.VBox(
-            [
-                self.legend_panel.panel,
-                self.params_panel.panel,
-                self.info_panel.panel,
-            ],
-            layout=build_layout(
-                margin="0px",
-                padding="0px 0px 0px 10px",
-                flex="0 1 380px",
-                min_width="260px",
-                max_width="400px",
-                display="none",
-                overflow_x="hidden",
-                overflow_y="auto",
-                box_sizing="border-box",
-            ),
-        )
-        self.sidebar_container.add_class("gu-figure-sidebar")
-        self.sidebar_container.add_class("gu-figure-context-governed")
-
-        # 4. Main content wrapper
+        # 4. Stable region hosts used by shell pages.
         self.left_panel = widgets.VBox(
             [self.view_selector, self.view_stage],
             layout=build_layout(
@@ -373,8 +393,11 @@ class FigureLayout:
         )
         self.left_panel.add_class("gu-figure-left-panel")
 
+        self.left_sidebar_container = self._build_sidebar_region(side="left")
+        self.sidebar_container = self._build_sidebar_region(side="right")
+
         self.content_wrapper = widgets.Box(
-            [self.left_panel, self.sidebar_container],
+            [],
             layout=build_layout(
                 display="flex",
                 flex_flow="row wrap",
@@ -387,7 +410,9 @@ class FigureLayout:
         )
         self.content_wrapper.add_class("gu-figure-content")
 
-        # 5. Output area below the figure
+        self.bottom_section_container = self._build_bottom_region()
+
+        # 5. Output area below the figure.
         self.print_output = widgets.Output(
             layout=build_layout(
                 width="100%",
@@ -415,14 +440,42 @@ class FigureLayout:
         )
         self.print_area.add_class("gu-figure-context-governed")
 
+        # 6. Shell-level page tabs + content surface.
+        self.shell_page_bar = build_tab_bar([], extra_classes=("gu-figure-shell-tabs",))
+        self.shell_page_tabs = widgets.VBox(
+            [self.shell_page_bar],
+            layout=build_layout(width="100%", min_width="0", margin="0 0 6px 0", display="none"),
+        )
+        self.shell_page_tabs.add_class("gu-figure-shell-tabs-host")
+        self.shell_page_tabs.add_class("gu-figure-context-governed")
+        self.shell_page_content = widgets.VBox(
+            [],
+            layout=build_layout(width="100%", min_width="0", margin="0px", padding="0px", gap="0px"),
+        )
+        self.shell_page_content.add_class("gu-figure-shell-page-content")
+        self.shell_page_content.add_class("gu-figure-context-governed")
+        self._shell_page_bridge = TabListBridge(
+            tablist_selector=".gu-figure-shell-tabs",
+            panel_selector=".gu-figure-shell-page-panel",
+            selected_index=0,
+        )
+
         self._style_widget = shared_style_widget(self._STYLE_CSS)
 
         self.root_widget = widgets.VBox(
-            [self._style_widget, self._titlebar, self.content_wrapper, self.print_area],
+            [
+                self._style_widget,
+                self._titlebar,
+                self.shell_page_tabs,
+                self.shell_page_content,
+                self.print_area,
+            ],
             layout=build_layout(width="100%", min_width="0", position="relative"),
         )
         self.root_widget.add_class("gu-figure-root")
         self.root_widget.add_class("gu-theme-root")
+        attach_host_children(self.root_widget, self._shell_page_bridge)
+
         self._section_widgets = {
             "shell": self.root_widget,
             "title": self._titlebar,
@@ -432,16 +485,39 @@ class FigureLayout:
             "parameters": self.params_panel.panel,
             "info": self.info_panel.panel,
             "output": self.print_panel,
+            "page_tabs": self.shell_page_tabs,
+            "page_content": self.shell_page_content,
+        }
+        self._shell_slots = {
+            "title": self._titlebar,
+            "navigation": self.view_selector,
+            "stage": self.view_stage,
+            "legend": self.legend_panel.panel,
+            "parameters": self.params_panel.panel,
+            "info": self.info_panel.panel,
+            "output": self.print_panel,
+            "page_tabs": self.shell_page_tabs,
+            "page_content": self.shell_page_content,
+            "left_region": self.left_sidebar_container,
+            "right_region": self.sidebar_container,
+            "bottom_region": self.bottom_section_container,
         }
 
+        self._rebuild_shell_arrangement()
         self.full_width_checkbox.observe(self._on_full_width_change, names="value")
         self._apply_content_layout_mode(is_full=self.full_width_checkbox.value)
+        self.update_sidebar_visibility(False, False, False)
         self._emit_layout_event(
             "layout_initialized",
             phase="completed",
             title=title,
+            shell_preset=self._shell_spec.name,
+            active_shell_page_id=self._active_shell_page_id,
             sidebar_display=self.sidebar_container.layout.display,
-            view_stage=layout_value_snapshot(self.view_stage.layout, ("width", "height", "min_height", "display", "overflow")),
+            view_stage=layout_value_snapshot(
+                self.view_stage.layout,
+                ("width", "height", "min_height", "display", "overflow"),
+            ),
         )
 
     def bind_layout_debug(self, emitter: Callable[..., Any], **base_fields: Any) -> None:
@@ -714,10 +790,26 @@ class FigureLayout:
             }
             for view_id, page in self._view_pages.items()
         }
+        shell_pages = {
+            page_id: {
+                "title": state.spec.title,
+                "display": state.host_box.layout.display,
+                "includes_stage": state.spec.include_stage,
+                "main_sections": list(state.spec.main_sections),
+                "left_sections": list(state.spec.left_sections),
+                "right_sections": list(state.spec.right_sections),
+                "bottom_sections": list(state.spec.bottom_sections),
+            }
+            for page_id, state in self._shell_pages.items()
+        }
         return {
             "title": self.title_html.value,
             "full_width": bool(self.full_width_checkbox.value),
             "content_layout_mode": self._content_layout_mode,
+            "shell_preset": self._shell_spec.name,
+            "active_shell_page_id": self._active_shell_page_id,
+            "visible_shell_page_ids": list(self._visible_shell_page_ids),
+            "shell_tabs_display": self.shell_page_tabs.layout.display,
             "ordered_view_ids": list(self._ordered_view_ids),
             "active_view_id": self._active_view_id,
             "view_selector_display": self.view_selector.layout.display,
@@ -737,11 +829,20 @@ class FigureLayout:
                 self.sidebar_container.layout,
                 ("display", "flex", "min_width", "max_width", "width", "padding", "overflow"),
             ),
+            "left_sidebar": layout_value_snapshot(
+                self.left_sidebar_container.layout,
+                ("display", "flex", "min_width", "max_width", "width", "padding", "overflow"),
+            ),
+            "bottom_region": layout_value_snapshot(
+                self.bottom_section_container.layout,
+                ("display", "width", "margin", "gap"),
+            ),
             "print_area": layout_value_snapshot(
                 self.print_area.layout,
                 ("width", "margin"),
             ),
             "pages": pages,
+            "shell_pages": shell_pages,
         }
 
     def set_title(self, text: str) -> None:
@@ -892,34 +993,16 @@ class FigureLayout:
         - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
         - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
         """
-        old_state = (
-            self.params_header.layout.display,
-            self.params_panel.panel.layout.display,
-            self.info_header.layout.display,
-            self.info_panel.panel.layout.display,
-            self.legend_panel.panel.layout.display,
-            self.sidebar_container.layout.display,
-        )
+        old_state = self._shell_display_state()
 
-        self.params_header.layout.display = "block" if has_params else "none"
-        self.params_panel.panel.layout.display = "flex" if has_params else "none"
+        self._section_visibility = {
+            "legend": bool(has_legend),
+            "parameters": bool(has_params),
+            "info": bool(has_info),
+        }
+        self._apply_shell_visibility()
 
-        self.info_header.layout.display = "block" if has_info else "none"
-        self.info_panel.panel.layout.display = "flex" if has_info else "none"
-
-        self.legend_panel.panel.layout.display = "flex" if has_legend else "none"
-
-        show_sidebar = has_params or has_info or has_legend
-        self.sidebar_container.layout.display = "flex" if show_sidebar else "none"
-
-        new_state = (
-            self.params_header.layout.display,
-            self.params_panel.panel.layout.display,
-            self.info_header.layout.display,
-            self.info_panel.panel.layout.display,
-            self.legend_panel.panel.layout.display,
-            self.sidebar_container.layout.display,
-        )
+        new_state = self._shell_display_state()
         changed = new_state != old_state
         self._emit_layout_event(
             "sidebar_visibility_changed" if changed else "sidebar_visibility_unchanged",
@@ -927,6 +1010,9 @@ class FigureLayout:
             has_params=has_params,
             has_info=has_info,
             has_legend=has_legend,
+            shell_preset=self._shell_spec.name,
+            active_shell_page_id=self._active_shell_page_id,
+            available_shell_pages=list(self._visible_shell_page_ids),
             sidebar_display=self.sidebar_container.layout.display,
         )
         return changed
@@ -1831,6 +1917,415 @@ class FigureLayout:
     # Internal helpers.
     # ------------------------------------------------------------------
 
+    def _build_sidebar_region(self, *, side: str) -> widgets.VBox:
+        padding = "0px 10px 0px 0px" if side == "left" else "0px 0px 0px 10px"
+        box = widgets.VBox(
+            [],
+            layout=build_layout(
+                margin="0px",
+                padding=padding,
+                flex="0 1 380px",
+                min_width="260px",
+                max_width="400px",
+                display="none",
+                overflow_x="hidden",
+                overflow_y="auto",
+                box_sizing="border-box",
+            ),
+        )
+        box.add_class("gu-figure-sidebar")
+        box.add_class(f"gu-figure-sidebar-{side}")
+        box.add_class("gu-figure-context-governed")
+        return box
+
+    def _build_bottom_region(self) -> widgets.VBox:
+        box = widgets.VBox(
+            [],
+            layout=build_layout(
+                width="100%",
+                min_width="0",
+                margin="0px",
+                padding="0px",
+                display="none",
+                gap="8px",
+            ),
+        )
+        box.add_class("gu-figure-bottom-region")
+        box.add_class("gu-figure-context-governed")
+        return box
+
+    def _set_children_if_changed(
+        self,
+        host: widgets.Box,
+        children: Sequence[widgets.Widget],
+    ) -> None:
+        desired = tuple(children)
+        if tuple(host.children) != desired:
+            host.children = desired
+
+    def _set_display_if_changed(self, widget: widgets.Widget, display: str) -> None:
+        layout = getattr(widget, "layout", None)
+        if layout is None:
+            return
+        if getattr(layout, "display", None) != display:
+            layout.display = display
+
+    def _section_panel_for_id(self, section_id: str) -> widgets.Widget:
+        mapping = {
+            "legend": self.legend_panel.panel,
+            "parameters": self.params_panel.panel,
+            "info": self.info_panel.panel,
+        }
+        if section_id not in mapping:
+            raise KeyError(f"Unknown shell section id: {section_id}")
+        return mapping[section_id]
+
+    def _build_shell_page_button(self, page_spec: _ShellPageSpec) -> widgets.Button:
+        button = widgets.Button(description=page_spec.title, tooltip=page_spec.title)
+        configure_action_button(
+            button,
+            variant="tab",
+            min_width_px=88,
+            extra_classes=("gu-figure-shell-tab",),
+        )
+        button.on_click(
+            lambda _button, page_id=page_spec.page_id: self._set_active_shell_page(
+                page_id,
+                reason="shell_page_selection",
+            )
+        )
+        return button
+
+    def _build_shell_page_state(self, page_spec: _ShellPageSpec) -> _ShellPageState:
+        if page_spec.include_stage:
+            left_box = self.left_sidebar_container
+            center_box = self.left_panel
+            right_box = self.sidebar_container
+            row_box = self.content_wrapper
+            bottom_box = self.bottom_section_container
+        else:
+            left_box = self._build_sidebar_region(side="left")
+            center_box = widgets.VBox(
+                [],
+                layout=build_layout(
+                    width="100%",
+                    min_width="0",
+                    flex="1 1 560px",
+                    margin="0px",
+                    padding="0px",
+                    display="flex",
+                    gap="8px",
+                ),
+            )
+            center_box.add_class("gu-figure-left-panel")
+            center_box.add_class("gu-figure-shell-main-region")
+            row_box = widgets.Box(
+                [],
+                layout=build_layout(
+                    display="flex",
+                    flex_flow="row wrap",
+                    align_items="stretch",
+                    width="100%",
+                    min_width="0",
+                    min_height="0",
+                    gap="8px",
+                ),
+            )
+            row_box.add_class("gu-figure-content")
+            right_box = self._build_sidebar_region(side="right")
+            bottom_box = self._build_bottom_region()
+
+        host_box = widgets.VBox(
+            [row_box, bottom_box],
+            layout=build_layout(
+                width="100%",
+                min_width="0",
+                margin="0px",
+                padding="0px",
+                gap="8px",
+                display="none",
+            ),
+        )
+        host_box.add_class("gu-figure-shell-page")
+        host_box.add_class("gu-figure-shell-page-panel")
+        host_box.add_class("gu-tab-panel")
+        host_box.add_class(f"gu-figure-shell-page-{page_spec.page_id}")
+
+        tab_button = (
+            self._build_shell_page_button(page_spec)
+            if len(self._shell_spec.pages) > 1
+            else None
+        )
+        return _ShellPageState(
+            spec=page_spec,
+            host_box=host_box,
+            row_box=row_box,
+            center_box=center_box,
+            left_box=left_box,
+            right_box=right_box,
+            bottom_box=bottom_box,
+            tab_button=tab_button,
+        )
+
+    def _rebuild_shell_arrangement(self) -> None:
+        pages = tuple(self._shell_spec.pages)
+        self._shell_pages = {}
+        self._shell_page_buttons = {}
+        self._ordered_shell_page_ids = tuple(page.page_id for page in pages)
+        page_hosts: list[widgets.Widget] = []
+        content_rows: list[widgets.Box] = []
+        center_boxes: list[widgets.VBox] = []
+        sidebar_slots: list[widgets.VBox] = []
+
+        stage_page_count = 0
+        for page_spec in pages:
+            page_state = self._build_shell_page_state(page_spec)
+            stage_page_count += 1 if page_spec.include_stage else 0
+            self._shell_pages[page_spec.page_id] = page_state
+            page_hosts.append(page_state.host_box)
+            content_rows.append(page_state.row_box)
+            center_boxes.append(page_state.center_box)
+            sidebar_slots.extend((page_state.left_box, page_state.right_box))
+            if page_state.tab_button is not None:
+                self._shell_page_buttons[page_spec.page_id] = page_state.tab_button
+
+            if page_spec.include_stage:
+                stage_children: tuple[widgets.Widget, ...]
+                stage_children = (
+                    (self.view_selector, self.view_stage)
+                    if page_spec.include_navigation
+                    else (self.view_stage,)
+                )
+                self._set_children_if_changed(self.left_panel, stage_children)
+                self._set_children_if_changed(page_state.center_box, stage_children)
+            else:
+                self._set_children_if_changed(
+                    page_state.center_box,
+                    tuple(
+                        self._section_panel_for_id(section_id)
+                        for section_id in page_spec.main_sections
+                    ),
+                )
+
+            self._set_children_if_changed(
+                page_state.left_box,
+                tuple(
+                    self._section_panel_for_id(section_id)
+                    for section_id in page_spec.left_sections
+                ),
+            )
+            self._set_children_if_changed(
+                page_state.right_box,
+                tuple(
+                    self._section_panel_for_id(section_id)
+                    for section_id in page_spec.right_sections
+                ),
+            )
+            self._set_children_if_changed(
+                page_state.bottom_box,
+                tuple(
+                    self._section_panel_for_id(section_id)
+                    for section_id in page_spec.bottom_sections
+                ),
+            )
+
+            row_children: list[widgets.Widget] = []
+            if page_spec.left_sections:
+                row_children.append(page_state.left_box)
+            row_children.append(page_state.center_box)
+            if page_spec.right_sections:
+                row_children.append(page_state.right_box)
+            self._set_children_if_changed(page_state.row_box, tuple(row_children))
+
+        if stage_page_count != 1:
+            raise ValueError(
+                f"Shell preset {self._shell_spec.name!r} must define exactly one stage page."
+            )
+
+        self._content_rows = tuple(content_rows)
+        self._center_boxes = tuple(center_boxes)
+        self._sidebar_slots = tuple(sidebar_slots)
+        self._set_children_if_changed(self.shell_page_content, tuple(page_hosts))
+        if self._active_shell_page_id not in self._ordered_shell_page_ids:
+            self._active_shell_page_id = self._shell_spec.default_page_id
+        self._apply_shell_visibility()
+        self._apply_content_layout_mode(is_full=bool(self.full_width_checkbox.value))
+        self._emit_layout_event(
+            "shell_arrangement_applied",
+            phase="completed",
+            shell_preset=self._shell_spec.name,
+            shell_pages=[page.page_id for page in pages],
+            active_shell_page_id=self._active_shell_page_id,
+        )
+
+    def _available_shell_page_ids(self) -> tuple[str, ...]:
+        visible: list[str] = []
+        for page_spec in self._shell_spec.pages:
+            if page_spec.include_stage or any(
+                self._section_visibility.get(section_id, False)
+                for section_id in page_spec._all_sections()
+            ):
+                visible.append(page_spec.page_id)
+        return tuple(visible)
+
+    def _sync_shell_page_tabs(self) -> None:
+        visible_ids = self._visible_shell_page_ids
+        if len(visible_ids) > 1:
+            children = tuple(
+                self._shell_page_buttons[page_id]
+                for page_id in visible_ids
+                if page_id in self._shell_page_buttons
+            )
+            self._set_children_if_changed(self.shell_page_bar, children)
+            self.shell_page_tabs.layout.display = "flex"
+        else:
+            self._set_children_if_changed(self.shell_page_bar, ())
+            self.shell_page_tabs.layout.display = "none"
+
+        for page_id, button in self._shell_page_buttons.items():
+            set_tab_button_selected(button, page_id == self._active_shell_page_id)
+
+        if self._visible_shell_page_ids and self._active_shell_page_id in self._visible_shell_page_ids:
+            selected_index = self._visible_shell_page_ids.index(self._active_shell_page_id)
+        else:
+            selected_index = 0
+        self._shell_page_bridge.selected_index = int(selected_index)
+
+    def _apply_shell_visibility(self) -> None:
+        self._visible_shell_page_ids = self._available_shell_page_ids()
+        if self._active_shell_page_id not in self._visible_shell_page_ids:
+            self._active_shell_page_id = (
+                self._visible_shell_page_ids[0] if self._visible_shell_page_ids else None
+            )
+
+        active_sections: set[str] = set()
+        for page_id, page_state in self._shell_pages.items():
+            spec = page_state.spec
+            page_available = page_id in self._visible_shell_page_ids
+            page_active = page_available and page_id == self._active_shell_page_id
+
+            left_visible = page_available and any(
+                self._section_visibility.get(section_id, False)
+                for section_id in spec.left_sections
+            )
+            center_visible = page_available and (
+                spec.include_stage
+                or any(
+                    self._section_visibility.get(section_id, False)
+                    for section_id in spec.main_sections
+                )
+            )
+            right_visible = page_available and any(
+                self._section_visibility.get(section_id, False)
+                for section_id in spec.right_sections
+            )
+            bottom_visible = page_available and any(
+                self._section_visibility.get(section_id, False)
+                for section_id in spec.bottom_sections
+            )
+
+            self._set_display_if_changed(page_state.left_box, "flex" if left_visible else "none")
+            self._set_display_if_changed(page_state.center_box, "flex" if center_visible else "none")
+            self._set_display_if_changed(page_state.right_box, "flex" if right_visible else "none")
+            self._set_display_if_changed(page_state.bottom_box, "flex" if bottom_visible else "none")
+            self._set_display_if_changed(
+                page_state.row_box,
+                "flex" if (left_visible or center_visible or right_visible) else "none",
+            )
+            self._set_display_if_changed(page_state.host_box, "flex" if page_active else "none")
+            if page_active:
+                active_sections.update(spec._all_sections())
+
+        params_visible = self._section_visibility.get("parameters", False) and "parameters" in active_sections
+        info_visible = self._section_visibility.get("info", False) and "info" in active_sections
+        legend_visible = self._section_visibility.get("legend", False) and "legend" in active_sections
+
+        self.params_header.layout.display = "block" if params_visible else "none"
+        self.params_panel.panel.layout.display = "flex" if params_visible else "none"
+        self.info_header.layout.display = "block" if info_visible else "none"
+        self.info_panel.panel.layout.display = "flex" if info_visible else "none"
+        self.legend_header.layout.display = "none"
+        self.legend_panel.panel.layout.display = "flex" if legend_visible else "none"
+
+        self._sync_shell_page_tabs()
+
+    def _set_active_shell_page(self, page_id: str, *, reason: str) -> None:
+        key = str(page_id)
+        if key not in self._visible_shell_page_ids or key == self._active_shell_page_id:
+            return
+        self._active_shell_page_id = key
+        self._apply_shell_visibility()
+        self._emit_layout_event(
+            "shell_page_selected",
+            phase="completed",
+            page_id=key,
+            available_shell_pages=list(self._visible_shell_page_ids),
+        )
+        self._request_active_shell_reflow(reason)
+
+    def _request_active_shell_reflow(self, reason: str) -> None:
+        if self._reflow_callback is None:
+            self._emit_layout_event(
+                "reflow_callback_missing",
+                phase="skipped",
+                reason=reason,
+                active_shell_page_id=self._active_shell_page_id,
+            )
+            return
+        if self._active_view_id is None:
+            self._emit_layout_event(
+                "shell_reflow_skipped",
+                phase="skipped",
+                reason=reason,
+                active_shell_page_id=self._active_shell_page_id,
+            )
+            return
+        active_page = self._shell_pages.get(self._active_shell_page_id or "")
+        if active_page is None or not active_page.spec.include_stage:
+            self._emit_layout_event(
+                "shell_reflow_skipped",
+                phase="skipped",
+                reason=reason,
+                active_shell_page_id=self._active_shell_page_id,
+            )
+            return
+        self._emit_layout_event(
+            "reflow_callback_invoked",
+            phase="requested",
+            view_id=self._active_view_id,
+            reason=reason,
+            active_shell_page_id=self._active_shell_page_id,
+        )
+        self._reflow_callback(self._active_view_id, reason)
+
+    def _shell_display_state(self) -> tuple[Any, ...]:
+        page_states = tuple(
+            (
+                page_id,
+                state.host_box.layout.display,
+                state.row_box.layout.display,
+                state.left_box.layout.display,
+                state.center_box.layout.display,
+                state.right_box.layout.display,
+                state.bottom_box.layout.display,
+            )
+            for page_id, state in self._shell_pages.items()
+        )
+        section_states = (
+            self.params_header.layout.display,
+            self.params_panel.panel.layout.display,
+            self.info_header.layout.display,
+            self.info_panel.panel.layout.display,
+            self.legend_panel.panel.layout.display,
+            self.left_sidebar_container.layout.display,
+            self.sidebar_container.layout.display,
+            self.bottom_section_container.layout.display,
+            self.shell_page_tabs.layout.display,
+            self._active_shell_page_id,
+            self._visible_shell_page_ids,
+        )
+        return (section_states, page_states)
+
     def _on_view_selector_change(self, change: dict[str, Any]) -> None:
         if self._suspend_view_selector_events:
             return
@@ -1899,26 +2394,35 @@ class FigureLayout:
         )
 
     def _apply_content_layout_mode(self, *, is_full: bool) -> None:
-        layout = self.content_wrapper.layout
-        plot_layout = self.left_panel.layout
-        sidebar_layout = self.sidebar_container.layout
-
         if is_full:
             self._content_layout_mode = "stacked"
-            layout.flex_flow = "column"
-            plot_layout.flex = "0 0 auto"
-            sidebar_layout.flex = "0 0 auto"
-            sidebar_layout.max_width = ""
-            sidebar_layout.width = "100%"
-            sidebar_layout.padding = "0px"
+            row_flow = "column"
+            center_flex = "0 0 auto"
+            sidebar_flex = "0 0 auto"
+            sidebar_max_width = ""
+            sidebar_width = "100%"
         else:
             self._content_layout_mode = "wrapped"
-            layout.flex_flow = "row wrap"
-            plot_layout.flex = "1 1 560px"
-            sidebar_layout.flex = "0 1 380px"
-            sidebar_layout.max_width = "400px"
-            sidebar_layout.width = "auto"
-            sidebar_layout.padding = "0px 0px 0px 10px"
+            row_flow = "row wrap"
+            center_flex = "1 1 560px"
+            sidebar_flex = "0 1 380px"
+            sidebar_max_width = "400px"
+            sidebar_width = "auto"
+
+        for row_box in self._content_rows:
+            row_box.layout.flex_flow = row_flow
+        for center_box in self._center_boxes:
+            center_box.layout.flex = center_flex
+        for sidebar_box in self._sidebar_slots:
+            sidebar_box.layout.flex = sidebar_flex
+            sidebar_box.layout.max_width = sidebar_max_width
+            sidebar_box.layout.width = sidebar_width
+            if is_full:
+                sidebar_box.layout.padding = "0px"
+            elif "gu-figure-sidebar-left" in getattr(sidebar_box, "_dom_classes", ()):
+                sidebar_box.layout.padding = "0px 10px 0px 0px"
+            else:
+                sidebar_box.layout.padding = "0px 0px 0px 10px"
 
     def _on_full_width_change(self, change: dict[str, Any]) -> None:
         is_full = bool(change["new"])
@@ -1926,6 +2430,7 @@ class FigureLayout:
         layout = self.content_wrapper.layout
         plot_layout = self.left_panel.layout
         sidebar_layout = self.sidebar_container.layout
+        left_sidebar_layout = self.left_sidebar_container.layout
         self._emit_layout_event(
             "full_width_layout_changed",
             phase="completed",
@@ -1933,5 +2438,6 @@ class FigureLayout:
             layout_mode=self._content_layout_mode,
             content_wrapper=layout_value_snapshot(layout, ("display", "flex_flow", "gap")),
             left_panel=layout_value_snapshot(plot_layout, ("width", "min_width", "flex")),
+            left_sidebar=layout_value_snapshot(left_sidebar_layout, ("display", "flex", "max_width", "width", "padding")),
             sidebar=layout_value_snapshot(sidebar_layout, ("display", "flex", "max_width", "width", "padding")),
         )

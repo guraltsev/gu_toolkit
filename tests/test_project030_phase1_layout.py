@@ -3,14 +3,20 @@ from __future__ import annotations
 from gu_toolkit import FigureLayout
 
 
-def test_sidebar_contains_shared_section_panels_in_legend_params_info_order() -> None:
+def test_default_shell_preset_keeps_shared_sections_in_right_region_and_hides_full_width_toggle() -> None:
     layout = FigureLayout()
+    snapshot = layout.layout_snapshot()
 
+    assert snapshot["shell_preset"] == "default"
+    assert snapshot["shell_pages"]["figure"]["right_sections"] == ["legend", "parameters", "info"]
     assert layout.sidebar_container.children == (
         layout.legend_panel.panel,
         layout.params_panel.panel,
         layout.info_panel.panel,
     )
+    assert layout.left_sidebar_container.children == ()
+    assert layout.bottom_section_container.children == ()
+    assert layout.full_width_checkbox.layout.display == "none"
 
 
 def test_update_sidebar_visibility_handles_legend_only_via_panel_surfaces() -> None:
@@ -28,7 +34,7 @@ def test_update_sidebar_visibility_handles_legend_only_via_panel_surfaces() -> N
     assert layout.sidebar_container.layout.display == "flex"
 
 
-def test_update_sidebar_visibility_hides_sidebar_when_all_sections_empty() -> None:
+def test_update_sidebar_visibility_hides_default_right_region_when_all_sections_empty() -> None:
     layout = FigureLayout()
 
     layout.update_sidebar_visibility(has_params=False, has_info=False, has_legend=False)
@@ -62,6 +68,8 @@ def test_layout_defaults_hide_horizontal_scrollbars_in_sidebar_and_output() -> N
 
     assert layout.sidebar_container.layout.overflow_x == "hidden"
     assert layout.sidebar_container.layout.overflow_y == "auto"
+    assert layout.left_sidebar_container.layout.overflow_x == "hidden"
+    assert layout.left_sidebar_container.layout.overflow_y == "auto"
     assert layout.info_box.layout.overflow_x == "hidden"
     assert layout.info_box.layout.overflow_y == "visible"
     assert layout.params_box.layout.overflow_x == "hidden"
