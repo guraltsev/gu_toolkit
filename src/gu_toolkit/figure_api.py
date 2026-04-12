@@ -1372,7 +1372,7 @@ def parameter(
     """
 
     fig = _require_current_figure()
-    return fig.parameters.parameter(symbols, control=control, **kwargs)
+    return fig.parameter(symbols, control=control, **kwargs)
 
 
 def plot(

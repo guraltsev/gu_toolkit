@@ -202,6 +202,7 @@ class ParameterManager(Mapping[str, ParamRef]):
         modal_host: widgets.Box | None = None,
         *,
         layout_manager: Any | None = None,
+        bind_change_callback: bool = True,
     ) -> None:
         self._refs: dict[str, ParamRef] = {}
         self._symbols: dict[str, Symbol] = {}
@@ -211,6 +212,7 @@ class ParameterManager(Mapping[str, ParamRef]):
         self._hooks: dict[Hashable, Callable[[ParamEvent], Any]] = {}
         self._hook_counter: int = 0
         self._render_callback = render_callback
+        self._bind_change_callback = bool(bind_change_callback)
         self._layout_manager = layout_manager
         self._layout_box = layout_box
         self._modal_host = modal_host
@@ -276,6 +278,29 @@ class ParameterManager(Mapping[str, ParamRef]):
                 f"Control ref parameter {ref_symbol!r} does not match requested name {name!r}."
             )
         return ref
+
+    @staticmethod
+    def _ordered_control_kwargs(control_kwargs: Mapping[str, Any]) -> list[tuple[str, Any]]:
+        """Return explicit kwargs in fallback application order."""
+        ordered_items = list(control_kwargs.items())
+        return [
+            *((name, value) for name, value in ordered_items if name != "value"),
+            *((name, value) for name, value in ordered_items if name == "value"),
+        ]
+
+    def _apply_control_kwargs(self, ref: ParamRef, control_kwargs: Mapping[str, Any]) -> None:
+        """Apply explicit kwargs to one live parameter ref."""
+        if not control_kwargs:
+            return
+
+        widget = getattr(ref, "widget", None)
+        atomic_apply = getattr(widget, "_apply_parameter_kwargs", None)
+        if callable(atomic_apply):
+            atomic_apply(control_kwargs)
+            return
+
+        for attr_name, value in self._ordered_control_kwargs(control_kwargs):
+            setattr(ref, attr_name, value)
 
     def parameter(
         self,
@@ -369,7 +394,8 @@ class ParameterManager(Mapping[str, ParamRef]):
                 self._mount_control(new_control)
                 refs = new_control.make_refs([symbol])
                 ref = self._lookup_control_ref(refs, name=name, symbol=symbol)
-                ref.observe(self._on_param_change)
+                if self._bind_change_callback:
+                    ref.observe(self._on_param_change)
                 self._refs[name] = ref
                 self._symbols.setdefault(name, symbol)
                 self._performance.increment("parameters_created")
@@ -382,7 +408,8 @@ class ParameterManager(Mapping[str, ParamRef]):
             refs = control.make_refs([symbol for _, symbol in missing])
             for name, symbol in missing:
                 ref = self._lookup_control_ref(refs, name=name, symbol=symbol)
-                ref.observe(self._on_param_change)
+                if self._bind_change_callback:
+                    ref.observe(self._on_param_change)
                 self._refs[name] = ref
                 self._symbols.setdefault(name, symbol)
                 self._performance.increment("parameters_created")
@@ -391,11 +418,22 @@ class ParameterManager(Mapping[str, ParamRef]):
                 self._performance.increment("controls_presented")
                 self._performance.increment("custom_controls_bound")
 
+        existing_names = {name for name, _symbol in existing}
+        built_in_constructor_keys = {"value", "min", "max", "step"}
+        built_in_post_create_kwargs = {
+            attr_name: value
+            for attr_name, value in control_kwargs.items()
+            if attr_name not in built_in_constructor_keys
+        }
+
         for name, symbol in requested:
             ref = self._refs[name]
             self._symbols.setdefault(name, symbol)
-            for attr_name, value in control_kwargs.items():
-                setattr(ref, attr_name, value)
+            if name in existing_names or control is not None:
+                kwargs_to_apply = control_kwargs
+            else:
+                kwargs_to_apply = built_in_post_create_kwargs
+            self._apply_control_kwargs(ref, kwargs_to_apply)
 
         self._performance.set_state(
             parameter_count=len(self._refs),

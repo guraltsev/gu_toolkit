@@ -7,7 +7,8 @@ step/default) and helper APIs for parameter-reference integration.
 import html
 import re
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from contextlib import ExitStack
 from typing import Any, cast
 
 from ._widget_stubs import anywidget, widgets
@@ -1185,6 +1186,31 @@ class FloatSlider(widgets.VBox):
     def _handle_animation_domain_change(self, change: Any) -> None:
         """Forward range/step edits to the animation controller."""
         self._animation.handle_domain_change()
+
+    def _apply_parameter_kwargs(self, control_kwargs: Mapping[str, Any]) -> None:
+        """Atomically apply explicit parameter kwargs to this live slider."""
+        if not control_kwargs:
+            return
+
+        ordered_items = [
+            *((name, value) for name, value in control_kwargs.items() if name != "value"),
+            *((name, value) for name, value in control_kwargs.items() if name == "value"),
+        ]
+
+        previous_syncing = self._syncing
+        self._syncing = True
+        try:
+            with ExitStack() as stack:
+                hold_sync = getattr(self.slider, "hold_sync", None)
+                if callable(hold_sync):
+                    stack.enter_context(hold_sync())
+                stack.enter_context(self.slider.hold_trait_notifications())
+                for attr_name, value in ordered_items:
+                    setattr(self, attr_name, value)
+        finally:
+            self._syncing = previous_syncing
+            self._sync_number_text(float(self.value))
+            self._sync_limit_texts(None)
 
     def _commit_animation_time(self, change: Any) -> None:
         """Commit the animation duration from the settings panel."""

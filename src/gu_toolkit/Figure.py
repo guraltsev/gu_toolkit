@@ -229,6 +229,7 @@ class Figure:
         "plots",
         "_layout",
         "_parameter_manager",
+        "_parameter_render_bindings",
         "_info",
         "_legend",
         "_sound",
@@ -420,9 +421,11 @@ class Figure:
 
         # 2. Initialize Managers
         # Note: we pass a callback for rendering so params can trigger updates
+        self._parameter_render_bindings: set[str] = set()
         self._parameter_manager = ParameterManager(
             self.render,
             layout_manager=self._layout,
+            bind_change_callback=False,
         )
         self._info = InfoPanelManager(self._layout.info_box)
         self._info.bind_figure(self)
@@ -3200,10 +3203,28 @@ class Figure:
         result = self._parameter_manager.parameter(
             symbols, control=control, **control_kwargs
         )
+        self._bind_parameter_render_callbacks(result)
         self._emit_layout_event("parameter_controls_updated", source="Figure", phase="completed")
         if self._sync_sidebar_visibility():
             self._request_active_view_reflow("sidebar_visibility")
         return result
+
+    def _bind_parameter_render_callbacks(
+        self, result: ParamRef | dict[str, ParamRef]
+    ) -> None:
+        """Attach figure-owned render callbacks to newly surfaced refs."""
+        refs = result.values() if isinstance(result, dict) else (result,)
+        for ref in refs:
+            parameter = getattr(ref, "parameter", None)
+            name = getattr(parameter, "name", None)
+            if name is None or name in self._parameter_render_bindings:
+                continue
+            ref.observe(self._on_parameter_value_change)
+            self._parameter_render_bindings.add(str(name))
+
+    def _on_parameter_value_change(self, event: ParamEvent) -> None:
+        """Render in response to a live parameter value change."""
+        self.render("param_change", event)
 
     def render(
         self,
