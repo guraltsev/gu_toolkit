@@ -2,7 +2,21 @@
 
 
 ## Summary
-Refactor the figure shell around **peer section instances**, **soft associations**, and **transport-neutral mount surfaces**, while preserving the existing stable per-view plotting runtime internally.
+Refactor the figure shell around **filtered presentations over global plot/parameter stores** and **transport-neutral mount surfaces**, while preserving the existing stable Plotly runtime strengths internally.
+
+Design note: the earlier Phase 003 framing around peer sections and soft associations was too abstract. The revised Phase 003 blueprint treats the architectural center as:
+
+- global plots
+- global parameters
+- explicit filters
+- legend and parameter presentations built from those filters
+- a small mount manager that places those presentation roots
+
+A "stage" in the revised design is only the user’s name for a Plotly plot widget/container. It is not a new central architecture object.
+
+Where this document still uses earlier “peer section” wording below, treat Phase 003 as the authoritative correction. The implementation blueprint for handoff is in `project-057-phase-003-parameter-legend-and-tabs-presentation-split.md`.
+
+The reviewed correction is: filters first, management/presentation split second, mounting last. That ordering is now authoritative for implementation.
 
 The end state must support three environments with the same core figure logic:
 
@@ -410,8 +424,8 @@ It should not:
    - define the internal contracts and narrow notebook-specific ownership
 2. [Phase 002 - slot-based shell and arrangement spec](project-057-phase-002-slot-based-shell-and-arrangement-spec.md)
    - introduce the first shell presets and page regions as a stepping stone
-3. [Phase 003 - peer section model and section-state split](project-057-phase-003-parameter-legend-and-tabs-presentation-split.md)
-   - replace singleton section assumptions and split parameter / legend / info shell state from widget surfaces
+3. [Phase 003 - filter-driven legends, parameter presentations, and mount management](project-057-phase-003-parameter-legend-and-tabs-presentation-split.md)
+   - replace view-driven shell behavior with explicit filters over global plots/parameters and split state from presentation
 4. [Phase 004 - Jupyter shell surface and default-layout migration](project-057-phase-004-jupyter-presenters-and-default-layout-migration.md)
    - migrate notebook behavior onto the peer-section model and a notebook mount surface
 5. [Phase 005 - HTML PyScript live widget shell surface](project-057-phase-005-html-pyscript-live-widget-runtime.md)

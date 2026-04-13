@@ -6,10 +6,12 @@ Proposed (revised)
 ## Project link
 [Project 057 - Figure shell presentation/runtime refactor](project-057-figure-shell-presentation-runtime-refactor.md)
 
-## Phase goal
-Build the concrete **Jupyter shell surface** on top of the peer-section model from Phase 003 and migrate the default notebook behavior onto that model.
+Note: Phase 003 is the authoritative architectural correction. References below to earlier peer-section wording should be read through the filter-driven/store+presentation split defined there.
 
-This phase is where the new section registry becomes a working notebook shell without falling back into:
+## Phase goal
+Build the concrete **Jupyter shell surface** on top of the filter-driven legend/parameter presentations from Phase 003 and migrate the default notebook behavior onto that mount-based model.
+
+This phase is where the new filtered presentations become a working notebook shell without falling back into:
 
 - singleton legend / info assumptions,
 - view-centric shell rules,
@@ -29,10 +31,10 @@ Those are useful notebook stepping stones, but not yet the final notebook shell 
 
 ## What this phase must accomplish
 
-### 1. Build a notebook shell surface over peer section instances
-Implement the concrete notebook composition layer that can mount section widget roots into notebook widget containers according to the new layout spec.
+### 1. Build a notebook shell surface over filtered presentations and plot widgets
+Implement the concrete notebook composition layer that can mount presentation roots and Plotly plot widgets into notebook widget containers according to the new layout spec.
 
-This surface should work with section instances such as:
+This surface should work with mountables such as:
 
 - one or more stage sections
 - zero or more legend sections

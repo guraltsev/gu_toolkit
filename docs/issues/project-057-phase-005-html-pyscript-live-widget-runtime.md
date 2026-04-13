@@ -6,10 +6,12 @@ Proposed (revised)
 ## Project link
 [Project 057 - Figure shell presentation/runtime refactor](project-057-figure-shell-presentation-runtime-refactor.md)
 
-## Phase goal
-Support standalone HTML files with inline PyScript + a Pyodide kernel by injecting a **live widget runtime** and mounting the same peer section widgets into responsive HTML slots.
+Note: Phase 003 is the authoritative architectural correction. References below to earlier peer-section wording should be read through the filter-driven/store+presentation split defined there.
 
-This phase is the concrete second transport target for the revised section model.
+## Phase goal
+Support standalone HTML files with inline PyScript + a Pyodide kernel by injecting a **live widget runtime** and mounting the same filtered legend/parameter/info presentations plus Plotly plot widgets into responsive HTML slots.
+
+This phase is the concrete second transport target for the revised mount-based model.
 
 ## Current context
 The repository already has important runtime pieces:
@@ -37,7 +39,7 @@ Create the JavaScript / bootstrap layer needed to:
 
 This phase must not fake interactivity with screenshots or static markup.
 
-### 2. Add an HTML mount surface for peer section instances
+### 2. Add an HTML mount surface for filtered presentations and plot widgets
 Create the HTML-specific mount surface that can mount stable section widget roots into named DOM targets.
 
 This mount surface must work with section instances, not singleton shell categories.
