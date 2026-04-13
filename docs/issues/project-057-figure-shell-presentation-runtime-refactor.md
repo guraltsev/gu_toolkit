@@ -2,373 +2,434 @@
 
 
 ## Summary
-Refactor the figure shell so `Figure`, parameter management, legend handling, and tab/navigation handling each have a **logic half** and a **presentation half**, while preserving the existing stable per-view plotting runtime.
+Refactor the figure shell around **peer section instances**, **soft associations**, and **transport-neutral mount surfaces**, while preserving the existing stable per-view plotting runtime internally.
 
 The end state must support three environments with the same core figure logic:
 
-- JupyterLab (already working today)
-- JupyterLite + Pyodide (already working today)
-- standalone HTML with inline PyScript + a Pyodide kernel + an injected **live widget runtime**
+- JupyterLab
+- JupyterLite + Pyodide
+- standalone HTML with inline PyScript + a Pyodide kernel + an injected live widget runtime
 
-The preferred implementation is **not** a custom DOM rewrite. The preferred implementation is a slot-based shell that reuses live `ipywidgets`/`anywidget` components and can either:
+This revision changes the architectural center of gravity.
+
+The shell must no longer be organized around:
+
+- one singleton legend section,
+- one singleton info section,
+- or active-view-driven shell visibility.
+
+Instead, the shell must organize **peer section instances** such as:
+
+- plot/stage sections,
+- legend sections,
+- info-card / info-output sections,
+- parameter sections,
+- output sections,
+- optional page containers.
+
+Those sections may carry **association metadata** that says which plots they are naturally related to, but those associations are **advisory**. They are used by default layout builders, not enforced as ownership or containment.
+
+The preferred implementation is still **not** a custom DOM rewrite. The preferred implementation is a slot-based shell that reuses live `ipywidgets` / `anywidget` components and can either:
 
 1. compose them inside notebook widget containers, or
 2. mount the same section-root widgets into named HTML `<div>` slots controlled by responsive CSS.
 
-That approach directly matches the requirement for flexibility without hand-rolling the entire widget stack.
+This revision also adopts a simpler visibility rule:
+
+- the notebook / HTML shell owns **who is visible**,
+- hidden sections stay mounted where practical,
+- plot-bearing sections may defer expensive updates while hidden,
+- visible transitions trigger refresh / reflow.
+
+Tabs and page buttons are therefore treated as **shell controls**, not as a new standalone architecture that needs its own presenter hierarchy.
 
 ## Hard requirements
 
-1. `Figure`, parameter manager, legend, and tabs/navigation must each have separate but coexisting logic and presentation responsibilities.
-2. The arrangement of panels must be declarative and configurable.
-3. Legend placement must support at least:
+1. Parameter handling and legend handling must each have explicit controller/state versus widget-surface responsibilities.
+2. The shell model must support **multiple legend sections** and **multiple info sections/cards** as peer items.
+3. Associations between sections and plots must be **soft metadata**, not parent/child ownership. The layout is allowed to place plot 1 beside legend 2 if explicitly asked.
+4. The arrangement of sections must be declarative and configurable.
+5. Legend placement must support at least:
    - hidden
-   - left of the figure
-   - right of the figure
-   - below the figure
-   - separate tab/page from the figure
-4. Plotly must obey the size of the active layout region.
-5. The default layout must remain functionally close to the current one, except the inline full-width toggle should disappear.
-6. The refactor must improve maintainability and boundaries rather than adding more one-off widget wiring.
-7. The solution must preserve the live widget model instead of replacing it with custom HTML controls.
+   - left of the plot/stage
+   - right of the plot/stage
+   - below the plot/stage
+   - separate page / tab from the plot/stage
+6. The default layout must remain functionally close to the current one, except the inline full-width toggle should disappear.
+7. Plotly must obey the size of the **currently visible layout region**.
+8. Hidden plot-bearing sections must be allowed to defer rendering and then refresh / reflow when they become visible.
+9. The implementation must preserve the live widget model instead of replacing it with custom HTML controls.
+10. JupyterLab, JupyterLite + Pyodide, and standalone HTML + PyScript + Pyodide must share the same core section model.
 
 ## General instructions
 
-- Preserve the current strengths of the architecture:
+- Preserve the current strengths of the runtime:
   - one stable `View` runtime per view
   - one stable `PlotlyPane` per view
-  - browser-measured Plotly sizing through the existing pane/driver model
-- Treat the current fixed right-sidebar layout as an implementation detail to replace, not as the long-term API.
-- Prefer internal protocols, presenters, slot hosts, and layout specs over more boolean flags in `FigureLayout`.
-- Reuse existing toolkit UI primitives where possible, especially shared section chrome and tab helpers.
-- Do not rewrite plotting, view state, sampling, code generation, or unrelated notebook helpers.
-- Do not switch away from `ipywidgets`/`anywidget` unless a concrete requirement forces it.
+  - browser-measured Plotly sizing through the existing pane / driver model
+- Treat the current view runtime as an **internal plotting runtime**, not as the organizing primitive for shell sections.
+- Do not build more architecture around active-view-centric shell rules.
+- Treat the current singleton shell sections (`legend`, `parameters`, `info`) as a stepping stone, not as the long-term API.
+- Prefer:
+  - section registries,
+  - stable section-root widgets,
+  - association metadata,
+  - shell mount surfaces,
+  - visibility lifecycle hooks,
+  over more booleans, more widget re-parenting, or more presenter families.
+- Reuse existing toolkit UI primitives where possible, especially section chrome, modal helpers, and `TabListBridge` where it helps accessibility.
+- Do not rewrite plotting, sampling, code generation, or unrelated notebook helpers.
+- Do not switch away from `ipywidgets` / `anywidget` unless a concrete requirement forces it.
 - Do not solve the HTML requirement with static embedding. The HTML target explicitly requires a live Pyodide-backed widget runtime.
-- Keep public authoring APIs stable unless a new layout/presentation option genuinely needs a small extension.
+- Keep public authoring APIs stable unless a new layout / section option genuinely needs a small extension.
 
 ## Evidence of the current problem
 
-### 1. The shell layout is hard-coded to one composition
-`src/gu_toolkit/figure_layout.py:249-423` builds a single widget tree with:
+### 1. The shell spec still models singleton section types, not section instances
+`src/gu_toolkit/figure_shell.py:15-16` hard-codes `_VALID_SECTION_IDS = ("legend", "parameters", "info")`.
 
-- title bar
-- `view_selector`
-- `view_stage`
-- one `sidebar_container`
-- `legend_panel`, `params_panel`, and `info_panel` stacked inside that sidebar
-- `print_area` below everything
+`src/gu_toolkit/figure_shell.py:78-104` then validates that:
 
-That is a concrete notebook presentation, not a reusable layout policy.
+- each section id may be mounted only once, and
+- each shell preset has exactly one stage page.
 
-### 2. Sidebar visibility is encoded as one fixed right-side policy
-`src/gu_toolkit/figure_layout.py:766-856` implements `update_sidebar_visibility(...)` by toggling display on the legend/parameter/info panels and then showing or hiding **one** `sidebar_container`.
+That means the current shell model cannot represent:
 
-That means the current shell can only answer one question: “is there a sidebar on the right?” It cannot express “legend below”, “legend in a separate tab”, or “legend hidden while parameters stay visible in a right column” without further hard-coded branches.
+- multiple legend sections,
+- multiple info-card sections,
+- or peer section instances with distinct identities.
 
-### 3. `Figure` passes concrete presentation containers into logic-heavy managers
-`src/gu_toolkit/Figure.py:414-468` wires the figure like this:
+This is a direct mismatch with the new requirement.
 
-- `ParameterManager(..., self._layout.params_box, modal_host=self._layout.root_widget)`
-- `InfoPanelManager(self._layout.info_box)`
-- `LegendPanelManager(self._layout.legend_box, modal_host=self._layout.root_widget, root_widget=self._layout.root_widget, header_toolbar=self._layout.legend_header_toolbar, ...)`
+### 2. `FigureLayout` still creates exactly one legend section and one info section
+`src/gu_toolkit/figure_layout.py:326-505` builds:
 
-This proves the figure orchestration layer is coupled to one concrete widget composition contract.
+- one `view_selector`
+- one `view_stage`
+- one `legend_panel`
+- one `params_panel`
+- one `info_panel`
+- one `_section_widgets["legend"]`
+- one `_section_widgets["info"]`
 
-### 4. Parameter management currently mixes registry logic and direct widget placement
-`src/gu_toolkit/figure_parameters.py:198-374` shows `ParameterManager` doing all of the following inside one class:
+So even after the earlier shell refactor, the shell still thinks in terms of **singleton section categories**, not peer section instances.
 
-- registry/state ownership for parameter refs
-- default control creation (`FloatSlider`)
-- control-to-ref binding
-- render callback dispatch
-- direct mutation of `self._layout_box.children`
-- direct modal host attachment
+### 3. `Figure` still owns one legend manager, one info manager, and one boolean visibility sync
+`src/gu_toolkit/Figure.py:423-437` wires exactly one `InfoPanelManager` and one `LegendPanelManager`.
 
-That is a logic/presentation collapse, not a modular boundary.
+`src/gu_toolkit/Figure.py:1256-1263` reduces shell state to three booleans:
 
-### 5. Legend management currently mixes plot state, rows, dialog chrome, and layout mutation
-`src/gu_toolkit/figure_legend.py:772-1012` and `src/gu_toolkit/figure_legend.py:1518-1587` show `LegendPanelManager` owning:
+- `has_params`
+- `has_info`
+- `panel_visible` for the singleton legend manager.
 
-- plot ordering and active-view filtering
-- row models
-- row widget creation
-- toolbar creation
-- style dialog creation
-- anywidget context bridge creation
-- modal overlay hosting
-- direct mutation of `layout_box.children`
-- optional mutation of `header_toolbar.children`
+That means the figure orchestration layer can currently answer only:
 
-This is exactly the kind of boundary collapse that makes later placement changes expensive and brittle.
+- “do we have any legend?”
+- “do we have any info?”
 
-### 6. “Tabs” are not yet a real independent presentation concept
-`src/gu_toolkit/figure_layout.py:1598-1760` shows `set_view_tabs(...)` and `observe_tab_selection(...)` are compatibility wrappers over the current `view_selector` implementation. In practice, the current “tabs” are just one `ToggleButtons` strip for view selection.
+It cannot express:
 
-That is not enough to support a shell-level “Figure / Legend / Parameters” tab region while also keeping per-view selection.
+- multiple legend sections,
+- multiple info sections,
+- or visibility per section instance.
 
-### 7. The display lifecycle is notebook-only
-`src/gu_toolkit/figure_layout.py:538-587` returns a new `OneShotOutput` and displays `root_widget` into it. `src/gu_toolkit/Figure.py:3800-3883` then uses `display(self._layout.output_widget)` in both `_ipython_display_()` and `show()`.
+### 4. Legend behavior is still keyed to the active view
+`src/gu_toolkit/figure_legend.py:1529-1652` shows that `LegendPanelManager` still owns:
 
-That works for notebooks, but it is not a transport-neutral mount contract for standalone HTML.
+- `_active_view_id`
+- `set_active_view(...)`
+- `_plot_in_active_view(...)`
+- `refresh(...)` filtering based on `plot.views`
 
-### 8. Pyodide support exists, but standalone HTML widget-runtime support does not
-`src/gu_toolkit/runtime_support.py:424-705` already understands Pyodide/browser timing backends, and `src/gu_toolkit/runtime_support.py:708-854` already probes Plotly FigureWidget support. However, the repository contains no standalone HTML widget manager/bootstrap layer, no HTML slot mount surface, and no live widget runtime injection helper.
+That means legend visibility is still conceptually driven by **active view membership**, not by section identity plus declared plot membership.
 
-This means the repository already supports a Pyodide-like runtime at the scheduler/runtime level, but not yet at the standalone HTML display/mount level.
+### 5. Info outputs and info cards still live inside one layout box and can be view-scoped
+`src/gu_toolkit/figure_info.py:332-342` appends each output directly into one `_layout_box.children` list.
 
-### 9. Existing tests encode the fixed shell assumptions
-For example:
+`src/gu_toolkit/figure_info.py:641-697` then stores `card.view_id` and hides or shows cards according to the active view.
 
-- `tests/test_project030_phase1_layout.py` asserts the sidebar contains legend, params, info in that fixed order.
-- `tests/test_project030_phase3_figure_wiring.py` asserts legend visibility is represented through the sidebar.
-- `tests/test_project019_phase12.py` asserts the current view-selector behavior.
+So info content is still modeled as children of one singleton info section, with visibility tied to view selection.
 
-These tests are useful evidence: they show the current structure is not only implemented but also baked into the current test contract.
+### 6. Shell visibility is still computed from one active shell page plus singleton section ids
+`src/gu_toolkit/figure_layout.py:2192-2249` computes:
+
+- `_visible_shell_page_ids`
+- `_active_shell_page_id`
+- `active_sections`
+- per-page `display` values
+
+and then toggles `legend_panel`, `params_panel`, and `info_panel` based on which singleton section ids are active on the selected page.
+
+That is a page-switching mechanism over singleton section types. It is not yet a general visibility lifecycle for peer section instances.
+
+### 7. Display transport is still notebook-specific
+`src/gu_toolkit/figure_layout.py:629-635` materializes display by wrapping `root_widget` in `OneShotOutput`.
+
+`src/gu_toolkit/Figure.py:3818-3901` then calls `display(self._layout._materialize_display_output())` in `_ipython_display_()` and `show()`.
+
+That works for notebooks, but it is not a mount-surface contract for standalone HTML slots.
+
+### 8. The repository already has the right browser-side visibility boundary inside `PlotlyPane`
+`src/gu_toolkit/PlotlyPane.py:643-655` computes DOM host visibility using browser state.
+
+`src/gu_toolkit/PlotlyPane.py:942-952` explicitly waits for visibility and measurable geometry before resizing.
+
+This is important evidence: the repo already contains the correct low-level boundary for DOM-owned visibility. The shell should align with that instead of inventing a parallel Python-only visibility system.
+
+### 9. The render pipeline already has a useful “active now, stale later” pattern
+`src/gu_toolkit/figure_diagnostics.py:411-456` renders the current view immediately and marks non-current views stale on parameter changes.
+
+That is a strong hint for the revised shell design:
+
+- hidden plot-bearing sections should not necessarily render immediately,
+- they can be marked dirty / stale,
+- and refreshed when they become visible.
 
 ## Symptoms
 
-The current design produces exactly the symptoms described by the user:
+The current design produces these symptoms:
 
-- layout flexibility requires shell rewrites instead of configuration
-- legend placement is trapped inside one sidebar policy
-- parameter and legend code are harder to test without concrete widget boxes
-- tabs are too narrow a concept to represent shell pages
-- HTML + PyScript cannot be supported cleanly because display is tied to IPython display output rather than mount surfaces
-- Plotly sizing risks recurring whenever a new shell arrangement is introduced, because geometry changes are currently tied to one notebook layout tree
+- multiple legends and multiple info sections are structurally awkward or impossible
+- layout flexibility still depends on singleton shell sections
+- legend and info behavior are still view-centric even though the shell should not be
+- shell tabs / pages are still too tied to Python-side page selection over singleton sections
+- standalone HTML is still blocked by notebook-specific display materialization
+- Plotly visibility / sizing logic is stronger than the shell model above it, so the shell is still fighting the best existing sizing boundary
 
 ## Core source of the problem
 
-The core source is **not** “legend is on the wrong side” or “the layout needs more flags.”
+The core source is **not** just “the legend is on the wrong side” or “the layout needs more flags.”
 
-The core source is that the current architecture collapses three separate concerns into the same classes and APIs:
+The real structural source is now this three-part mismatch:
 
-### A. Section logic is collapsed into section presentation
-Parameter/legend/tab state and behavior are mixed with widget creation, widget parenting, and UI chrome.
+### A. The shell still thinks in singleton section categories
+The current architecture still assumes one legend section, one info section, one parameters section, and one stage page.
 
-### B. Layout policy is collapsed into one concrete notebook widget tree
-The current `FigureLayout` is both the shell policy and one specific notebook presentation. Because those are the same thing, introducing another arrangement means editing the same class that owns the current shell.
+That makes later layout work harder because the shell cannot naturally represent multiple peer sections.
 
-### C. Display transport is collapsed into IPython display
-Notebook display, widget hosting, and layout composition all currently assume “display a root widget in a notebook output area.” That assumption is precisely what breaks the standalone HTML requirement.
+### B. View identity still leaks into shell section behavior
+The plotting runtime may continue to use views internally, but the shell model should not use active-view membership as the organizing rule for legend or info visibility.
 
-These are structural sources, not surface symptoms.
+### C. Visibility and transport are still too Python / notebook owned
+The current shell still centers Python-side page selection and notebook display materialization, even though the existing Plotly driver already uses DOM visibility and measured geometry as the truth.
+
+These are structural boundaries, not surface symptoms.
 
 ## Why this identifies the root cause rather than a symptom
 
 A stopgap fix would look like one of these:
 
-- add more booleans to `FigureLayout` for “legend_bottom”, “legend_left”, “legend_tab”, etc.
-- add more special cases to `LegendPanelManager.refresh()`
-- keep passing `layout_box` everywhere and just re-parent widgets more often
-- add a separate HTML-only shell that duplicates notebook widget logic
-- push more explicit `fig.update_layout(width=..., height=...)` calls into Python every time the shell changes
+- keep `_VALID_SECTION_IDS` and add more singleton section names
+- add more shell presets for more singleton arrangements
+- build a generic tabs / navigation presenter hierarchy without fixing singleton sections
+- make legend / info “attached to plots” as hard ownership
+- keep active-view filtering and only add more exceptions
+- solve HTML with a custom parallel UI
+- push more width / height values from Python
 
-Those approaches would treat the symptom (“I want more arrangements”) while keeping the actual source untouched (“logic, presentation, and transport are fused”).
+Those would still leave the real issue in place:
 
-The correct approach is to break the fused boundary once and then let different presentations reuse the same section logic.
+- the shell would still not have peer section instances,
+- layout would still not be free to place sections arbitrarily,
+- and visibility would still not line up with the DOM-driven sizing/runtime boundary already present in `PlotlyPane`.
 
 ## Recommended solution
 
-### 1. Keep the existing stable per-view plotting runtime
-Preserve the current `View`/`ViewManager`/`PlotlyPane` architecture.
+### 1. Preserve the current view runtime, but stop using views as the shell primitive
+`View`, `ViewManager`, and `PlotlyPane` remain important internal runtime pieces.
 
-That part of the repository is already a strength:
+But the shell should no longer be organized around “active view decides which legend / info exists.”
 
-- one stable plotting runtime per view
-- one stable pane per view
-- explicit browser-driven sizing in `PlotlyPane`
-- view activation as a distinct concept
+Views stay internal to plotting. The shell moves to section instances.
 
-The shell refactor should build around that rather than replacing it.
+### 2. Introduce a peer section registry
+Create an internal registry of section instances. Each section instance should have at least:
 
-### 2. Introduce a slot-based shell model
-Create a small internal shell specification that describes **what goes where**, independently of notebook widget composition.
+- a stable section id
+- a section kind (`stage`, `legend`, `info`, `parameters`, `output`, ...)
+- controller / state ownership
+- a stable widget surface root
+- optional association metadata
+- optional default placement hints
 
-The exact class names can vary, but the boundary should exist. Example concepts:
+This is the level that can support:
 
-- `FigureShellSpec`
-- `FigureArrangement`
-- `ShellRegion`
-- `SectionPlacement`
-- `FigureDisplaySurface`
+- multiple legends
+- multiple info-card sections
+- multiple plot-bearing sections later
+- conventional layouts and deliberately weird layouts
 
-The shell spec should describe regions such as:
+### 3. Treat associations as soft metadata
+A legend or info section may declare that it is naturally associated with:
 
-- title
-- view navigation
-- figure stage
-- legend
-- parameters
-- info
-- output
-- optional shell tab/page region
+- one plot id
+- a plot group
+- a semantic tag
+- or some other higher-level content group
 
-This is the right level for saying:
+But that association must not create parent/child ownership.
 
-- legend is hidden
-- legend is below the stage
-- legend is in the right column
-- legend is in a separate shell tab
-- parameters and info remain in the right column
-- HTML presentation uses external div slots
+The default layout builder may use associations to co-locate related sections. The shell spec is still allowed to override that and place sections arbitrarily.
 
-### 3. Split each major area into controller/state vs presenter
-The exact names can vary, but the architectural rule should be explicit.
+### 4. Split parameter handling into controller/state versus widget surface
+Parameter logic should own:
 
-#### Figure
-- **Logic:** orchestration, view activation, render/reflow requests, plot lifecycle coordination.
-- **Presentation:** shell composition, slot mounting, notebook display surface, HTML mount surface.
+- registry
+- refs
+- render-trigger semantics
+- custom binding policy
 
-#### Parameters
-- **Logic:** parameter registry, refs, hooks, render-trigger semantics, custom-control binding policy.
-- **Presentation:** built-in control factories, control wrappers, section chrome, root widget list, modal host wiring.
+The widget surface should own:
 
-#### Legend
-- **Logic:** plot ordering, active-view filtering, legend row state, style state, sound state, editor-intent state.
-- **Presentation:** row widgets, labels/toggles, toolbar, dialog, anywidget bridge, modal overlay, section root.
+- concrete control widgets
+- modal host wiring
+- stable widget roots
+- ordering inside parameter sections
 
-#### Tabs / navigation
-- **Logic:** selected item, available tabs/pages, tab descriptors, activation callbacks.
-- **Presentation:** `ToggleButtons`, toolkit tab buttons, `build_tab_bar(...)`, `TabListBridge`, page visibility widgets.
+### 5. Split legend handling into controller/state versus widget surface
+Legend logic should own:
 
-This split is what creates maintainable boundaries.
+- plot membership / ordering
+- row state
+- style state
+- sound state
+- editor intent
 
-### 4. Reuse the existing widget ecosystem instead of hand-rolling UI
-The repository already has presentational building blocks worth reusing:
+The widget surface should own:
 
-- shared section chrome from `ui_system.py`
-- `build_tab_bar(...)` in `src/gu_toolkit/ui_system.py:1387-1447`
-- `TabListBridge` in `src/gu_toolkit/widget_chrome.py:384-573`
-- modal host helpers in `ui_system.py` / `widget_chrome.py`
-- anywidget-based bridges already used by Plotly, legend, sliders, sound, and math input
+- row widgets
+- toolbar widgets
+- dialog widgets
+- anywidget bridges
+- stable widget roots
+- modal placement
 
-This directly supports the user’s requirement to keep using widgets rather than rewriting the UI from scratch.
+The new legend controller must be keyed by declared plot membership or other explicit section inputs, not by `active_view_id`.
 
-### 5. Use stable section-root widgets as the reusable presentation unit
-Each presenter should expose one stable root widget (or a small stable widget bundle) that can be mounted into a shell slot.
+### 6. Promote info content into the peer-section model
+Info cards and raw outputs can no longer remain only as children of one singleton info box.
 
-That supports both target environments:
+They do not need a giant new architecture, but they must become promotable into **section instances** so the shell can place multiple info sections independently.
 
-- **Notebook/Jupyter presentation:** compose the roots inside `VBox`/`HBox`/`Box` containers.
-- **Standalone HTML presentation:** mount the same roots into named `<div>` slots using a live widget manager.
+### 7. Make shell visibility a presentation responsibility
+Notebook and HTML shells should decide who is visible.
 
-This is the best fit for the user’s suggestion that different output/widgets be constrained to different divs in responsive HTML.
+That means:
 
-### 6. Add a real display-surface abstraction
-The figure needs a transport boundary now because there is finally a real second transport target.
+- page tabs / buttons are shell controls, not a major standalone subsystem
+- hidden sections stay mounted where practical
+- visible / hidden transitions are shell lifecycle events
+- the shell does not need a big presenter hierarchy just to render tabs in multiple styles
 
-The repository’s own earlier architecture notes correctly warned against adding a `FigureUIAdapter` too early. That warning no longer applies here, because the standalone HTML + PyScript target is a concrete new display transport.
+### 8. Add notebook and HTML mount surfaces over the same section registry
+The same section widget roots should be mountable into:
 
-The figure should no longer assume that “displaying” means only:
+- notebook widget containers, and
+- HTML `<div>` slots.
 
-- create a one-shot notebook `Output`
-- call `IPython.display.display(...)`
+That creates a real transport boundary without duplicating UI logic.
 
-Instead, it should route presentation through a display surface / mount surface abstraction such as:
+### 9. Reuse the existing PlotlyPane visibility boundary
+The existing `PlotlyResizeDriver` already knows how to:
 
-- notebook cell surface
-- notebook reusable root widget surface
-- HTML slotted surface
+- detect whether the DOM host is visible
+- wait for measurable geometry
+- resize only when the host is ready
 
-### 7. Add a standalone HTML live widget runtime bootstrap
-For standalone HTML, the correct solution is a real widget runtime bootstrap, not fake rendering.
+The revised shell should emit visibility / geometry intent and let `PlotlyPane` continue to own browser measurement.
 
-That bootstrap must:
+### 10. Defer hidden plot work and refresh on visible transitions
+The render pipeline already has a stale-marking pattern for inactive views.
 
-- initialize a live widget manager in the PyScript/Pyodide page
-- load `anywidget`-backed widgets correctly
-- mount widget views into supplied DOM targets
-- support the toolkit’s anywidget-based pieces (`PlotlyResizeDriver`, legend bridges, slider modal bridges, tab bridges, etc.)
+Generalize that idea so hidden plot-bearing sections can:
 
-This is the critical missing piece for the HTML target.
-
-### 8. Keep Plotly sizing in `PlotlyPane`, but broaden the reflow contract
-Do **not** move sizing responsibility into ad-hoc Python layout width/height code.
-
-The browser still owns real measured geometry, so `PlotlyPane` remains the right sizing boundary. What needs to change is the reflow contract:
-
-- shell arrangement changes must emit geometry-change events
-- shell-tab switches must emit geometry-change events
-- legend/parameter/info occupancy changes must emit geometry-change events
-- HTML mount completion and external div resizes must emit geometry-change events
-- those events must trigger the active pane’s reflow in a transport-neutral way
-
-That is how Plotly will stay aligned with the new shell arrangements.
+- skip immediate expensive render work while hidden
+- be marked dirty / stale
+- refresh and reflow when they become visible again
 
 ## Why this approach is the best fit
 
-### It solves the actual transport problem
-The HTML requirement is not just “another layout preset.” It is a new display transport. A display-surface boundary is justified now.
+### It solves the actual modeling problem
+The central problem is no longer just shell layout flexibility. It is that the shell needs **peer section instances** with soft associations. This approach introduces exactly that boundary.
 
-### It avoids hand-rolling widgets
-The same live widget components can be reused in Jupyter and HTML. That is exactly what the user asked for.
+### It matches the requested flexibility without enforcing bad structure
+The model allows the common case:
 
-### It localizes the shell problem
-The refactor mainly touches:
+- plot + associated legend + associated info cards
 
-- figure shell composition
-- section controller/presenter boundaries
-- display/mount surfaces
-- geometry/reflow signaling
+without enforcing it as ownership. That is exactly the requested behavior.
 
-It does **not** require rewriting plotting, view state, or the Plotly pane architecture.
+### It aligns with the strongest existing browser/runtime code
+`PlotlyPane` already trusts DOM visibility and measured size. Making the shell visibility presentation-owned is therefore not speculative; it aligns the shell with the best code path already in the repo.
 
-### It scales to future layouts cleanly
-Once the shell is slot-based, new layouts become spec/presenter work rather than more deep wiring through `FigureLayout`, `LegendPanelManager`, and `ParameterManager`.
+### It does not rewrite unrelated systems
+This approach mainly touches:
+
+- shell section modeling
+- section controller / widget-surface boundaries
+- mount surfaces
+- visibility lifecycle / reflow triggers
+
+It does **not** require rewriting plotting, sampling, code generation, or `PlotlyPane` itself.
 
 ## Alternatives rejected
 
-### Rejected: extend `FigureLayout` with more booleans
-That would keep layout policy fused to one widget tree and would become harder to reason about with every new arrangement.
+### Rejected: a generic navigation / presenter hierarchy as the center of the design
+Tabs and page buttons are just shell controls over visibility. They are not important enough to deserve a large independent abstraction stack.
 
-### Rejected: build a separate custom HTML UI
-That would duplicate the existing widget logic and violate the user’s desire to avoid hand-rolling the entire UI stack.
+### Rejected: plot-subordinate legends or info cards
+That would enforce ownership that the user explicitly does not want.
 
-### Rejected: static widget embedding
-The HTML requirement explicitly calls for a live Pyodide-backed widget runtime.
+### Rejected: extending the singleton section-id shell model
+More singleton ids or more shell presets would still avoid the real problem.
 
-### Rejected: solve sizing by pushing more pixel values from Python
-The browser is still the source of truth for actual geometry. The existing `PlotlyPane` approach should be preserved and integrated with a better shell reflow contract.
+### Rejected: a separate custom HTML UI
+That would duplicate the live widget stack and violate the stated requirement.
+
+### Rejected: Python-driven width / height sizing
+The browser is still the source of truth for geometry. `PlotlyPane` already proves that.
 
 ## Scope discipline / non-goals
 
-This project is **not** a rewrite of the entire package.
+This project is **not** a rewrite of the whole package.
 
 It should not:
 
 - rewrite `View` / `ViewManager`
 - replace `PlotlyPane`
-- reimplement Plotly rendering
-- rework plot normalization, code generation, or sound generation logic unless required for widget hosting boundaries
-- force the info panel into the same logic/presentation split in the first pass
-- change the mathematical authoring surface
-- hide the problem under CSS hacks or transport-specific one-offs
-
-The info panel is adjacent to this refactor because it occupies shell space, but it is not the primary target of the requested split. Use generic shell-slot abstractions so info can continue to work without turning this project into a broad rewrite.
+- replace Plotly rendering
+- rewrite plot normalization or code generation
+- build a parallel custom DOM UI
+- force plot / legend / info into parent/child ownership
+- remove legacy view APIs from the public surface unless that becomes necessary later
 
 ## Project phases
 
 1. [Phase 001 - architecture and boundaries](project-057-phase-001-architecture-and-boundaries.md)
-   - define the internal contracts, migration map, and transport boundary before moving code
+   - define the internal contracts and narrow notebook-specific ownership
 2. [Phase 002 - slot-based shell and arrangement spec](project-057-phase-002-slot-based-shell-and-arrangement-spec.md)
-   - replace the fixed sidebar shell with declarative regions and placements
-3. [Phase 003 - parameter, legend, and tabs logic/presentation split](project-057-phase-003-parameter-legend-and-tabs-presentation-split.md)
-   - separate section state/controllers from widget presenters
-4. [Phase 004 - Jupyter presenters and default-layout migration](project-057-phase-004-jupyter-presenters-and-default-layout-migration.md)
-   - preserve JupyterLab/JupyterLite behavior on the new shell/presenter boundaries
-5. [Phase 005 - HTML PyScript live widget runtime](project-057-phase-005-html-pyscript-live-widget-runtime.md)
-   - support standalone HTML with live widget mounting into responsive div slots
-6. [Phase 006 - Plotly sizing and validation](project-057-phase-006-plotly-sizing-and-validation.md)
-   - harden reflow behavior and verify all supported arrangements/environments
+   - introduce the first shell presets and page regions as a stepping stone
+3. [Phase 003 - peer section model and section-state split](project-057-phase-003-parameter-legend-and-tabs-presentation-split.md)
+   - replace singleton section assumptions and split parameter / legend / info shell state from widget surfaces
+4. [Phase 004 - Jupyter shell surface and default-layout migration](project-057-phase-004-jupyter-presenters-and-default-layout-migration.md)
+   - migrate notebook behavior onto the peer-section model and a notebook mount surface
+5. [Phase 005 - HTML PyScript live widget shell surface](project-057-phase-005-html-pyscript-live-widget-runtime.md)
+   - support standalone HTML with live widget mounting into responsive external slots
+6. [Phase 006 - visibility lifecycle, Plotly sizing, and validation](project-057-phase-006-plotly-sizing-and-validation.md)
+   - harden hidden / visible behavior, reflow, and validation across supported environments
 
 ## Acceptance criteria
 
-- [ ] `Figure`, parameter management, legend handling, and tabs/navigation all have explicit logic/presentation boundaries.
-- [ ] Shell arrangement is driven by a spec/presenter layer rather than one fixed sidebar implementation.
-- [ ] The default layout remains functionally equivalent to the current layout except the full-width toggle is gone.
-- [ ] Legend placement can be configured to hidden, left, right, bottom, and separate tab/page modes.
+- [ ] Parameter handling has an explicit controller/state versus widget-surface boundary.
+- [ ] Legend handling has an explicit controller/state versus widget-surface boundary.
+- [ ] The shell model supports multiple legend sections and multiple info sections/cards as peer items.
+- [ ] Associations between plots and companion sections are soft metadata, not enforced ownership.
+- [ ] Shell arrangement is driven by a section-instance registry plus layout spec rather than one fixed singleton sidebar contract.
+- [ ] The default layout remains functionally close to the current one, except the full-width toggle is gone.
 - [ ] JupyterLab remains supported.
 - [ ] JupyterLite + Pyodide remains supported.
 - [ ] Standalone HTML + inline PyScript + Pyodide can mount the same live widget sections into HTML slots.
-- [ ] Plotly respects the active layout region in every supported arrangement.
-- [ ] The implementation reuses existing widget/runtime infrastructure instead of creating a parallel custom UI system.
+- [ ] Plotly respects the currently visible layout region in every supported arrangement.
+- [ ] Hidden plot-bearing sections can defer expensive work and then refresh / reflow when they become visible.
+- [ ] The implementation reuses the existing widget/runtime infrastructure instead of creating a parallel custom UI system.

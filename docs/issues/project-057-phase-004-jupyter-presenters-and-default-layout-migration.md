@@ -1,81 +1,139 @@
-# Project 057 / Phase 004: Jupyter presenters and default-layout migration
+# Project 057 / Phase 004: Jupyter shell surface and default-layout migration
 
 ## Status
-Proposed
+Proposed (revised)
 
 ## Project link
 [Project 057 - Figure shell presentation/runtime refactor](project-057-figure-shell-presentation-runtime-refactor.md)
 
 ## Phase goal
-Make JupyterLab and JupyterLite/JupyterLite+Pyodide first-class consumers of the new shell/presenter boundaries while preserving current user-facing behavior.
+Build the concrete **Jupyter shell surface** on top of the peer-section model from Phase 003 and migrate the default notebook behavior onto that model.
 
-This phase is where the new internal design becomes the actual notebook implementation.
+This phase is where the new section registry becomes a working notebook shell without falling back into:
+
+- singleton legend / info assumptions,
+- view-centric shell rules,
+- or a large navigation abstraction stack.
 
 ## Current context
-The current notebook display path is hard-coded through notebook output display:
+The repo already has a notebook layout manager and shell pages, but they are still tied to the pre-revision model.
 
-- `FigureLayout.output_widget` creates a `OneShotOutput` and displays `root_widget` into it (`src/gu_toolkit/figure_layout.py:538-587`)
-- `Figure._ipython_display_()` and `Figure.show()` then call `display(self._layout.output_widget)` (`src/gu_toolkit/Figure.py:3800-3883`)
+Relevant evidence:
 
-That path works for notebooks but is too notebook-specific to be the long-term figure display contract.
+- `src/gu_toolkit/figure_layout.py:326-505` builds one notebook root tree with one view selector, one stage, and singleton section panels.
+- `src/gu_toolkit/figure_layout.py:2192-2249` applies visibility by toggling singleton section panels and one active shell page.
+- `src/gu_toolkit/figure_layout.py:629-635` still materializes display as a notebook `OneShotOutput`.
+- `src/gu_toolkit/Figure.py:3818-3901` still routes display through notebook-only `display(...)` calls.
 
-At the same time, JupyterLab and JupyterLite are already working today, so this phase must preserve that behavior while moving them onto the new shell boundaries.
+Those are useful notebook stepping stones, but not yet the final notebook shell surface for the revised section model.
 
 ## What this phase must accomplish
 
-### 1. Implement the notebook presentation path on top of the new shell system
-Create the concrete notebook presenter/display surface that uses:
+### 1. Build a notebook shell surface over peer section instances
+Implement the concrete notebook composition layer that can mount section widget roots into notebook widget containers according to the new layout spec.
 
-- the new shell slots/arrangement spec
-- the new section presenters
-- the existing stable view runtimes
-- notebook widget containers and shared toolkit chrome
+This surface should work with section instances such as:
 
-The notebook shell can stay visually close to the current UI; what must change is the internal ownership boundary.
+- one or more stage sections
+- zero or more legend sections
+- zero or more info sections / info-card groups
+- parameter sections
+- output sections
 
-### 2. Route notebook display through a display-surface abstraction
-`show()` and `_ipython_display_()` should no longer be the only place where the figure “knows” how it is mounted.
+The shell surface should not assume that “legend” and “info” are singletons.
 
-The notebook implementation should become one display surface among potentially several. It may still use one-shot notebook output semantics internally if that remains useful, but that behavior should live in the notebook presentation layer, not as the figure’s only display model.
+### 2. Keep notebook visibility presentation-owned
+The notebook shell should decide which mounted sections are visible.
 
-### 3. Preserve current notebook behavior and default layout parity
-Validate that the default arrangement remains close to the current notebook behavior:
+That means:
 
-- multiple views still show view navigation above the stage
-- legend/parameters/info behave as expected in the default shell
-- output remains visible below the main content
-- current notebook examples remain understandable and broadly compatible
+- shell page containers or regions may toggle `layout.display` / CSS classes
+- controls like tab bars or buttons are just shell controls over visibility
+- hidden sections stay mounted where practical instead of being recreated or deeply re-parented on every switch
 
-### 4. Validate JupyterLite + Pyodide compatibility on the new notebook path
-The repository already supports Pyodide-like runtime features at the scheduler/runtime level. This phase must ensure the notebook presenters still work correctly when the kernel/runtime is Pyodide-backed.
+The shell must emit visibility lifecycle events that later phases can use for Plotly refresh / reflow.
 
-### 5. Keep existing anywidget-based helpers working in notebook mode
-This includes at least:
+### 3. Make the default notebook layout conventional, not restrictive
+The default layout should continue to feel close to today’s notebook behavior.
 
-- `PlotlyResizeDriver`
-- legend interaction bridge
-- slider/modal bridges
-- tab accessibility bridge if introduced in earlier phases
+But it should now be built from:
 
-The notebook migration should not silently break those runtime helpers.
+- peer section instances
+- soft associations
+- notebook regions / pages
+
+The normal default code path should generate something like:
+
+- a plot / stage section
+- its associated legend section in the conventional side or bottom placement
+- its associated info sections in a conventional nearby placement
+- the shared parameter section
+- the output section below
+
+However, the underlying model must still allow arbitrary remapping.
+
+### 4. Keep view selection as a compatibility surface, not as the new shell primitive
+Notebook view switching may continue to exist where it already exists.
+
+But in this phase:
+
+- do not expand view-centric shell APIs
+- do not make new legend or info notebook logic depend on active-view filtering
+- do not make the new shell design revolve around the view selector
+
+If a notebook control still selects the active plotting view, that is a compatibility feature, not the conceptual center of the shell.
+
+### 5. Implement the notebook display surface boundary
+The notebook implementation should no longer treat `OneShotOutput` as the only meaningful display contract.
+
+The new notebook shell surface should expose a clear mount / display boundary such as:
+
+- a root widget surface for reuse, and
+- an optional notebook-cell materializer for compatibility with `display(fig)` / `fig.show()`.
+
+This is still notebook-specific, but it should now live behind an explicit notebook display-surface boundary rather than as the figure’s only transport model.
+
+### 6. Reuse existing notebook widget infrastructure
+Reuse existing toolkit infrastructure where it helps:
+
+- section chrome in `ui_system.py`
+- `TabListBridge` where page accessibility is useful
+- existing modal helpers
+- anywidget-backed controls already used by the toolkit
+
+The notebook migration should not introduce a parallel custom UI layer.
+
+### 7. Preserve JupyterLab and JupyterLite + Pyodide behavior
+This phase must keep notebook behavior working in both supported notebook environments.
+
+That includes at least:
+
+- JupyterLab
+- JupyterLite + Pyodide
+
+and must not silently break anywidget-backed notebook helpers already used by the figure shell.
 
 ## Deliverables for this phase
 
-- the notebook/Jupyter concrete shell presenter
-- the notebook display surface/mount path
-- updated notebook-focused tests
-- JupyterLab and JupyterLite regression validation on the new architecture
+- the concrete notebook shell surface for peer section instances
+- a notebook display-surface / mount path
+- a default notebook layout builder that uses soft associations but does not enforce them
+- notebook visibility lifecycle hooks for later Plotly hardening work
+- updated notebook-focused tests and regression checks
 
 ## Out of scope
 
-- standalone HTML runtime bootstrap
-- HTML slot mounting
-- final Plotly sizing hardening across every arrangement
+- standalone HTML widget runtime bootstrap
+- final Plotly sizing sign-off across all arrangements
+- removal of legacy view APIs from the public surface
+- a custom notebook UI system unrelated to `ipywidgets` / `anywidget`
 
 ## Exit criteria
 
-- [ ] JupyterLab still works on the new shell/presenter boundaries.
-- [ ] JupyterLite + Pyodide still works on the new shell/presenter boundaries.
-- [ ] Default notebook behavior remains functionally similar to today.
-- [ ] Notebook display is implemented through the new display-surface boundary rather than as the figure’s only hard-coded display path.
-- [ ] Anywidget-based notebook helpers continue to function.
+- [ ] JupyterLab still works on the peer-section model.
+- [ ] JupyterLite + Pyodide still works on the peer-section model.
+- [ ] The default notebook layout remains functionally close to today, except the full-width toggle is gone.
+- [ ] The default notebook path conventionally places associated legends / info near their related plot sections without enforcing ownership.
+- [ ] Notebook visibility is controlled by the shell surface rather than by singleton section assumptions.
+- [ ] Notebook display is implemented through an explicit notebook mount/display boundary rather than as the figure’s only transport path.
+- [ ] Existing anywidget-based notebook helpers continue to function.
