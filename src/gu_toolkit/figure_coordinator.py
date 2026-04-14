@@ -117,8 +117,7 @@ from .figure_parameters import ParameterManager, ParameterPanel
 from .figure_sound import FigureSoundManager
 from .figure_parametric_plot import ParametricPlot, create_or_update_parametric_plot
 from .figure_plot import Plot
-from .figure_view import FigureViews, View
-from .figure_view_manager import ViewManager
+from ._figure_panes import FigurePanes, FigurePane
 # SECTION: Figure (The Coordinator) [id: Figure]
 # =============================================================================
 class Figure:
@@ -236,8 +235,11 @@ class Figure:
         "_legend",
         "_legend_panels",
         "_sound",
-        "_view_manager",
-        "_views",
+        "_panes",
+        "_ordered_pane_ids",
+        "_current_pane_id",
+        "_default_pane_id",
+        "_panes_facade",
         "_sampling_points",
         "_default_x_range",
         "_default_y_range",
@@ -248,7 +250,7 @@ class Figure:
         "_context_depth",
         "_render_scheduler",
         "_relayout_debouncer",
-        "_pending_relayout_view_id",
+        "_pending_relayout_pane_id",
         "_layout_debug_figure_id",
         "_layout_debug_enabled",
         "_layout_event_buffer",
@@ -310,7 +312,6 @@ class Figure:
         ) -> bool:
             return self._coerce_samples_value(lhs) == self._coerce_samples_value(rhs)
         debug = bool(_deprecated_kwargs.pop("debug", False))
-        default_view_id = _deprecated_kwargs.pop("default_view_id", None)
         plotly_legend_mode = _deprecated_kwargs.pop("plotly_legend_mode", None)
         if _deprecated_kwargs:
             unexpected = ", ".join(sorted(_deprecated_kwargs))
@@ -322,12 +323,6 @@ class Figure:
                 stacklevel=2,
             )
             logging.getLogger("gu_toolkit.layout").setLevel(logging.DEBUG)
-        if default_view_id is not None:
-            warnings.warn(
-                "Figure(default_view_id=...) is deprecated and ignored; view ids are managed via fig.views.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         if plotly_legend_mode is not None:
             warnings.warn(
                 "Figure(plotly_legend_mode=...) is deprecated; the toolkit uses a side-panel legend.",
@@ -465,19 +460,22 @@ class Figure:
             event_sink=(self._emit_layout_event if self._layout_debug_enabled else (lambda **_kwargs: None)),
         )
         self._emit_layout_event("relayout_debouncer_created", source="Figure", phase="completed", level=logging.INFO)
-        self._layout.observe_view_selection(self.set_active_view)
+        self._layout.observe_pane_selection(self.select_pane)
         self._layout.observe_full_width_change(
-            lambda _is_full: self._request_active_view_reflow("full_width_change")
+            lambda _is_full: self._request_current_pane_reflow("full_width_change")
         )
-        self._layout.bind_view_reflow(self._request_view_reflow)
+        self._layout.bind_pane_reflow(self._request_pane_reflow)
 
-        # 4. Views facade and model registry
-        self._view_manager = ViewManager()
-        self._views = FigureViews(self)
+        # 4. Pane registry
+        self._default_pane_id = "main"
+        self._panes: dict[str, FigurePane] = {}
+        self._ordered_pane_ids: list[str] = []
+        self._current_pane_id = self._default_pane_id
+        self._panes_facade = FigurePanes(self)
 
         # 5. Set initial state
-        self.add_view(
-            self._view_manager.default_view_id,
+        self.add_pane(
+            self._default_pane_id,
             x_range=default_x_range,
             y_range=default_y_range,
             x_label=x_label,
@@ -489,9 +487,9 @@ class Figure:
             register=True,
         )
         self._sync_default_presentations_for_plot_widget(self.pane.widget)
-        self._emit_layout_event("active_view_after_remove", source="Figure", phase="completed", view_id=self.views.current_id)
+        self._emit_layout_event("current_pane_ready", source="Figure", phase="completed", pane_id=self.panes.current_id)
         if self._sync_sidebar_visibility():
-            self._request_active_view_reflow("sidebar_visibility")
+            self._request_current_pane_reflow("sidebar_visibility")
 
         self._emit_layout_event("figure_created", source="Figure", phase="completed", level=logging.INFO, title=title, samples=self.samples, default_samples=self.default_samples)
 
@@ -509,11 +507,9 @@ class Figure:
     def _emit_layout_event(self, event: str, *, source: str, phase: str, level: int = logging.DEBUG, **fields: Any) -> dict[str, Any]:
         if not self._layout_debug_enabled:
             return {}
-        if "active_view_id" not in fields:
-            fields["active_view_id"] = (
-                self._view_manager.active_view_id
-                if hasattr(self, "_view_manager")
-                else None
+        if "current_pane_id" not in fields:
+            fields["current_pane_id"] = (
+                self._current_pane_id if hasattr(self, "_panes") and self._panes else None
             )
         return self._layout_event_emitter(
             event=event,
@@ -634,107 +630,26 @@ class Figure:
         self._layout.set_title(value)
 
     # -------------------------------
-    # Views
+    # Panes
     # -------------------------------
 
     @property
-    def views(self) -> FigureViews:
-        """Mapping-like access to the figure's public :class:`View` objects.
-        
-        Full API
-        --------
-        ``obj.views -> FigureViews``
-        
-        Parameters
-        ----------
-        None. This API does not declare user-supplied parameters beyond implicit object context.
-        
-        Returns
-        -------
-        FigureViews
-            Result produced by this API.
-        
-        Optional arguments
-        ------------------
-        This API does not declare optional arguments in its Python signature.
-        
-        Architecture note
-        -----------------
-        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
-        
-        Examples
-        --------
-        Basic use::
-        
-            obj = Figure(...)
-            current = obj.views
-        
-        Discovery-oriented use::
-        
-            help(Figure)
-            # then follow the guide/test links listed below
-        
-        Learn more / explore
-        --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Guide: ``docs/guides/develop_guide.md``.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
-        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
-        """
-        return self._views
+    def panes(self) -> FigurePanes:
+        """Mapping-like access to the figure's public pane objects."""
+        return self._panes_facade
 
     @property
-    def active_view_id(self) -> str:
-        """Return the currently active view id.
-        
-        Full API
-        --------
-        ``obj.active_view_id -> str``
-        
-        Parameters
-        ----------
-        None. This API does not declare user-supplied parameters beyond implicit object context.
-        
-        Returns
-        -------
-        str
-            Result produced by this API.
-        
-        Optional arguments
-        ------------------
-        This API does not declare optional arguments in its Python signature.
-        
-        Architecture note
-        -----------------
-        This member belongs to ``Figure``. The figure layer is coordinator-driven: Figure owns orchestration, while view/layout/info/parameter collaborators own their specific state. Use it through the owning object rather than bypassing the surrounding figure/runtime machinery.
-        
-        Examples
-        --------
-        Basic use::
-        
-            obj = Figure(...)
-            current = obj.active_view_id
-        
-        Discovery-oriented use::
-        
-            help(Figure)
-            # then follow the guide/test links listed below
-        
-        Learn more / explore
-        --------------------
-        - Start with ``docs/guides/api-discovery.md`` for a task-oriented map of the package.
-        - Guide: ``docs/guides/develop_guide.md``.
-        - Example notebook: ``examples/Toolkit_overview.ipynb``.
-        - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
-        - In a notebook or REPL, run ``help(Figure)`` and ``dir(Figure)`` to inspect adjacent members.
-        """
-        warnings.warn(
-            "Figure.active_view_id is deprecated; use fig.views.current_id.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.views.current_id
+    def current_pane_id(self) -> str:
+        """Return the identifier of the currently selected pane."""
+        if not self._ordered_pane_ids:
+            raise KeyError("Figure has no panes")
+        return self._current_pane_id
+
+    def _require_pane(self, pane_id: str) -> FigurePane:
+        key = str(pane_id)
+        if key not in self._panes:
+            raise KeyError(f"Unknown pane: {key}")
+        return self._panes[key]
 
     def _create_view(
         self,

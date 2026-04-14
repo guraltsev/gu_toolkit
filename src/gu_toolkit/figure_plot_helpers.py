@@ -69,24 +69,24 @@ def resolve_plot_id(existing_plots: Mapping[str, Any], requested_id: str | None)
 
 
 
-def normalize_view_ids(
-    view: str | Sequence[str] | None,
+def normalize_pane_ids(
+    pane: str | Sequence[str] | None,
     *,
-    default_view_id: str,
+    default_pane_id: str,
 ) -> tuple[str, ...]:
-    """Normalize a public ``view=`` argument into a tuple of view ids.
+    """Normalize a public ``pane=`` argument into a tuple of pane ids.
     
     Full API
     --------
-    ``normalize_view_ids(view: str | Sequence[str] | None, *, default_view_id: str) -> tuple[str, ...]``
+    ``normalize_pane_ids(pane: str | Sequence[str] | None, *, default_pane_id: str) -> tuple[str, ...]``
     
     Parameters
     ----------
-    view : str | Sequence[str] | None
-        View identifier or view-scoped target. When omitted, the active view is used. Required.
+    pane : str | Sequence[str] | None
+        Pane identifier or pane-scoped target. When omitted, the current pane is used. Required.
     
-    default_view_id : str
-        Identifier for the default view or fallback view. Required.
+    default_pane_id : str
+        Identifier for the default pane or fallback pane. Required.
     
     Returns
     -------
@@ -105,12 +105,12 @@ def normalize_view_ids(
     --------
     Basic use::
     
-        from gu_toolkit.figure_plot_helpers import normalize_view_ids
-        result = normalize_view_ids(...)
+        from gu_toolkit.figure_plot_helpers import normalize_pane_ids
+        result = normalize_pane_ids(...)
     
     Discovery-oriented use::
     
-        help(normalize_view_ids)
+        help(normalize_pane_ids)
         # then follow the guide/test links listed below
     
     Learn more / explore
@@ -119,13 +119,13 @@ def normalize_view_ids(
     - Guide: ``docs/guides/legend-plot-editor.md``.
     - Example notebook: ``examples/Toolkit_overview.ipynb``.
     - Runtime discovery tip: call ``plot_style_options()`` and inspect ``Figure.plot`` to see the supported cartesian-curve options.
-    - In a notebook or REPL, run ``help(normalize_view_ids)`` and inspect sibling APIs in the same module.
+    - In a notebook or REPL, run ``help(normalize_pane_ids)`` and inspect sibling APIs in the same module.
     """
-    if isinstance(view, str):
-        return (view,)
-    if view is None:
-        return (default_view_id,)
-    return tuple(view)
+    if isinstance(pane, str):
+        return (pane,)
+    if pane is None:
+        return (default_pane_id,)
+    return tuple(pane)
 
 
 
@@ -180,6 +180,6 @@ def remove_plot_from_figure(figure: Any, plot_id: str) -> None:
     plot = figure.plots.pop(plot_id, None)
     if plot is None:
         return
-    for view_id in tuple(plot.views):
-        plot.remove_from_view(view_id)
+    for pane_id in tuple(plot.panes):
+        plot.remove_from_pane(pane_id)
     figure._notify_plot_removed(plot_id)
