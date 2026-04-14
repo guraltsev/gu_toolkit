@@ -1,7 +1,7 @@
 # Project 057 / Phase 003: filter-driven legends, parameter presentations, and mount management
 
 ## Status
-Revised replacement for the earlier Phase 003 draft.
+Unknown
 
 ## Project link
 [Project 057 - Figure shell presentation/runtime refactor](project-057-figure-shell-presentation-runtime-refactor.md)

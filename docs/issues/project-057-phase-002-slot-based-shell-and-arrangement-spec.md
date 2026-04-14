@@ -1,7 +1,7 @@
 # Project 057 / Phase 002: slot-based shell and arrangement spec
 
 ## Status
-Proposed
+Implemented
 
 ## Project link
 [Project 057 - Figure shell presentation/runtime refactor](project-057-figure-shell-presentation-runtime-refactor.md)
