@@ -16,6 +16,7 @@ from typing import Any
 
 from ._widget_stubs import widgets
 from .figure_shell import _FigureShellSpec, _ShellPageSpec, _resolve_figure_shell_spec
+from .figure_mount import MountItem, MountManager
 from .ui_system import (
     build_layout,
     build_section_panel,
@@ -502,6 +503,16 @@ class FigureLayout:
             "right_region": self.sidebar_container,
             "bottom_region": self.bottom_section_container,
         }
+        self._mount_manager = MountManager()
+        for slot_name, host_widget in self._shell_slots.items():
+            if isinstance(host_widget, widgets.Box):
+                self._mount_manager.register_slot(slot_name, host_widget)
+        for item_id, widget in self._section_widgets.items():
+            if item_id == "shell":
+                continue
+            self._mount_manager.register(
+                MountItem(id=item_id, kind=item_id, root_widget=widget)
+            )
 
         self._rebuild_shell_arrangement()
         self.full_width_checkbox.observe(self._on_full_width_change, names="value")
@@ -634,6 +645,45 @@ class FigureLayout:
             display(self.root_widget)
         return out
 
+    @property
+    def mount_manager(self) -> MountManager:
+        """Auto-generated reference note for ``mount_manager``.
+
+        Full API
+        --------
+        ``mount_manager(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Return the layout-level mount manager."""
+
+        return self._mount_manager
+
     def _mount_parameter_control(self, control: Any) -> None:
         """Attach a parameter control to the notebook parameter section."""
 
@@ -642,6 +692,19 @@ class FigureLayout:
             attach_fn(self.root_widget)
         if control not in self.params_box.children:
             self.params_box.children = (*self.params_box.children, control)
+
+    @property
+    def _parameter_panel_children(self) -> tuple[widgets.Widget, ...]:
+        """Return the widgets currently mounted in the notebook parameter body."""
+
+        return tuple(self.params_box.children)
+
+    def _set_parameter_panel_children(self, children: Sequence[widgets.Widget]) -> None:
+        """Replace the notebook parameter body widgets."""
+
+        desired = tuple(children)
+        if self.params_box.children != desired:
+            self.params_box.children = desired
 
     @property
     def _legend_has_toolbar_host(self) -> bool:
@@ -993,7 +1056,7 @@ class FigureLayout:
         - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
         - In a notebook or REPL, run ``help(FigureLayout)`` and ``dir(FigureLayout)`` to inspect adjacent members.
         """
-        old_state = self._shell_display_state()
+        old_state = self._effective_layout_state()
 
         self._section_visibility = {
             "legend": bool(has_legend),
@@ -1002,7 +1065,7 @@ class FigureLayout:
         }
         self._apply_shell_visibility()
 
-        new_state = self._shell_display_state()
+        new_state = self._effective_layout_state()
         changed = new_state != old_state
         self._emit_layout_event(
             "sidebar_visibility_changed" if changed else "sidebar_visibility_unchanged",
@@ -2101,32 +2164,20 @@ class FigureLayout:
             else:
                 self._set_children_if_changed(
                     page_state.center_box,
-                    tuple(
-                        self._section_panel_for_id(section_id)
-                        for section_id in page_spec.main_sections
-                    ),
+                    self._mount_manager.widgets_for_ids(page_spec.main_sections),
                 )
 
             self._set_children_if_changed(
                 page_state.left_box,
-                tuple(
-                    self._section_panel_for_id(section_id)
-                    for section_id in page_spec.left_sections
-                ),
+                self._mount_manager.widgets_for_ids(page_spec.left_sections),
             )
             self._set_children_if_changed(
                 page_state.right_box,
-                tuple(
-                    self._section_panel_for_id(section_id)
-                    for section_id in page_spec.right_sections
-                ),
+                self._mount_manager.widgets_for_ids(page_spec.right_sections),
             )
             self._set_children_if_changed(
                 page_state.bottom_box,
-                tuple(
-                    self._section_panel_for_id(section_id)
-                    for section_id in page_spec.bottom_sections
-                ),
+                self._mount_manager.widgets_for_ids(page_spec.bottom_sections),
             )
 
             row_children: list[widgets.Widget] = []
@@ -2241,11 +2292,11 @@ class FigureLayout:
         legend_visible = self._section_visibility.get("legend", False) and "legend" in active_sections
 
         self.params_header.layout.display = "block" if params_visible else "none"
-        self.params_panel.panel.layout.display = "flex" if params_visible else "none"
+        self._mount_manager.set_visible("parameters", params_visible)
         self.info_header.layout.display = "block" if info_visible else "none"
-        self.info_panel.panel.layout.display = "flex" if info_visible else "none"
+        self._mount_manager.set_visible("info", info_visible)
         self.legend_header.layout.display = "none"
-        self.legend_panel.panel.layout.display = "flex" if legend_visible else "none"
+        self._mount_manager.set_visible("legend", legend_visible)
 
         self._sync_shell_page_tabs()
 
@@ -2297,6 +2348,14 @@ class FigureLayout:
             active_shell_page_id=self._active_shell_page_id,
         )
         self._reflow_callback(self._active_view_id, reason)
+
+    def _effective_layout_state(self) -> tuple[Any, ...]:
+        legend_effective = bool(self._section_visibility.get("legend", False) and self.legend_box.children)
+        return (
+            bool(self._section_visibility.get("parameters", False)),
+            bool(self._section_visibility.get("info", False)),
+            legend_effective,
+        )
 
     def _shell_display_state(self) -> tuple[Any, ...]:
         page_states = tuple(

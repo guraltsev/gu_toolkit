@@ -175,6 +175,7 @@ class InfoPanelManager:
         debouncer: QueuedDebouncer
         pending_ctx: InfoPanelManager.InfoChangeContext | None = None
         view_id: str | None = None
+        group_id: str = "default"
 
     def __init__(self, layout_box: widgets.Box) -> None:
         """Initialize the info panel manager.
@@ -199,6 +200,9 @@ class InfoPanelManager:
         self._outputs: dict[Hashable, widgets.Output] = {}
         self._components: dict[Hashable, Any] = {}
         self._layout_box = layout_box
+        self._groups: dict[str, widgets.Box] = {"default": layout_box}
+        self._output_groups: dict[Hashable, str] = {}
+        self._group_contents: dict[str, set[Hashable]] = {"default": set()}
         self._counter = 0
         self._simple_cards: dict[Hashable, InfoPanelManager._SimpleInfoCard] = {}
         self._simple_counter = 0
@@ -260,8 +264,183 @@ class InfoPanelManager:
         if callback is not None:
             callback(reason)
 
+    @staticmethod
+    def _normalize_group_id(group_id: Hashable | None) -> str:
+        return "default" if group_id is None else str(group_id)
+
+    def ensure_group(
+        self,
+        group_id: Hashable | None,
+        *,
+        root_widget: widgets.Box | None = None,
+    ) -> widgets.Box:
+        """Auto-generated reference note for ``ensure_group``.
+
+        Full API
+        --------
+        ``ensure_group(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Return a stable mount root for one info presentation group."""
+        key = self._normalize_group_id(group_id)
+        if key not in self._groups:
+            box = root_widget or widgets.VBox(
+                layout=widgets.Layout(width="100%", min_width="0", gap="6px")
+            )
+            add_class = getattr(box, "add_class", None)
+            if callable(add_class):
+                add_class("gu-figure-info-group")
+            self._groups[key] = box
+            self._group_contents.setdefault(key, set())
+        elif root_widget is not None and self._groups[key] is not root_widget:
+            self._groups[key] = root_widget
+        return self._groups[key]
+
+    def group_widget(self, group_id: Hashable | None = None) -> widgets.Box:
+        """Auto-generated reference note for ``group_widget``.
+
+        Full API
+        --------
+        ``group_widget(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Return the widget root for one info group."""
+        return self.ensure_group(group_id)
+
+    def group_has_info(self, group_id: Hashable | None = None) -> bool:
+        """Auto-generated reference note for ``group_has_info``.
+
+        Full API
+        --------
+        ``group_has_info(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Return whether the requested group currently has mounted info content."""
+        key = self._normalize_group_id(group_id)
+        return len(self._group_contents.get(key, set())) > 0
+
+    @property
+    def default_group_has_info(self) -> bool:
+        """Auto-generated reference note for ``default_group_has_info``.
+
+        Full API
+        --------
+        ``default_group_has_info(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Whether the default sidebar info group has any content."""
+        return self.group_has_info("default")
+
     def get_output(
-        self, id: Hashable | None = None, **layout_kwargs: Any
+        self,
+        id: Hashable | None = None,
+        group: Hashable | None = None,
+        root_widget: widgets.Box | None = None,
+        **layout_kwargs: Any,
     ) -> widgets.Output:
         """Get or create an Info Output widget.
         
@@ -337,8 +516,12 @@ class InfoPanelManager:
         if callable(add_class):
             add_class("gu-figure-info-output")
 
+        group_key = self._normalize_group_id(group)
+        host = self.ensure_group(group_key, root_widget=root_widget)
         self._outputs[id] = out
-        self._layout_box.children += (out,)
+        self._output_groups[id] = group_key
+        self._group_contents.setdefault(group_key, set()).add(id)
+        host.children += (out,)
         self._notify_layout_change("output_created")
         return out
 
@@ -500,7 +683,7 @@ class InfoPanelManager:
         - Runtime discovery tip: use ``with fig:`` or ``with fig.views["id"]:`` and inspect ``help(Figure)`` for the class-based and current-figure surfaces.
         - In a notebook or REPL, run ``help(InfoPanelManager)`` and ``dir(InfoPanelManager)`` to inspect adjacent members.
         """
-        return len(self._outputs) > 0
+        return any(len(items) > 0 for items in self._group_contents.values())
 
     @property
     def outputs(self) -> Mapping[Hashable, widgets.Output]:
@@ -555,6 +738,8 @@ class InfoPanelManager:
         id: Hashable | None = None,
         *,
         view: str | None = None,
+        group: Hashable | None = None,
+        root_widget: widgets.Box | None = None,
     ) -> Hashable:
         """Create or replace a simple rich-text info card.
         
@@ -614,7 +799,7 @@ class InfoPanelManager:
             if m:
                 self._simple_counter = max(self._simple_counter, int(m.group(1)) + 1)
 
-        out = self.get_output(id=id)
+        out = self.get_output(id=id, group=group, root_widget=root_widget)
 
         normalized = self._normalize_spec(spec)
         card = self._simple_cards.get(id)
@@ -639,6 +824,7 @@ class InfoPanelManager:
             self._simple_cards[id] = card
 
         card.view_id = view
+        card.group_id = self._output_groups.get(id, "default")
         self._rebuild_simple_card(card, normalized)
         self._apply_card_visibility(card)
         return id

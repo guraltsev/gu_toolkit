@@ -703,6 +703,394 @@ class LegendStyleDialogState:
     autonormalization: bool
 
 
+class LegendModel:
+    """Auto-generated reference note for ``LegendModel``.
+
+    Full API
+    --------
+    ``LegendModel(...)``
+
+    Parameters
+    ----------
+    See the Python signature for the accepted arguments.
+
+    Returns
+    -------
+    Any
+        Result produced by this API.
+
+    Optional arguments
+    ------------------
+    Optional inputs follow the Python signature when present.
+
+    Architecture note
+    -----------------
+    This class is part of the figure presentation/runtime refactor boundary.
+
+    Examples
+    --------
+    Basic use::
+
+        # See tests for concrete usage examples.
+
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for package navigation.
+    """
+    """Widget-free legend membership and ordering state."""
+
+    def __init__(
+        self,
+        *,
+        plot_filter: Callable[[Any], bool] | None = None,
+    ) -> None:
+        self._plots: dict[str, Any] = {}
+        self._ordered_plot_ids: list[str] = []
+        self._plot_filter = plot_filter
+
+    @property
+    def plots(self) -> dict[str, Any]:
+        """Auto-generated reference note for ``plots``.
+
+        Full API
+        --------
+        ``plots(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        return self._plots
+
+    @property
+    def ordered_plot_ids(self) -> tuple[str, ...]:
+        """Auto-generated reference note for ``ordered_plot_ids``.
+
+        Full API
+        --------
+        ``ordered_plot_ids(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        return tuple(self._ordered_plot_ids)
+
+    def set_plot_filter(self, plot_filter: Callable[[Any], bool] | None) -> None:
+        """Auto-generated reference note for ``set_plot_filter``.
+
+        Full API
+        --------
+        ``set_plot_filter(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        self._plot_filter = plot_filter
+
+    def includes(self, plot: Any) -> bool:
+        """Auto-generated reference note for ``includes``.
+
+        Full API
+        --------
+        ``includes(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        if self._plot_filter is None:
+            return True
+        try:
+            return bool(self._plot_filter(plot))
+        except Exception:
+            return False
+
+    def on_plot_added(self, plot_id: str, plot: Any) -> None:
+        """Auto-generated reference note for ``on_plot_added``.
+
+        Full API
+        --------
+        ``on_plot_added(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        self._plots[plot_id] = plot
+        if plot_id not in self._ordered_plot_ids:
+            self._ordered_plot_ids.append(plot_id)
+
+    def on_plot_updated(self, plot_id: str, plot: Any) -> None:
+        """Auto-generated reference note for ``on_plot_updated``.
+
+        Full API
+        --------
+        ``on_plot_updated(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        self.on_plot_added(plot_id, plot)
+
+    def on_plot_removed(self, plot_id: str) -> None:
+        """Auto-generated reference note for ``on_plot_removed``.
+
+        Full API
+        --------
+        ``on_plot_removed(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        self._plots.pop(plot_id, None)
+        self._ordered_plot_ids = [pid for pid in self._ordered_plot_ids if pid != plot_id]
+
+    def ordered_plots(self) -> tuple[tuple[str, Any], ...]:
+        """Auto-generated reference note for ``ordered_plots``.
+
+        Full API
+        --------
+        ``ordered_plots(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        return tuple(
+            (plot_id, self._plots[plot_id])
+            for plot_id in self._ordered_plot_ids
+            if plot_id in self._plots
+        )
+
+    def visible_plots(self) -> tuple[tuple[str, Any], ...]:
+        """Auto-generated reference note for ``visible_plots``.
+
+        Full API
+        --------
+        ``visible_plots(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        return tuple(
+            (plot_id, plot)
+            for plot_id, plot in self.ordered_plots()
+            if self.includes(plot)
+        )
+
+
 class LegendPanelManager:
     """Manage legend sidebar rows and synchronize them with plot lifecycle events.
     
@@ -778,6 +1166,7 @@ class LegendPanelManager:
         header_toolbar: widgets.Box | None = None,
         enable_plot_editor: bool = False,
         layout_manager: Any | None = None,
+        model: LegendModel | None = None,
     ) -> None:
         """Initialize a legend manager bound to the provided layout box."""
         self._layout_manager = layout_manager
@@ -791,9 +1180,10 @@ class LegendPanelManager:
             )
         self._enable_plot_editor = bool(enable_plot_editor)
         self._plot_editor_handler: Callable[[str | None], None] | None = None
+        self._model = model or LegendModel()
         self._rows: dict[str, LegendRowModel] = {}
-        self._plots: dict[str, Any] = {}
-        self._ordered_plot_ids: list[str] = []
+        self._plots = self._model.plots
+        self._ordered_plot_ids = self._model._ordered_plot_ids
         self._active_view_id: str | None = None
         self._suspended_plot_ids: set[str] = set()
         self._sound_generation_enabled = False
@@ -1163,6 +1553,83 @@ class LegendPanelManager:
 
         return self._enable_plot_editor or self.has_legend
 
+    @property
+    def model(self) -> LegendModel:
+        """Auto-generated reference note for ``model``.
+
+        Full API
+        --------
+        ``model(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Return the underlying widget-free legend model."""
+        return self._model
+
+    def set_plot_filter(self, plot_filter: Callable[[Any], bool] | None) -> None:
+        """Auto-generated reference note for ``set_plot_filter``.
+
+        Full API
+        --------
+        ``set_plot_filter(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Apply an explicit legend membership filter over global plots."""
+        self._active_view_id = None
+        self._model.set_plot_filter(plot_filter)
+        self.refresh(reason="plot_filter_changed")
+
     def bind_plot_editor_handler(
         self, callback: Callable[[str | None], None] | None
     ) -> None:
@@ -1408,9 +1875,7 @@ class LegendPanelManager:
         - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
         """
         plot_id = self._normalize_plot_id(getattr(plot, "id", None), fallback_prefix="plot")
-        self._plots[plot_id] = plot
-        if plot_id not in self._ordered_plot_ids:
-            self._ordered_plot_ids.append(plot_id)
+        self._model.on_plot_added(plot_id, plot)
         if plot_id not in self._rows:
             self._rows[plot_id] = self._create_row(plot_id)
         self.refresh(reason="plot_added")
@@ -1464,7 +1929,7 @@ class LegendPanelManager:
         if plot_id not in self._rows:
             self.on_plot_added(plot)
             return
-        self._plots[plot_id] = plot
+        self._model.on_plot_updated(plot_id, plot)
         self.refresh(reason="plot_updated")
 
     def on_plot_removed(self, plot_id: str) -> None:
@@ -1513,8 +1978,7 @@ class LegendPanelManager:
         - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
         """
         key = self._normalize_plot_id(plot_id, fallback_prefix="plot")
-        self._plots.pop(key, None)
-        self._ordered_plot_ids = [pid for pid in self._ordered_plot_ids if pid != key]
+        self._model.on_plot_removed(key)
         removed = self._rows.pop(key, None)
         if removed is not None:
             removed.toggle.unobserve_all()
@@ -1572,7 +2036,12 @@ class LegendPanelManager:
         - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
         """
         self._active_view_id = str(view_id)
-        self.refresh(reason="active_view_changed")
+        target_view_id = self._active_view_id
+        self.set_plot_filter(
+            lambda plot, _view_id=target_view_id: _view_id in tuple(
+                str(member_id) for member_id in getattr(plot, "views", ())
+            )
+        )
 
     def refresh(self, reason: str = "") -> None:
         """Synchronize row widgets with latest plot state and active-view filtering.
@@ -1620,12 +2089,11 @@ class LegendPanelManager:
         - In a notebook or REPL, run ``help(LegendPanelManager)`` and ``dir(LegendPanelManager)`` to inspect adjacent members.
         """
         visible_rows: list[widgets.Widget] = []
-        for plot_id in self._ordered_plot_ids:
-            plot = self._plots.get(plot_id)
+        for plot_id, plot in self._model.ordered_plots():
             row = self._rows.get(plot_id)
-            if plot is None or row is None:
+            if row is None:
                 continue
-            visible = self._plot_in_active_view(plot)
+            visible = self._model.includes(plot)
             row.is_visible_for_active_view = visible
             self._sync_row_widgets(row=row, plot=plot)
             if visible:
@@ -1645,11 +2113,8 @@ class LegendPanelManager:
             self._sync_dialog_from_plot_state()
 
     def _plot_in_active_view(self, plot: Any) -> bool:
-        """Return whether ``plot`` belongs to the current active view."""
-        if self._active_view_id is None:
-            return True
-        plot_views = getattr(plot, "views", ())
-        return self._active_view_id in tuple(str(view_id) for view_id in plot_views)
+        """Compatibility shim returning whether the current legend filter keeps ``plot``."""
+        return self._model.includes(plot)
 
     def _create_row(self, plot_id: str) -> LegendRowModel:
         """Create a legend row widget bundle with toggle and label controls."""

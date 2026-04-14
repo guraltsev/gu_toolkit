@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 import time
-from collections.abc import Callable, Hashable, Iterator, Mapping
+from collections.abc import Callable, Hashable, Iterator, Mapping, Sequence
 from typing import Any
 
 from ._widget_stubs import widgets
@@ -211,27 +211,27 @@ class ParameterManager(Mapping[str, ParamRef]):
         self._controls: list[Any] = []
         self._hooks: dict[Hashable, Callable[[ParamEvent], Any]] = {}
         self._hook_counter: int = 0
+        self._subscribers: dict[Hashable, Callable[[set[str]], Any]] = {}
+        self._subscriber_counter: int = 0
         self._render_callback = render_callback
         self._bind_change_callback = bool(bind_change_callback)
         self._layout_manager = layout_manager
         self._layout_box = layout_box
         self._modal_host = modal_host
-        if self._layout_manager is None and self._layout_box is None:
-            raise TypeError(
-                "ParameterManager requires layout_manager or layout_box."
-            )
+        self._default_parameter_filter: Callable[[], Sequence[ParameterKey]] | None = None
         self._performance = PerformanceMonitor("ParameterManager")
         self._performance.increment("created")
         self._performance.set_state(parameter_count=0, control_count=0, hook_count=0)
 
     def _mount_control(self, control: Any) -> None:
-        if self._layout_manager is not None:
-            self._layout_manager._mount_parameter_control(control)
-            return
         attach_fn = getattr(control, "set_modal_host", None)
         if callable(attach_fn):
             attach_fn(self._modal_host)
-        assert self._layout_box is not None
+        if self._layout_manager is not None:
+            self._layout_manager._mount_parameter_control(control)
+            return
+        if self._layout_box is None:
+            return
         if control not in self._layout_box.children:
             self._layout_box.children = (*self._layout_box.children, control)
 
@@ -447,6 +447,7 @@ class ParameterManager(Mapping[str, ParamRef]):
             missing_count=len(missing),
             existing_count=len(existing),
         )
+        self._notify_subscribers({name for name, _symbol in requested})
 
         if single:
             return self._refs[requested[0][0]]
@@ -859,6 +860,412 @@ class ParameterManager(Mapping[str, ParamRef]):
         """
         return len(self._refs) > 0
 
+    @property
+    def panel_visible(self) -> bool:
+        """Auto-generated reference note for ``panel_visible``.
+
+        Full API
+        --------
+        ``panel_visible(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Whether the current parameter presentation has any mounted controls."""
+        layout_children = None
+        if self._layout_manager is not None:
+            layout_children = getattr(self._layout_manager, "_parameter_panel_children", None)
+        elif self._layout_box is not None:
+            layout_children = tuple(self._layout_box.children)
+        if layout_children is None:
+            return self.has_params
+        return len(tuple(layout_children)) > 0
+
+    def list_parameters(self) -> tuple[str, ...]:
+        """Auto-generated reference note for ``list_parameters``.
+
+        Full API
+        --------
+        ``list_parameters(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Return canonical parameter names in deterministic creation order."""
+        return tuple(self._refs.keys())
+
+    def get_parameter_spec(self, name: ParameterKey) -> dict[str, Any]:
+        """Auto-generated reference note for ``get_parameter_spec``.
+
+        Full API
+        --------
+        ``get_parameter_spec(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Return a lightweight spec snapshot for one parameter."""
+        resolved = self._resolve_name(name)
+        ref = self._refs[resolved]
+        symbol = self._symbols.get(resolved, parameter_symbol(resolved))
+        spec: dict[str, Any] = {
+            "name": resolved,
+            "symbol": symbol,
+            "widget": getattr(ref, "widget", None),
+            "value": getattr(ref, "value", None),
+        }
+        for attr_name in ("min", "max", "step", "description"):
+            if hasattr(ref, attr_name):
+                spec[attr_name] = getattr(ref, attr_name)
+        return spec
+
+    def get_value(self, name: ParameterKey) -> Any:
+        """Auto-generated reference note for ``get_value``.
+
+        Full API
+        --------
+        ``get_value(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Return the live value for one stored parameter."""
+        return self._refs[self._resolve_name(name)].value
+
+    def set_value(self, name: ParameterKey, value: Any) -> None:
+        """Auto-generated reference note for ``set_value``.
+
+        Full API
+        --------
+        ``set_value(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Assign the live value for one stored parameter."""
+        self._refs[self._resolve_name(name)].value = value
+
+    def controls_for_parameters(
+        self,
+        names: Sequence[ParameterKey] | None = None,
+    ) -> tuple[Any, ...]:
+        """Auto-generated reference note for ``controls_for_parameters``.
+
+        Full API
+        --------
+        ``controls_for_parameters(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Return unique controls that cover the requested parameter names."""
+        if names is None:
+            requested = set(self._refs.keys())
+        else:
+            requested = {self._resolve_name(name) for name in names}
+        if not requested:
+            return ()
+        selected: list[Any] = []
+        for control in self._controls:
+            for name, ref in self._refs.items():
+                if name in requested and getattr(ref, "widget", None) is control:
+                    selected.append(control)
+                    break
+        return tuple(selected)
+
+    def subscribe(self, callback: Callable[[set[str]], Any]) -> Callable[[], None]:
+        """Auto-generated reference note for ``subscribe``.
+
+        Full API
+        --------
+        ``subscribe(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Subscribe to parameter creation/reconfiguration/value changes."""
+        self._subscriber_counter += 1
+        subscriber_id: Hashable = f"subscriber:{self._subscriber_counter}"
+        self._subscribers[subscriber_id] = callback
+
+        def _unsubscribe() -> None:
+            self._subscribers.pop(subscriber_id, None)
+
+        return _unsubscribe
+
+    def set_default_parameter_filter(
+        self,
+        parameter_filter: Callable[[], Sequence[ParameterKey]] | None,
+    ) -> None:
+        """Auto-generated reference note for ``set_default_parameter_filter``.
+
+        Full API
+        --------
+        ``set_default_parameter_filter(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Store the preferred default presentation filter for later reuse."""
+        self._default_parameter_filter = parameter_filter
+
+    def create_panel(
+        self,
+        *,
+        parameter_filter: Callable[[], Sequence[ParameterKey]] | Sequence[ParameterKey] | None = None,
+        root_widget: widgets.Box | None = None,
+        modal_host: widgets.Box | None = None,
+    ) -> "ParameterPanel":
+        """Auto-generated reference note for ``create_panel``.
+
+        Full API
+        --------
+        ``create_panel(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        """Create a filtered parameter presentation over this store."""
+        effective_filter = (
+            self._default_parameter_filter if parameter_filter is None else parameter_filter
+        )
+        return ParameterPanel(
+            self,
+            parameter_filter=effective_filter,
+            root_widget=root_widget,
+            modal_host=modal_host,
+        )
+
+    def _notify_subscribers(self, names: Sequence[ParameterKey] | set[str]) -> None:
+        """Notify presentation subscribers about changed parameter memberships/values."""
+        changed_names: set[str] = set()
+        for raw_name in names:
+            try:
+                changed_names.add(self._resolve_name(raw_name))
+            except Exception:
+                try:
+                    changed_names.add(parameter_name(raw_name, role="parameter"))
+                except Exception:
+                    changed_names.add(str(raw_name))
+        for callback in tuple(self._subscribers.values()):
+            callback(set(changed_names))
+
     def add_hook(
         self,
         callback: Callable[[ParamEvent | None], Any],
@@ -1003,6 +1410,9 @@ class ParameterManager(Mapping[str, ParamRef]):
             self._performance.increment("render_callback_failures")
             raise
         finally:
+            changed_name = getattr(getattr(event, "parameter", None), "name", None)
+            if changed_name is not None:
+                self._notify_subscribers({str(changed_name)})
             self._performance.record_duration(
                 "render_callback_ms",
                 (time.perf_counter() - started) * 1000.0,
@@ -1452,6 +1862,350 @@ class ParameterManager(Mapping[str, ParamRef]):
         - In a notebook or REPL, run ``help(ParameterManager)`` and ``dir(ParameterManager)`` to inspect adjacent members.
         """
         return list(self._controls)
+
+
+class ParameterPanel:
+    """Auto-generated reference note for ``ParameterPanel``.
+
+    Full API
+    --------
+    ``ParameterPanel(...)``
+
+    Parameters
+    ----------
+    See the Python signature for the accepted arguments.
+
+    Returns
+    -------
+    Any
+        Result produced by this API.
+
+    Optional arguments
+    ------------------
+    Optional inputs follow the Python signature when present.
+
+    Architecture note
+    -----------------
+    This class is part of the figure presentation/runtime refactor boundary.
+
+    Examples
+    --------
+    Basic use::
+
+        # See tests for concrete usage examples.
+
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for package navigation.
+    """
+    """Filtered widget surface over a :class:`ParameterManager` store."""
+
+    def __init__(
+        self,
+        store: ParameterManager,
+        *,
+        parameter_filter: Callable[[], Sequence[ParameterKey]] | Sequence[ParameterKey] | None = None,
+        root_widget: widgets.Box | None = None,
+        modal_host: widgets.Box | None = None,
+    ) -> None:
+        self._store = store
+        self._parameter_filter = parameter_filter
+        self._root_widget = root_widget or widgets.VBox(
+            layout=widgets.Layout(width="100%", min_width="0", gap="6px")
+        )
+        self._modal_host = modal_host
+        add_class = getattr(self._root_widget, "add_class", None)
+        if callable(add_class):
+            add_class("gu-figure-parameter-panel")
+        self._unsubscribe = store.subscribe(lambda _changed: self.refresh())
+        self.refresh()
+
+    @property
+    def root_widget(self) -> widgets.Box:
+        """Auto-generated reference note for ``root_widget``.
+
+        Full API
+        --------
+        ``root_widget(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        return self._root_widget
+
+    @property
+    def panel_visible(self) -> bool:
+        """Auto-generated reference note for ``panel_visible``.
+
+        Full API
+        --------
+        ``panel_visible(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        return len(tuple(getattr(self._root_widget, "children", ()))) > 0
+
+    def set_parameter_filter(
+        self,
+        parameter_filter: Callable[[], Sequence[ParameterKey]] | Sequence[ParameterKey] | None,
+    ) -> None:
+        """Auto-generated reference note for ``set_parameter_filter``.
+
+        Full API
+        --------
+        ``set_parameter_filter(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        self._parameter_filter = parameter_filter
+        self.refresh()
+
+    def parameter_names(self) -> tuple[str, ...]:
+        """Auto-generated reference note for ``parameter_names``.
+
+        Full API
+        --------
+        ``parameter_names(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        raw_names: Sequence[ParameterKey] | None
+        if callable(self._parameter_filter):
+            raw_names = self._parameter_filter()
+        else:
+            raw_names = self._parameter_filter
+        if raw_names is None:
+            return self._store.list_parameters()
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for raw_name in raw_names:
+            try:
+                name = parameter_name(raw_name, role="parameter")
+            except Exception:
+                name = str(raw_name)
+            if name in self._store and name not in seen:
+                ordered.append(name)
+                seen.add(name)
+        return tuple(ordered)
+
+    def refresh(self) -> None:
+        """Auto-generated reference note for ``refresh``.
+
+        Full API
+        --------
+        ``refresh(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        controls = self._store.controls_for_parameters(self.parameter_names())
+        if self._modal_host is not None:
+            for control in controls:
+                attach_fn = getattr(control, "set_modal_host", None)
+                if callable(attach_fn):
+                    attach_fn(self._modal_host)
+        desired = tuple(controls)
+        if tuple(getattr(self._root_widget, "children", ())) != desired:
+            self._root_widget.children = desired
+
+    def close(self) -> None:
+        """Auto-generated reference note for ``close``.
+
+        Full API
+        --------
+        ``close(...)``
+
+        Parameters
+        ----------
+        See the Python signature for the accepted arguments.
+
+        Returns
+        -------
+        Any
+            Result produced by this API.
+
+        Optional arguments
+        ------------------
+        Optional inputs follow the Python signature when present.
+
+        Architecture note
+        -----------------
+        This member is part of the figure presentation/runtime refactor boundary.
+
+        Examples
+        --------
+        Basic use::
+
+            # See tests for concrete usage examples.
+
+        Learn more / explore
+        --------------------
+        - Start with ``docs/guides/api-discovery.md`` for package navigation.
+        """
+        unsubscribe = getattr(self, "_unsubscribe", None)
+        if callable(unsubscribe):
+            unsubscribe()
+            self._unsubscribe = None
+
+
+class ParameterStore(ParameterManager):
+    """Auto-generated reference note for ``ParameterStore``.
+
+    Full API
+    --------
+    ``ParameterStore(...)``
+
+    Parameters
+    ----------
+    See the Python signature for the accepted arguments.
+
+    Returns
+    -------
+    Any
+        Result produced by this API.
+
+    Optional arguments
+    ------------------
+    Optional inputs follow the Python signature when present.
+
+    Architecture note
+    -----------------
+    This class is part of the figure presentation/runtime refactor boundary.
+
+    Examples
+    --------
+    Basic use::
+
+        # See tests for concrete usage examples.
+
+    Learn more / explore
+    --------------------
+    - Start with ``docs/guides/api-discovery.md`` for package navigation.
+    """
+    """Compatibility alias for the widget-free parameter store boundary."""
 
 
 # =============================================================================

@@ -1276,7 +1276,7 @@ def create_or_update_parametric_plot(
             update_kwargs["label"] = label
         figure.plots[id].update(**update_kwargs)
         plot = figure.plots[id]
-        figure._legend.on_plot_updated(plot)
+        figure._notify_plot_updated(plot)
         if figure._sync_sidebar_visibility():
             figure._request_active_view_reflow("sidebar_visibility")
         return plot
@@ -1313,7 +1313,7 @@ def create_or_update_parametric_plot(
         y_numeric_function=y_numeric_fn,
     )
     figure.plots[id] = plot
-    figure._legend.on_plot_added(plot)
+    figure._notify_plot_added(plot)
     if figure._sync_sidebar_visibility():
         figure._request_active_view_reflow("sidebar_visibility")
     return plot

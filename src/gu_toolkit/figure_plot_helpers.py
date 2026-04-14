@@ -182,4 +182,4 @@ def remove_plot_from_figure(figure: Any, plot_id: str) -> None:
         return
     for view_id in tuple(plot.views):
         plot.remove_from_view(view_id)
-    figure._legend.on_plot_removed(plot_id)
+    figure._notify_plot_removed(plot_id)
